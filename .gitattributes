@@ -1,0 +1,7 @@
+# Shell-Skripte und Container-Dateien MÜSSEN LF behalten — mit CRLF scheitert
+# der Container-Start an "bad interpreter: /bin/sh^M".
+*.sh text eol=lf
+Dockerfile text eol=lf
+docker/Caddyfile text eol=lf
+*.mjs text eol=lf
+*.yml text eol=lf

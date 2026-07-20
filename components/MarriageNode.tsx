@@ -1,0 +1,73 @@
+"use client";
+
+import { Handle, Position, type NodeProps } from "reactflow";
+
+import { formatDate } from "@/lib/tree-layout";
+
+export type MarriageNodeData = {
+  date: string;
+  subtype: string;
+  primaryMediaId: string | null;
+  partnerNames: string;
+  dimmed: boolean;
+};
+
+/** Jahreszahl auf der Zeitachse. Als Knoten, damit sie mitzoomt und -wandert. */
+export function YearNode({ data }: NodeProps<{ year: number }>) {
+  return (
+    <div className="pointer-events-none flex items-center gap-2">
+      <span className="text-xs font-medium tabular-nums text-stone-400">
+        {data.year}
+      </span>
+      <span className="h-px w-8 bg-stone-200 dark:bg-stone-800" />
+    </div>
+  );
+}
+
+/**
+ * Hochzeit als eigenständiges Ereignis auf der Zeitachse — bewusst rund und
+ * deutlich kleiner als eine Personenkarte, damit auf einen Blick klar ist,
+ * dass hier ein Ereignis steht und keine Person.
+ */
+export function MarriageNode({ data }: NodeProps<MarriageNodeData>) {
+  const divorced = data.subtype === "DIVORCED";
+  const label = divorced ? "Ehe geschieden" : "Hochzeit";
+
+  return (
+    <div
+      className={`flex flex-col items-center transition-opacity ${
+        data.dimmed ? "opacity-25" : "opacity-100"
+      }`}
+      title={`${label}: ${data.partnerNames} — ${formatDate(data.date)}`}
+    >
+      <Handle
+        type="target"
+        position={Position.Top}
+        className="!h-1.5 !w-1.5 !border-0 !bg-rose-300"
+      />
+
+      {data.primaryMediaId ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={`/api/media/${data.primaryMediaId}?variant=thumb`}
+          alt=""
+          className="h-14 w-14 rounded-full object-cover shadow-md ring-2 ring-rose-400"
+        />
+      ) : (
+        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-rose-50 text-lg shadow-sm ring-2 ring-rose-300 dark:bg-rose-950">
+          {divorced ? "⚯" : "♥"}
+        </div>
+      )}
+
+      <div className="mt-1 whitespace-nowrap rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-medium tabular-nums text-stone-600 shadow-sm dark:bg-stone-900/90 dark:text-stone-300">
+        {formatDate(data.date)}
+      </div>
+
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        className="!h-1.5 !w-1.5 !border-0 !bg-rose-300"
+      />
+    </div>
+  );
+}
