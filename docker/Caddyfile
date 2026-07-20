@@ -1,0 +1,10 @@
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Bilder werden vom Next-Server gestreamt; großzügiges Limit für Uploads.
+	request_body {
+		max_size 25MB
+	}
+
+	reverse_proxy app:3000
+}

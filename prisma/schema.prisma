@@ -1,0 +1,222 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Benutzer & Rollen
+// ---------------------------------------------------------------------------
+
+enum Role {
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+enum UserStatus {
+  INVITED // vom Admin angelegt, hat sich noch nie eingeloggt
+  ACTIVE
+  BLOCKED
+}
+
+// Die User-Tabelle ist gleichzeitig die Allowlist: Wer hier nicht steht,
+// kommt trotz gültigem Google-/GitHub-Konto nicht rein (siehe lib/auth.ts).
+model User {
+  id            String     @id @default(cuid())
+  email         String     @unique
+  name          String?
+  image         String?
+  emailVerified DateTime?
+  role          Role       @default(VIEWER)
+  status        UserStatus @default(INVITED)
+  createdAt     DateTime   @default(now())
+  lastLoginAt   DateTime?
+
+  accounts Account[]
+  sessions Session[]
+
+  uploadedMedia MediaAsset[] @relation("MediaUploader")
+  auditLogs     AuditLog[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ---------------------------------------------------------------------------
+// Stammbaum
+// ---------------------------------------------------------------------------
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  UNKNOWN
+}
+
+model Person {
+  id         String    @id @default(cuid())
+  givenName  String
+  familyName String?
+  birthName  String?
+  gender     Gender    @default(UNKNOWN)
+  birthDate  DateTime?
+  birthPlace String?
+  deathDate  DateTime?
+  deathPlace String?
+  notes      String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  // Beziehungen, in denen diese Person die Quelle bzw. das Ziel ist.
+  relationsFrom Relationship[] @relation("RelationFrom")
+  relationsTo   Relationship[] @relation("RelationTo")
+
+  media PersonMedia[]
+
+  @@index([familyName, givenName])
+}
+
+enum RelationType {
+  PARENT_OF // from = Elternteil, to = Kind
+  PARTNER_OF // ungerichtet, wird kanonisch gespeichert (fromId < toId)
+}
+
+enum RelationSubtype {
+  BIOLOGICAL
+  ADOPTIVE
+  STEP
+  FOSTER
+  MARRIED
+  UNMARRIED
+  DIVORCED
+}
+
+// Beziehungen liegen bewusst in einer eigenen Tabelle statt als parentId auf
+// Person: nur so sind Adoption, Stiefverhältnisse, Mehrfachehen und
+// Beziehungszeiträume abbildbar, ohne das Schema zu ändern.
+model Relationship {
+  id           String          @id @default(cuid())
+  type         RelationType
+  subtype      RelationSubtype @default(BIOLOGICAL)
+  fromPersonId String
+  toPersonId   String
+  startDate    DateTime?
+  endDate      DateTime?
+  notes        String?
+  createdAt    DateTime        @default(now())
+
+  fromPerson Person              @relation("RelationFrom", fields: [fromPersonId], references: [id], onDelete: Cascade)
+  toPerson   Person              @relation("RelationTo", fields: [toPersonId], references: [id], onDelete: Cascade)
+  media      RelationshipMedia[]
+
+  @@unique([type, fromPersonId, toPersonId])
+  @@index([fromPersonId])
+  @@index([toPersonId])
+}
+
+// ---------------------------------------------------------------------------
+// Medien
+// ---------------------------------------------------------------------------
+
+model MediaAsset {
+  id           String   @id @default(cuid())
+  storageKey   String   @unique // Objektschlüssel im S3/MinIO-Bucket
+  thumbnailKey String?
+  // Ursprünglicher Dateiname beim Upload. Dient als menschenlesbarer Verweis
+  // im Export — der storageKey ist eine UUID und sagt niemandem etwas.
+  fileName     String?
+  mimeType     String
+  sizeBytes    Int
+  width        Int?
+  height       Int?
+  caption      String?
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  uploadedBy    User?               @relation("MediaUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  persons       PersonMedia[]
+  relationships RelationshipMedia[]
+}
+
+// Bilder zu einem Ereignis statt zu einer Person — vor allem Hochzeitsfotos.
+model RelationshipMedia {
+  relationshipId String
+  mediaId        String
+  isPrimary      Boolean @default(false)
+  sortOrder      Int     @default(0)
+
+  relationship Relationship @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+  media        MediaAsset   @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@id([relationshipId, mediaId])
+  @@index([mediaId])
+}
+
+model PersonMedia {
+  personId  String
+  mediaId   String
+  isPrimary Boolean @default(false)
+  sortOrder Int     @default(0)
+
+  person Person     @relation(fields: [personId], references: [id], onDelete: Cascade)
+  media  MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@id([personId, mediaId])
+  @@index([mediaId])
+}
+
+// ---------------------------------------------------------------------------
+// Audit
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String // CREATE | UPDATE | DELETE
+  entityType String // Person | Relationship | MediaAsset | User
+  entityId   String
+  diff       Json?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
