@@ -2,8 +2,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
-import { route, badRequest } from "@/lib/api";
+import { route, badRequest, forbidden } from "@/lib/api";
 import { audit } from "@/lib/audit";
+import {
+  canUploadForPerson,
+  canUploadForRelationship,
+} from "@/lib/media-scope";
 
 type Params = { id: string };
 
@@ -21,7 +25,7 @@ const input = z.object({
  * Primärbilder oder gar keins.
  */
 export const POST = route<Params>(
-  "media:upload",
+  null,
   async (ctx, req, { id: mediaId }) => {
     const parsed = input.safeParse(await req.json());
     if (!parsed.success) return badRequest(parsed.error.issues);
@@ -33,6 +37,11 @@ export const POST = route<Params>(
         { status: 400 },
       );
     }
+
+    const allowed = personId
+      ? await canUploadForPerson(ctx.scope, personId)
+      : await canUploadForRelationship(ctx.scope, relationshipId!);
+    if (!allowed) return forbidden("das Primärbild hier festzulegen");
 
     if (personId) {
       const link = await prisma.personMedia.findUnique({

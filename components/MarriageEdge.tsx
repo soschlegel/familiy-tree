@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { EdgeLabelRenderer, type EdgeProps } from "reactflow";
 
 import { formatDate, type MarriageInfo } from "@/lib/tree-layout";
@@ -57,19 +58,26 @@ export function MarriageEdge({
       />
 
       <EdgeLabelRenderer>
-        <div
+        {/* EdgeLabelRenderer schaltet Zeigerereignisse pauschal ab — für einen
+            anklickbaren Marker muss das hier gezielt zurückgenommen werden. */}
+        <Link
+          href={
+            data
+              ? `/people/${data.personId}?rel=${data.relationshipId}`
+              : "#"
+          }
           style={{
             transform: `translate(-50%, -50%) translate(${midX}px, ${bottom}px)`,
           }}
-          className={`pointer-events-none absolute flex items-center gap-1.5 rounded-full bg-white/95 px-2 py-1 shadow-sm ring-1 backdrop-blur transition-opacity dark:bg-stone-900/95 ${
-            divorced ? "ring-stone-200" : "ring-rose-200"
+          className={`pointer-events-auto absolute flex items-center gap-1.5 rounded-full bg-white/95 px-2 py-1 shadow-sm ring-1 backdrop-blur transition hover:shadow-md dark:bg-stone-900/95 ${
+            divorced
+              ? "ring-stone-200 hover:ring-stone-300"
+              : "ring-rose-200 hover:ring-rose-300"
           } ${data?.dimmed ? "opacity-15" : "opacity-100"}`}
           title={
             data?.date
-              ? `${divorced ? "Ehe geschieden" : "Hochzeit"} am ${formatDate(data.date)}`
-              : divorced
-                ? "geschieden"
-                : "verheiratet"
+              ? `${divorced ? "Ehe geschieden" : "Hochzeit"} am ${formatDate(data.date)} — Details ansehen`
+              : "Ehe-Details ansehen"
           }
         >
           {data?.primaryMediaId ? (
@@ -93,7 +101,7 @@ export function MarriageEdge({
               {year}
             </span>
           )}
-        </div>
+        </Link>
       </EdgeLabelRenderer>
     </>
   );

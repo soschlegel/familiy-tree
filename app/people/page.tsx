@@ -1,8 +1,8 @@
 import Link from "next/link";
 
 import { prisma } from "@/lib/prisma";
-import { requirePage } from "@/lib/session";
-import { can } from "@/lib/authz";
+import { requireScope } from "@/lib/session";
+import { editableFamilyIds, personVisibilityFilter } from "@/lib/scope";
 import { lifeSpan } from "@/lib/tree-layout";
 
 export const dynamic = "force-dynamic";
@@ -12,20 +12,26 @@ export default async function PeoplePage({
 }: {
   searchParams: Promise<{ q?: string }>;
 }) {
-  const session = await requirePage("person:read");
+  const { scope } = await requireScope();
   const { q } = await searchParams;
   const needle = q?.trim();
+  const canCreate = scope.isAdmin || editableFamilyIds(scope).length > 0;
 
   const persons = await prisma.person.findMany({
-    where: needle
-      ? {
-          OR: [
-            { givenName: { contains: needle, mode: "insensitive" } },
-            { familyName: { contains: needle, mode: "insensitive" } },
-            { birthName: { contains: needle, mode: "insensitive" } },
-          ],
-        }
-      : undefined,
+    where: {
+      AND: [
+        personVisibilityFilter(scope),
+        needle
+          ? {
+              OR: [
+                { givenName: { contains: needle, mode: "insensitive" as const } },
+                { familyName: { contains: needle, mode: "insensitive" as const } },
+                { birthName: { contains: needle, mode: "insensitive" as const } },
+              ],
+            }
+          : {},
+      ],
+    },
     orderBy: [{ familyName: "asc" }, { givenName: "asc" }],
     include: {
       media: { where: { isPrimary: true }, take: 1, select: { mediaId: true } },
@@ -37,7 +43,7 @@ export default async function PeoplePage({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Personen ({persons.length})</h1>
-        {can(session.user.role, "person:create") && (
+        {canCreate && (
           <Link
             href="/people/new"
             className="rounded bg-stone-900 px-3 py-1.5 text-sm text-white hover:bg-stone-700"

@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
-import { route, badRequest } from "@/lib/api";
+import { route, badRequest, forbidden } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import { relationshipInput } from "@/lib/validation";
+import { canEditRelationship } from "@/lib/scope";
 
 /**
  * Prüft, ob `candidateAncestorId` bereits ein Nachfahre von `personId` ist.
@@ -40,12 +41,16 @@ async function wouldCreateCycle(
   return false;
 }
 
-export const POST = route("relationship:create", async (ctx, req) => {
+export const POST = route(null, async (ctx, req) => {
   const parsed = relationshipInput.safeParse(await req.json());
   if (!parsed.success) return badRequest(parsed.error.issues);
 
   let { type, subtype, fromPersonId, toPersonId, startDate, endDate } =
     parsed.data;
+
+  if (!(await canEditRelationship(ctx.scope, fromPersonId, toPersonId))) {
+    return forbidden("diese Beziehung anzulegen");
+  }
 
   // PARTNER_OF ist ungerichtet — kanonisch sortiert speichern, damit die
   // Unique-Constraint doppelte Ehen in beiden Richtungen verhindert.

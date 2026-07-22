@@ -41,6 +41,52 @@ model User {
 
   uploadedMedia MediaAsset[] @relation("MediaUploader")
   auditLogs     AuditLog[]
+  families      UserFamily[]
+}
+
+// ---------------------------------------------------------------------------
+// Familien — Einheit der Rechtevergabe
+// ---------------------------------------------------------------------------
+
+model Family {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  persons PersonFamily[]
+  members UserFamily[]
+}
+
+// Eine Person gehört zu beliebig vielen Familien. Durch Heirat verbinden sich
+// Familien — wer einheiratet, gehört fortan zu beiden.
+model PersonFamily {
+  personId String
+  familyId String
+
+  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  @@id([personId, familyId])
+  @@index([familyId])
+}
+
+enum FamilyRole {
+  EDITOR
+  VIEWER
+}
+
+// Zugriff eines Benutzers auf eine Familie. Ohne Eintrag: kein Zugriff.
+model UserFamily {
+  userId   String
+  familyId String
+  role     FamilyRole @default(VIEWER)
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  @@id([userId, familyId])
+  @@index([familyId])
 }
 
 model Account {
@@ -108,7 +154,8 @@ model Person {
   relationsFrom Relationship[] @relation("RelationFrom")
   relationsTo   Relationship[] @relation("RelationTo")
 
-  media PersonMedia[]
+  media    PersonMedia[]
+  families PersonFamily[]
 
   @@index([familyName, givenName])
 }

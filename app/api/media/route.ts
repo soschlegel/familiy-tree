@@ -3,9 +3,13 @@ import sharp from "sharp";
 import { randomUUID } from "node:crypto";
 
 import { prisma } from "@/lib/prisma";
-import { route } from "@/lib/api";
+import { route, forbidden } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import { putObject } from "@/lib/storage";
+import {
+  canUploadForPerson,
+  canUploadForRelationship,
+} from "@/lib/media-scope";
 
 const MAX_BYTES = Number(process.env.MAX_UPLOAD_BYTES ?? 15 * 1024 * 1024);
 const ALLOWED = new Set(["jpeg", "png", "webp", "gif", "avif", "tiff"]);
@@ -18,7 +22,7 @@ export const runtime = "nodejs";
  * Dateityp echt validiert statt nur anhand des Content-Type-Headers geraten.
  * Bei diesem Volumen ist der Durchsatz kein Thema.
  */
-export const POST = route("media:upload", async (ctx, req) => {
+export const POST = route(null, async (ctx, req) => {
   const form = await req.formData();
   const file = form.get("file");
   const personId = form.get("personId");
@@ -27,6 +31,26 @@ export const POST = route("media:upload", async (ctx, req) => {
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "Keine Datei übermittelt" }, { status: 400 });
+  }
+
+  // Vor dem Verarbeiten prüfen: ein Bild muss an etwas hängen, das der
+  // Benutzer bearbeiten darf. Ohne Zuordnung dürfen nur Admins hochladen,
+  // sonst entstünden Bilder außerhalb jeder Rechteprüfung.
+  const target =
+    typeof personId === "string" && personId
+      ? { kind: "person" as const, id: personId }
+      : typeof relationshipId === "string" && relationshipId
+        ? { kind: "relationship" as const, id: relationshipId }
+        : null;
+
+  if (!target) {
+    if (!ctx.scope.isAdmin) return forbidden("Bilder ohne Zuordnung");
+  } else {
+    const allowed =
+      target.kind === "person"
+        ? await canUploadForPerson(ctx.scope, target.id)
+        : await canUploadForRelationship(ctx.scope, target.id);
+    if (!allowed) return forbidden("hier Bilder hochzuladen");
   }
   if (file.size > MAX_BYTES) {
     return NextResponse.json(

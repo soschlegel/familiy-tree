@@ -12,6 +12,31 @@ export type MarriageNodeData = {
   dimmed: boolean;
 };
 
+/**
+ * Treffpunkt zweier Elternteile. Bewusst ein kleiner Punkt: hier laufen beide
+ * Elternlinien zusammen und teilen sich von dort auf die Kinder auf, statt dass
+ * jeder Elternteil einzeln zu jedem Kind zieht.
+ */
+export function JunctionNode({ data }: NodeProps<{ dimmed: boolean }>) {
+  return (
+    <div
+      className={`transition-opacity ${data.dimmed ? "opacity-25" : "opacity-100"}`}
+    >
+      <Handle
+        type="target"
+        position={Position.Top}
+        className="!h-1 !w-1 !border-0 !bg-stone-300 !opacity-0"
+      />
+      <div className="h-2 w-2 rounded-full bg-stone-400 dark:bg-stone-500" />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        className="!h-1 !w-1 !border-0 !bg-stone-300 !opacity-0"
+      />
+    </div>
+  );
+}
+
 /** Jahreszahl auf der Zeitachse. Als Knoten, damit sie mitzoomt und -wandert. */
 export function YearNode({ data }: NodeProps<{ year: number }>) {
   return (
