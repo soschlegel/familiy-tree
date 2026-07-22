@@ -4,6 +4,7 @@ import JSZip from "jszip";
 import { prisma } from "@/lib/prisma";
 import { route } from "@/lib/api";
 import { getObjectBuffer } from "@/lib/storage";
+import { personVisibilityFilter, type Scope } from "@/lib/scope";
 import {
   EXCHANGE_VERSION,
   mediaFileName,
@@ -12,18 +13,40 @@ import {
 
 export const runtime = "nodejs";
 
-async function buildExport(): Promise<{
+/**
+ * Baut den Export — beschränkt auf die für diesen Benutzer sichtbaren
+ * Personen. Ohne diese Einschränkung wäre der Export ein Weg, das gesamte
+ * Rechtekonzept mit einem Klick zu umgehen.
+ */
+async function buildExport(scope: Scope): Promise<{
   data: ExchangeFile;
   keyByFileName: Map<string, string>;
 }> {
-  const [persons, relationships, assets] = await Promise.all([
-    prisma.person.findMany({
-      orderBy: [{ familyName: "asc" }, { givenName: "asc" }],
-      include: { media: { orderBy: { sortOrder: "asc" } } },
-    }),
-    prisma.relationship.findMany({ include: { media: true } }),
-    prisma.mediaAsset.findMany({ orderBy: { createdAt: "asc" } }),
+  const persons = await prisma.person.findMany({
+    where: personVisibilityFilter(scope),
+    orderBy: [{ familyName: "asc" }, { givenName: "asc" }],
+    include: { media: { orderBy: { sortOrder: "asc" } } },
+  });
+
+  const personIds = new Set(persons.map((p) => p.id));
+
+  // Nur Beziehungen, deren BEIDE Seiten sichtbar sind — eine halbe Beziehung
+  // verweist beim Empfänger ins Leere und verrät die Existenz der anderen.
+  const relationships = (
+    await prisma.relationship.findMany({ include: { media: true } })
+  ).filter(
+    (r) => personIds.has(r.fromPersonId) && personIds.has(r.toPersonId),
+  );
+
+  const referenced = new Set([
+    ...persons.flatMap((p) => p.media.map((m) => m.mediaId)),
+    ...relationships.flatMap((r) => r.media.map((m) => m.mediaId)),
   ]);
+
+  const assets = await prisma.mediaAsset.findMany({
+    where: { id: { in: [...referenced] } },
+    orderBy: { createdAt: "asc" },
+  });
 
   const taken = new Set<string>();
   const nameById = new Map<string, string>();
@@ -88,9 +111,9 @@ async function buildExport(): Promise<{
  * (?format=zip). Nur wer Bilder sehen darf, darf auch exportieren — der
  * Export enthält denselben Bestand.
  */
-export const GET = route("person:read", async (_ctx, req) => {
+export const GET = route(null, async (ctx, req) => {
   const format = new URL(req.url).searchParams.get("format") ?? "json";
-  const { data, keyByFileName } = await buildExport();
+  const { data, keyByFileName } = await buildExport(ctx.scope);
   const stamp = new Date().toISOString().slice(0, 10);
 
   if (format === "json") {

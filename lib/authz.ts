@@ -1,55 +1,36 @@
 import type { Role } from "@prisma/client";
 
 /**
- * Zentrale Rollen-Policy. Jede serverseitige Mutation MUSS hier durch.
- * Die UI blendet zusätzlich aus — das ist Komfort, nicht Sicherheit.
+ * GLOBALE Rechte — Verwaltungsaufgaben, die nicht an einer einzelnen Familie
+ * hängen. Alles Inhaltliche (Personen, Beziehungen, Bilder) wird NICHT hier
+ * entschieden, sondern in lib/scope.ts anhand der Familienzugehörigkeit.
+ *
+ * Diese Trennung ist beabsichtigt: eine Person gehört zu Familien, und ob
+ * jemand sie sehen oder ändern darf, ergibt sich aus der Rolle in genau diesen
+ * Familien — nicht aus einer pauschalen Rolle. Eine globale Rolle EDITOR wäre
+ * neben den Familienrollen eine zweite, widersprüchliche Quelle.
  */
-
 export type Action =
-  | "person:read"
-  | "person:create"
-  | "person:update"
-  | "person:delete"
-  | "relationship:create"
-  | "relationship:update"
-  | "relationship:delete"
-  | "media:read"
-  | "media:upload"
-  | "media:delete"
   | "user:read"
   | "user:manage"
   | "audit:read"
-  | "data:import";
+  | "data:import"
+  | "family:manage";
 
-const VIEWER: Action[] = ["person:read", "media:read"];
-
-const EDITOR: Action[] = [
-  ...VIEWER,
-  "person:create",
-  "person:update",
-  "relationship:create",
-  "relationship:update",
-  "relationship:delete",
-  "media:upload",
-];
-
-// Admin darf alles — inklusive Löschen von Personen und Benutzerverwaltung.
-const ADMIN: Action[] = [
-  ...EDITOR,
-  "person:delete",
-  "media:delete",
+const ADMIN_ONLY: Action[] = [
   "user:read",
   "user:manage",
   "audit:read",
-  // Import bleibt bewusst Admins vorbehalten: er kann in einem Zug den
-  // gesamten Bestand verändern.
+  // Import kann in einem Zug den gesamten Bestand verändern.
   "data:import",
+  // Familien anlegen und Zugriffe vergeben ist Rechtevergabe.
+  "family:manage",
 ];
 
 const PERMISSIONS: Record<Role, Action[]> = {
-  VIEWER,
-  EDITOR,
-  ADMIN,
+  VIEWER: [],
+  EDITOR: [],
+  ADMIN: ADMIN_ONLY,
 };
 
 export function can(role: Role | undefined | null, action: Action): boolean {
@@ -58,13 +39,12 @@ export function can(role: Role | undefined | null, action: Action): boolean {
 }
 
 export class ForbiddenError extends Error {
-  constructor(action: Action) {
-    super(`Keine Berechtigung für: ${action}`);
+  constructor(what: string) {
+    super(`Keine Berechtigung für: ${what}`);
     this.name = "ForbiddenError";
   }
 }
 
-/** Wirft ForbiddenError, wenn die Rolle die Aktion nicht abdeckt. */
 export function assertCan(role: Role | undefined | null, action: Action): void {
   if (!can(role, action)) throw new ForbiddenError(action);
 }

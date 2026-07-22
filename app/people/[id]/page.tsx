@@ -2,11 +2,17 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { prisma } from "@/lib/prisma";
-import { requirePage } from "@/lib/session";
-import { can } from "@/lib/authz";
+import { requireScope } from "@/lib/session";
+import {
+  canEditPerson,
+  canViewPerson,
+  editableFamilyIds,
+  personVisibilityFilter,
+} from "@/lib/scope";
 import { lifeSpan, formatDate } from "@/lib/tree-layout";
 import { MediaGallery } from "@/components/MediaGallery";
 import { DeletePersonButton } from "@/components/DeletePersonButton";
+import { PersonFamilies } from "@/components/PersonFamilies";
 import {
   RelationshipEditor,
   type RelationRow,
@@ -22,7 +28,7 @@ export default async function PersonPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await requirePage("person:read");
+  const { scope } = await requireScope();
   const { id } = await params;
 
   const person = await prisma.person.findUnique({
@@ -44,13 +50,23 @@ export default async function PersonPage({
         include: { media: true },
         orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }],
       },
+      families: { include: { family: true } },
     },
   });
 
   if (!person) notFound();
 
+  const familyIds = person.families.map((f) => f.familyId);
+  // Nicht sichtbar = nicht vorhanden. Ein eigener Hinweis würde bestätigen,
+  // dass es diese Person gibt.
+  if (!canViewPerson(scope, familyIds)) notFound();
+
+  const canEdit = canEditPerson(scope, familyIds);
+
+  // Nur sichtbare Personen zur Auswahl anbieten — die Suchhilfe darf keine
+  // Namen aus fremden Familien preisgeben.
   const allPersons = await prisma.person.findMany({
-    where: { id: { not: id } },
+    where: { AND: [{ id: { not: id } }, personVisibilityFilter(scope)] },
     orderBy: [{ familyName: "asc" }, { givenName: "asc" }],
     select: {
       id: true,
@@ -59,6 +75,12 @@ export default async function PersonPage({
       birthDate: true,
       deathDate: true,
     },
+  });
+
+  const allFamilies = await prisma.family.findMany({
+    where: scope.isAdmin ? undefined : { id: { in: [...scope.families.keys()] } },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
   });
 
   // Beide Beziehungsrichtungen in eine flache, lesbare Liste bringen.
@@ -93,7 +115,6 @@ export default async function PersonPage({
     })),
   ].sort((a, b) => a.label.localeCompare(b.label));
 
-  const canEdit = can(session.user.role, "person:update");
   const fmt = (d: Date | null) => formatDate(d) || "—";
 
   return (
@@ -112,12 +133,25 @@ export default async function PersonPage({
         {canEdit && (
           <Link
             href={`/people/${person.id}/edit`}
-            className="rounded border border-stone-300 px-3 py-1.5 text-sm hover:bg-stone-100 dark:border-stone-700 dark:hover:bg-stone-800"
+            className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm transition hover:bg-stone-100 dark:border-stone-700 dark:hover:bg-stone-800"
           >
             Bearbeiten
           </Link>
         )}
       </header>
+
+      <PersonFamilies
+        personId={person.id}
+        assigned={person.families.map((f) => ({
+          id: f.familyId,
+          name: f.family.name,
+        }))}
+        available={allFamilies}
+        editableFamilyIds={
+          scope.isAdmin ? allFamilies.map((f) => f.id) : editableFamilyIds(scope)
+        }
+        canEdit={canEdit}
+      />
 
       <dl className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm sm:grid-cols-4">
         <div>
@@ -155,9 +189,9 @@ export default async function PersonPage({
           birthDate: p.birthDate?.toISOString() ?? null,
           deathDate: p.deathDate?.toISOString() ?? null,
         }))}
-        canEdit={can(session.user.role, "relationship:create")}
-        canUploadMedia={can(session.user.role, "media:upload")}
-        canDeleteMedia={can(session.user.role, "media:delete")}
+        canEdit={canEdit}
+        canUploadMedia={canEdit}
+        canDeleteMedia={canEdit}
       />
 
       <MediaGallery
@@ -167,15 +201,12 @@ export default async function PersonPage({
           caption: m.media.caption,
           isPrimary: m.isPrimary,
         }))}
-        canUpload={can(session.user.role, "media:upload")}
-        canDelete={can(session.user.role, "media:delete")}
+        canUpload={canEdit}
+        canDelete={canEdit}
       />
 
-      {can(session.user.role, "person:delete") && (
-        <DeletePersonButton
-          personId={person.id}
-          personName={name(person)}
-        />
+      {canEdit && (
+        <DeletePersonButton personId={person.id} personName={name(person)} />
       )}
     </div>
   );

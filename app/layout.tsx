@@ -42,6 +42,11 @@ export default async function RootLayout({
               <Link href="/admin/data" className="text-sm hover:underline">
                 Daten
               </Link>
+              {can(session.user.role, "family:manage") && (
+                <Link href="/admin/families" className="text-sm hover:underline">
+                  Familien
+                </Link>
+              )}
               {can(session.user.role, "user:manage") && (
                 <Link href="/admin/users" className="text-sm hover:underline">
                   Benutzer

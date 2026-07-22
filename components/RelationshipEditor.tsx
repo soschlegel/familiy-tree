@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
 import { PersonPicker, type PickerPerson } from "./PersonPicker";
 import { MediaGallery } from "./MediaGallery";
@@ -171,7 +171,19 @@ export function RelationshipEditor({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
-  const [gallery, setGallery] = useState<string | null>(null);
+
+  // Aus dem Stammbaum verlinkt: ?rel=<id> öffnet direkt die Galerie dieser
+  // Ehe, damit der Klick auf den Ehe-Marker dort landet, wo er hinzeigt.
+  const searchParams = useSearchParams();
+  const linkedRelation = searchParams.get("rel");
+  const [gallery, setGallery] = useState<string | null>(linkedRelation);
+  const sectionRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (!linkedRelation) return;
+    setGallery(linkedRelation);
+    sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [linkedRelation]);
 
   // Neu angelegte Personen sofort auswählbar machen, ohne die Seite neu zu
   // laden — sonst ginge die halbfertige Zuordnung verloren.
@@ -262,7 +274,7 @@ export function RelationshipEditor({
       : ["BIOLOGICAL", "ADOPTIVE", "STEP", "FOSTER"];
 
   return (
-    <section className="space-y-3">
+    <section ref={sectionRef} className="space-y-3">
       <h2 className="font-medium">Beziehungen</h2>
 
       {relations.length === 0 ? (
@@ -270,7 +282,14 @@ export function RelationshipEditor({
       ) : (
         <ul className="divide-y divide-stone-200 rounded border border-stone-200 dark:divide-stone-800 dark:border-stone-800">
           {relations.map((r) => (
-            <li key={r.id} className="px-3 py-2 text-sm">
+            <li
+              key={r.id}
+              className={`px-3 py-2 text-sm transition-colors ${
+                r.id === linkedRelation
+                  ? "bg-amber-50 dark:bg-amber-950/30"
+                  : ""
+              }`}
+            >
               <div className="flex items-center gap-3">
                 <span className="w-24 shrink-0 text-stone-500">{r.label}</span>
                 <Link

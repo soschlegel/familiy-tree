@@ -31,11 +31,22 @@ const EMPTY: PersonFormValues = {
 const field =
   "w-full rounded border border-stone-300 px-2 py-1.5 text-sm dark:border-stone-700 dark:bg-stone-900";
 
-export function PersonForm({ initial }: { initial?: PersonFormValues }) {
+export function PersonForm({
+  initial,
+  families = [],
+}: {
+  initial?: PersonFormValues;
+  families?: { id: string; name: string }[];
+}) {
   const router = useRouter();
   const [values, setValues] = useState<PersonFormValues>(initial ?? EMPTY);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Beim Anlegen entscheidet die Familie darüber, wer die Person sieht.
+  // Vorbelegt mit der ersten, damit sie nicht versehentlich unsichtbar wird.
+  const [familyIds, setFamilyIds] = useState<string[]>(
+    families.length > 0 ? [families[0].id] : [],
+  );
 
   const set = <K extends keyof PersonFormValues>(
     key: K,
@@ -53,7 +64,7 @@ export function PersonForm({ initial }: { initial?: PersonFormValues }) {
       {
         method: isEdit ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+        body: JSON.stringify(isEdit ? values : { ...values, familyIds }),
       },
     );
 
@@ -154,6 +165,44 @@ export function PersonForm({ initial }: { initial?: PersonFormValues }) {
           />
         </label>
       </div>
+
+      {!initial?.id && families.length > 0 && (
+        <div>
+          <span className="mb-1 block text-xs text-stone-500">
+            Familien — bestimmen, wer diese Person sehen kann
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {families.map((f) => {
+              const active = familyIds.includes(f.id);
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() =>
+                    setFamilyIds((prev) =>
+                      active
+                        ? prev.filter((id) => id !== f.id)
+                        : [...prev, f.id],
+                    )
+                  }
+                  className={`rounded-full border px-3 py-1 text-sm transition ${
+                    active
+                      ? "border-stone-900 bg-stone-900 text-white dark:border-stone-100 dark:bg-stone-100 dark:text-stone-900"
+                      : "border-stone-300 text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-400"
+                  }`}
+                >
+                  {f.name}
+                </button>
+              );
+            })}
+          </div>
+          {familyIds.length === 0 && (
+            <p className="mt-1 text-xs text-amber-700">
+              Ohne Familie ist die Person nur für Administratoren sichtbar.
+            </p>
+          )}
+        </div>
+      )}
 
       <label className="block">
         <span className="mb-1 block text-xs text-stone-500">Notizen</span>

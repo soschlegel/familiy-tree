@@ -1,7 +1,8 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { prisma } from "@/lib/prisma";
-import { requirePage } from "@/lib/session";
+import { requireScope } from "@/lib/session";
+import { canEditPerson, canViewPerson } from "@/lib/scope";
 import { PersonForm } from "@/components/PersonForm";
 
 export const dynamic = "force-dynamic";
@@ -11,11 +12,18 @@ export default async function EditPersonPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requirePage("person:update");
+  const { scope } = await requireScope();
   const { id } = await params;
 
-  const person = await prisma.person.findUnique({ where: { id } });
+  const person = await prisma.person.findUnique({
+    where: { id },
+    include: { families: { select: { familyId: true } } },
+  });
   if (!person) notFound();
+
+  const familyIds = person.families.map((f) => f.familyId);
+  if (!canViewPerson(scope, familyIds)) notFound();
+  if (!canEditPerson(scope, familyIds)) redirect(`/people/${id}`);
 
   return (
     <div className="space-y-4">

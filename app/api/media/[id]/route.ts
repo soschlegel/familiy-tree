@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
-import { route } from "@/lib/api";
+import { route, notFound } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import { getObjectStream, deleteObject } from "@/lib/storage";
+import { canViewMedia, canDeleteMedia } from "@/lib/media-scope";
 
 type Params = { id: string };
 
@@ -14,11 +15,12 @@ export const runtime = "nodejs";
  * Dadurch gilt die Anmeldepflicht auch für Fotos — bei einem privaten
  * Familienarchiv ist das der Punkt.
  */
-export const GET = route<Params>("media:read", async (_ctx, req, { id }) => {
+export const GET = route<Params>(null, async (ctx, req, { id }) => {
   const asset = await prisma.mediaAsset.findUnique({ where: { id } });
-  if (!asset) {
-    return NextResponse.json({ error: "Nicht gefunden" }, { status: 404 });
-  }
+  if (!asset) return notFound();
+
+  // 404 statt 403: die Existenz eines Bildes ist selbst schon eine Auskunft.
+  if (!(await canViewMedia(ctx.scope, id))) return notFound();
 
   const wantsThumb =
     new URL(req.url).searchParams.get("variant") === "thumb";
@@ -39,12 +41,11 @@ export const GET = route<Params>("media:read", async (_ctx, req, { id }) => {
 });
 
 export const DELETE = route<Params>(
-  "media:delete",
+  null,
   async (ctx, _req, { id }) => {
     const asset = await prisma.mediaAsset.findUnique({ where: { id } });
-    if (!asset) {
-      return NextResponse.json({ error: "Nicht gefunden" }, { status: 404 });
-    }
+    if (!asset) return notFound();
+    if (!(await canDeleteMedia(ctx.scope, id))) return notFound();
 
     await prisma.mediaAsset.delete({ where: { id } });
 
