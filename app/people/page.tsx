@@ -1,8 +1,8 @@
 import Link from "next/link";
 
-import { prisma } from "@/lib/prisma";
 import { requireScope } from "@/lib/session";
-import { editableFamilyIds, personVisibilityFilter } from "@/lib/scope";
+import { editableFamilyIds } from "@/lib/scope";
+import { searchPersons } from "@/lib/services";
 import { lifeSpan } from "@/lib/tree-layout";
 
 export const dynamic = "force-dynamic";
@@ -17,27 +17,7 @@ export default async function PeoplePage({
   const needle = q?.trim();
   const canCreate = scope.isAdmin || editableFamilyIds(scope).length > 0;
 
-  const persons = await prisma.person.findMany({
-    where: {
-      AND: [
-        personVisibilityFilter(scope),
-        needle
-          ? {
-              OR: [
-                { givenName: { contains: needle, mode: "insensitive" as const } },
-                { familyName: { contains: needle, mode: "insensitive" as const } },
-                { birthName: { contains: needle, mode: "insensitive" as const } },
-              ],
-            }
-          : {},
-      ],
-    },
-    orderBy: [{ familyName: "asc" }, { givenName: "asc" }],
-    include: {
-      media: { where: { isPrimary: true }, take: 1, select: { mediaId: true } },
-      _count: { select: { relationsFrom: true, relationsTo: true } },
-    },
-  });
+  const { items: persons } = await searchPersons(scope, { q: needle });
 
   return (
     <div className="space-y-4">
@@ -75,10 +55,10 @@ export default async function PeoplePage({
                 href={`/people/${p.id}`}
                 className="flex items-center gap-3 px-3 py-2 hover:bg-stone-100 dark:hover:bg-stone-800"
               >
-                {p.media[0] ? (
+                {p.primaryMediaId ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={`/api/media/${p.media[0].mediaId}?variant=thumb`}
+                    src={`/api/media/${p.primaryMediaId}?variant=thumb`}
                     alt=""
                     className="h-9 w-9 rounded-full object-cover"
                   />
@@ -89,13 +69,10 @@ export default async function PeoplePage({
                   {[p.givenName, p.familyName].filter(Boolean).join(" ")}
                 </span>
                 <span className="text-sm text-stone-500">
-                  {lifeSpan({
-                    birthDate: p.birthDate?.toISOString() ?? null,
-                    deathDate: p.deathDate?.toISOString() ?? null,
-                  })}
+                  {lifeSpan(p)}
                 </span>
                 <span className="ml-auto text-xs text-stone-400">
-                  {p._count.relationsFrom + p._count.relationsTo} Beziehungen
+                  {p.relationCount} Beziehungen
                 </span>
               </Link>
             </li>

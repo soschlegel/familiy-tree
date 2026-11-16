@@ -108,14 +108,36 @@ export async function canEditRelationship(
   if (scope.isAdmin) return true;
 
   const families = await familyIdsOf([fromPersonId, toPersonId]);
-  const from = families.get(fromPersonId) ?? [];
-  const to = families.get(toPersonId) ?? [];
+  return canEditRelationshipBetween(
+    scope,
+    families.get(fromPersonId) ?? [],
+    families.get(toPersonId) ?? [],
+  );
+}
 
-  const editFrom = canEditPerson(scope, from);
-  const editTo = canEditPerson(scope, to);
+/** Reine Regel hinter canEditRelationship — anhand der Familien beider Seiten. */
+export function canEditRelationshipBetween(
+  scope: Scope,
+  fromFamilyIds: string[],
+  toFamilyIds: string[],
+): boolean {
+  if (scope.isAdmin) return true;
+
+  const editFrom = canEditPerson(scope, fromFamilyIds);
+  const editTo = canEditPerson(scope, toFamilyIds);
   if (!editFrom && !editTo) return false;
 
-  return canViewPerson(scope, from) && canViewPerson(scope, to);
+  return canViewPerson(scope, fromFamilyIds) && canViewPerson(scope, toFamilyIds);
+}
+
+/**
+ * Familien-IDs einer Person, soweit der Benutzer diese Familien selbst kennt.
+ * Fremde Familien bleiben verborgen — schon ihre Existenz ist eine Auskunft
+ * über andere (siehe GET /api/families).
+ */
+export function visibleFamilyIds(scope: Scope, familyIds: string[]): string[] {
+  if (scope.isAdmin) return familyIds;
+  return familyIds.filter((id) => scope.families.has(id));
 }
 
 /** Anonymisierte Darstellung einer Person, die der Benutzer nicht sehen darf. */

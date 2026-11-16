@@ -50,9 +50,103 @@ npm run dev
 
 → http://localhost:3000
 
+MinIO ist lokal unter **Port 9100** (S3-API) und **9101** (Web-Konsole)
+erreichbar, nicht unter dem Standardport 9000 — der ist auf manchen Rechnern
+belegt (z.B. durch Zscaler). Andere Ports über `MINIO_API_PORT` /
+`MINIO_CONSOLE_PORT` beim `docker compose`-Aufruf setzen und `S3_ENDPOINT` in
+der `.env` anpassen.
+
 Ohne konfiguriertes OAuth greift der **Dev-Login** (`ENABLE_DEV_LOGIN=true`):
 E-Mail eingeben, kein Passwort. Er funktioniert nur mit `NODE_ENV=development`
 und nur für E-Mails, die bereits in der Benutzerliste stehen.
+
+## Entwicklung: Prüfen und Testen
+
+| Befehl | Zweck |
+|---|---|
+| `npm run typecheck` | TypeScript-Prüfung (`tsc --noEmit`) |
+| `npm run lint` | ESLint (Flat-Config `eslint.config.mjs`, Next-Regeln) |
+| `npm test` | Vitest — Unit-Tests und Dienst-Tests |
+| `npm run test:watch` | Vitest im Watch-Modus |
+
+Die Unit-Tests (Rechte, Validierung, Graph-Algorithmen, Layout) brauchen keine
+Datenbank. Die Dienst-Tests (`tests/services.db.test.ts`) laufen gegen die
+**Mock-Datenbank** und überspringen sich mit Hinweis, wenn diese nicht
+erreichbar oder leer ist — vorher also `npm run mock:setup`. Die Tests greifen
+nie auf die normale Datenbank zu; schreibende Tests räumen ihre eigenen
+Datensätze wieder ab.
+
+## Mock-Daten
+
+Für Entwicklung, Tests und Vorführungen gibt es einen deterministischen
+Testdatensatz in einer **eigenen Datenbank** (`familytree_mock`) und einem
+**eigenen Bucket** (`familytree-mock`) — die normale Datenbank bleibt
+unberührt.
+
+```bash
+docker compose -f docker-compose.dev.yml up -d   # Postgres + MinIO
+npm run mock:setup    # Datenbank anlegen, Schema anwenden, befüllen, Bilder erzeugen
+npm run dev:mock      # Dev-Server gegen die Mock-Daten: http://localhost:3100
+```
+
+| Befehl | Zweck |
+|---|---|
+| `npm run mock:setup` | legt `familytree_mock` an (falls nötig), `prisma db push`, befüllt |
+| `npm run db:mock` | nur neu befüllen (löscht vorher alle Mock-Daten) |
+| `npm run dev:mock` | `next dev` auf Port **3100** mit Build-Ordner `.next-mock` — läuft parallel zum normalen Dev-Server auf 3000 |
+| `npm run mock:env` | zeigt die berechnete Mock-Umgebung |
+
+Die Befehle laufen über `scripts/mock.mjs` (plattformunabhängig, auch unter
+Windows). Der Name der Mock-Datenbank wird aus `DATABASE_URL` abgeleitet
+(`…/familytree` → `…/familytree_mock`) oder über `MOCK_DATABASE_URL` gesetzt.
+`prisma/seed-mock.ts` verweigert den Dienst, wenn der Datenbankname nicht auf
+`_mock` oder `_test` endet. Jeder Lauf leert Mock-Datenbank und Mock-Bucket und
+baut alles neu auf; das Ergebnis ist bei jedem Lauf identisch, einschließlich
+der IDs (`mock-p-001`, `mock-r-0001`, `mock-family-a`, …). Ist MinIO nicht
+erreichbar, wird ohne Bilder befüllt (mit Warnung).
+
+**Inhalt** (Generator: `prisma/mock-data.ts`, auch direkt in Tests nutzbar):
+rund 195 Personen über sechs Generationen ab ca. 1860 in vier Familien:
+
+| ID | Familie |
+|---|---|
+| `mock-family-a` | Familie Becker (Hannover) |
+| `mock-family-b` | Familie Hoffmann (Sachsen) |
+| `mock-family-c` | Familie Wagner (Franken) |
+| `mock-family-d` | Familie Schulz (Ostsee) |
+
+Die Familien sind durch Heiraten verbunden (Eingeheiratete gehören zu beiden
+Familien). Eingebaut sind außerdem: Scheidung mit Wiederheirat,
+Halbgeschwister, ein Stiefkind, eine Adoption (Kind mit leiblicher Mutter und
+zwei Adoptiveltern, also drei Elternteilen), ein Pflegekind, Personen mit
+fehlenden Angaben (Geburtsdatum, Geburtsort, Geschlecht, Sterbedatum bei über
+100-Jährigen), drei mögliche Dubletten, drei Personen ohne Familie (nur für
+Admins sichtbar), Notizen sowie Platzhalter-Porträts und zwei Hochzeitsfotos.
+Die IDs dieser Sonderfälle liefert `generateMockData().landmarks`.
+
+**Benutzer** (Anmeldung per Dev-Login, nur E-Mail):
+
+| E-Mail | Rolle | Familien |
+|---|---|---|
+| `admin@example.test` | Administrator | alle |
+| `editor@example.test` | Bearbeiter | A bearbeiten, B lesen |
+| `viewer@example.test` | Betrachter | A lesen |
+| `nofamily@example.test` | Betrachter | keine |
+| `blocked@example.test` | gesperrt | (A lesen) — Anmeldung schlägt fehl |
+
+## Dienstschicht
+
+Die Fachlogik liegt in [lib/services](lib/services) als einfache
+async-Funktionen, die einen `Scope` ([lib/scope.ts](lib/scope.ts)) bekommen und
+serialisierbare Daten liefern: Baum, Personensuche, Personendetail mit
+gruppierten Beziehungen, Vorfahren/Nachfahren, Verwandtschaftsweg, Statistik,
+Datenlücken, Dubletten sowie die Mutationen für Personen und Beziehungen
+(einschließlich Validierung, Rechteprüfung und Audit). Route-Handler und Seiten
+nutzen dieselben Funktionen. Die Dienste importieren weder `next/*` noch
+`lib/auth.ts` und laufen daher auch in einem einfachen Node-Prozess;
+`scopeForEmail()` liefert dort den Scope zu einem Benutzer. Fehler kommen als
+`ServiceError` (`NOT_FOUND`, `FORBIDDEN`, `CONFLICT`, `VALIDATION`); unsichtbare
+Personen gelten als `NOT_FOUND`.
 
 ### OAuth lokal einrichten
 
@@ -108,6 +202,41 @@ eine öffentliche Domain mit TLS (Caddy holt das Zertifikat automatisch). Rein
 im LAN funktioniert OAuth nicht; dort bliebe nur der Dev-Login oder ein
 Wechsel auf E-Mail+Passwort.
 
+## Schema und Migrationen
+
+Das Schema liegt in `prisma/schema.prisma`, die Migrationen in
+`prisma/migrations` (Ausgangsstand: `0_init`). Schemaänderungen künftig mit
+`npm run db:migrate` (`prisma migrate dev`) als Migration anlegen und mit
+einchecken.
+
+Der `migrate`-Container ([docker/migrate.sh](docker/migrate.sh)) entscheidet
+beim Start anhand der Datenbank:
+
+| Zustand | Vorgehen |
+|---|---|
+| leere Datenbank (Neuinstallation) | `prisma migrate deploy` |
+| Datenbank mit Migrationshistorie | `prisma migrate deploy` |
+| bestehende Installation ohne Historie (früher per `db push` angelegt) | wie bisher `prisma db push` |
+
+Bestehende Installationen ändern ihr Verhalten also nicht von selbst.
+Umstellen (Baselining) geht einmalig so — **vorher sichern**:
+
+```bash
+# 1. Prüfen, dass die Datenbank exakt dem Schema entspricht
+#    (Ausgabe muss "This is an empty migration." sein):
+npx prisma migrate diff --from-url "$DATABASE_URL" \
+  --to-schema-datamodel prisma/schema.prisma --script
+
+# 2. Ausgangsmigration als bereits angewendet markieren:
+npx prisma migrate resolve --applied 0_init
+```
+
+Auf der NAS z.B. über `docker compose run --rm migrate sh` im
+migrate-Container. Ab dann läuft dort beim Start `migrate deploy`.
+
+Lokal (`docker-compose.dev.yml`) gilt dasselbe: `npm run db:push` bleibt
+möglich; wer auf Migrationen umstellen will, baselinet wie oben.
+
 ## Sicherung
 
 ```bash
@@ -153,6 +282,19 @@ Person ──< Relationship >── Person     type: PARENT_OF | PARTNER_OF
 Person ──< PersonMedia >── MediaAsset
 User (= Allowlist) ──< AuditLog
 ```
+
+Regeln für Beziehungen (geprüft in [lib/validation.ts](lib/validation.ts) und
+[lib/services/relationships.ts](lib/services/relationships.ts)):
+
+- Die Art muss zum Typ passen — Eltern: leiblich, adoptiert, Stief, Pflege;
+  Partner: verheiratet, unverheiratet, geschieden.
+- Höchstens **zwei leibliche** Eltern; Adoptiv-, Stief- und Pflegeeltern
+  kommen beliebig hinzu.
+- Keine Zyklen (niemand ist sein eigener Vorfahre), keine Partnerschaft
+  zwischen Elternteil und Kind, keine doppelten Beziehungen.
+- Daten müssen plausibel sein: kein Jahr vor 1000, Geburt und Tod nicht in der
+  Zukunft, Tod nicht vor der Geburt, Ende einer Beziehung nicht vor ihrem
+  Beginn.
 
 ## Berechtigungen
 

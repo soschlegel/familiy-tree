@@ -1,5 +1,3 @@
-import { hierarchy, tree as d3tree, type HierarchyPointNode } from "d3-hierarchy";
-
 export type TreePerson = {
   id: string;
   givenName: string;
@@ -147,16 +145,6 @@ export function indexTree(data: TreeData): Index {
   return { byId, childrenOf, parentsOf, partnersOf };
 }
 
-/**
- * Wurzeln sind Personen ohne Eltern — mit einer Ausnahme: Wer eingeheiratet
- * hat (keine eigenen Eltern, aber ein Partner mit Eltern) wird bewusst NICHT
- * zur Wurzel. Sonst bekäme diese Person einen eigenen Strang am Rand, bevor
- * der Partner sie als zweite Karte aufnehmen kann, und stünde losgelöst von
- * der Familie, in die sie gehört.
- *
- * Wer dadurch unplatziert bliebe, wird in layoutForest nachträglich als
- * eigener Strang ergänzt.
- */
 /** Einheitliches Datumsformat für die gesamte Oberfläche: 01.08.1984 */
 export function formatDate(d: string | Date | null | undefined): string {
   if (!d) return "";
