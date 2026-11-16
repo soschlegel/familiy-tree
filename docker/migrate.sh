@@ -21,15 +21,34 @@ until probe >/dev/null 2>&1; do
   sleep 2
 done
 
-# migrate deploy, sobald Migrationen im Repo liegen; sonst das Schema direkt
-# anwenden. So läuft der erste Start auch ohne generierte Migration durch.
+# Drei Fälle (siehe README, Abschnitt "Schema und Migrationen"):
+#
+#   migrations — die Datenbank wird über prisma/migrations verwaltet:
+#                `migrate deploy` spielt fehlende Migrationen ein.
+#   empty      — Neuinstallation: ebenfalls `migrate deploy`, damit die
+#                Datenbank von Anfang an eine Migrationshistorie hat.
+#   pushed     — bestehende Installation aus der Zeit vor den Migrationen
+#                (angelegt per `db push`). Verhalten bleibt wie bisher:
+#                Schema direkt anwenden. Umstellen erst nach bewusstem
+#                Baselining (`prisma migrate resolve --applied 0_init`).
+STATE="empty"
 if [ -d prisma/migrations ] && [ -n "$(ls -A prisma/migrations 2>/dev/null)" ]; then
-  echo "[migrate] Migrationen anwenden…"
-  $PRISMA migrate deploy
+  STATE="$(node docker/db-state.mjs)"
 else
-  echo "[migrate] Keine Migrationen gefunden — Schema wird direkt angewendet."
-  $PRISMA db push --skip-generate --accept-data-loss
+  STATE="no-migrations"
 fi
+
+case "$STATE" in
+  migrations|empty)
+    echo "[migrate] Migrationen anwenden ($STATE)…"
+    $PRISMA migrate deploy
+    ;;
+  *)
+    echo "[migrate] Datenbank ohne Migrationshistorie ($STATE) — Schema wird direkt angewendet."
+    echo "[migrate] Hinweis: Umstellung auf Migrationen siehe README (Baselining)."
+    $PRISMA db push --skip-generate --accept-data-loss
+    ;;
+esac
 
 # Idempotent: legt den Admin aus INITIAL_ADMIN_EMAIL an bzw. hebt ihn auf ADMIN.
 if [ -n "$INITIAL_ADMIN_EMAIL" ]; then

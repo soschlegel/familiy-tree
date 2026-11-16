@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
-import { route, notFound } from "@/lib/api";
+import { route, notFound, forbidden } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import { getObjectStream, deleteObject } from "@/lib/storage";
 import { canViewMedia, canDeleteMedia } from "@/lib/media-scope";
@@ -26,7 +26,16 @@ export const GET = route<Params>(null, async (ctx, req, { id }) => {
     new URL(req.url).searchParams.get("variant") === "thumb";
   const key = wantsThumb ? (asset.thumbnailKey ?? asset.storageKey) : asset.storageKey;
 
-  const body = await getObjectStream(key);
+  let body: ReadableStream | null;
+  try {
+    body = await getObjectStream(key);
+  } catch (err) {
+    // Fehlt das Objekt im Speicher (z.B. nach einem unvollständigen
+    // Restore), ist das ein 404 — kein Serverfehler mit Stacktrace.
+    const name = (err as { name?: string })?.name;
+    if (name === "NoSuchKey" || name === "NotFound") body = null;
+    else throw err;
+  }
   if (!body) {
     return NextResponse.json({ error: "Datei fehlt im Speicher" }, { status: 404 });
   }
@@ -45,7 +54,10 @@ export const DELETE = route<Params>(
   async (ctx, _req, { id }) => {
     const asset = await prisma.mediaAsset.findUnique({ where: { id } });
     if (!asset) return notFound();
-    if (!(await canDeleteMedia(ctx.scope, id))) return notFound();
+    if (!(await canViewMedia(ctx.scope, id))) return notFound();
+    if (!(await canDeleteMedia(ctx.scope, id))) {
+      return forbidden("dieses Bild zu löschen");
+    }
 
     await prisma.mediaAsset.delete({ where: { id } });
 

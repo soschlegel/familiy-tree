@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 
 import "./globals.css";
 import "reactflow/dist/style.css";
 import { auth, signOut } from "@/lib/auth";
 import { can } from "@/lib/authz";
+import { MainContainer, NavBar, type NavItem } from "@/components/NavBar";
 
 export const metadata: Metadata = {
-  title: "Stammbaum",
+  title: { default: "Stammbaum", template: "%s · Stammbaum" },
   description: "Familienstammbaum mit Bildarchiv",
 };
 
@@ -23,57 +23,52 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const session = await auth();
+  const user = session?.user;
+
+  const items: NavItem[] = user
+    ? [
+        { href: "/tree", label: "Baum" },
+        { href: "/people", label: "Personen" },
+        { href: "/research", label: "Recherche" },
+        // Export steht allen offen (enthält nur, was der Benutzer sehen
+        // darf); der Import ist auf der Seite selbst Administratoren
+        // vorbehalten.
+        { href: "/admin/data", label: "Daten" },
+        ...(can(user.role, "family:manage")
+          ? [{ href: "/admin/families", label: "Familien" }]
+          : []),
+        ...(can(user.role, "user:manage")
+          ? [{ href: "/admin/users", label: "Benutzer" }]
+          : []),
+      ]
+    : [];
 
   return (
     <html lang="de">
       <body className="min-h-screen">
-        {session?.user && (
-          <header className="border-b border-stone-200 bg-white dark:border-stone-800 dark:bg-stone-900">
-            <nav className="mx-auto flex max-w-6xl items-center gap-6 px-4 py-3">
-              <Link href="/tree" className="font-semibold">
-                Stammbaum
-              </Link>
-              <Link href="/tree" className="text-sm hover:underline">
-                Baum
-              </Link>
-              <Link href="/people" className="text-sm hover:underline">
-                Personen
-              </Link>
-              <Link href="/admin/data" className="text-sm hover:underline">
-                Daten
-              </Link>
-              {can(session.user.role, "family:manage") && (
-                <Link href="/admin/families" className="text-sm hover:underline">
-                  Familien
-                </Link>
-              )}
-              {can(session.user.role, "user:manage") && (
-                <Link href="/admin/users" className="text-sm hover:underline">
-                  Benutzer
-                </Link>
-              )}
-
-              <div className="ml-auto flex items-center gap-3 text-sm">
-                <span className="text-stone-500">
-                  {session.user.name ?? session.user.email}
-                  {" · "}
-                  {ROLE_LABEL[session.user.role]}
-                </span>
-                <form
-                  action={async () => {
-                    "use server";
-                    await signOut({ redirectTo: "/login" });
-                  }}
-                >
-                  <button className="rounded border border-stone-300 px-2 py-1 hover:bg-stone-100 dark:border-stone-700 dark:hover:bg-stone-800">
-                    Abmelden
-                  </button>
-                </form>
-              </div>
-            </nav>
-          </header>
+        <a
+          href="#inhalt"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:shadow dark:focus:bg-stone-900"
+        >
+          Zum Inhalt springen
+        </a>
+        {user && (
+          <NavBar
+            items={items}
+            userLabel={`${user.name ?? user.email} · ${ROLE_LABEL[user.role] ?? user.role}`}
+            signOut={
+              <form
+                action={async () => {
+                  "use server";
+                  await signOut({ redirectTo: "/login" });
+                }}
+              >
+                <button className="btn-secondary">Abmelden</button>
+              </form>
+            }
+          />
         )}
-        <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+        <MainContainer>{children}</MainContainer>
       </body>
     </html>
   );

@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import JSZip from "jszip";
-import sharp from "sharp";
-import { randomUUID } from "node:crypto";
 
 import { prisma } from "@/lib/prisma";
 import { route } from "@/lib/api";
 import { audit } from "@/lib/audit";
-import { putObject } from "@/lib/storage";
-import { exchangeSchema, type ExchangeFile } from "@/lib/exchange";
+import { processAndStoreImage } from "@/lib/media-processing";
+import { subtypeMatchesType } from "@/lib/validation";
+import {
+  exchangeSchema,
+  type ExchangeFile,
+  type ExchangeRelationship,
+} from "@/lib/exchange";
 
 export const runtime = "nodejs";
 
@@ -70,6 +73,18 @@ async function readUpload(file: File): Promise<{
 }
 
 /**
+ * Beziehungen, die das Datenmodell nicht zulässt, werden nicht importiert —
+ * sonst gelangten über den Import Daten hinein, die die API ablehnen würde.
+ */
+function invalidRelationship(r: ExchangeRelationship): string | null {
+  if (r.fromPersonId === r.toPersonId) return "Beziehung einer Person zu sich selbst.";
+  if (!subtypeMatchesType(r.type, r.subtype)) {
+    return `Art ${r.subtype} passt nicht zu ${r.type}.`;
+  }
+  return null;
+}
+
+/**
  * Ermittelt, was der Import täte — ohne etwas zu ändern. Dieselbe Funktion
  * liefert die Vorschau und die Grundlage für den eigentlichen Lauf, damit
  * Vorschau und Ausführung nicht auseinanderlaufen können.
@@ -111,6 +126,11 @@ async function makePlan(
       warnings.push(
         `Beziehung ${r.id} verweist auf unbekannte Personen und wird übersprungen.`,
       );
+      continue;
+    }
+    const invalid = invalidRelationship(r);
+    if (invalid) {
+      warnings.push(`Beziehung ${r.id} wird übersprungen: ${invalid}`);
       continue;
     }
     if (relationshipIds.has(r.id)) plan.relationships.update++;
@@ -196,11 +216,18 @@ export const POST = route("data:import", async (ctx, req) => {
     if (!knownPersons.has(r.fromPersonId) || !knownPersons.has(r.toPersonId)) {
       continue;
     }
+    if (invalidRelationship(r)) continue;
+    // Partnerschaften kanonisch (fromId < toId) speichern wie die API — sonst
+    // umginge eine umgekehrt gespeicherte Ehe die Eindeutigkeitsprüfung.
+    const [fromPersonId, toPersonId] =
+      r.type === "PARTNER_OF" && r.fromPersonId > r.toPersonId
+        ? [r.toPersonId, r.fromPersonId]
+        : [r.fromPersonId, r.toPersonId];
     const fields = {
       type: r.type,
       subtype: r.subtype,
-      fromPersonId: r.fromPersonId,
-      toPersonId: r.toPersonId,
+      fromPersonId,
+      toPersonId,
       startDate: iso(r.startDate),
       endDate: iso(r.endDate),
       notes: r.notes ?? null,
@@ -211,7 +238,7 @@ export const POST = route("data:import", async (ctx, req) => {
         update: { subtype: fields.subtype, startDate: fields.startDate, endDate: fields.endDate, notes: fields.notes },
         create: { id: r.id, ...fields },
       });
-    } catch (err) {
+    } catch {
       // Verstößt gegen die Eindeutigkeit (Beziehung existiert bereits unter
       // anderer ID) — überspringen statt den ganzen Import abzubrechen.
       plan.warnings.push(`Beziehung ${r.id} übersprungen: bereits vorhanden.`);
@@ -232,41 +259,19 @@ export const POST = route("data:import", async (ctx, req) => {
     if (!content) continue;
 
     try {
-      const uuid = randomUUID();
-      const originalKey = `originals/${uuid}.webp`;
-      const thumbnailKey = `thumbs/${uuid}.webp`;
-
-      const pipeline = sharp(content).rotate();
-      const [original, thumbnail] = await Promise.all([
-        pipeline
-          .clone()
-          .resize(2000, 2000, { fit: "inside", withoutEnlargement: true })
-          .webp({ quality: 88 })
-          .toBuffer({ resolveWithObject: true }),
-        pipeline.clone().resize(320, 320, { fit: "cover" }).webp({ quality: 75 }).toBuffer(),
-      ]);
-
-      await Promise.all([
-        putObject(originalKey, original.data, "image/webp"),
-        putObject(thumbnailKey, thumbnail, "image/webp"),
-      ]);
+      const stored = await processAndStoreImage(content, { checkFormat: false });
 
       await prisma.mediaAsset.create({
         data: {
           id: m.id,
-          storageKey: originalKey,
-          thumbnailKey,
+          ...stored,
           fileName: m.fileName,
-          mimeType: "image/webp",
-          sizeBytes: original.data.byteLength,
-          width: original.info.width,
-          height: original.info.height,
           caption: m.caption ?? null,
           uploadedById: ctx.userId,
         },
       });
       importedMedia.add(m.id);
-    } catch (err) {
+    } catch {
       plan.warnings.push(`Bild ${m.fileName} übersprungen: nicht lesbar.`);
     }
   }

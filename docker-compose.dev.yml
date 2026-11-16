@@ -31,8 +31,10 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     ports:
-      - "9000:9000"
-      - "9001:9001" # Web-Konsole: http://localhost:9001
+      # Host-Ports einstellbar: 9000 ist auf manchen Rechnern belegt (z.B.
+      # durch Zscaler). S3_ENDPOINT in der .env muss zum API-Port passen.
+      - "${MINIO_API_PORT:-9100}:9000"
+      - "${MINIO_CONSOLE_PORT:-9101}:9001" # Web-Konsole: http://localhost:9101
     volumes:
       - ./data/dev-minio:/data
     healthcheck:
@@ -50,6 +52,7 @@ services:
       /bin/sh -c "
       mc alias set local http://storage:9000 minioadmin minioadmin &&
       mc mb --ignore-existing local/familytree &&
+      mc mb --ignore-existing local/familytree-mock &&
       echo 'Bucket bereit.'
       "
     restart: "no"

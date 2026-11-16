@@ -1,91 +1,46 @@
 import { NextResponse } from "next/server";
 
-import { prisma } from "@/lib/prisma";
-import { route, badRequest, forbidden } from "@/lib/api";
-import { audit } from "@/lib/audit";
-import { personInput } from "@/lib/validation";
-import { editableFamilyIds, personVisibilityFilter } from "@/lib/scope";
+import { route } from "@/lib/api";
+import { createPerson, searchPersons, type PersonSort } from "@/lib/services";
 
+const SORTS: PersonSort[] = ["name", "birthDate", "birthDateDesc", "updatedAt"];
+
+/**
+ * Sichtbare Personen suchen.
+ *
+ * Antwort wie bisher als Array (rückwärtskompatibel); die Gesamtzahl steht im
+ * Header `X-Total-Count`. Optionale Parameter: q, familyId, limit, offset,
+ * sort (name | birthDate | birthDateDesc | updatedAt).
+ */
 export const GET = route(null, async (ctx, req) => {
-  const q = new URL(req.url).searchParams.get("q")?.trim();
+  const params = new URL(req.url).searchParams;
+  const num = (key: string) => {
+    const raw = params.get(key);
+    if (raw === null || raw === "") return undefined;
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 0 ? n : undefined;
+  };
+  const sort = params.get("sort") as PersonSort | null;
 
-  const persons = await prisma.person.findMany({
-    where: {
-      AND: [
-        personVisibilityFilter(ctx.scope),
-        q
-          ? {
-              OR: [
-                { givenName: { contains: q, mode: "insensitive" as const } },
-                { familyName: { contains: q, mode: "insensitive" as const } },
-                { birthName: { contains: q, mode: "insensitive" as const } },
-              ],
-            }
-          : {},
-      ],
-    },
-    orderBy: [{ familyName: "asc" }, { givenName: "asc" }],
-    include: {
-      media: { where: { isPrimary: true }, take: 1, select: { mediaId: true } },
-      families: { select: { familyId: true } },
-    },
+  const { items, total } = await searchPersons(ctx.scope, {
+    q: params.get("q") ?? undefined,
+    familyId: params.get("familyId") ?? undefined,
+    limit: num("limit"),
+    offset: num("offset"),
+    sort: sort && SORTS.includes(sort) ? sort : undefined,
   });
 
   return NextResponse.json(
-    persons.map(({ media, families, ...p }) => ({
-      ...p,
-      primaryMediaId: media[0]?.mediaId ?? null,
-      familyIds: families.map((f) => f.familyId),
-    })),
+    items.map(({ relationCount: _relationCount, ...p }) => p),
+    { headers: { "X-Total-Count": String(total) } },
   );
 });
 
 /**
- * Neue Person. Nicht-Admins müssen sie einer Familie zuordnen, in der sie
- * EDITOR sind — eine Person ohne Familie wäre für den Anlegenden im nächsten
- * Moment unsichtbar, weil nur Admins familienlose Personen sehen.
+ * Neue Person. Regeln (Familienzuordnung, Validierung) siehe createPerson in
+ * lib/services/persons.ts.
  */
 export const POST = route(null, async (ctx, req) => {
-  const body = await req.json();
-  const parsed = personInput.safeParse(body);
-  if (!parsed.success) return badRequest(parsed.error.issues);
-
-  const editable = editableFamilyIds(ctx.scope);
-  const requested: string[] = Array.isArray(body?.familyIds)
-    ? body.familyIds
-    : [];
-
-  let familyIds: string[];
-
-  if (ctx.scope.isAdmin) {
-    familyIds = requested;
-  } else {
-    if (editable.length === 0) {
-      return forbidden("Personen anzulegen");
-    }
-    const illegal = requested.filter((f) => !editable.includes(f));
-    if (illegal.length > 0) {
-      return forbidden("Familien, in denen du keine Bearbeitungsrechte hast");
-    }
-    // Ohne Angabe in die einzige bearbeitbare Familie legen; gibt es mehrere,
-    // muss der Aufrufer sich festlegen.
-    familyIds = requested.length > 0 ? requested : editable.slice(0, 1);
-  }
-
-  const person = await prisma.person.create({
-    data: {
-      ...parsed.data,
-      families: { create: familyIds.map((familyId) => ({ familyId })) },
-    },
-  });
-
-  await audit({
-    userId: ctx.userId,
-    action: "CREATE",
-    entityType: "Person",
-    entityId: person.id,
-    diff: { ...parsed.data, familyIds },
-  });
-
-  return NextResponse.json({ ...person, familyIds }, { status: 201 });
+  const person = await createPerson(ctx.scope, await req.json());
+  return NextResponse.json(person, { status: 201 });
 });
