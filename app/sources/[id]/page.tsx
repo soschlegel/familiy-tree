@@ -1,0 +1,221 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { cache } from "react";
+
+import { requireScope } from "@/lib/session";
+import { getSource, type CitationTarget, type PersonRef, type SourceDetail } from "@/lib/services";
+import { CITATION_FACT_LABEL, CONFIDENCE_LABEL, SOURCE_KIND_LABEL } from "@/lib/source-labels";
+import { formatDate, lifeSpan } from "@/lib/tree-layout";
+import { LockIcon } from "@/components/PersonNode";
+import { DeleteSourceButton } from "@/components/DeleteSourceButton";
+
+export const dynamic = "force-dynamic";
+
+const name = (p: { givenName: string; familyName: string | null }) =>
+  [p.givenName, p.familyName].filter(Boolean).join(" ");
+
+const loadDetail = cache(async (id: string) => {
+  const { scope } = await requireScope();
+  return getSource(scope, id);
+});
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const detail = await loadDetail(id);
+  return { title: detail ? detail.source.title : "Nicht gefunden" };
+}
+
+function PersonName({ person }: { person: PersonRef }) {
+  if (person.restricted) {
+    return (
+      <span className="inline-flex items-center gap-1 italic text-stone-500 dark:text-stone-400">
+        <LockIcon className="h-3.5 w-3.5" /> Nicht freigegeben
+      </span>
+    );
+  }
+  return (
+    <Link href={`/people/${person.id}`} className="font-medium hover:underline">
+      {name(person)}
+    </Link>
+  );
+}
+
+const RELATION_LABEL: Record<string, string> = {
+  MARRIED: "Ehe",
+  DIVORCED: "Ehe (geschieden)",
+  UNMARRIED: "Partnerschaft",
+  BIOLOGICAL: "Eltern – Kind",
+  ADOPTIVE: "Adoption",
+  STEP: "Stiefelternteil – Kind",
+  FOSTER: "Pflegeelternteil – Kind",
+};
+
+function Target({ target }: { target: CitationTarget }) {
+  if (target.kind === "person") {
+    const span = target.person.restricted ? "" : lifeSpan(target.person);
+    return (
+      <span className="flex flex-wrap items-baseline gap-x-2">
+        <PersonName person={target.person} />
+        {span && <span className="text-xs muted">{span}</span>}
+      </span>
+    );
+  }
+  return (
+    <span className="flex flex-wrap items-baseline gap-x-1.5">
+      <span className="text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400">
+        {RELATION_LABEL[target.subtype] ?? "Beziehung"}:
+      </span>
+      <PersonName person={target.from} />
+      <span className="muted">&amp;</span>
+      <PersonName person={target.to} />
+    </span>
+  );
+}
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="eyebrow">{label}</dt>
+      <dd className="mt-1 break-words">{children}</dd>
+    </div>
+  );
+}
+
+export default async function SourcePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ saved?: string }>;
+}) {
+  const { id } = await params;
+  const { saved } = await searchParams;
+  const detail: SourceDetail | null = await loadDetail(id);
+  // Unsichtbar = nicht vorhanden (wie bei Personen).
+  if (!detail) notFound();
+  const { source: s, citations } = detail;
+  const date = formatDate(s.date, s.datePrecision, s.dateQualifier);
+  const total = citations.length + detail.hiddenCitationCount;
+
+  return (
+    <div className="space-y-8">
+      <nav aria-label="Brotkrumen" className="text-sm">
+        <Link href="/sources" className="btn-link text-sm">
+          ← Alle Quellen
+        </Link>
+      </nav>
+
+      {saved && (
+        <p role="status" className="alert-success">
+          Quelle gespeichert.
+        </p>
+      )}
+
+      <header className="card relative overflow-hidden p-5 sm:p-7">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-brass-100/70 to-transparent dark:from-brass-700/20"
+        />
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start">
+          <div className="min-w-0 flex-1 space-y-2">
+            <p>
+              <span className="badge-accent">{SOURCE_KIND_LABEL[s.kind]}</span>
+            </p>
+            <h1 className="font-serif text-2xl font-semibold tracking-tight sm:text-3xl">{s.title}</h1>
+            {s.author && <p className="muted">{s.author}</p>}
+          </div>
+          {detail.canEdit && (
+            <Link href={`/sources/${s.id}/edit`} className="btn-primary self-start">
+              Bearbeiten
+            </Link>
+          )}
+        </div>
+
+        <dl className="relative mt-6 grid gap-4 border-t border-stone-200 pt-5 text-sm sm:grid-cols-2 lg:grid-cols-4 dark:border-stone-800">
+          <Row label="Archiv">{s.repository || "—"}</Row>
+          <Row label="Signatur">{s.callNumber || "—"}</Row>
+          <Row label="Datum">{date || "—"}</Row>
+          <Row label="Internet">
+            {s.url ? (
+              <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-accent-700 underline-offset-2 hover:underline dark:text-accent-300">
+                {s.url.replace(/^https?:\/\//, "").slice(0, 60)}
+              </a>
+            ) : (
+              "—"
+            )}
+          </Row>
+        </dl>
+      </header>
+
+      {(s.notes || s.mediaId) && (
+        <section aria-labelledby="notes-h" className="card grid gap-5 p-5 md:grid-cols-[1fr_auto]">
+          <div>
+            <h2 id="notes-h" className="section-title mb-2">
+              Abschrift und Notizen
+            </h2>
+            {s.notes ? (
+              <p className="whitespace-pre-wrap leading-relaxed">{s.notes}</p>
+            ) : (
+              <p className="text-sm muted">Keine Abschrift erfasst.</p>
+            )}
+          </div>
+          {s.mediaId && (
+            <figure className="md:w-56">
+              <a href={`/api/media/${s.mediaId}`} target="_blank" rel="noopener noreferrer">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/api/media/${s.mediaId}?variant=thumb`}
+                  alt={`Scan zu ${s.title}`}
+                  className="w-full rounded-lg border border-stone-200 object-cover dark:border-stone-800"
+                />
+              </a>
+              <figcaption className="mt-1 text-xs muted">Scan — antippen für volle Größe</figcaption>
+            </figure>
+          )}
+        </section>
+      )}
+
+      <section aria-labelledby="cited-h" className="space-y-3" data-testid="source-citations">
+        <div>
+          <h2 id="cited-h" className="section-title">
+            Belegt
+          </h2>
+          <p className="text-sm muted">
+            {total === 0
+              ? "Diese Quelle belegt noch nichts. Belege entstehen auf der Personenseite unter „Quellen“."
+              : total === 1
+                ? "Eine Angabe stützt sich auf diese Quelle."
+                : `${total} Angaben stützen sich auf diese Quelle.`}
+          </p>
+        </div>
+        {citations.length > 0 && (
+          <ul className="card divide-y divide-stone-200 dark:divide-stone-800">
+            {citations.map((c) => (
+              <li key={c.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-2.5 text-sm" data-testid="source-citation">
+                <span className="w-36 shrink-0 text-xs font-medium uppercase tracking-wide text-accent-700 dark:text-accent-300">
+                  {CITATION_FACT_LABEL[c.fact]}
+                </span>
+                <Target target={c.target} />
+                {c.detail && <span className="text-xs muted">· {c.detail}</span>}
+                {c.confidence && <span className="badge px-2 py-0 text-[11px]">{CONFIDENCE_LABEL[c.confidence]}</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+        {detail.hiddenCitationCount > 0 && (
+          <p className="alert-info" data-testid="source-hidden-citations">
+            {detail.hiddenCitationCount === 1
+              ? "Ein weiterer Beleg betrifft eine Familie, die für dich nicht freigegeben ist."
+              : `${detail.hiddenCitationCount} weitere Belege betreffen Familien, die für dich nicht freigegeben sind.`}
+          </p>
+        )}
+      </section>
+
+      {detail.canDelete && (
+        <section aria-label="Quelle löschen" className="rounded-2xl border border-stone-200 bg-stone-100/50 p-5 dark:border-stone-800 dark:bg-stone-900/40">
+          <DeleteSourceButton sourceId={s.id} title={s.title} citationCount={total} />
+        </section>
+      )}
+    </div>
+  );
+}

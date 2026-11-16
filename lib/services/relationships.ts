@@ -15,6 +15,17 @@ import {
   validationError,
 } from "./errors";
 import { toRelationshipDto, type RelationshipDto } from "./dto";
+import { fuzzyColumns, fuzzyField, type FuzzyDate } from "../dates";
+
+/** Validierte Eingabe -> Prisma-Spalten (Anker, Genauigkeit, Zusatz). */
+function relationshipColumns<T extends { startDate?: FuzzyDate | null; endDate?: FuzzyDate | null }>(data: T) {
+  const { startDate, endDate, ...rest } = data;
+  return {
+    ...rest,
+    ...(startDate !== undefined ? fuzzyColumns("startDate", startDate) : {}),
+    ...(endDate !== undefined ? fuzzyColumns("endDate", endDate) : {}),
+  };
+}
 
 /**
  * Prüft, ob `parentId` bereits Nachfahre von `childId` ist. Verhindert Zyklen
@@ -159,7 +170,14 @@ export async function createRelationship(
   if (existing) throw conflictError("Diese Beziehung existiert bereits.");
 
   const relationship = await prisma.relationship.create({
-    data: { type, subtype, fromPersonId, toPersonId, startDate, endDate, notes },
+    data: {
+      type,
+      subtype,
+      fromPersonId,
+      toPersonId,
+      notes,
+      ...relationshipColumns({ startDate, endDate }),
+    },
   });
 
   await audit({
@@ -197,8 +215,8 @@ export async function updateRelationship(
   const merged = {
     type: existing.type,
     subtype: data.subtype ?? existing.subtype,
-    startDate: data.startDate !== undefined ? data.startDate : existing.startDate,
-    endDate: data.endDate !== undefined ? data.endDate : existing.endDate,
+    startDate: data.startDate !== undefined ? data.startDate : fuzzyField(existing, "startDate"),
+    endDate: data.endDate !== undefined ? data.endDate : fuzzyField(existing, "endDate"),
   };
   const issues = relationshipIssues(merged);
   if (issues.length > 0) throw validationError(issues);
@@ -211,9 +229,10 @@ export async function updateRelationship(
     await assertBiologicalParentLimit(existing.toPersonId, existing.id);
   }
 
+  const columns = relationshipColumns(data);
   const relationship = await prisma.relationship.update({
     where: { id },
-    data,
+    data: columns,
   });
 
   await audit({
@@ -221,7 +240,7 @@ export async function updateRelationship(
     action: "UPDATE",
     entityType: "Relationship",
     entityId: id,
-    diff: data,
+    diff: columns,
   });
 
   return toRelationshipDto(relationship);

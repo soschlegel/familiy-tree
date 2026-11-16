@@ -3,6 +3,7 @@ import { can } from "@/lib/authz";
 import { DataTransfer } from "@/components/DataTransfer";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Daten" };
 
 export default async function DataPage() {
   const session = await requirePage();
@@ -10,8 +11,9 @@ export default async function DataPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold">Daten sichern und einspielen</h1>
-        <p className="text-sm text-stone-500">
+        <p className="eyebrow">Daten</p>
+        <h1 className="page-title">Sichern und einspielen</h1>
+        <p className="mt-1 text-sm muted">
           Austauschformat für Umzüge und Sicherungen.
         </p>
       </div>

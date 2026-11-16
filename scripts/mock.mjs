@@ -6,6 +6,7 @@
 //   node scripts/mock.mjs seed    nur neu befüllen (Datenbank muss existieren)
 //   node scripts/mock.mjs dev     Dev-Server gegen die Mock-Daten auf Port 3100
 //   node scripts/mock.mjs env     berechnete Umgebung anzeigen
+//   node scripts/mock.mjs mcp     MCP-Server (stdio) gegen die Mock-Daten
 //
 // Die Mock-Datenbank liegt neben der normalen auf demselben Postgres. Ihr Name
 // wird aus DATABASE_URL abgeleitet (…/familytree -> …/familytree_mock) oder
@@ -155,6 +156,11 @@ try {
     case "dev":
       await dev();
       break;
+    case "mcp":
+      // MCP-Server (mcp/server.ts) gegen die Mock-Datenbank. Hier nichts auf
+      // stdout ausgeben — das gehört allein dem MCP-Protokoll.
+      await run([bin.tsx, "mcp/server.ts"]);
+      break;
     case "env":
       console.log(
         JSON.stringify(
@@ -171,7 +177,7 @@ try {
       );
       break;
     default:
-      console.error("Aufruf: node scripts/mock.mjs <setup|seed|dev|env>");
+      console.error("Aufruf: node scripts/mock.mjs <setup|seed|dev|env|mcp>");
       process.exit(1);
   }
 } catch (err) {

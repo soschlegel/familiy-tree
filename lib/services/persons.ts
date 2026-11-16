@@ -17,6 +17,7 @@ import {
   personPatch,
 } from "../validation";
 import { buildGraphIndex, siblingsOf } from "../graph";
+import { fuzzyColumns, fuzzyField, type DatePrecision, type DateQualifier, type FuzzyDate } from "../dates";
 import {
   forbiddenError,
   notFoundError,
@@ -24,6 +25,7 @@ import {
   parseOrThrow,
   validationError,
 } from "./errors";
+import { listPersonCitations, type PersonCitation } from "./sources";
 import {
   iso,
   toPersonRef,
@@ -47,6 +49,15 @@ export type SearchPersonsOptions = {
   limit?: number;
   offset?: number;
   sort?: PersonSort;
+  /** Geburtsjahr ab (einschließlich). Personen ohne Geburtsdatum fallen heraus. */
+  bornFrom?: number;
+  /** Geburtsjahr bis (einschließlich). */
+  bornTo?: number;
+  /** Teilstring von Geburts- oder Sterbeort (ohne Groß-/Kleinschreibung). */
+  place?: string;
+  gender?: "MALE" | "FEMALE" | "OTHER" | "UNKNOWN";
+  /** true: nur mit Sterbedatum, false: nur ohne. */
+  deceased?: boolean;
 };
 
 export type PersonListItem = PersonSummary & { relationCount: number };
@@ -55,7 +66,15 @@ export const MAX_PAGE_SIZE = 1000;
 
 function searchWhere(
   scope: Scope,
-  { q, familyId }: Pick<SearchPersonsOptions, "q" | "familyId">,
+  {
+    q,
+    familyId,
+    bornFrom,
+    bornTo,
+    place,
+    gender,
+    deceased,
+  }: Omit<SearchPersonsOptions, "limit" | "offset" | "sort">,
 ): Prisma.PersonWhereInput {
   const words = (q ?? "").trim().split(/\s+/).filter(Boolean).slice(0, 8);
   const and: Prisma.PersonWhereInput[] = [personVisibilityFilter(scope)];
@@ -79,6 +98,31 @@ function searchWhere(
       and.push({ families: { some: { familyId } } });
     }
   }
+
+  const fromYear = Number.isFinite(bornFrom) ? Math.floor(bornFrom!) : undefined;
+  const toYear = Number.isFinite(bornTo) ? Math.floor(bornTo!) : undefined;
+  if (fromYear !== undefined || toYear !== undefined) {
+    and.push({
+      birthDate: {
+        ...(fromYear !== undefined ? { gte: new Date(Date.UTC(fromYear, 0, 1)) } : {}),
+        ...(toYear !== undefined ? { lt: new Date(Date.UTC(toYear + 1, 0, 1)) } : {}),
+      },
+    });
+  }
+
+  const placeText = place?.trim();
+  if (placeText) {
+    and.push({
+      OR: [
+        { birthPlace: { contains: placeText, mode: "insensitive" } },
+        { deathPlace: { contains: placeText, mode: "insensitive" } },
+      ],
+    });
+  }
+
+  if (gender) and.push({ gender });
+  if (deceased === true) and.push({ deathDate: { not: null } });
+  if (deceased === false) and.push({ deathDate: null });
 
   return { AND: and };
 }
@@ -152,7 +196,11 @@ export type PersonRelation = {
   /** Rolle der ANDEREN Person aus Sicht dieser Person. */
   role: "parent" | "child" | "partner";
   startDate: string | null;
+  startDatePrecision: DatePrecision;
+  startDateQualifier: DateQualifier;
   endDate: string | null;
+  endDatePrecision: DatePrecision;
+  endDateQualifier: DateQualifier;
   notes: string | null;
   other: PersonRef;
   /** Bilder zu dieser Beziehung (z.B. Hochzeitsfotos). */
@@ -184,6 +232,8 @@ export type PersonDetail = {
   children: PersonRelation[];
   partners: PersonRelation[];
   siblings: PersonSibling[];
+  /** Belege zur Person und zu ihren Beziehungen (siehe sources.ts). */
+  citations: PersonCitation[];
 };
 
 /**
@@ -205,6 +255,10 @@ export async function getPersonDetail(
     birthDate: true,
     birthPlace: true,
     deathDate: true,
+    birthDatePrecision: true,
+    birthDateQualifier: true,
+    deathDatePrecision: true,
+    deathDateQualifier: true,
     families: { select: { familyId: true } },
   } as const;
   const relMedia = {
@@ -259,7 +313,11 @@ export async function getPersonDetail(
       subtype: r.subtype,
       role: r.type === "PARENT_OF" ? ("child" as const) : ("partner" as const),
       startDate: iso(r.startDate),
+      startDatePrecision: r.startDatePrecision,
+      startDateQualifier: r.startDateQualifier,
       endDate: iso(r.endDate),
+      endDatePrecision: r.endDatePrecision,
+      endDateQualifier: r.endDateQualifier,
       notes: r.notes,
       other: ref(r.toPerson),
       media: mediaOf(r.media),
@@ -270,7 +328,11 @@ export async function getPersonDetail(
       subtype: r.subtype,
       role: r.type === "PARENT_OF" ? ("parent" as const) : ("partner" as const),
       startDate: iso(r.startDate),
+      startDatePrecision: r.startDatePrecision,
+      startDateQualifier: r.startDateQualifier,
       endDate: iso(r.endDate),
+      endDatePrecision: r.endDatePrecision,
+      endDateQualifier: r.endDateQualifier,
       notes: r.notes,
       other: ref(r.fromPerson),
       media: mediaOf(r.media),
@@ -344,6 +406,7 @@ export async function getPersonDetail(
     );
 
   const primary = person.media.find((m) => m.isPrimary);
+  const citations = await listPersonCitations(scope, id);
 
   return {
     person: toPersonSummary(scope, person, {
@@ -376,6 +439,7 @@ export async function getPersonDetail(
           a.other.id.localeCompare(b.other.id),
       ),
     siblings,
+    citations,
   };
 }
 
@@ -394,6 +458,10 @@ export async function listPickablePersons(
     familyName: string | null;
     birthDate: string | null;
     deathDate: string | null;
+    birthDatePrecision: DatePrecision;
+    birthDateQualifier: DateQualifier;
+    deathDatePrecision: DatePrecision;
+    deathDateQualifier: DateQualifier;
   }[]
 > {
   const rows = await prisma.person.findMany({
@@ -410,6 +478,10 @@ export async function listPickablePersons(
       familyName: true,
       birthDate: true,
       deathDate: true,
+      birthDatePrecision: true,
+      birthDateQualifier: true,
+      deathDatePrecision: true,
+      deathDateQualifier: true,
     },
   });
   return rows.map((p) => ({
@@ -422,6 +494,19 @@ export async function listPickablePersons(
 // ---------------------------------------------------------------------------
 // Mutationen
 // ---------------------------------------------------------------------------
+
+/**
+ * Validierte Eingabe -> Prisma-Spalten. Ein Datum wird zu Anker, Genauigkeit
+ * und Zusatz; fehlende Felder (undefined) bleiben unverändert.
+ */
+function personColumns<T extends { birthDate?: FuzzyDate | null; deathDate?: FuzzyDate | null }>(data: T) {
+  const { birthDate, deathDate, ...rest } = data;
+  return {
+    ...rest,
+    ...(birthDate !== undefined ? fuzzyColumns("birthDate", birthDate) : {}),
+    ...(deathDate !== undefined ? fuzzyColumns("deathDate", deathDate) : {}),
+  };
+}
 
 async function summaryById(scope: Scope, id: string): Promise<PersonSummary> {
   const p = await prisma.person.findUniqueOrThrow({
@@ -474,9 +559,10 @@ export async function createPerson(
     }
   }
 
+  const columns = personColumns(data);
   const person = await prisma.person.create({
     data: {
-      ...data,
+      ...columns,
       families: { create: familyIds.map((familyId) => ({ familyId })) },
     },
   });
@@ -486,7 +572,7 @@ export async function createPerson(
     action: "CREATE",
     entityType: "Person",
     entityId: person.id,
-    diff: { ...data, familyIds },
+    diff: { ...columns, familyIds },
   });
 
   return toPersonSummary(scope, person, { familyIds, primaryMediaId: null });
@@ -513,20 +599,21 @@ export async function updatePerson(
   // Datumsregeln über den zusammengeführten Stand prüfen — sonst ließe sich
   // ein Sterbedatum vor dem Geburtsdatum in zwei Schritten eintragen.
   const merged = {
-    birthDate: data.birthDate !== undefined ? data.birthDate : existing.birthDate,
-    deathDate: data.deathDate !== undefined ? data.deathDate : existing.deathDate,
+    birthDate: data.birthDate !== undefined ? data.birthDate : fuzzyField(existing, "birthDate"),
+    deathDate: data.deathDate !== undefined ? data.deathDate : fuzzyField(existing, "deathDate"),
   };
   const issues = personDateIssues(merged);
   if (issues.length > 0) throw validationError(issues);
 
-  await prisma.person.update({ where: { id }, data });
+  const columns = personColumns(data);
+  await prisma.person.update({ where: { id }, data: columns });
 
   await audit({
     userId: scope.userId,
     action: "UPDATE",
     entityType: "Person",
     entityId: id,
-    diff: data,
+    diff: columns,
   });
 
   return summaryById(scope, id);

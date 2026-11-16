@@ -3,6 +3,7 @@ import type { Gender } from "@prisma/client";
 import { prisma } from "../prisma";
 import { canViewPerson, type Scope } from "../scope";
 import { buildGraphIndex, type GraphEdge, type GraphIndex } from "../graph";
+import type { DatePrecision, DateQualifier } from "../dates";
 
 /**
  * Lädt den kompletten Graphen samt Sichtbarkeit je Person.
@@ -26,6 +27,10 @@ export type GraphPerson = {
   birthPlace: string | null;
   deathDate: Date | null;
   deathPlace: string | null;
+  birthDatePrecision: DatePrecision;
+  birthDateQualifier: DateQualifier;
+  deathDatePrecision: DatePrecision;
+  deathDateQualifier: DateQualifier;
   hasNotes: boolean;
   familyIds: string[];
   primaryMediaId: string | null;
@@ -34,7 +39,11 @@ export type GraphPerson = {
 
 export type GraphRelationship = GraphEdge & {
   startDate: Date | null;
+  startDatePrecision: DatePrecision;
+  startDateQualifier: DateQualifier;
   endDate: Date | null;
+  endDatePrecision: DatePrecision;
+  endDateQualifier: DateQualifier;
   primaryMediaId: string | null;
 };
 
@@ -58,6 +67,10 @@ export async function loadGraph(scope: Scope): Promise<LoadedGraph> {
         birthPlace: true,
         deathDate: true,
         deathPlace: true,
+        birthDatePrecision: true,
+        birthDateQualifier: true,
+        deathDatePrecision: true,
+        deathDateQualifier: true,
         notes: true,
         media: { where: { isPrimary: true }, take: 1, select: { mediaId: true } },
         families: { select: { familyId: true } },
@@ -72,7 +85,11 @@ export async function loadGraph(scope: Scope): Promise<LoadedGraph> {
         fromPersonId: true,
         toPersonId: true,
         startDate: true,
+        startDatePrecision: true,
+        startDateQualifier: true,
         endDate: true,
+        endDatePrecision: true,
+        endDateQualifier: true,
         media: { where: { isPrimary: true }, take: 1, select: { mediaId: true } },
       },
     }),
@@ -91,6 +108,10 @@ export async function loadGraph(scope: Scope): Promise<LoadedGraph> {
       birthPlace: p.birthPlace,
       deathDate: p.deathDate,
       deathPlace: p.deathPlace,
+      birthDatePrecision: p.birthDatePrecision,
+      birthDateQualifier: p.birthDateQualifier,
+      deathDatePrecision: p.deathDatePrecision,
+      deathDateQualifier: p.deathDateQualifier,
       hasNotes: Boolean(p.notes),
       familyIds,
       primaryMediaId: p.media[0]?.mediaId ?? null,
@@ -105,7 +126,11 @@ export async function loadGraph(scope: Scope): Promise<LoadedGraph> {
     from: r.fromPersonId,
     to: r.toPersonId,
     startDate: r.startDate,
+    startDatePrecision: r.startDatePrecision,
+    startDateQualifier: r.startDateQualifier,
     endDate: r.endDate,
+    endDatePrecision: r.endDatePrecision,
+    endDateQualifier: r.endDateQualifier,
     primaryMediaId: r.media[0]?.mediaId ?? null,
   }));
 

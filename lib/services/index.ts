@@ -20,4 +20,8 @@ export * from "./persons";
 export * from "./relationships";
 export * from "./research";
 export * from "./families";
+export * from "./kinship";
+export * from "./timeline";
+export * from "./consistency";
+export * from "./sources";
 export { loadGraph, type GraphPerson, type GraphRelationship, type LoadedGraph } from "./graph-data";

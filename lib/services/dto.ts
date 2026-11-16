@@ -1,17 +1,31 @@
 import type { Person, Relationship } from "@prisma/client";
 
+import type { DatePrecision, DateQualifier } from "../dates";
 import { maskPerson, visibleFamilyIds, type MaskedPerson, type Scope } from "../scope";
 
 /**
  * Serialisierbare Darstellungen, die die Dienste zurückgeben. Datumswerte
  * stehen als ISO-String darin, damit das Ergebnis ohne Umweg als JSON
  * verschickt werden kann (Route-Handler, Server-Components, MCP).
+ *
+ * Ungenaue Daten: der ISO-String ist der Ankerpunkt (siehe lib/dates.ts),
+ * daneben stehen Genauigkeit (`…Precision`) und Zusatz (`…Qualifier`).
+ * Anzeigen bitte immer über formatFuzzyDate/lifeSpan, nie direkt über den
+ * ISO-String — „1850“ ist sonst „01.01.1850“.
  */
 
 export type Gender = "MALE" | "FEMALE" | "OTHER" | "UNKNOWN";
 
+/** Genauigkeit und Zusatz der Lebensdaten. */
+export type LifeDatePrecision = {
+  birthDatePrecision: DatePrecision;
+  birthDateQualifier: DateQualifier;
+  deathDatePrecision: DatePrecision;
+  deathDateQualifier: DateQualifier;
+};
+
 /** Vollständige Angaben einer sichtbaren Person. */
-export type PersonSummary = {
+export type PersonSummary = LifeDatePrecision & {
   id: string;
   givenName: string;
   familyName: string | null;
@@ -31,7 +45,7 @@ export type PersonSummary = {
 };
 
 /** Kurzform für Listen in Recherche-Ergebnissen. */
-export type PersonBrief = {
+export type PersonBrief = LifeDatePrecision & {
   id: string;
   givenName: string;
   familyName: string | null;
@@ -53,13 +67,27 @@ export type RelationshipDto = {
   fromPersonId: string;
   toPersonId: string;
   startDate: string | null;
+  startDatePrecision: DatePrecision;
+  startDateQualifier: DateQualifier;
   endDate: string | null;
+  endDatePrecision: DatePrecision;
+  endDateQualifier: DateQualifier;
   notes: string | null;
   createdAt: string;
 };
 
 export const iso = (d: Date | null | undefined): string | null =>
   d ? d.toISOString() : null;
+
+/** Genauigkeit/Zusatz aus einem (Teil-)Datensatz; fehlend = tagesgenau. */
+export function lifeDatePrecision(p: Partial<LifeDatePrecision>): LifeDatePrecision {
+  return {
+    birthDatePrecision: p.birthDatePrecision ?? "DAY",
+    birthDateQualifier: p.birthDateQualifier ?? "EXACT",
+    deathDatePrecision: p.deathDatePrecision ?? "DAY",
+    deathDateQualifier: p.deathDateQualifier ?? "EXACT",
+  };
+}
 
 export function toPersonSummary(
   scope: Scope,
@@ -76,6 +104,7 @@ export function toPersonSummary(
     birthPlace: p.birthPlace,
     deathDate: iso(p.deathDate),
     deathPlace: p.deathPlace,
+    ...lifeDatePrecision(p),
     notes: p.notes,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
@@ -85,16 +114,18 @@ export function toPersonSummary(
   };
 }
 
-export function toPersonBrief(p: {
-  id: string;
-  givenName: string;
-  familyName: string | null;
-  birthName: string | null;
-  gender: Gender;
-  birthDate: Date | string | null;
-  birthPlace: string | null;
-  deathDate: Date | string | null;
-}): PersonBrief {
+export function toPersonBrief(
+  p: {
+    id: string;
+    givenName: string;
+    familyName: string | null;
+    birthName: string | null;
+    gender: Gender;
+    birthDate: Date | string | null;
+    birthPlace: string | null;
+    deathDate: Date | string | null;
+  } & Partial<LifeDatePrecision>,
+): PersonBrief {
   const s = (d: Date | string | null) =>
     d === null ? null : typeof d === "string" ? d : d.toISOString();
   return {
@@ -106,6 +137,7 @@ export function toPersonBrief(p: {
     birthDate: s(p.birthDate),
     birthPlace: p.birthPlace,
     deathDate: s(p.deathDate),
+    ...lifeDatePrecision(p),
     restricted: false,
   };
 }
@@ -126,7 +158,11 @@ export function toRelationshipDto(r: Relationship): RelationshipDto {
     fromPersonId: r.fromPersonId,
     toPersonId: r.toPersonId,
     startDate: iso(r.startDate),
+    startDatePrecision: r.startDatePrecision,
+    startDateQualifier: r.startDateQualifier,
     endDate: iso(r.endDate),
+    endDatePrecision: r.endDatePrecision,
+    endDateQualifier: r.endDateQualifier,
     notes: r.notes,
     createdAt: r.createdAt.toISOString(),
   };

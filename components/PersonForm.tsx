@@ -1,7 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+
+import { apiFetch, jsonBody } from "./api-client";
+import { DateInput } from "./DateInput";
+import { parseFuzzyDate } from "@/lib/dates";
+import { personDateIssues } from "@/lib/validation";
 
 export type PersonFormValues = {
   id?: string;
@@ -9,6 +15,7 @@ export type PersonFormValues = {
   familyName: string | null;
   birthName: string | null;
   gender: "MALE" | "FEMALE" | "OTHER" | "UNKNOWN";
+  /** Datum als Eingabetext (z.B. „12.03.1850“, „um 1850“), siehe lib/dates.ts. */
   birthDate: string | null;
   birthPlace: string | null;
   deathDate: string | null;
@@ -28,8 +35,26 @@ const EMPTY: PersonFormValues = {
   notes: "",
 };
 
-const field =
-  "w-full rounded border border-stone-300 px-2 py-1.5 text-sm dark:border-stone-700 dark:bg-stone-900";
+type TextKey = Exclude<keyof PersonFormValues, "id" | "gender">;
+
+/**
+ * Dieselben Datumsregeln wie im Server schon vor dem Absenden prüfen — der
+ * Server bleibt maßgeblich, aber so steht der Hinweis gleich am Feld.
+ */
+function localIssues(v: PersonFormValues): Record<string, string> {
+  const issues: Record<string, string> = {};
+  if (!v.givenName.trim()) issues.givenName = "Bitte einen Vornamen angeben.";
+  const birth = parseFuzzyDate(v.birthDate);
+  const death = parseFuzzyDate(v.deathDate);
+  if (!birth.ok) issues.birthDate = birth.error;
+  if (!death.ok) issues.deathDate = death.error;
+  if (birth.ok && death.ok) {
+    for (const issue of personDateIssues({ birthDate: birth.value, deathDate: death.value })) {
+      issues[issue.path] ??= `${issue.message}.`;
+    }
+  }
+  return issues;
+}
 
 export function PersonForm({
   initial,
@@ -41,136 +66,150 @@ export function PersonForm({
   const router = useRouter();
   const [values, setValues] = useState<PersonFormValues>(initial ?? EMPTY);
   const [error, setError] = useState<string | null>(null);
+  const [fields, setFields] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   // Beim Anlegen entscheidet die Familie darüber, wer die Person sieht.
   // Vorbelegt mit der ersten, damit sie nicht versehentlich unsichtbar wird.
   const [familyIds, setFamilyIds] = useState<string[]>(
     families.length > 0 ? [families[0].id] : [],
   );
+  const isEdit = Boolean(initial?.id);
 
   const set = <K extends keyof PersonFormValues>(
     key: K,
     value: PersonFormValues[K],
-  ) => setValues((v) => ({ ...v, [key]: value }));
+  ) => {
+    setValues((v) => ({ ...v, [key]: value }));
+    if (fields[key as string]) setFields((f) => ({ ...f, [key]: "" }));
+  };
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
-    setError(null);
+    if (saving) return;
 
-    const isEdit = Boolean(initial?.id);
-    const res = await fetch(
-      isEdit ? `/api/persons/${initial!.id}` : "/api/persons",
-      {
-        method: isEdit ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(isEdit ? values : { ...values, familyIds }),
-      },
-    );
-
-    setSaving(false);
-
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? `Fehler ${res.status}`);
+    const local = localIssues(values);
+    if (Object.keys(local).length > 0) {
+      setFields(local);
+      setError("Bitte die markierten Felder prüfen.");
       return;
     }
 
-    const person = await res.json();
-    router.push(`/people/${person.id}`);
+    setSaving(true);
+    setError(null);
+    setFields({});
+
+    // Leere Felder als null schicken, damit sie beim Bearbeiten wirklich
+    // geleert werden.
+    const payload = Object.fromEntries(
+      Object.entries(values)
+        .filter(([k]) => k !== "id")
+        .map(([k, v]) => [k, typeof v === "string" && v.trim() === "" && k !== "givenName" ? null : v]),
+    );
+
+    const res = await apiFetch<{ id: string }>(
+      isEdit ? `/api/persons/${initial!.id}` : "/api/persons",
+      jsonBody(isEdit ? "PATCH" : "POST", isEdit ? payload : { ...payload, familyIds }),
+    );
+
+    if (!res.ok) {
+      setSaving(false);
+      setError(res.message);
+      setFields(res.fields);
+      return;
+    }
+
+    // `saving` bleibt gesetzt, bis die Folgeseite da ist — kein Doppelklick.
+    router.push(`/people/${res.data.id}`);
     router.refresh();
   }
 
+  const date = (key: "birthDate" | "deathDate", label: string) => (
+    <DateInput
+      id={`person-${key}`}
+      label={label}
+      value={values[key] ?? ""}
+      error={fields[key]}
+      onChange={(v) => set(key, v)}
+    />
+  );
+
+  const text = (key: TextKey, label: string, opts: { type?: string; required?: boolean; autoComplete?: string } = {}) => {
+    const id = `person-${key}`;
+    const err = fields[key];
+    const raw = values[key] ?? "";
+    return (
+      <div>
+        <label htmlFor={id} className="field-label">
+          {label}
+          {opts.required && <span aria-hidden className="text-red-700 dark:text-red-400"> *</span>}
+        </label>
+        <input
+          id={id}
+          type={opts.type ?? "text"}
+          required={opts.required}
+          autoComplete={opts.autoComplete ?? "off"}
+          aria-invalid={err ? true : undefined}
+          aria-describedby={err ? `${id}-error` : undefined}
+          className={`field w-full ${err ? "field-invalid" : ""}`}
+          value={raw}
+          onChange={(e) => set(key, e.target.value)}
+        />
+        {err && (
+          <span id={`${id}-error`} className="field-error">
+            {err}
+          </span>
+        )}
+      </div>
+    );
+  };
+
   return (
-    <form onSubmit={submit} className="max-w-xl space-y-3">
+    <form onSubmit={submit} noValidate className="card max-w-2xl space-y-5 p-5 sm:p-6" aria-label={isEdit ? "Person bearbeiten" : "Person anlegen"}>
       {error && (
-        <p className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p role="alert" className="alert-error">
           {error}
         </p>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
-        <label className="block">
-          <span className="mb-1 block text-xs text-stone-500">Vorname *</span>
-          <input
-            required
-            className={field}
-            value={values.givenName}
-            onChange={(e) => set("givenName", e.target.value)}
-          />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs text-stone-500">Nachname</span>
-          <input
-            className={field}
-            value={values.familyName ?? ""}
-            onChange={(e) => set("familyName", e.target.value)}
-          />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs text-stone-500">Geburtsname</span>
-          <input
-            className={field}
-            value={values.birthName ?? ""}
-            onChange={(e) => set("birthName", e.target.value)}
-          />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs text-stone-500">Geschlecht</span>
-          <select
-            className={field}
-            value={values.gender}
-            onChange={(e) =>
-              set("gender", e.target.value as PersonFormValues["gender"])
-            }
-          >
-            <option value="UNKNOWN">unbekannt</option>
-            <option value="FEMALE">weiblich</option>
-            <option value="MALE">männlich</option>
-            <option value="OTHER">divers</option>
-          </select>
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs text-stone-500">Geburtsdatum</span>
-          <input
-            type="date"
-            className={field}
-            value={values.birthDate?.slice(0, 10) ?? ""}
-            onChange={(e) => set("birthDate", e.target.value)}
-          />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs text-stone-500">Geburtsort</span>
-          <input
-            className={field}
-            value={values.birthPlace ?? ""}
-            onChange={(e) => set("birthPlace", e.target.value)}
-          />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs text-stone-500">Sterbedatum</span>
-          <input
-            type="date"
-            className={field}
-            value={values.deathDate?.slice(0, 10) ?? ""}
-            onChange={(e) => set("deathDate", e.target.value)}
-          />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs text-stone-500">Sterbeort</span>
-          <input
-            className={field}
-            value={values.deathPlace ?? ""}
-            onChange={(e) => set("deathPlace", e.target.value)}
-          />
-        </label>
-      </div>
+      <fieldset className="space-y-3">
+        <legend className="eyebrow mb-2">Name</legend>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {text("givenName", "Vorname", { required: true })}
+          {text("familyName", "Nachname")}
+          {text("birthName", "Geburtsname")}
+          <div>
+            <label htmlFor="person-gender" className="field-label">
+              Geschlecht
+            </label>
+            <select
+              id="person-gender"
+              className="field w-full"
+              value={values.gender}
+              onChange={(e) => set("gender", e.target.value as PersonFormValues["gender"])}
+            >
+              <option value="UNKNOWN">unbekannt</option>
+              <option value="FEMALE">weiblich</option>
+              <option value="MALE">männlich</option>
+              <option value="OTHER">divers</option>
+            </select>
+          </div>
+        </div>
+      </fieldset>
 
-      {!initial?.id && families.length > 0 && (
-        <div>
-          <span className="mb-1 block text-xs text-stone-500">
-            Familien — bestimmen, wer diese Person sehen kann
-          </span>
+      <fieldset className="space-y-3">
+        <legend className="eyebrow mb-2">Lebensdaten</legend>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {date("birthDate", "Geburtsdatum")}
+          {text("birthPlace", "Geburtsort")}
+          {date("deathDate", "Sterbedatum")}
+          {text("deathPlace", "Sterbeort")}
+        </div>
+      </fieldset>
+
+      {!isEdit && families.length > 0 && (
+        <fieldset>
+          <legend className="eyebrow mb-1">Familien</legend>
+          <p className="mb-2 text-sm muted">Bestimmen, wer diese Person sehen kann.</p>
           <div className="flex flex-wrap gap-2">
             {families.map((f) => {
               const active = familyIds.includes(f.id);
@@ -178,48 +217,54 @@ export function PersonForm({
                 <button
                   key={f.id}
                   type="button"
+                  aria-pressed={active}
                   onClick={() =>
                     setFamilyIds((prev) =>
-                      active
-                        ? prev.filter((id) => id !== f.id)
-                        : [...prev, f.id],
+                      active ? prev.filter((id) => id !== f.id) : [...prev, f.id],
                     )
                   }
-                  className={`rounded-full border px-3 py-1 text-sm transition ${
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition ${
                     active
-                      ? "border-stone-900 bg-stone-900 text-white dark:border-stone-100 dark:bg-stone-100 dark:text-stone-900"
-                      : "border-stone-300 text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-400"
+                      ? "border-accent-700 bg-accent-700 text-white dark:border-accent-300 dark:bg-accent-300 dark:text-stone-950"
+                      : "border-stone-300 bg-surface text-stone-700 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"
                   }`}
                 >
+                  <span aria-hidden>{active ? "✓" : "+"}</span>
                   {f.name}
                 </button>
               );
             })}
           </div>
           {familyIds.length === 0 && (
-            <p className="mt-1 text-xs text-amber-700">
+            <p className="alert-warning mt-2">
               Ohne Familie ist die Person nur für Administratoren sichtbar.
             </p>
           )}
-        </div>
+          {fields.familyIds && <span className="field-error">{fields.familyIds}</span>}
+        </fieldset>
       )}
 
-      <label className="block">
-        <span className="mb-1 block text-xs text-stone-500">Notizen</span>
+      <div>
+        <label htmlFor="person-notes" className="field-label">
+          Notizen
+        </label>
         <textarea
+          id="person-notes"
           rows={4}
-          className={field}
+          className="field w-full"
           value={values.notes ?? ""}
           onChange={(e) => set("notes", e.target.value)}
         />
-      </label>
+      </div>
 
-      <button
-        disabled={saving}
-        className="rounded bg-stone-900 px-4 py-2 text-sm text-white hover:bg-stone-700 disabled:opacity-50"
-      >
-        {saving ? "Speichern…" : "Speichern"}
-      </button>
+      <div className="flex flex-wrap items-center gap-2 border-t border-stone-200 pt-4 dark:border-stone-800">
+        <button type="submit" disabled={saving} className="btn-primary">
+          {saving ? "Speichert…" : isEdit ? "Änderungen speichern" : "Person anlegen"}
+        </button>
+        <Link href={isEdit ? `/people/${initial!.id}` : "/people"} className="btn-secondary">
+          Abbrechen
+        </Link>
+      </div>
     </form>
   );
 }

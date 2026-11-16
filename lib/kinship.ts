@@ -130,8 +130,12 @@ export function bloodRelationTerm(input: BloodTermInput): string {
   }
 
   // Seite nur, wo sie etwas aussagt: ab Großeltern bzw. Onkel/Tante.
+  // Steht vor einem Generationszusatz: "Cousine 1. Grades mütterlicherseits,
+  // eine Generation darüber".
   if (input.side && up >= 2) {
-    term += input.side === "paternal" ? " väterlicherseits" : " mütterlicherseits";
+    const side = input.side === "paternal" ? " väterlicherseits" : " mütterlicherseits";
+    const comma = term.indexOf(", ");
+    term = comma >= 0 ? term.slice(0, comma) + side + term.slice(comma) : term + side;
   }
   return term;
 }

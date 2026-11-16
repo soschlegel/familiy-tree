@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Fraunces, Source_Sans_3 } from "next/font/google";
 
 import "./globals.css";
 import "reactflow/dist/style.css";
@@ -10,6 +11,21 @@ export const metadata: Metadata = {
   title: { default: "Stammbaum", template: "%s · Stammbaum" },
   description: "Familienstammbaum mit Bildarchiv",
 };
+
+// Überschriften in einer Antiqua mit Charakter, Fließtext in einer gut
+// lesbaren Grotesk. Beide selbst gehostet über next/font, mit Systemschrift
+// als Rückfall (siehe tailwind.config.ts).
+const serif = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-serif",
+  display: "swap",
+  axes: ["opsz"],
+});
+const sans = Source_Sans_3({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  display: "swap",
+});
 
 const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Administrator",
@@ -30,6 +46,7 @@ export default async function RootLayout({
         { href: "/tree", label: "Baum" },
         { href: "/people", label: "Personen" },
         { href: "/research", label: "Recherche" },
+        { href: "/sources", label: "Quellen" },
         // Export steht allen offen (enthält nur, was der Benutzer sehen
         // darf); der Import ist auf der Seite selbst Administratoren
         // vorbehalten.
@@ -44,7 +61,7 @@ export default async function RootLayout({
     : [];
 
   return (
-    <html lang="de">
+    <html lang="de" className={`${serif.variable} ${sans.variable}`}>
       <body className="min-h-screen">
         <a
           href="#inhalt"

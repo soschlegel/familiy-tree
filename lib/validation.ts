@@ -1,5 +1,13 @@
 import { z } from "zod";
 
+import {
+  asFuzzyDate,
+  certainlyBefore,
+  dateBounds,
+  parseFuzzyDate,
+  type FuzzyDate,
+} from "./dates";
+
 // ---------------------------------------------------------------------------
 // Fachregeln — bewusst als reine Funktionen, damit API, Dienste (lib/services)
 // und Tests dieselben Regeln verwenden und nichts davon an Zod hängt.
@@ -43,52 +51,68 @@ export function defaultSubtype(type: RelationTypeName): RelationSubtypeName {
 
 export type RuleIssue = { path: string; message: string };
 
-const year = (d: Date) => d.getUTCFullYear();
+/** Datumsangabe für die Regeln: ungenaues Datum oder (Altbestand) ein Date = tagesgenau. */
+export type DateValue = FuzzyDate | Date | null | undefined;
+
+/**
+ * Jahr vor MIN_YEAR bzw. sicher in der Zukunft. „Zukunft“ bemisst sich am
+ * frühestmöglichen Zeitpunkt der Angabe: „2026“ ist im laufenden Jahr
+ * zulässig, „nach 2026“ nicht.
+ */
+function singleDateIssues(
+  path: string,
+  f: FuzzyDate,
+  labels: { tooEarly: string; future: string },
+  latestAllowed: number,
+): RuleIssue[] {
+  const issues: RuleIssue[] = [];
+  if (f.date.getUTCFullYear() < MIN_YEAR) issues.push({ path, message: labels.tooEarly });
+  if (dateBounds(f, { tolerant: false }).start > latestAllowed) {
+    issues.push({ path, message: labels.future });
+  }
+  return issues;
+}
 
 /**
  * Prüft Lebensdaten einer Person. Wird sowohl beim Anlegen als auch nach dem
  * Zusammenführen eines Teil-Updates mit dem gespeicherten Stand aufgerufen —
  * sonst ließe sich ein Sterbedatum vor dem Geburtsdatum in zwei Schritten
  * eintragen.
+ *
+ * Ungenaue Daten werden über ihren Zeitraum verglichen: abgelehnt wird nur,
+ * was für jede Lesart widersprüchlich ist („um 1850“ geboren und 1849
+ * gestorben ist zulässig, 1840 gestorben nicht).
  */
 export function personDateIssues(
-  p: { birthDate?: Date | null; deathDate?: Date | null },
+  p: { birthDate?: DateValue; deathDate?: DateValue },
   now: Date = new Date(),
 ): RuleIssue[] {
   const issues: RuleIssue[] = [];
-  const { birthDate, deathDate } = p;
+  const birth = asFuzzyDate(p.birthDate);
+  const death = asFuzzyDate(p.deathDate);
 
-  if (birthDate) {
-    if (year(birthDate) < MIN_YEAR) {
-      issues.push({
-        path: "birthDate",
-        message: `Geburtsjahr vor ${MIN_YEAR} ist nicht plausibel`,
-      });
-    }
-    if (birthDate.getTime() > now.getTime()) {
-      issues.push({
-        path: "birthDate",
-        message: "Geburtsdatum liegt in der Zukunft",
-      });
-    }
+  if (birth) {
+    issues.push(
+      ...singleDateIssues(
+        "birthDate",
+        birth,
+        { tooEarly: `Geburtsjahr vor ${MIN_YEAR} ist nicht plausibel`, future: "Geburtsdatum liegt in der Zukunft" },
+        now.getTime(),
+      ),
+    );
+  }
+  if (death) {
+    issues.push(
+      ...singleDateIssues(
+        "deathDate",
+        death,
+        { tooEarly: `Sterbejahr vor ${MIN_YEAR} ist nicht plausibel`, future: "Sterbedatum liegt in der Zukunft" },
+        now.getTime(),
+      ),
+    );
   }
 
-  if (deathDate) {
-    if (year(deathDate) < MIN_YEAR) {
-      issues.push({
-        path: "deathDate",
-        message: `Sterbejahr vor ${MIN_YEAR} ist nicht plausibel`,
-      });
-    }
-    if (deathDate.getTime() > now.getTime()) {
-      issues.push({
-        path: "deathDate",
-        message: "Sterbedatum liegt in der Zukunft",
-      });
-    }
-  }
-
-  if (birthDate && deathDate && deathDate.getTime() < birthDate.getTime()) {
+  if (birth && death && certainlyBefore(death, birth)) {
     issues.push({
       path: "deathDate",
       message: "Sterbedatum liegt vor dem Geburtsdatum",
@@ -103,8 +127,8 @@ export function relationshipIssues(
   r: {
     type: RelationTypeName;
     subtype: string;
-    startDate?: Date | null;
-    endDate?: Date | null;
+    startDate?: DateValue;
+    endDate?: DateValue;
   },
   now: Date = new Date(),
 ): RuleIssue[] {
@@ -117,22 +141,24 @@ export function relationshipIssues(
     });
   }
 
-  for (const key of ["startDate", "endDate"] as const) {
-    const d = r[key];
-    if (!d) continue;
-    if (year(d) < MIN_YEAR) {
-      issues.push({ path: key, message: `Jahr vor ${MIN_YEAR} ist nicht plausibel` });
-    }
-    if (d.getTime() > now.getTime() + FUTURE_TOLERANCE_MS) {
-      issues.push({ path: key, message: "Datum liegt zu weit in der Zukunft" });
-    }
+  const start = asFuzzyDate(r.startDate);
+  const end = asFuzzyDate(r.endDate);
+  for (const [key, f] of [
+    ["startDate", start],
+    ["endDate", end],
+  ] as const) {
+    if (!f) continue;
+    issues.push(
+      ...singleDateIssues(
+        key,
+        f,
+        { tooEarly: `Jahr vor ${MIN_YEAR} ist nicht plausibel`, future: "Datum liegt zu weit in der Zukunft" },
+        now.getTime() + FUTURE_TOLERANCE_MS,
+      ),
+    );
   }
 
-  if (
-    r.startDate &&
-    r.endDate &&
-    r.endDate.getTime() < r.startDate.getTime()
-  ) {
+  if (start && end && certainlyBefore(end, start)) {
     issues.push({ path: "endDate", message: "Ende liegt vor dem Beginn" });
   }
 
@@ -153,15 +179,28 @@ function addIssues(ctx: z.RefinementCtx, issues: RuleIssue[]) {
 // Eingabeschemata
 // ---------------------------------------------------------------------------
 
-const optionalDate = z
+/**
+ * Datumsfeld: akzeptiert alle Schreibweisen von parseFuzzyDate (1850,
+ * 03.1850, 12.03.1850, März 1850, um 1850, vor 1900, nach 1723, ISO …) und
+ * liefert ein FuzzyDate. Leer/null = kein Datum. Die deutsche Fehlermeldung
+ * nennt Beispiele.
+ */
+export const fuzzyDateInput = z
   .string()
   .trim()
+  .max(60)
   .optional()
   .nullable()
-  .transform((v) => (v ? new Date(v) : null))
-  .refine((d) => d === null || !Number.isNaN(d.getTime()), {
-    message: "Ungültiges Datum",
+  .transform((v, ctx): FuzzyDate | null => {
+    const r = parseFuzzyDate(v);
+    if (!r.ok) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: r.error });
+      return z.NEVER;
+    }
+    return r.value;
   });
+
+const optionalDate = fuzzyDateInput;
 
 const optionalText = z
   .string()
@@ -256,3 +295,109 @@ export const userPatch = z.object({
   role: z.enum(["ADMIN", "EDITOR", "VIEWER"]).optional(),
   status: z.enum(["INVITED", "ACTIVE", "BLOCKED"]).optional(),
 });
+
+// ---------------------------------------------------------------------------
+// Quellen und Belege
+// ---------------------------------------------------------------------------
+
+export const SOURCE_KINDS = [
+  "CHURCH_BOOK",
+  "CIVIL_REGISTRY",
+  "CENSUS",
+  "GRAVESTONE",
+  "FAMILY_DOCUMENT",
+  "ORAL",
+  "WEBSITE",
+  "OTHER",
+] as const;
+export type SourceKindName = (typeof SOURCE_KINDS)[number];
+
+export const CITATION_FACTS = ["NAME", "BIRTH", "DEATH", "PARTNERSHIP", "PARENTAGE", "OTHER"] as const;
+export type CitationFactName = (typeof CITATION_FACTS)[number];
+
+export const CITATION_CONFIDENCES = ["HIGH", "MEDIUM", "LOW"] as const;
+export type CitationConfidenceName = (typeof CITATION_CONFIDENCES)[number];
+
+/** Welche Angaben sich an einer Person bzw. an einer Beziehung belegen lassen. */
+export const PERSON_FACTS: readonly CitationFactName[] = ["NAME", "BIRTH", "DEATH", "OTHER"];
+export function relationshipFacts(type: RelationTypeName): readonly CitationFactName[] {
+  return type === "PARTNER_OF" ? ["PARTNERSHIP", "OTHER"] : ["PARENTAGE", "OTHER"];
+}
+
+const sourceUrl = z
+  .string()
+  .trim()
+  .max(2000)
+  .optional()
+  .nullable()
+  .transform((v) => (v ? v : null))
+  .refine((v) => v === null || /^https?:\/\/\S+$/i.test(v), {
+    message: "Bitte eine vollständige Adresse mit http:// oder https:// angeben",
+  });
+
+const sourceFields = z.object({
+  title: z.string().trim().min(1, "Bitte einen Titel angeben").max(300),
+  kind: z.enum(SOURCE_KINDS).default("OTHER"),
+  author: optionalText,
+  repository: optionalText,
+  callNumber: optionalText,
+  url: sourceUrl,
+  date: optionalDate,
+  notes: z
+    .string()
+    .trim()
+    .max(50000)
+    .optional()
+    .nullable()
+    .transform((v) => (v ? v : null)),
+  mediaId: z
+    .string()
+    .trim()
+    .optional()
+    .nullable()
+    .transform((v) => (v ? v : null)),
+});
+
+function sourceDateIssues(s: { date?: DateValue }): RuleIssue[] {
+  const f = asFuzzyDate(s.date);
+  if (!f) return [];
+  return singleDateIssues(
+    "date",
+    f,
+    { tooEarly: `Jahr vor ${MIN_YEAR} ist nicht plausibel`, future: "Datum liegt in der Zukunft" },
+    Date.now(),
+  );
+}
+
+export const sourceInput = sourceFields.superRefine((s, ctx) => addIssues(ctx, sourceDateIssues(s)));
+export const sourcePatch = sourceFields.partial().superRefine((s, ctx) => addIssues(ctx, sourceDateIssues(s)));
+
+const citationFields = {
+  fact: z.enum(CITATION_FACTS).default("OTHER"),
+  detail: optionalText,
+  confidence: z
+    .enum(CITATION_CONFIDENCES)
+    .optional()
+    .nullable()
+    .transform((v) => v ?? null),
+};
+
+/** Beleg: genau eines von personId und relationshipId. */
+export const citationInput = z
+  .object({
+    sourceId: z.string().trim().min(1, "Bitte eine Quelle wählen"),
+    personId: z.string().trim().min(1).optional().nullable(),
+    relationshipId: z.string().trim().min(1).optional().nullable(),
+    ...citationFields,
+  })
+  .superRefine((c, ctx) => {
+    if (Boolean(c.personId) === Boolean(c.relationshipId)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["personId"],
+        message: "Ein Beleg gehört zu genau einer Person oder genau einer Beziehung",
+      });
+    }
+  });
+
+export const citationPatch = z.object(citationFields).partial();
