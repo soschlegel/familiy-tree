@@ -10,8 +10,10 @@
  * Inhalt: vier Familien über sechs Generationen (ab ca. 1860), durch Heiraten
  * miteinander verbunden, dazu gezielt eingebaute Sonderfälle (Scheidung und
  * Wiederheirat, Halbgeschwister, Stief-, Adoptiv- und Pflegeverhältnis,
- * Datenlücken, mögliche Dubletten, Personen ohne Familie). Die Sonderfälle
- * sind in `landmarks` mit ihren IDs hinterlegt.
+ * Datenlücken, mögliche Dubletten, Personen ohne Familie). Die älteren
+ * Generationen haben teils ungenaue Daten (nur Jahr/Monat, „um“, „vor“), und
+ * es gibt Quellen verschiedener Art mit Belegen über mehrere Familien. Die
+ * Sonderfälle sind in `landmarks` mit ihren IDs hinterlegt.
  */
 
 export const MOCK_SEED = 20261116;
@@ -20,6 +22,8 @@ export const MOCK_SEED = 20261116;
 export const MOCK_REFERENCE_YEAR = 2025;
 
 export type MockGender = "MALE" | "FEMALE" | "OTHER" | "UNKNOWN";
+export type MockPrecision = "DAY" | "MONTH" | "YEAR";
+export type MockQualifier = "EXACT" | "ABOUT" | "BEFORE" | "AFTER";
 export type FamilyKey = "A" | "B" | "C" | "D";
 
 export type MockFamily = {
@@ -39,6 +43,10 @@ export type MockPerson = {
   birthPlace: string | null;
   deathDate: Date | null;
   deathPlace: string | null;
+  birthDatePrecision: MockPrecision;
+  birthDateQualifier: MockQualifier;
+  deathDatePrecision: MockPrecision;
+  deathDateQualifier: MockQualifier;
   notes: string | null;
   /** Familienzuordnung (Rechte). Leer = nur für Admins sichtbar. */
   familyKeys: FamilyKey[];
@@ -61,7 +69,38 @@ export type MockRelationship = {
   toPersonId: string;
   startDate: Date | null;
   endDate: Date | null;
+  startDatePrecision: MockPrecision;
+  startDateQualifier: MockQualifier;
+  endDatePrecision: MockPrecision;
+  endDateQualifier: MockQualifier;
   notes: string | null;
+};
+
+export type MockSource = {
+  id: string;
+  title: string;
+  kind: "CHURCH_BOOK" | "CIVIL_REGISTRY" | "CENSUS" | "GRAVESTONE" | "FAMILY_DOCUMENT" | "ORAL" | "WEBSITE" | "OTHER";
+  author: string | null;
+  repository: string | null;
+  callNumber: string | null;
+  url: string | null;
+  date: Date | null;
+  datePrecision: MockPrecision;
+  dateQualifier: MockQualifier;
+  notes: string | null;
+  /** Bild (MockImage.id) als Scan — wird nur gesetzt, wenn Bilder angelegt wurden. */
+  scanImageId: string | null;
+  createdById: string;
+};
+
+export type MockCitation = {
+  id: string;
+  sourceId: string;
+  personId: string | null;
+  relationshipId: string | null;
+  fact: "NAME" | "BIRTH" | "DEATH" | "PARTNERSHIP" | "PARENTAGE" | "OTHER";
+  detail: string | null;
+  confidence: "HIGH" | "MEDIUM" | "LOW" | null;
 };
 
 export type MockUser = {
@@ -108,6 +147,20 @@ export type MockLandmarks = {
   noFamily: string[];
   missingBirthDate: string[];
   probablyDeceasedWithoutDeathDate: string[];
+  /** Personen mit ungenauen Lebensdaten (nur Jahr/Monat, „um“, „vor“). */
+  impreciseDates: { yearOnly: string; about: string; before: string; monthOnly: string };
+  sources: {
+    /** Kirchenbuch Familie A: Geburten, Tod und die Ehe des Stammvaters. */
+    churchBookA: string;
+    /** Heiratsregister, zitiert in Familie A UND für eine Person nur aus Familie B. */
+    crossFamily: string;
+    /** Nur für Personen aus Familie D zitiert — für Betrachter A unsichtbar. */
+    onlyFamilyD: string;
+    /** Ohne Beleg — nur für Ersteller (Admin) sichtbar. */
+    uncited: string;
+  };
+  /** Ehe des Stammvaters A — mit Beleg (PARTNERSHIP). */
+  citedMarriage: string;
 };
 
 export type MockData = {
@@ -116,6 +169,8 @@ export type MockData = {
   persons: MockPerson[];
   relationships: MockRelationship[];
   images: MockImage[];
+  sources: MockSource[];
+  citations: MockCitation[];
   landmarks: MockLandmarks;
 };
 
@@ -253,8 +308,17 @@ export function generateMockData(seed: number = MOCK_SEED): MockData {
     return randomDate(Math.max(birthYear + 1, deathYear));
   };
 
-  const add = (p: Omit<Internal, "id" | "married">): Internal => {
-    const person: Internal = { ...p, id: personId(), married: false };
+  const EXACT_DAY = {
+    birthDatePrecision: "DAY",
+    birthDateQualifier: "EXACT",
+    deathDatePrecision: "DAY",
+    deathDateQualifier: "EXACT",
+  } as const;
+
+  const add = (
+    p: Omit<Internal, "id" | "married" | "birthDatePrecision" | "birthDateQualifier" | "deathDatePrecision" | "deathDateQualifier">,
+  ): Internal => {
+    const person: Internal = { ...EXACT_DAY, ...p, id: personId(), married: false };
     persons.push(person);
     byId.set(person.id, person);
     return person;
@@ -302,6 +366,10 @@ export function generateMockData(seed: number = MOCK_SEED): MockData {
       toPersonId: to.id,
       startDate: startYear ? randomDate(startYear) : null,
       endDate: endYear ? randomDate(endYear) : null,
+      startDatePrecision: "DAY",
+      startDateQualifier: "EXACT",
+      endDatePrecision: "DAY",
+      endDateQualifier: "EXACT",
       notes: null,
     };
     if (r.startDate && r.endDate && r.endDate < r.startDate) r.endDate = r.startDate;
@@ -325,6 +393,10 @@ export function generateMockData(seed: number = MOCK_SEED): MockData {
       toPersonId: child.id,
       startDate: startYear ? randomDate(startYear) : null,
       endDate: null,
+      startDatePrecision: "DAY",
+      startDateQualifier: "EXACT",
+      endDatePrecision: "DAY",
+      endDateQualifier: "EXACT",
       notes: null,
     };
     relationships.push(r);
@@ -812,6 +884,265 @@ export function generateMockData(seed: number = MOCK_SEED): MockData {
     throw new Error("Mock-Daten: Heirat zwischen Familie A und B konnte nicht erzeugt werden.");
   }
 
+  // --- Ungenaue Daten ------------------------------------------------------
+  // Bewusst ohne Zufallszahlen: alles oben Erzeugte (IDs, Bilder, Daten)
+  // bleibt dadurch unverändert. Das Jahr bleibt gleich, nur Genauigkeit und
+  // Zusatz ändern sich — so wie ein Kirchenbuch oft nur das Jahr hergibt.
+  const toYear = (d: Date) => utc(d.getUTCFullYear(), 1, 1);
+  const toMonth = (d: Date) => utc(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
+  const gen0 = persons.filter((p) => p.generation === 0 && p.familyKeys.length > 0);
+  gen0.forEach((p, i) => {
+    if (p.birthDate) {
+      if (i % 3 === 0) {
+        p.birthDate = toYear(p.birthDate);
+        p.birthDatePrecision = "YEAR";
+        p.birthDateQualifier = "ABOUT";
+      } else if (i % 3 === 1) {
+        p.birthDate = toYear(p.birthDate);
+        p.birthDatePrecision = "YEAR";
+      } else {
+        p.birthDate = toMonth(p.birthDate);
+        p.birthDatePrecision = "MONTH";
+      }
+    }
+    if (p.deathDate && i % 2 === 1) {
+      // „vor <Folgejahr>“ — deckt das tatsächliche Sterbejahr ab.
+      p.deathDate = utc(p.deathDate.getUTCFullYear() + 1, 1, 1);
+      p.deathDatePrecision = "YEAR";
+      p.deathDateQualifier = "BEFORE";
+    } else if (p.deathDate) {
+      p.deathDate = toYear(p.deathDate);
+      p.deathDatePrecision = "YEAR";
+    }
+  });
+  const gen1 = persons.filter((p) => p.generation === 1 && p.birthDate && !duplicates.some((d) => d.includes(p.id)));
+  gen1.forEach((p, i) => {
+    if (i % 4 === 0) {
+      p.birthDate = toYear(p.birthDate!);
+      p.birthDatePrecision = "YEAR";
+    } else if (i % 7 === 3) {
+      p.birthDate = toYear(p.birthDate!);
+      p.birthDatePrecision = "YEAR";
+      p.birthDateQualifier = "ABOUT";
+    }
+  });
+  // Hochzeiten der Stammeltern: nur das Jahr, eine davon „um“.
+  relationships
+    .filter((r) => r.type === "PARTNER_OF" && gen0.some((p) => p.id === r.fromPersonId) && r.startDate)
+    .forEach((r, i) => {
+      r.startDate = toYear(r.startDate!);
+      r.startDatePrecision = "YEAR";
+      if (i === 1) r.startDateQualifier = "ABOUT";
+    });
+  // Der vermutete Vater des Stammvaters: „um 1831“, gestorben „vor 1900“.
+  unassigned1.birthDate = utc(1831, 1, 1);
+  unassigned1.birthDatePrecision = "YEAR";
+  unassigned1.birthDateQualifier = "ABOUT";
+  unassigned1.deathDate = utc(1900, 1, 1);
+  unassigned1.deathDatePrecision = "YEAR";
+  unassigned1.deathDateQualifier = "BEFORE";
+
+  const pickImprecise = (pred: (p: Internal) => boolean) => persons.find((p) => p.familyKeys.length > 0 && pred(p))!.id;
+  const impreciseDates = {
+    yearOnly: pickImprecise((p) => p.birthDatePrecision === "YEAR" && p.birthDateQualifier === "EXACT"),
+    about: pickImprecise((p) => p.birthDateQualifier === "ABOUT"),
+    before: pickImprecise((p) => p.deathDateQualifier === "BEFORE"),
+    monthOnly: pickImprecise((p) => p.birthDatePrecision === "MONTH"),
+  };
+
+  // --- Quellen und Belege ---------------------------------------------------
+  const sources: MockSource[] = [];
+  const citations: MockCitation[] = [];
+  let sourceCounter = 0;
+  let citationCounter = 0;
+  const source = (s: Omit<MockSource, "id" | "createdById" | "datePrecision" | "dateQualifier" | "scanImageId"> &
+    Partial<Pick<MockSource, "datePrecision" | "dateQualifier" | "scanImageId">>) => {
+    const full: MockSource = {
+      datePrecision: "DAY",
+      dateQualifier: "EXACT",
+      scanImageId: null,
+      ...s,
+      id: `mock-s-${String(++sourceCounter).padStart(2, "0")}`,
+      createdById: "mock-user-admin",
+    };
+    sources.push(full);
+    return full.id;
+  };
+  const cite = (
+    sourceId: string,
+    target: { personId: string } | { relationshipId: string },
+    fact: MockCitation["fact"],
+    detail: string | null,
+    confidence: MockCitation["confidence"] = "HIGH",
+  ) => {
+    citations.push({
+      id: `mock-c-${String(++citationCounter).padStart(3, "0")}`,
+      sourceId,
+      personId: "personId" in target ? target.personId : null,
+      relationshipId: "relationshipId" in target ? target.relationshipId : null,
+      fact,
+      detail,
+      confidence,
+    });
+  };
+  const spouseOf = (id: string) => {
+    const m = marriageOf(id);
+    return m ? (m.fromPersonId === id ? m.toPersonId : m.fromPersonId) : null;
+  };
+  const yearOfId = (id: string) => byId.get(id)?.birthDate?.getUTCFullYear() ?? 0;
+
+  // 1. Kirchenbuch Familie A: Taufen, Trauung des Stammvaters, zwei Kinder.
+  const founderA = founders.A;
+  const founderAMarriage = marriageOf(founderA)!;
+  const churchBookA = source({
+    title: "Kirchenbuch St. Marien Celle, Taufen und Trauungen 1855–1895",
+    kind: "CHURCH_BOOK",
+    author: "Pfarramt St. Marien Celle",
+    repository: "Kirchenbuchamt Hannover",
+    callNumber: "KB Celle 12",
+    url: null,
+    date: utc(1895, 1, 1),
+    datePrecision: "YEAR",
+    dateQualifier: "BEFORE",
+    notes:
+      "Taufen ab 1855 in deutscher Kurrentschrift, gut lesbar. Trauungen im hinteren Teil des Bandes.\n\n" +
+      "Abschrift Taufeintrag: „Otto, Sohn des Bäckers Heinrich B. und seiner Ehefrau …, getauft in der Marktkirche.“",
+  });
+  cite(churchBookA, { personId: founderA }, "BIRTH", `Taufen ${yearOfId(founderA)}, Nr. 12`);
+  cite(churchBookA, { personId: founderA }, "NAME", "Taufeintrag, Randvermerk", "MEDIUM");
+  cite(churchBookA, { relationshipId: founderAMarriage.id }, "PARTNERSHIP", "Trauungen, S. 214, Nr. 4");
+  const dated = (list: Internal[]) => list.filter((k) => k.birthDate);
+  const founderAKids = dated(childrenOf(founderA)).slice(0, 2);
+  for (const k of founderAKids) cite(churchBookA, { personId: k.id }, "BIRTH", `Taufen ${yearOf(k)}`, "MEDIUM");
+
+  // 2. Standesamt Leipzig: Geburten der Familie B (nur B).
+  const registryB = source({
+    title: "Standesamt Leipzig, Geburtsregister 1885–1900",
+    kind: "CIVIL_REGISTRY",
+    author: null,
+    repository: "Stadtarchiv Leipzig",
+    callNumber: "StA Leipzig G 1885–1900",
+    url: null,
+    date: null,
+    notes: null,
+  });
+  for (const k of dated(childrenOf(founders.B)).slice(0, 3)) {
+    cite(registryB, { personId: k.id }, "BIRTH", `Nr. ${100 + yearOf(k) - 1880}/${yearOf(k)}`);
+  }
+
+  // 3. Heiratsregister: Ehe zwischen Familie A und B — zitiert für die Ehe
+  //    (sichtbar in A), die Braut (A und B) und ihren Elternteil (nur B).
+  const crossMarriage = relationships.find(
+    (r) =>
+      r.type === "PARTNER_OF" &&
+      [r.fromPersonId, r.toPersonId].includes(crossIntoA!.wife.id) &&
+      [r.fromPersonId, r.toPersonId].includes(crossIntoA!.husband.id),
+  )!;
+  const crossYear = crossMarriage.startDate?.getUTCFullYear() ?? 1940;
+  const crossWeddingImage = images.find((i) => i.relationshipId === crossMarriage.id);
+  const crossFamily = source({
+    title: `Standesamt Hannover, Heiratsregister ${crossYear}`,
+    kind: "CIVIL_REGISTRY",
+    author: null,
+    repository: "Stadtarchiv Hannover",
+    callNumber: `Heiratsregister ${crossYear}, Bd. 3`,
+    url: null,
+    date: utc(crossYear, 1, 1),
+    datePrecision: "YEAR",
+    notes: "Heiratseintrag mit Angaben zu den Eltern beider Brautleute.",
+    scanImageId: crossWeddingImage?.id ?? null,
+  });
+  cite(crossFamily, { relationshipId: crossMarriage.id }, "PARTNERSHIP", `Nr. 312/${crossYear}`);
+  cite(crossFamily, { personId: crossIntoA!.wife.id }, "NAME", "Geburtsname der Braut");
+  cite(crossFamily, { personId: inLawOnlyB!.id }, "NAME", "als Elternteil der Braut genannt", "MEDIUM");
+
+  // 4. Volkszählung Kiel: nur Familie D.
+  const censusD = source({
+    title: "Volkszählung 1900, Kiel — Einwohnerliste",
+    kind: "CENSUS",
+    author: null,
+    repository: "Stadtarchiv Kiel",
+    callNumber: "VZ 1900/Kiel/7",
+    url: null,
+    date: utc(1900, 12, 1),
+    notes: null,
+  });
+  cite(censusD, { personId: founders.D }, "OTHER", "Haushalt Schulz, Blatt 7", "MEDIUM");
+  const founderDWife = spouseOf(founders.D);
+  if (founderDWife) cite(censusD, { personId: founderDWife }, "OTHER", "Haushalt Schulz, Blatt 7", "MEDIUM");
+
+  // 5. Grabstein der Stammeltern A.
+  const grave = source({
+    title: "Grabstein Familie Becker, Stadtfriedhof Engesohde",
+    kind: "GRAVESTONE",
+    author: null,
+    repository: "Stadtfriedhof Engesohde, Hannover",
+    callNumber: "Abt. 12, Nr. 34",
+    url: null,
+    date: null,
+    notes: "Inschrift: „Hier ruhen in Gott …“ — Sterbejahre gut lesbar, Tage verwittert.",
+  });
+  cite(grave, { personId: founderA }, "DEATH", null);
+  const founderAWife = spouseOf(founderA);
+  if (founderAWife && byId.get(founderAWife)?.deathDate) cite(grave, { personId: founderAWife }, "DEATH", null);
+
+  // 6. Familienbibel Wagner (Familie C).
+  const bible = source({
+    title: "Familienbibel Wagner",
+    kind: "FAMILY_DOCUMENT",
+    author: "Familie Wagner",
+    repository: "Familienbesitz",
+    callNumber: null,
+    url: null,
+    date: utc(1880, 1, 1),
+    datePrecision: "YEAR",
+    dateQualifier: "ABOUT",
+    notes: "Eintragungen auf dem Vorsatzblatt:\n- Hochzeit der Stammeltern\n- Geburten der Kinder",
+  });
+  cite(bible, { personId: founders.C }, "BIRTH", "Vorsatzblatt", "MEDIUM");
+  cite(bible, { relationshipId: marriageOf(founders.C)!.id }, "PARTNERSHIP", "Vorsatzblatt", "MEDIUM");
+
+  // 7. Mündliche Überlieferung zur Scheidung (Familie A).
+  const oral = source({
+    title: "Erzählungen von Gertrud Becker (Gespräch)",
+    kind: "ORAL",
+    author: "Gertrud Becker",
+    repository: null,
+    callNumber: null,
+    url: null,
+    date: utc(1998, 5, 1),
+    datePrecision: "MONTH",
+    notes: "Aufgezeichnet bei einem Familientreffen. Jahreszahlen aus der Erinnerung.",
+  });
+  cite(oral, { relationshipId: firstMarriage.id }, "PARTNERSHIP", "Erinnerung an die Scheidung", "LOW");
+
+  // 8. Online-Ortsfamilienbuch (Familie A, zweite Generation).
+  const ofb = source({
+    title: "Online-Ortsfamilienbuch Hildesheim",
+    kind: "WEBSITE",
+    author: "Verein für Computergenealogie",
+    repository: null,
+    callNumber: null,
+    url: "https://ofb.example.org/hildesheim",
+    date: null,
+    notes: null,
+  });
+  const ofbPerson = dated(childrenOf(founderA))[2] ?? dated(childrenOf(founderA))[0];
+  cite(ofb, { personId: ofbPerson.id }, "BIRTH", "Familie Nr. 4711", "MEDIUM");
+
+  // 9. Noch nicht ausgewertet — ohne Beleg.
+  const uncited = source({
+    title: "Adressbuch Hannover 1910",
+    kind: "OTHER",
+    author: null,
+    repository: "Stadtbibliothek Hannover",
+    callNumber: "Hann. Adr. 1910",
+    url: null,
+    date: utc(1910, 1, 1),
+    datePrecision: "YEAR",
+    notes: "Noch nicht ausgewertet.",
+  });
+
   const landmarks: MockLandmarks = {
     founders,
     crossMarriedIntoA: crossIntoA.wife.id,
@@ -834,6 +1165,9 @@ export function generateMockData(seed: number = MOCK_SEED): MockData {
     noFamily,
     missingBirthDate,
     probablyDeceasedWithoutDeathDate: probablyDeceased,
+    impreciseDates,
+    sources: { churchBookA, crossFamily, onlyFamilyD: censusD, uncited },
+    citedMarriage: founderAMarriage.id,
   };
 
   return {
@@ -845,6 +1179,8 @@ export function generateMockData(seed: number = MOCK_SEED): MockData {
     })),
     relationships,
     images,
+    sources,
+    citations,
     landmarks,
   };
 }

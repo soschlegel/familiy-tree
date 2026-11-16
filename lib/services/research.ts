@@ -7,6 +7,15 @@ import {
   type PathStep,
 } from "../graph";
 import { toPersonBrief, type PersonBrief, type PersonRef } from "./dto";
+import {
+  dateBounds,
+  formatFuzzyDate,
+  formatFuzzyYear,
+  fuzzyField,
+  isPreciseDate,
+  minYearDistance,
+  yearsBetween,
+} from "../dates";
 import { loadGraph, type GraphPerson, type LoadedGraph } from "./graph-data";
 
 /**
@@ -134,7 +143,15 @@ export async function findRelationshipPath(
   aId: string,
   bId: string,
 ): Promise<RelationshipPathResult | null> {
-  const graph = await loadGraph(scope);
+  return relationshipPathInGraph(await loadGraph(scope), aId, bId);
+}
+
+/** Wie findRelationshipPath, aber auf einem bereits geladenen Graphen. */
+export function relationshipPathInGraph(
+  graph: LoadedGraph,
+  aId: string,
+  bId: string,
+): RelationshipPathResult | null {
   const a = graph.persons.get(aId);
   const b = graph.persons.get(bId);
   if (!a?.visible || !b?.visible) return null;
@@ -202,9 +219,16 @@ export type Statistics = {
 
 const LIKELY_DECEASED_AGE = 100;
 
+/**
+ * Ohne Sterbedatum, aber sicher älter als 100 Jahre. Bei ungenauem
+ * Geburtsdatum zählt der späteste mögliche Zeitpunkt („nach 1900“ also nie).
+ */
 function probablyDeceased(p: GraphPerson, now: Date): boolean {
   if (p.deathDate || !p.birthDate) return false;
-  return now.getUTCFullYear() - p.birthDate.getUTCFullYear() > LIKELY_DECEASED_AGE;
+  const birth = fuzzyField(p, "birthDate")!;
+  const latest = dateBounds(birth).end;
+  if (!Number.isFinite(latest)) return false;
+  return now.getUTCFullYear() - new Date(latest - 1).getUTCFullYear() > LIKELY_DECEASED_AGE;
 }
 
 export async function getStatistics(scope: Scope): Promise<Statistics> {
@@ -291,7 +315,8 @@ export type DataGapKind =
   | "deathPlaceWithoutDeathDate"
   | "implausibleParentAge"
   | "isolated"
-  | "withoutFamily";
+  | "withoutFamily"
+  | "unsourced";
 
 export type DataGaps = {
   counts: Record<DataGapKind, number>;
@@ -309,6 +334,7 @@ const GAP_KINDS: DataGapKind[] = [
   "implausibleParentAge",
   "isolated",
   "withoutFamily",
+  "unsourced",
 ];
 
 /**
@@ -321,7 +347,16 @@ export async function findDataGaps(
   options: { limit?: number } = {},
 ): Promise<DataGaps> {
   const limit = Math.max(1, Math.min(1000, Math.floor(options.limit ?? 50)));
-  const graph = await loadGraph(scope);
+  const [graph, citedRows] = await Promise.all([
+    loadGraph(scope),
+    // Welche Angaben einer Person belegt sind — für "unsourced".
+    prisma.citation.findMany({
+      where: { personId: { not: null }, fact: { in: ["BIRTH", "DEATH"] } },
+      select: { personId: true, fact: true },
+      distinct: ["personId", "fact"],
+    }),
+  ]);
+  const cited = new Set(citedRows.map((c) => `${c.personId}|${c.fact}`));
   const now = new Date();
 
   const visible = [...graph.persons.values()]
@@ -352,22 +387,43 @@ export async function findDataGaps(
       add(
         "probablyDeceasedWithoutDeathDate",
         p,
-        `geboren ${p.birthDate!.getUTCFullYear()}`,
+        `geboren ${formatFuzzyYear(fuzzyField(p, "birthDate"))}`,
       );
     }
     if (p.deathPlace && !p.deathDate) add("deathPlaceWithoutDeathDate", p);
     if (parents.length + children.length + partners.length === 0) add("isolated", p);
     if (scope.isAdmin && p.familyIds.length === 0) add("withoutFamily", p);
 
+    // Lebensdaten ohne Beleg: Geburt bzw. Tod erfasst (Datum oder Ort), aber
+    // keine Quelle für genau diese Angabe.
+    const unsourced: string[] = [];
+    if ((p.birthDate || p.birthPlace) && !cited.has(`${p.id}|BIRTH`)) unsourced.push("Geburt");
+    if ((p.deathDate || p.deathPlace) && !cited.has(`${p.id}|DEATH`)) unsourced.push("Tod");
+    if (unsourced.length > 0) add("unsourced", p, `ohne Beleg: ${unsourced.join(", ")}`);
+
     // Leibliche Eltern, die bei der Geburt unter 14 oder über 70 waren —
     // fast immer ein Erfassungsfehler.
-    if (p.birthDate) {
+    // Bei ungenauen Daten nur, wenn es für jede Lesart gilt.
+    const birth = fuzzyField(p, "birthDate");
+    if (birth) {
       for (const e of parents) {
         if (e.subtype !== "BIOLOGICAL") continue;
         const parent = graph.persons.get(e.from);
-        if (!parent?.visible || !parent.birthDate) continue;
-        const age = p.birthDate.getUTCFullYear() - parent.birthDate.getUTCFullYear();
-        if (age < 14 || age > 70) {
+        const parentBirth = parent?.visible ? fuzzyField(parent, "birthDate") : null;
+        if (!parent || !parentBirth) continue;
+        const exact = isPreciseDate(birth) && isPreciseDate(parentBirth);
+        const range = exact
+          ? (() => {
+              const y = birth.date.getUTCFullYear() - parentBirth.date.getUTCFullYear();
+              return { min: y, max: y };
+            })()
+          : yearsBetween(parentBirth, birth);
+        if (range.max < 14 || range.min > 70) {
+          const age = exact
+            ? `${range.min}`
+            : range.max < 14
+              ? `höchstens ${Math.max(0, Math.floor(range.max))}`
+              : `mindestens ${Math.floor(range.min)}`;
           add(
             "implausibleParentAge",
             p,
@@ -508,18 +564,28 @@ export async function findPossibleDuplicates(
           reasons.push(`ähnlicher Vorname (${a.givenName} / ${b.givenName})`);
         }
 
-        const ya = a.birthDate?.getUTCFullYear();
-        const yb = b.birthDate?.getUTCFullYear();
-        if (ya !== undefined && yb !== undefined) {
-          const diff = Math.abs(ya - yb);
+        const fa = fuzzyField(a, "birthDate");
+        const fb = fuzzyField(b, "birthDate");
+        if (fa && fb) {
+          // Genaue Jahre: Differenz der Jahre wie bisher. Ungenaue: kleinster
+          // möglicher Abstand („um 1850“ und 1852 passen zusammen).
+          const exactYears = fa.qualifier === "EXACT" && fb.qualifier === "EXACT";
+          const ya = fa.date.getUTCFullYear();
+          const yb = fb.date.getUTCFullYear();
+          const diff = exactYears ? Math.abs(ya - yb) : Math.ceil(minYearDistance(fa, fb) - 1e-9);
           if (diff > maxYearDiff) continue;
-          score += diff === 0 ? 0.3 : 0.2;
-          reasons.push(diff === 0 ? `gleiches Geburtsjahr (${ya})` : `Geburtsjahre ${ya} / ${yb}`);
-          if (a.birthDate!.getTime() === b.birthDate!.getTime()) {
+          const same = exactYears && ya === yb;
+          score += same ? 0.3 : 0.2;
+          reasons.push(
+            same
+              ? `gleiches Geburtsjahr (${ya})`
+              : `Geburtsjahre ${formatFuzzyYear(fa)} / ${formatFuzzyYear(fb)}`,
+          );
+          if (isPreciseDate(fa) && isPreciseDate(fb) && fa.date.getTime() === fb.date.getTime()) {
             score += 0.1;
-            reasons.push("identisches Geburtsdatum");
+            reasons.push(`identisches Geburtsdatum (${formatFuzzyDate(fa)})`);
           }
-        } else if (ya === undefined && yb === undefined) {
+        } else if (!fa && !fb) {
           continue;
         } else {
           score += 0.05;

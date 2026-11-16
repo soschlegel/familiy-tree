@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { route } from "@/lib/api";
 import { getObjectBuffer } from "@/lib/storage";
 import { personVisibilityFilter, type Scope } from "@/lib/scope";
+import { canViewMedia } from "@/lib/media-scope";
 import {
   EXCHANGE_VERSION,
   mediaFileName,
@@ -43,6 +44,36 @@ async function buildExport(scope: Scope): Promise<{
     ...relationships.flatMap((r) => r.media.map((m) => m.mediaId)),
   ]);
 
+  // Belege nur an exportierten Personen bzw. Beziehungen — dieselbe Grenze
+  // wie oben. Quellen: die zitierten, dazu (Admin) alle bzw. (sonst) die
+  // eigenen noch unbelegten.
+  const relationshipIds = new Set(relationships.map((r) => r.id));
+  const citations = await prisma.citation.findMany({
+    where: {
+      OR: [{ personId: { in: [...personIds] } }, { relationshipId: { in: [...relationshipIds] } }],
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
+  const sources = await prisma.source.findMany({
+    where: scope.isAdmin
+      ? {}
+      : {
+          OR: [
+            { id: { in: [...new Set(citations.map((c) => c.sourceId))] } },
+            { createdById: scope.userId, citations: { none: {} } },
+          ],
+        },
+    orderBy: [{ title: "asc" }, { id: "asc" }],
+  });
+  // Scans gehören mit ins Archiv, sofern der Benutzer sie sehen darf.
+  const sourceMedia = new Map<string, string | null>();
+  for (const s of sources) {
+    if (!s.mediaId) continue;
+    const ok = referenced.has(s.mediaId) || scope.isAdmin || (await canViewMedia(scope, s.mediaId));
+    sourceMedia.set(s.id, ok ? s.mediaId : null);
+    if (ok) referenced.add(s.mediaId);
+  }
+
   const assets = await prisma.mediaAsset.findMany({
     where: { id: { in: [...referenced] } },
     orderBy: { createdAt: "asc" },
@@ -70,8 +101,12 @@ async function buildExport(scope: Scope): Promise<{
       birthName: p.birthName,
       gender: p.gender,
       birthDate: iso(p.birthDate),
+      birthDatePrecision: p.birthDatePrecision,
+      birthDateQualifier: p.birthDateQualifier,
       birthPlace: p.birthPlace,
       deathDate: iso(p.deathDate),
+      deathDatePrecision: p.deathDatePrecision,
+      deathDateQualifier: p.deathDateQualifier,
       deathPlace: p.deathPlace,
       notes: p.notes,
       media: p.media.map((m) => ({
@@ -86,7 +121,11 @@ async function buildExport(scope: Scope): Promise<{
       fromPersonId: r.fromPersonId,
       toPersonId: r.toPersonId,
       startDate: iso(r.startDate),
+      startDatePrecision: r.startDatePrecision,
+      startDateQualifier: r.startDateQualifier,
       endDate: iso(r.endDate),
+      endDatePrecision: r.endDatePrecision,
+      endDateQualifier: r.endDateQualifier,
       notes: r.notes,
       media: r.media.map((m) => ({
         mediaId: m.mediaId,
@@ -100,6 +139,29 @@ async function buildExport(scope: Scope): Promise<{
       mimeType: a.mimeType,
       width: a.width,
       height: a.height,
+    })),
+    sources: sources.map((s) => ({
+      id: s.id,
+      title: s.title,
+      kind: s.kind,
+      author: s.author,
+      repository: s.repository,
+      callNumber: s.callNumber,
+      url: s.url,
+      date: iso(s.date),
+      datePrecision: s.datePrecision,
+      dateQualifier: s.dateQualifier,
+      notes: s.notes,
+      mediaId: sourceMedia.get(s.id) ?? null,
+    })),
+    citations: citations.map((c) => ({
+      id: c.id,
+      sourceId: c.sourceId,
+      personId: c.personId,
+      relationshipId: c.relationshipId,
+      fact: c.fact,
+      detail: c.detail,
+      confidence: c.confidence,
     })),
   };
 

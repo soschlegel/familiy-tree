@@ -3,6 +3,7 @@ import { requirePage } from "@/lib/session";
 import { UserAdmin } from "@/components/UserAdmin";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Benutzer" };
 
 export default async function UsersPage() {
   const session = await requirePage("user:manage");
@@ -22,8 +23,9 @@ export default async function UsersPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold">Benutzerverwaltung</h1>
-        <p className="text-sm text-stone-500">
+        <p className="eyebrow">Verwaltung</p>
+        <h1 className="page-title">Benutzer</h1>
+        <p className="mt-1 text-sm muted">
           Nur hier eingetragene E-Mail-Adressen können sich anmelden — ein
           gültiges Google- oder GitHub-Konto allein genügt nicht.
         </p>

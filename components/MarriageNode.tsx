@@ -2,10 +2,12 @@
 
 import { Handle, Position, type NodeProps } from "reactflow";
 
-import { formatDate } from "@/lib/tree-layout";
+import { formatDate, type MarriageEvent } from "@/lib/tree-layout";
 
 export type MarriageNodeData = {
   date: string;
+  datePrecision?: MarriageEvent["datePrecision"];
+  dateQualifier?: MarriageEvent["dateQualifier"];
   subtype: string;
   primaryMediaId: string | null;
   partnerNames: string;
@@ -63,7 +65,7 @@ export function MarriageNode({ data }: NodeProps<MarriageNodeData>) {
       className={`flex flex-col items-center transition-opacity ${
         data.dimmed ? "opacity-25" : "opacity-100"
       }`}
-      title={`${label}: ${data.partnerNames} — ${formatDate(data.date)}`}
+      title={`${label}: ${data.partnerNames} — ${formatDate(data.date, data.datePrecision, data.dateQualifier)}`}
     >
       <Handle
         type="target"
@@ -85,7 +87,7 @@ export function MarriageNode({ data }: NodeProps<MarriageNodeData>) {
       )}
 
       <div className="mt-1 whitespace-nowrap rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-medium tabular-nums text-stone-600 shadow-sm dark:bg-stone-900/90 dark:text-stone-300">
-        {formatDate(data.date)}
+        {formatDate(data.date, data.datePrecision, data.dateQualifier)}
       </div>
 
       <Handle

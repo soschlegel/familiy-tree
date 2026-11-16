@@ -1,3 +1,11 @@
+import {
+  formatFuzzyDate,
+  formatFuzzyYear,
+  toFuzzyDate,
+  type DatePrecision,
+  type DateQualifier,
+} from "./dates";
+
 export type TreePerson = {
   id: string;
   givenName: string;
@@ -5,6 +13,11 @@ export type TreePerson = {
   gender: "MALE" | "FEMALE" | "OTHER" | "UNKNOWN";
   birthDate: string | null;
   deathDate: string | null;
+  /** Genauigkeit und Zusatz der Lebensdaten (fehlend = tagesgenau). */
+  birthDatePrecision?: DatePrecision;
+  birthDateQualifier?: DateQualifier;
+  deathDatePrecision?: DatePrecision;
+  deathDateQualifier?: DateQualifier;
   primaryMediaId: string | null;
   /** Anonymer Platzhalter: der Benutzer darf diese Person nicht sehen. */
   restricted?: boolean;
@@ -20,6 +33,10 @@ export type TreeRelationship = {
   toPersonId: string;
   startDate: string | null;
   endDate: string | null;
+  startDatePrecision?: DatePrecision;
+  startDateQualifier?: DateQualifier;
+  endDatePrecision?: DatePrecision;
+  endDateQualifier?: DateQualifier;
   primaryMediaId: string | null;
 };
 
@@ -42,6 +59,8 @@ export type MarriageEvent = {
   id: string;
   relationshipId: string;
   date: string;
+  datePrecision?: DatePrecision;
+  dateQualifier?: DateQualifier;
   subtype: string;
   primaryMediaId: string | null;
   partnerAId: string;
@@ -77,6 +96,9 @@ export type MarriageInfo = {
   personId: string;
   date: string | null;
   endDate: string | null;
+  /** Genauigkeit und Zusatz von `date` (Beginn der Ehe). */
+  datePrecision?: DatePrecision;
+  dateQualifier?: DateQualifier;
   subtype: string;
   primaryMediaId: string | null;
 };
@@ -111,7 +133,12 @@ export type LayoutEdge = {
 };
 
 export const NODE_WIDTH = 180;
-export const NODE_HEIGHT = 96;
+/**
+ * Höhe eines Knotens. Die Karte selbst ist 70px hoch; früher waren es 96,
+ * und die 26px Luft standen in jeder Zeile als zusätzlicher Leerraum
+ * zwischen den Generationen (die Linien setzten 13px neben der Karte an).
+ */
+export const NODE_HEIGHT = 76;
 
 type Index = {
   byId: Map<string, TreePerson>;
@@ -145,30 +172,34 @@ export function indexTree(data: TreeData): Index {
   return { byId, childrenOf, parentsOf, partnersOf };
 }
 
-/** Einheitliches Datumsformat für die gesamte Oberfläche: 01.08.1984 */
-export function formatDate(d: string | Date | null | undefined): string {
-  if (!d) return "";
-  const date = typeof d === "string" ? new Date(d) : d;
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("de-DE", {
-    timeZone: "UTC",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+/**
+ * Einheitliches Datumsformat für die gesamte Oberfläche: 01.08.1984 — bzw.
+ * bei ungenauen Daten „März 1850“, „1850“, „um 1850“, „vor 1900“. Ohne
+ * Angabe von Genauigkeit und Zusatz gilt das Datum als tagesgenau.
+ */
+export function formatDate(
+  d: string | Date | null | undefined,
+  precision?: DatePrecision | string | null,
+  qualifier?: DateQualifier | string | null,
+): string {
+  return formatFuzzyDate(toFuzzyDate(d ?? null, precision, qualifier));
 }
 
 export function displayName(p: TreePerson): string {
   return [p.givenName, p.familyName].filter(Boolean).join(" ");
 }
 
+/** „1850 – 1912“, „um 1850 – vor 1920“, „* um 1850“, „† 1912“. */
 export function lifeSpan(p: {
   birthDate: string | null;
   deathDate: string | null;
+  birthDatePrecision?: DatePrecision | string | null;
+  birthDateQualifier?: DateQualifier | string | null;
+  deathDatePrecision?: DatePrecision | string | null;
+  deathDateQualifier?: DateQualifier | string | null;
 }): string {
-  const year = (d: string | null) => (d ? new Date(d).getFullYear() : null);
-  const b = year(p.birthDate);
-  const d = year(p.deathDate);
+  const b = formatFuzzyYear(toFuzzyDate(p.birthDate, p.birthDatePrecision, p.birthDateQualifier));
+  const d = formatFuzzyYear(toFuzzyDate(p.deathDate, p.deathDatePrecision, p.deathDateQualifier));
   if (!b && !d) return "";
   if (b && d) return `${b} – ${d}`;
   if (b) return `* ${b}`;

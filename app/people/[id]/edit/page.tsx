@@ -1,11 +1,14 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { prisma } from "@/lib/prisma";
 import { requireScope } from "@/lib/session";
 import { canEditPerson, canViewPerson } from "@/lib/scope";
 import { PersonForm } from "@/components/PersonForm";
+import { fuzzyField, toDateInput } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Person bearbeiten" };
 
 export default async function EditPersonPage({
   params,
@@ -26,11 +29,16 @@ export default async function EditPersonPage({
   if (!canEditPerson(scope, familyIds)) redirect(`/people/${id}`);
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-semibold">
-        {[person.givenName, person.familyName].filter(Boolean).join(" ")}{" "}
-        bearbeiten
-      </h1>
+    <div className="space-y-5">
+      <Link href={`/people/${person.id}`} className="btn-link text-sm">
+        ← Zurück zur Person
+      </Link>
+      <div>
+        <p className="eyebrow">Bearbeiten</p>
+        <h1 className="page-title">
+          {[person.givenName, person.familyName].filter(Boolean).join(" ")}
+        </h1>
+      </div>
       <PersonForm
         initial={{
           id: person.id,
@@ -38,9 +46,11 @@ export default async function EditPersonPage({
           familyName: person.familyName,
           birthName: person.birthName,
           gender: person.gender,
-          birthDate: person.birthDate?.toISOString() ?? null,
+          // Als Eingabetext in der gespeicherten Genauigkeit, z.B. „um 1850“ —
+          // unverändert abgeschickt ergibt er wieder genau dasselbe Datum.
+          birthDate: toDateInput(fuzzyField(person, "birthDate")),
           birthPlace: person.birthPlace,
-          deathDate: person.deathDate?.toISOString() ?? null,
+          deathDate: toDateInput(fuzzyField(person, "deathDate")),
           deathPlace: person.deathPlace,
           notes: person.notes,
         }}

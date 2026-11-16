@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "familytree-mock": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["scripts/mock.mjs", "mcp"],
+      "env": {
+        "MCP_USER_EMAIL": "admin@example.test",
+        "MCP_ALLOW_WRITE": "false"
+      }
+    }
+  }
+}

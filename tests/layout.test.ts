@@ -104,6 +104,25 @@ describe("layoutGenerations", () => {
     expect(timeline.nodes).toHaveLength(data.persons.length);
   });
 
+  it("bleibt kompakt: kaum breiter als die breiteste dicht gepackte Ebene (Mock-Daten)", () => {
+    // Früher richtete das Layout jede Ebene für sich mittig aus und schob
+    // Gruppen beim Auflösen von Überlappungen einseitig nach außen — der
+    // Mock-Baum wurde dadurch gut doppelt so breit wie nötig (17 119 px bei
+    // 8 340 px dicht gepackt). Jetzt: höchstens 35 % Zuschlag.
+    const { nodes } = layoutGenerations(mockTreeData());
+    const rows = new Map<number, LayoutNode[]>();
+    for (const n of nodes) rows.set(n.y, [...(rows.get(n.y) ?? []), n]);
+    const H_GAP = 40;
+    const packed = Math.max(
+      ...[...rows.values()].map(
+        (row) => row.reduce((sum, n) => sum + width(n) + H_GAP, 0) - H_GAP,
+      ),
+    );
+    const extent =
+      Math.max(...nodes.map((n) => n.x + width(n))) - Math.min(...nodes.map((n) => n.x));
+    expect(extent).toBeLessThanOrEqual(packed * 1.35);
+  });
+
   it("läuft bei Zyklen in fehlerhaften Daten nicht endlos", () => {
     const data: TreeData = {
       persons: [person("a", 1900), person("b", 1930), person("c", null)],

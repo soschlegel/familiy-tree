@@ -3,7 +3,7 @@ import { prisma } from "./prisma";
 type AuditInput = {
   userId?: string | null;
   action: "CREATE" | "UPDATE" | "DELETE";
-  entityType: "Person" | "Relationship" | "MediaAsset" | "User" | "Family";
+  entityType: "Person" | "Relationship" | "MediaAsset" | "User" | "Family" | "Source" | "Citation";
   entityId: string;
   diff?: unknown;
 };

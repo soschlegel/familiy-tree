@@ -33,7 +33,13 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
+    // Die Playwright-Tests (e2e/, npm run test:e2e) laufen getrennt.
+    exclude: ["e2e/**", "node_modules/**"],
     testTimeout: 30_000,
+    // Die Datenbank-Tests teilen sich eine Mock-Datenbank; schreibende Tests
+    // legen kurzzeitig eigene Datensätze an. Parallel liefen Zählungen in
+    // anderen Dateien dagegen — deshalb Dateien nacheinander.
+    fileParallelism: false,
     hookTimeout: 30_000,
     // Nie gegen die normale Datenbank: alle Tests sehen nur die Mock-DB.
     env: { DATABASE_URL: mockDatabaseUrl(), NODE_ENV: "test" },

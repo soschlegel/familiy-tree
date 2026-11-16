@@ -4,7 +4,8 @@
  *
  * Aufruf über `npm run db:mock` bzw. `npm run mock:setup` (scripts/mock.mjs
  * setzt DATABASE_URL und S3_BUCKET passend). Direkt aufgerufen verweigert das
- * Skript den Dienst, solange der Datenbankname nicht auf _mock oder _test
+ * Skript den Dienst +
+        , solange der Datenbankname nicht auf _mock oder _test
  * endet — es löscht vor dem Befüllen ALLE Daten der Zieldatenbank.
  *
  * Wiederholbar: jeder Lauf leert die Mock-Datenbank und den Mock-Bucket und
@@ -170,7 +171,7 @@ async function main() {
     // Alles leeren. TRUNCATE … CASCADE ist schneller als deleteMany je
     // Tabelle und hält sich nicht mit Fremdschlüsseln auf.
     await prisma.$executeRawUnsafe(
-      `TRUNCATE TABLE "AuditLog", "RelationshipMedia", "PersonMedia", "MediaAsset",
+      `TRUNCATE TABLE "AuditLog", "Citation", "Source", "RelationshipMedia", "PersonMedia", "MediaAsset",
         "Relationship", "PersonFamily", "Person", "UserFamily", "Family",
         "Session", "Account", "VerificationToken", "User" CASCADE`,
     );
@@ -207,6 +208,7 @@ async function main() {
     await prisma.relationship.createMany({ data: data.relationships });
 
     let imageCount = 0;
+    const createdImages = new Set<string>();
     if (data.images.length > 0 && (await prepareBucket(bucket))) {
       const { processAndStoreImage } = await import("../lib/media-processing");
       for (const img of data.images) {
@@ -233,8 +235,18 @@ async function main() {
           });
         }
         imageCount++;
+        createdImages.add(img.id);
       }
     }
+
+    // Quellen und Belege — der Scan nur, wenn das Bild angelegt wurde.
+    await prisma.source.createMany({
+      data: data.sources.map(({ scanImageId, ...src }) => ({
+        ...src,
+        mediaId: scanImageId && createdImages.has(scanImageId) ? scanImageId : null,
+      })),
+    });
+    await prisma.citation.createMany({ data: data.citations });
 
     const perFamily = data.families
       .map((f) => `${f.name}: ${data.persons.filter((p) => p.familyKeys.includes(f.key)).length}`)
@@ -243,7 +255,8 @@ async function main() {
 
     console.log(
       `[mock] Fertig: ${data.persons.length} Personen über ${generations} Generationen, ` +
-        `${data.relationships.length} Beziehungen, ${imageCount} Bilder.`,
+        `${data.relationships.length} Beziehungen, ${imageCount} Bilder, ` +
+        `${data.sources.length} Quellen mit ${data.citations.length} Belegen.`,
     );
     console.log(`[mock] Je Familie: ${perFamily}; ohne Familie: ${data.landmarks.noFamily.length}`);
     console.log("[mock] Benutzer (Dev-Login):");

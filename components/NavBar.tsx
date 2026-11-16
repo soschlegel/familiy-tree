@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { useDismiss } from "./useDismiss";
 
 export type NavItem = { href: string; label: string };
 
@@ -31,43 +33,27 @@ export function NavBar({
   // Nach einem Seitenwechsel ist das Menü wieder zu.
   useEffect(() => setOpen(false), [pathname]);
 
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        setOpen(false);
-        toggleRef.current?.focus();
-      }
-    }
-    function onClick(e: MouseEvent) {
-      const target = e.target as Node;
-      if (!menuRef.current?.contains(target) && !toggleRef.current?.contains(target)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("keydown", onKey);
-    document.addEventListener("mousedown", onClick);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.removeEventListener("mousedown", onClick);
-    };
-  }, [open]);
+  // Klick daneben, Escape (Fokus zurück auf „Menü") und Tab aus dem Menü
+  // heraus schließen es.
+  const close = useCallback(() => setOpen(false), []);
+  useDismiss(open, close, [menuRef, toggleRef], toggleRef);
 
   const linkClass = (active: boolean) =>
-    `rounded-md px-2 py-1 text-sm transition ${
+    `rounded-full px-3 py-1 text-sm font-medium transition ${
       active
-        ? "bg-stone-100 font-medium text-stone-900 dark:bg-stone-800 dark:text-stone-50"
-        : "text-stone-600 hover:bg-stone-100 hover:text-stone-900 dark:text-stone-300 dark:hover:bg-stone-800 dark:hover:text-stone-50"
+        ? "bg-accent-700 text-white dark:bg-accent-300 dark:text-stone-950"
+        : "text-stone-600 hover:bg-stone-900/5 hover:text-stone-900 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-stone-50"
     }`;
 
   return (
-    <header className="relative border-b border-stone-200 bg-white dark:border-stone-800 dark:bg-stone-900">
+    <header className="relative z-30 border-b border-stone-900/10 bg-surface/90 backdrop-blur dark:border-white/10">
       <nav
         aria-label="Hauptnavigation"
         className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-2.5"
       >
-        <Link href="/tree" className="mr-3 font-semibold">
-          Stammbaum
+        <Link href="/tree" className="mr-4 flex items-center gap-2" aria-label="Stammbaum — Startseite">
+          <BrandMark />
+          <span className="font-serif text-lg font-semibold tracking-tight">Stammbaum</span>
         </Link>
 
         <ul className="hidden items-center gap-1 md:flex">
@@ -134,6 +120,23 @@ export function NavBar({
         </div>
       )}
     </header>
+  );
+}
+
+/** Kleines Zeichen: Wurzel, Stamm und Krone als stilisierter Stammbaum. */
+export function BrandMark({ className = "h-7 w-7" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 32 32" aria-hidden className={className}>
+      <rect width="32" height="32" rx="9" className="fill-accent-700 dark:fill-accent-300" />
+      <g className="stroke-white dark:stroke-stone-950" strokeWidth="1.8" fill="none" strokeLinecap="round">
+        <path d="M16 25V15M16 15l-5-4M16 15l5-4M11 11V8M21 11V8" />
+      </g>
+      <g className="fill-brass-300 dark:fill-brass-600">
+        <circle cx="11" cy="7.5" r="2.2" />
+        <circle cx="21" cy="7.5" r="2.2" />
+        <circle cx="16" cy="25.5" r="2.2" />
+      </g>
+    </svg>
   );
 }
 

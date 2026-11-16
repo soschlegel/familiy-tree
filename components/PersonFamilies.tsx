@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { apiFetch, jsonBody } from "./api-client";
+
 type Family = { id: string; name: string };
 
 /**
@@ -24,42 +26,44 @@ export function PersonFamilies({
   canEdit: boolean;
 }) {
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const assignedIds = new Set(assigned.map((f) => f.id));
   const editable = new Set(editableFamilyIds);
 
   async function toggle(familyId: string) {
+    if (busy) return;
     const next = assignedIds.has(familyId)
       ? [...assignedIds].filter((id) => id !== familyId)
       : [...assignedIds, familyId];
 
-    setBusy(true);
+    setBusy(familyId);
     setError(null);
-
-    const res = await fetch(`/api/persons/${personId}/families`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ familyIds: next }),
-    });
-
-    setBusy(false);
+    const res = await apiFetch(
+      `/api/persons/${personId}/families`,
+      jsonBody("PUT", { familyIds: next }),
+    );
+    setBusy(null);
 
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? `Fehler ${res.status}`);
+      setError(res.message);
       return;
     }
     router.refresh();
   }
 
   return (
-    <section className="space-y-2">
-      <h2 className="text-sm font-medium text-stone-500">Familien</h2>
+    <section className="space-y-2" aria-labelledby="person-families-h">
+      <h3 id="person-families-h" className="font-serif text-base font-semibold">
+        Familien
+      </h3>
+      <p className="text-sm muted">
+        Bestimmen, wer diese Person sehen kann. Antippen zum Zuordnen oder Entfernen.
+      </p>
 
       {assigned.length === 0 && (
-        <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+        <p className="alert-warning">
           Diese Person ist keiner Familie zugeordnet und damit nur für
           Administratoren sichtbar.
         </p>
@@ -72,9 +76,11 @@ export function PersonFamilies({
 
           return (
             <button
+              type="button"
               key={f.id}
-              disabled={!mayToggle || busy}
-              onClick={() => toggle(f.id)}
+              disabled={!mayToggle || busy !== null}
+              aria-pressed={active}
+              onClick={() => void toggle(f.id)}
               title={
                 mayToggle
                   ? active
@@ -82,26 +88,25 @@ export function PersonFamilies({
                     : "Dieser Familie zuordnen"
                   : "Keine Bearbeitungsrechte in dieser Familie"
               }
-              className={`rounded-full border px-3 py-1 text-sm transition ${
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition ${
                 active
-                  ? "border-stone-900 bg-stone-900 text-white dark:border-stone-100 dark:bg-stone-100 dark:text-stone-900"
-                  : "border-stone-300 text-stone-600 dark:border-stone-700 dark:text-stone-400"
-              } ${mayToggle ? "hover:opacity-80" : "cursor-not-allowed opacity-60"}`}
+                  ? "border-accent-700 bg-accent-700 text-white dark:border-accent-300 dark:bg-accent-300 dark:text-stone-950"
+                  : "border-stone-300 bg-surface text-stone-700 dark:border-stone-700 dark:text-stone-300"
+              } ${mayToggle ? "hover:opacity-85" : "cursor-not-allowed opacity-60"} ${busy === f.id ? "animate-pulse" : ""}`}
             >
+              <span aria-hidden>{active ? "✓" : "+"}</span>
               {f.name}
             </button>
           );
         })}
 
         {available.length === 0 && (
-          <p className="text-sm text-stone-500">
-            Noch keine Familien angelegt.
-          </p>
+          <p className="text-sm muted">Noch keine Familien angelegt.</p>
         )}
       </div>
 
       {error && (
-        <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p role="alert" className="alert-error">
           {error}
         </p>
       )}

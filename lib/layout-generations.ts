@@ -29,7 +29,14 @@ import {
  */
 
 const H_GAP = 40;
-const V_GAP = 130;
+/**
+ * Abstand zwischen zwei Kartenreihen. Er trägt: die Sammelschienen der
+ * Abstammungslinien (34px unter der Karte, bis zu vier Spuren — siehe
+ * ParentEdge), die unter der Reihe geführten Ehe-Kanten samt Marker (54px)
+ * und die Treffpunkte auf halber Höhe. 112 reicht dafür mit Luft; vorher 130
+ * plus 26px ungenutzte Knotenhöhe.
+ */
+const V_GAP = 112;
 const CONNECTOR = 56;
 
 /**
@@ -234,6 +241,18 @@ function computeGenerations(data: TreeData): Map<string, number> {
   return gen;
 }
 
+/** Vorgegebene Ebenen auf 0 … n verschieben; fehlende Personen auf Ebene 0. */
+function normalizeGenerations(
+  data: TreeData,
+  given: Map<string, number>,
+): Map<string, number> {
+  const gen = new Map<string, number>();
+  for (const p of data.persons) gen.set(p.id, given.get(p.id) ?? 0);
+  const min = Math.min(0, ...gen.values());
+  for (const [id, g] of gen) gen.set(id, g - min);
+  return gen;
+}
+
 /**
  * Fasst Ehepaare zu einer Doppelkarte zusammen. Anders als früher wird dabei
  * NICHT verlangt, dass ein Partner elternlos ist: die Kanten werden ohnehin
@@ -346,18 +365,81 @@ function orderUnits(units: Unit[], segments: Segment[]): void {
     else linkGroups.set(key, [{ a: upper, b: lower }]);
   }
 
-  const countCrossings = () => {
+  const crossingsIn = (group: { a: Unit; b: Unit }[]) => {
     let total = 0;
-    for (const group of linkGroups.values()) {
-      for (let i = 0; i < group.length; i++) {
-        for (let j = i + 1; j < group.length; j++) {
-          const p = group[i];
-          const q = group[j];
-          if ((p.a.order - q.a.order) * (p.b.order - q.b.order) < 0) total++;
-        }
+    for (let i = 0; i < group.length; i++) {
+      for (let j = i + 1; j < group.length; j++) {
+        const p = group[i];
+        const q = group[j];
+        if ((p.a.order - q.a.order) * (p.b.order - q.b.order) < 0) total++;
       }
     }
     return total;
+  };
+
+  const countCrossings = () => {
+    let total = 0;
+    for (const group of linkGroups.values()) total += crossingsIn(group);
+    return total;
+  };
+
+  // Ein Tausch innerhalb einer Generation ändert nur die Kreuzungen der
+  // Gruppen, die diese Generation berühren. Beim Nachbessern genügt es daher,
+  // diese neu zu zählen — das Ergebnis ist dasselbe, aber um ein Vielfaches
+  // schneller (spürbar beim Umschalten auf den Zeitstrahl).
+  const groupsByGeneration = new Map<number, { a: Unit; b: Unit }[][]>();
+  for (const group of linkGroups.values()) {
+    const gens = new Set([group[0].a.generation, group[0].b.generation]);
+    for (const g of gens) {
+      const list = groupsByGeneration.get(g);
+      if (list) list.push(group);
+      else groupsByGeneration.set(g, [group]);
+    }
+  }
+  const crossingsAround = (g: number) => {
+    let total = 0;
+    for (const group of groupsByGeneration.get(g) ?? []) total += crossingsIn(group);
+    return total;
+  };
+
+  /**
+   * Noch gezielter: Tauschen zwei NACHBARN a und b, ändert sich nur, ob sich
+   * Linien von a mit Linien von b kreuzen — und zwar kippt genau jedes
+   * solche Paar mit verschiedenen anderen Enden. Das ist O(Grad(a)·Grad(b))
+   * statt quadratisch in der Kantenzahl. Für die seltenen Linien innerhalb
+   * einer Ebene greift weiter die vollständige Zählung (crossingsAround).
+   */
+  type Incidence = { key: string; other: Unit; upperSide: boolean };
+  const incidences = new Map<string, Incidence[]>();
+  const flatUnits = new Set<string>();
+  for (const { upper, lower } of segments) {
+    const key = `${upper.generation}-${lower.generation}`;
+    if (upper.generation === lower.generation) {
+      flatUnits.add(upper.id);
+      flatUnits.add(lower.id);
+    }
+    const push = (u: Unit, inc: Incidence) => {
+      const list = incidences.get(u.id);
+      if (list) list.push(inc);
+      else incidences.set(u.id, [inc]);
+    };
+    push(upper, { key, other: lower, upperSide: true });
+    push(lower, { key, other: upper, upperSide: false });
+  }
+  /** Änderung der Kreuzungszahl, wenn a (links) und b (rechts) tauschen; null = unbekannt. */
+  const swapDelta = (a: Unit, b: Unit): number | null => {
+    if (flatUnits.has(a.id) || flatUnits.has(b.id)) return null;
+    let delta = 0;
+    for (const e of incidences.get(a.id) ?? []) {
+      for (const f of incidences.get(b.id) ?? []) {
+        if (e.key !== f.key || e.upperSide !== f.upperSide) continue;
+        const diff = e.other.order - f.other.order;
+        if (diff === 0) continue;
+        const crossingBefore = (a.order - b.order) * diff < 0;
+        delta += crossingBefore ? -1 : 1;
+      }
+    }
+    return delta;
   };
 
   let best = countCrossings();
@@ -416,6 +498,10 @@ function orderUnits(units: Unit[], segments: Segment[]): void {
   // dann bleibt es beim Baryzentrum-Ergebnis.
   const refine = units.length <= 400;
 
+  // Laufende Gesamtzahl; je Tausch wird nur der betroffene Ausschnitt neu
+  // gezählt. (orderOf/sync braucht hier niemand — nur das Baryzentrum oben.)
+  let current = refine ? countCrossings() : 0;
+
   for (let pass = 0; refine && pass < 12; pass++) {
     let improvedStrictly = false;
     let moved = false;
@@ -423,20 +509,23 @@ function orderUnits(units: Unit[], segments: Segment[]): void {
     for (const g of generations) {
       const layer = layers.get(g)!;
       for (let i = 0; i + 1 < layer.length; i++) {
-        const before = countCrossings();
-
+        const before = current;
         const a = layer[i];
         const b = layer[i + 1];
+        const delta = swapDelta(a, b);
+        const localBefore = delta === null ? crossingsAround(g) : 0;
+
         [a.order, b.order] = [b.order, a.order];
         layer[i] = b;
         layer[i + 1] = a;
-        sync();
 
-        const after = countCrossings();
+        const after =
+          delta === null ? before - localBefore + crossingsAround(g) : before + delta;
         // Gleichwertige Tausche in jedem zweiten Durchlauf zulassen.
         const acceptTie = after === before && pass % 2 === 1;
 
         if (after < before || acceptTie) {
+          current = after;
           moved = true;
           if (after < before) improvedStrictly = true;
           if (after < best) {
@@ -447,7 +536,6 @@ function orderUnits(units: Unit[], segments: Segment[]): void {
           [a.order, b.order] = [b.order, a.order];
           layer[i] = a;
           layer[i + 1] = b;
-          sync();
         }
       }
     }
@@ -507,15 +595,43 @@ function placeHorizontally(
     }
   }
 
-  /** Überlappungen auflösen, ohne die Reihenfolge zu ändern. */
+  /**
+   * Überlappungen auflösen, ohne die Reihenfolge zu ändern — und dabei jeden
+   * Kasten so nah wie möglich an seiner Wunschposition lassen.
+   *
+   * Früher wurde erst nach rechts geschoben, dann nach links. Das ließ ganze
+   * Gruppen bei jedem Durchlauf nach außen wandern, und der Baum wurde fast
+   * doppelt so breit wie nötig. Jetzt: kleinste Quadrate unter der
+   * Abstandsbedingung (Pool-Adjacent-Violators). Kästen, die sich ins Gehege
+   * kommen, bilden einen Block, der mittig auf dem Durchschnitt ihrer Wünsche
+   * sitzt — statt einseitig verdrängt zu werden.
+   */
   const separate = (layer: Unit[]) => {
-    for (let i = 1; i < layer.length; i++) {
-      const min = layer[i - 1].x + unitWidth(layer[i - 1]) + H_GAP;
-      if (layer[i].x < min) layer[i].x = min;
+    if (layer.length < 2) return;
+    // Mit dem Versatz durch die Breiten wird die Bedingung zu "monoton
+    // steigend" — dafür ist PAV exakt und linear.
+    const offset: number[] = [];
+    let acc = 0;
+    for (const u of layer) {
+      offset.push(acc);
+      acc += unitWidth(u) + H_GAP;
     }
-    for (let i = layer.length - 2; i >= 0; i--) {
-      const max = layer[i + 1].x - unitWidth(layer[i]) - H_GAP;
-      if (layer[i].x > max) layer[i].x = max;
+    const blocks: { sum: number; count: number }[] = [];
+    for (let i = 0; i < layer.length; i++) {
+      blocks.push({ sum: layer[i].x - offset[i], count: 1 });
+      while (blocks.length > 1) {
+        const last = blocks[blocks.length - 1];
+        const prev = blocks[blocks.length - 2];
+        if (prev.sum / prev.count <= last.sum / last.count) break;
+        prev.sum += last.sum;
+        prev.count += last.count;
+        blocks.pop();
+      }
+    }
+    let i = 0;
+    for (const b of blocks) {
+      const value = b.sum / b.count;
+      for (let k = 0; k < b.count; k++, i++) layer[i].x = value + offset[i];
     }
   };
 
@@ -540,38 +656,75 @@ function placeHorizontally(
     }
   }
 
-  // Auf x=0 normalisieren und jede Generation mittig ausrichten.
+  // Früher wurde hier zusätzlich jede Generation für sich mittig
+  // ausgerichtet. Das verschob die Ebenen gegeneinander und machte die eben
+  // hergestellte Ausrichtung Eltern-über-Kindern wieder zunichte; zugleich
+  // entstanden so die breiten Leerräume am Rand jeder Ebene. Stattdessen nur
+  // leere Spalten zusammenziehen.
+  compactColumns(units);
+
   const minX = Math.min(...units.map((u) => u.x));
   for (const u of units) u.x -= minX;
+}
 
-  const widest = Math.max(
-    ...generations.map((g) => {
-      const layer = byGeneration.get(g)!;
-      const last = layer[layer.length - 1];
-      return last.x + unitWidth(last) - layer[0].x;
-    }),
-  );
+/** Größte erlaubte Lücke zwischen zwei Spalten, die keine Ebene belegt. */
+export const MAX_COLUMN_GAP = H_GAP * 3;
 
-  for (const g of generations) {
-    const layer = byGeneration.get(g)!;
-    const width =
-      layer[layer.length - 1].x + unitWidth(layer[layer.length - 1]) -
-      layer[0].x;
-    const offset = (widest - width) / 2 - layer[0].x;
-    for (const u of layer) u.x += offset;
+/**
+ * Zieht senkrechte Streifen zusammen, in denen auf KEINER Ebene ein Kasten
+ * steht. Alles rechts eines solchen Streifens rückt geschlossen nach links —
+ * Reihenfolge, Ausrichtung zwischen den Ebenen und Abstände bleiben dadurch
+ * erhalten, es entfällt nur leere Fläche (typisch zwischen nicht verbundenen
+ * Familienzweigen oder neben einem einzelnen, weit ausgreifenden Zweig).
+ */
+function compactColumns(units: Unit[]): void {
+  if (units.length === 0) return;
+  const spans = units
+    .map((u) => [u.x, u.x + unitWidth(u)] as const)
+    .sort((a, b) => a[0] - b[0]);
+
+  const shifts: { at: number; by: number }[] = [];
+  let end = spans[0][1];
+  for (const [start, stop] of spans) {
+    if (start - end > MAX_COLUMN_GAP) {
+      shifts.push({ at: start, by: start - end - MAX_COLUMN_GAP });
+    }
+    end = Math.max(end, stop);
+  }
+  if (shifts.length === 0) return;
+
+  for (const u of units) {
+    let by = 0;
+    for (const s of shifts) if (u.x >= s.at) by += s.by;
+    u.x -= by;
   }
 }
 
+export type GenerationsOptions = {
+  mergeCouples?: boolean;
+  /**
+   * Fest vorgegebene Ebene je Person statt der Schätzung aus Abstammung und
+   * Geburtsjahren — für die Fokus-Ansicht, deren Ebenen sich aus dem Abstand
+   * zur Fokusperson ergeben. Personen ohne Eintrag landen auf Ebene 0.
+   */
+  generations?: Map<string, number>;
+  /** Senkrechter Abstand zwischen zwei Kartenreihen (Standard: V_GAP). */
+  rowGap?: number;
+};
+
 export function layoutGenerations(
   data: TreeData,
-  options: { mergeCouples?: boolean } = {},
+  options: GenerationsOptions = {},
 ): {
   nodes: LayoutNode[];
   edges: LayoutEdge[];
   junctions: ParentJunction[];
 } {
   const idx = indexTree(data);
-  const gen = computeGenerations(data);
+  const gen = options.generations
+    ? normalizeGenerations(data, options.generations)
+    : computeGenerations(data);
+  const pitch = NODE_HEIGHT + (options.rowGap ?? V_GAP);
   const realUnits = buildUnits(data, gen, options.mergeCouples ?? true);
 
   const anchorOf = new Map<string, string>();
@@ -693,6 +846,8 @@ export function layoutGenerations(
           personId: rel.fromPersonId,
           date: rel.startDate,
           endDate: rel.endDate,
+          datePrecision: rel.startDatePrecision,
+          dateQualifier: rel.startDateQualifier,
           subtype: rel.subtype,
           primaryMediaId: rel.primaryMediaId,
         };
@@ -703,7 +858,7 @@ export function layoutGenerations(
       person,
       partner: u.partner,
       x: u.x,
-      y: u.generation * (NODE_HEIGHT + V_GAP),
+      y: u.generation * pitch,
       marriage,
       hasDescendants:
         (idx.childrenOf.get(person.id)?.length ?? 0) > 0 ||
@@ -743,7 +898,7 @@ export function layoutGenerations(
       // Korridor durch die übersprungenen Ebenen.
       waypoints: pair.via.map((v) => ({
         x: v.x + DUMMY_WIDTH / 2,
-        y: v.generation * (NODE_HEIGHT + V_GAP) + NODE_HEIGHT / 2,
+        y: v.generation * pitch + NODE_HEIGHT / 2,
       })),
     });
   }
@@ -769,6 +924,8 @@ export function layoutGenerations(
           personId: r.fromPersonId,
           date: r.startDate,
           endDate: r.endDate,
+          datePrecision: r.startDatePrecision,
+          dateQualifier: r.startDateQualifier,
           subtype: r.subtype,
           primaryMediaId: r.primaryMediaId,
         },
@@ -776,7 +933,7 @@ export function layoutGenerations(
     }
   }
 
-  const junctions = buildJunctions(data, realUnits, anchorOf);
+  const junctions = buildJunctions(data, realUnits, anchorOf, pitch);
 
   // Kanten entfernen, die ein Treffpunkt ersetzt: sonst liefe zusätzlich zur
   // Gabelung noch je eine Einzellinie von jedem Elternteil zu jedem Kind.
@@ -806,6 +963,7 @@ function buildJunctions(
   data: TreeData,
   units: Unit[],
   anchorOf: Map<string, string>,
+  pitch: number,
 ): ParentJunction[] {
   const unitById = new Map(units.map((u) => [u.id, u]));
   const unitX = (u: Unit) => u.x + unitWidth(u) / 2;
@@ -859,9 +1017,7 @@ function buildJunctions(
         parentUnits.reduce((sum, u) => sum + unitX(u), 0) / parentUnits.length,
       // Mittig zwischen der unteren Elternebene und der oberen Kindebene.
       y:
-        (lowestParent * (NODE_HEIGHT + V_GAP) +
-          NODE_HEIGHT +
-          highestChild * (NODE_HEIGHT + V_GAP)) /
+        (lowestParent * pitch + NODE_HEIGHT + highestChild * pitch) /
         2,
       parentUnitIds: parentUnits.map((u) => u.id),
       childUnitIds: childUnits.map((u) => u.id),
@@ -1191,6 +1347,8 @@ export function layoutTimeline(data: TreeData) {
       id: `event:${r.id}`,
       relationshipId: r.id,
       date: r.startDate,
+      datePrecision: r.startDatePrecision,
+      dateQualifier: r.startDateQualifier,
       subtype: r.subtype,
       primaryMediaId: r.primaryMediaId,
       partnerAId: r.fromPersonId,

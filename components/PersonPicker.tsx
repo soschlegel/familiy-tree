@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
-import { formatDate } from "@/lib/tree-layout";
+import { useDismiss } from "./useDismiss";
+
+import { formatDate, lifeSpan } from "@/lib/tree-layout";
+import { apiFetch, jsonBody } from "./api-client";
 
 export type PickerPerson = {
   id: string;
@@ -10,6 +13,10 @@ export type PickerPerson = {
   familyName: string | null;
   birthDate: string | null;
   deathDate: string | null;
+  birthDatePrecision?: string;
+  birthDateQualifier?: string;
+  deathDatePrecision?: string;
+  deathDateQualifier?: string;
 };
 
 function label(p: PickerPerson): string {
@@ -17,17 +24,14 @@ function label(p: PickerPerson): string {
 }
 
 function dates(p: PickerPerson): string {
-  const year = (d: string | null) => (d ? new Date(d).getFullYear() : null);
-  const b = year(p.birthDate);
-  const d = year(p.deathDate);
-  if (b && d) return `* ${b} † ${d}`;
-  if (b) return `* ${b}`;
-  if (d) return `† ${d}`;
-  return "ohne Datum";
+  const span = lifeSpan(p);
+  if (!span) return "ohne Datum";
+  // „1850 – 1912“ -> „* 1850 † 1912“ (Format der Auswahlliste)
+  return p.birthDate && p.deathDate ? `* ${span.replace(" – ", " † ")}` : span;
 }
 
 function fullDate(p: PickerPerson): string {
-  return formatDate(p.birthDate);
+  return formatDate(p.birthDate, p.birthDatePrecision, p.birthDateQualifier);
 }
 
 /**
@@ -44,12 +48,15 @@ export function PersonPicker({
   onChange,
   onCreated,
   placeholder = "Name eingeben…",
+  labelledBy,
 }: {
   people: PickerPerson[];
   value: string;
   onChange: (id: string) => void;
   onCreated?: (person: PickerPerson) => void;
   placeholder?: string;
+  /** id des sichtbaren Feldnamens (für Screenreader). */
+  labelledBy?: string;
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -57,6 +64,7 @@ export function PersonPicker({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
+  const listId = useId();
 
   const selected = people.find((p) => p.id === value) ?? null;
 
@@ -79,13 +87,9 @@ export function PersonPicker({
 
   useEffect(() => setCursor(0), [query]);
 
-  useEffect(() => {
-    function onClickOutside(e: MouseEvent) {
-      if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
+  // Vorschläge schließen bei Klick daneben, Escape und Tab aus dem Feld.
+  const close = useCallback(() => setOpen(false), []);
+  useDismiss(open, close, [boxRef]);
 
   function pick(person: PickerPerson) {
     onChange(person.id);
@@ -94,6 +98,7 @@ export function PersonPicker({
   }
 
   async function createFromQuery() {
+    if (creating) return;
     // Erstes Wort als Vorname, Rest als Nachname — die häufigste Eingabe.
     const parts = query.trim().split(/\s+/);
     const givenName = parts[0];
@@ -102,21 +107,16 @@ export function PersonPicker({
     setCreating(true);
     setError(null);
 
-    const res = await fetch("/api/persons", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ givenName, familyName }),
-    });
+    const res = await apiFetch<PickerPerson>("/api/persons", jsonBody("POST", { givenName, familyName }));
 
     setCreating(false);
 
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? `Anlegen fehlgeschlagen (${res.status})`);
+      setError(res.message);
       return;
     }
 
-    const person: PickerPerson = await res.json();
+    const person = res.data;
     onCreated?.(person);
     pick(person);
   }
@@ -139,9 +139,9 @@ export function PersonPicker({
   }
 
   return (
-    <div ref={boxRef} className="relative w-72">
+    <div ref={boxRef} className="relative w-full sm:w-72">
       {selected ? (
-        <div className="flex items-center gap-2 rounded border border-stone-300 px-2 py-1.5 text-sm dark:border-stone-700 dark:bg-stone-900">
+        <div className="field flex items-center gap-2" aria-labelledby={labelledBy} role="group">
           <span className="truncate font-medium">{label(selected)}</span>
           <span className="shrink-0 text-xs text-stone-500">
             {dates(selected)}
@@ -152,8 +152,8 @@ export function PersonPicker({
               onChange("");
               setQuery("");
             }}
-            className="ml-auto shrink-0 text-xs text-stone-500 hover:text-stone-900 dark:hover:text-stone-100"
-            aria-label="Auswahl aufheben"
+            className="btn-link ml-auto shrink-0"
+            aria-label={`Auswahl ${label(selected)} aufheben`}
           >
             ändern
           </button>
@@ -168,12 +168,17 @@ export function PersonPicker({
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
           placeholder={placeholder}
-          className="w-full rounded border border-stone-300 px-2 py-1.5 text-sm dark:border-stone-700 dark:bg-stone-900"
+          aria-labelledby={labelledBy}
+          role="combobox"
+          aria-expanded={open}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          className="field w-full"
         />
       )}
 
       {open && !selected && (
-        <div className="absolute z-20 mt-1 w-full overflow-hidden rounded border border-stone-300 bg-white shadow-lg dark:border-stone-700 dark:bg-stone-900">
+        <div id={listId} className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-stone-300 bg-surface shadow-lift dark:border-stone-700">
           {matches.length === 0 && !canCreate && (
             <p className="px-3 py-2 text-sm text-stone-500">
               Keine Person gefunden.
@@ -184,6 +189,7 @@ export function PersonPicker({
             <button
               key={p.id}
               type="button"
+              tabIndex={-1}
               onMouseEnter={() => setCursor(i)}
               onClick={() => pick(p)}
               className={`flex w-full items-baseline gap-2 px-3 py-2 text-left text-sm ${
@@ -200,6 +206,7 @@ export function PersonPicker({
           {canCreate && (
             <button
               type="button"
+              tabIndex={-1}
               disabled={creating}
               onMouseEnter={() => setCursor(matches.length)}
               onClick={() => void createFromQuery()}

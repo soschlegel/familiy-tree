@@ -39,9 +39,10 @@ model User {
   accounts Account[]
   sessions Session[]
 
-  uploadedMedia MediaAsset[] @relation("MediaUploader")
-  auditLogs     AuditLog[]
-  families      UserFamily[]
+  uploadedMedia  MediaAsset[] @relation("MediaUploader")
+  auditLogs      AuditLog[]
+  families       UserFamily[]
+  createdSources Source[]     @relation("SourceCreator")
 }
 
 // ---------------------------------------------------------------------------
@@ -136,26 +137,49 @@ enum Gender {
   UNKNOWN
 }
 
+// Ungenaue Daten: Das DateTime-Feld bleibt der sortierbare Ankerpunkt
+// (Jahres- bzw. Monatsanfang bei geringerer Genauigkeit), Genauigkeit und
+// Zusatz beschreiben, wie es gemeint ist. Die Standardwerte (Tag, genau)
+// entsprechen allen Daten, die vor dieser Erweiterung erfasst wurden.
+// Siehe lib/dates.ts.
+enum DatePrecision {
+  DAY
+  MONTH
+  YEAR
+}
+
+enum DateQualifier {
+  EXACT
+  ABOUT // um, ca.
+  BEFORE // vor
+  AFTER // nach
+}
+
 model Person {
-  id         String    @id @default(cuid())
-  givenName  String
-  familyName String?
-  birthName  String?
-  gender     Gender    @default(UNKNOWN)
-  birthDate  DateTime?
-  birthPlace String?
-  deathDate  DateTime?
-  deathPlace String?
-  notes      String?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id                 String        @id @default(cuid())
+  givenName          String
+  familyName         String?
+  birthName          String?
+  gender             Gender        @default(UNKNOWN)
+  birthDate          DateTime?
+  birthDatePrecision DatePrecision @default(DAY)
+  birthDateQualifier DateQualifier @default(EXACT)
+  birthPlace         String?
+  deathDate          DateTime?
+  deathDatePrecision DatePrecision @default(DAY)
+  deathDateQualifier DateQualifier @default(EXACT)
+  deathPlace         String?
+  notes              String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 
   // Beziehungen, in denen diese Person die Quelle bzw. das Ziel ist.
   relationsFrom Relationship[] @relation("RelationFrom")
   relationsTo   Relationship[] @relation("RelationTo")
 
-  media    PersonMedia[]
-  families PersonFamily[]
+  media     PersonMedia[]
+  families  PersonFamily[]
+  citations Citation[]
 
   @@index([familyName, givenName])
 }
@@ -179,19 +203,24 @@ enum RelationSubtype {
 // Person: nur so sind Adoption, Stiefverhältnisse, Mehrfachehen und
 // Beziehungszeiträume abbildbar, ohne das Schema zu ändern.
 model Relationship {
-  id           String          @id @default(cuid())
-  type         RelationType
-  subtype      RelationSubtype @default(BIOLOGICAL)
-  fromPersonId String
-  toPersonId   String
-  startDate    DateTime?
-  endDate      DateTime?
-  notes        String?
-  createdAt    DateTime        @default(now())
+  id                 String          @id @default(cuid())
+  type               RelationType
+  subtype            RelationSubtype @default(BIOLOGICAL)
+  fromPersonId       String
+  toPersonId         String
+  startDate          DateTime?
+  startDatePrecision DatePrecision   @default(DAY)
+  startDateQualifier DateQualifier   @default(EXACT)
+  endDate            DateTime?
+  endDatePrecision   DatePrecision   @default(DAY)
+  endDateQualifier   DateQualifier   @default(EXACT)
+  notes              String?
+  createdAt          DateTime        @default(now())
 
   fromPerson Person              @relation("RelationFrom", fields: [fromPersonId], references: [id], onDelete: Cascade)
   toPerson   Person              @relation("RelationTo", fields: [toPersonId], references: [id], onDelete: Cascade)
   media      RelationshipMedia[]
+  citations  Citation[]
 
   @@unique([type, fromPersonId, toPersonId])
   @@index([fromPersonId])
@@ -220,6 +249,7 @@ model MediaAsset {
   uploadedBy    User?               @relation("MediaUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
   persons       PersonMedia[]
   relationships RelationshipMedia[]
+  sources       Source[]
 }
 
 // Bilder zu einem Ereignis statt zu einer Person — vor allem Hochzeitsfotos.
@@ -250,6 +280,84 @@ model PersonMedia {
 }
 
 // ---------------------------------------------------------------------------
+// Quellen und Belege
+// ---------------------------------------------------------------------------
+
+enum SourceKind {
+  CHURCH_BOOK // Kirchenbuch
+  CIVIL_REGISTRY // Standesamt
+  CENSUS // Volkszählung, Einwohnerlisten
+  GRAVESTONE // Grabstein, Friedhofsregister
+  FAMILY_DOCUMENT // Familienunterlagen, Briefe, Bibel
+  ORAL // mündliche Überlieferung
+  WEBSITE // Webseite, Online-Datenbank
+  OTHER
+}
+
+// Eine Quelle (z.B. ein Kirchenbuch) kann viele Angaben vieler Personen
+// belegen. Sichtbar ist sie, sobald der Benutzer etwas sieht, wofür sie
+// zitiert wird — Rechte hängen also an den Belegen (lib/services/sources.ts).
+model Source {
+  id            String        @id @default(cuid())
+  title         String
+  kind          SourceKind    @default(OTHER)
+  author        String? // Verfasser bzw. Herkunft
+  repository    String? // Archiv, Pfarramt, Standesamt
+  callNumber    String? // Signatur
+  url           String?
+  date          DateTime?
+  datePrecision DatePrecision @default(DAY)
+  dateQualifier DateQualifier @default(EXACT)
+  notes         String? // Abschrift, Notizen
+  mediaId       String? // Scan: ein bereits hochgeladenes Bild
+  createdById   String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  media     MediaAsset? @relation(fields: [mediaId], references: [id], onDelete: SetNull)
+  createdBy User?       @relation("SourceCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  citations Citation[]
+
+  @@index([title])
+}
+
+enum CitationFact {
+  NAME
+  BIRTH
+  DEATH
+  PARTNERSHIP // Heirat bzw. Partnerschaft (nur an PARTNER_OF)
+  PARENTAGE // Abstammung (nur an PARENT_OF)
+  OTHER
+}
+
+enum CitationConfidence {
+  HIGH // gesichert
+  MEDIUM // wahrscheinlich
+  LOW // unsicher
+}
+
+// Beleg: eine Quelle stützt eine Angabe zu GENAU EINER Person oder Beziehung
+// (geprüft im Dienst — Prisma kennt keine Check-Constraints).
+model Citation {
+  id             String              @id @default(cuid())
+  sourceId       String
+  personId       String?
+  relationshipId String?
+  fact           CitationFact        @default(OTHER)
+  detail         String? // Seite, Eintragsnummer, Fundstelle
+  confidence     CitationConfidence?
+  createdAt      DateTime            @default(now())
+
+  source       Source        @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  person       Person?       @relation(fields: [personId], references: [id], onDelete: Cascade)
+  relationship Relationship? @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId])
+  @@index([personId])
+  @@index([relationshipId])
+}
+
+// ---------------------------------------------------------------------------
 // Audit
 // ---------------------------------------------------------------------------
 
@@ -257,7 +365,7 @@ model AuditLog {
   id         String   @id @default(cuid())
   userId     String?
   action     String // CREATE | UPDATE | DELETE
-  entityType String // Person | Relationship | MediaAsset | User
+  entityType String // Person | Relationship | MediaAsset | User | Family | Source | Citation
   entityId   String
   diff       Json?
   createdAt  DateTime @default(now())
