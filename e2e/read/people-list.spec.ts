@@ -1,4 +1,4 @@
-import { test, expect, authFile } from "../support/fixtures";
+import { test, expect, authFile, waitForHydration } from "../support/fixtures";
 import { FAMILY, familyName, fullName, mock, visibleFor } from "../support/mock";
 
 /** Personenliste: Suche, Familienfilter, Sortierung, Seiten, Zählung. */
@@ -46,7 +46,7 @@ test("Namenssuche", async ({ page }) => {
   await page.goto("/people");
   await page.getByLabel("Name").fill(word);
   await page.getByLabel("Name").press("Enter");
-  await expect(page).toHaveURL(`/people?q=${word}`);
+  await expect(page).toHaveURL(new RegExp(`/people\\?q=${word}&`));
   await expect(page.getByTestId("people-count")).toHaveText(`1–${expected.length} von ${expected.length} Treffern`);
   const items = page.getByTestId("people-list").getByRole("listitem");
   await expect(items).toHaveCount(expected.length);
@@ -72,7 +72,7 @@ test("Familienfilter", async ({ page }) => {
   const inB = visibleFor(["B"]).length;
   await page.goto("/people");
   await page.getByLabel("Familie").selectOption({ label: familyName("B") });
-  await expect(page).toHaveURL(`/people?family=${FAMILY.B}`);
+  await expect(page).toHaveURL(new RegExp(`[?&]family=${FAMILY.B}(&|$)`));
   await expect(page.getByTestId("people-count")).toHaveText(`1–${PAGE} von ${inB} Treffern`);
   // Badge der Familie an jeder Karte.
   const short = familyName("B").replace(/^Familie /, "");
@@ -81,7 +81,7 @@ test("Familienfilter", async ({ page }) => {
   }
   // Filter und Seite zusammen.
   await page.getByRole("navigation", { name: "Seiten" }).getByRole("link", { name: "Seite 2" }).click();
-  await expect(page).toHaveURL(`/people?family=${FAMILY.B}&page=2`);
+  await expect(page).toHaveURL(`/people?family=${FAMILY.B}&page=2`); // Seitenverweise sind aufgeräumt
   await expect(page.getByTestId("people-count")).toHaveText(`41–80 von ${inB} Treffern`);
 });
 
@@ -96,18 +96,24 @@ test("Sortierung nach Geburt", async ({ page }) => {
 
   await page.goto("/people");
   await page.getByLabel("Sortierung").selectOption({ label: "Geburt, älteste zuerst" });
-  await expect(page).toHaveURL("/people?sort=birthDate");
+  await expect(page).toHaveURL(/[?&]sort=birthDate(&|$)/);
   const items = page.getByTestId("people-list").getByRole("listitem");
   await expect(items.first()).toContainText(fullName(oldest.id));
+  await waitForHydration(page, "#people-sort");
 
   await page.getByLabel("Sortierung").selectOption({ label: "Geburt, jüngste zuerst" });
-  await expect(page).toHaveURL("/people?sort=birthDateDesc");
+  await expect(page).toHaveURL(/[?&]sort=birthDateDesc(&|$)/);
   await expect(items.first()).toContainText(String(youngest.birthDate!.getUTCFullYear()));
+  await waitForHydration(page, "#people-sort");
 
   await page.getByLabel("Sortierung").selectOption({ label: "Name" });
-  await expect(page).toHaveURL("/people");
-  const names = await items.locator("span.font-semibold").allInnerTexts();
-  expect(names.length).toBe(PAGE);
+  await expect(page).toHaveURL(/[?&]sort=name(&|$)/);
+  await expect(items).toHaveCount(PAGE);
+  // Nach Name: alphabetisch nach Nachname.
+  const first = [...mock.persons].sort(
+    (a, b) => (a.familyName ?? "").localeCompare(b.familyName ?? "", "de") || a.givenName.localeCompare(b.givenName, "de"),
+  )[0];
+  await expect(items.first()).toContainText(first.familyName!);
 });
 
 test.describe("als Betrachter", () => {

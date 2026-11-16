@@ -103,8 +103,11 @@ export default async function TreePage({
     }
   }
 
+  // Die Seite füllt genau den Bildschirm unter der Kopfzeile (55px) samt
+  // Innenabstand von <main> (2 × 12px); die Baumfläche nimmt den Rest ein,
+  // wie viele Zeilen die Werkzeugleiste auch braucht (auf dem Telefon mehrere).
   return (
-    <div className="space-y-3">
+    <div className="flex h-[calc(100dvh-79px)] flex-col gap-3">
       {params.denied && (
         <p role="alert" className="alert-warning">
           Für die aufgerufene Seite fehlt dir die Berechtigung. Du wurdest zum

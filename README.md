@@ -41,7 +41,7 @@ Bildarchiv und rollenbasierter Benutzerverwaltung.
 | Anmeldung | Auth.js v5 (GitHub, Google, Dev-Login) |
 | Bilder | MinIO (S3-kompatibel), sharp |
 | Visualisierung | React Flow (Layout selbst geschrieben, `lib/layout-generations.ts`) |
-| Betrieb | Docker Compose + Caddy |
+| Betrieb | Docker Compose (Portainer), Images aus GitHub Actions über ghcr.io |
 
 ## Lokal starten
 
@@ -401,6 +401,10 @@ benutzerbezogen statt im Projekt, z.B.:
 claude mcp add stammbaum --scope user -e MCP_USER_EMAIL=deine@mail.de -- node C:/Pfad/zu/familiy-tree/node_modules/tsx/dist/cli.mjs C:/Pfad/zu/familiy-tree/mcp/server.ts
 ```
 
+Liegt die Datenbank auf der NAS, ist sie standardmäßig von außen nicht
+erreichbar — wie man sie bei Bedarf freischaltet, steht unter
+[Datenbank vom PC aus (MCP)](#datenbank-vom-pc-aus-mcp).
+
 **Claude Desktop** (`%APPDATA%\Claude\claude_desktop_config.json` unter
 Windows):
 
@@ -448,45 +452,304 @@ ungenauer Daten, Quellen, Belegen und Audit-Log als Bearbeiter, Start wie in
 
 ## Betrieb auf der NAS (Portainer)
 
-Alle persistenten Daten liegen als Bind-Mounts unter **einem** Pfad:
+Gedacht für eine NAS (x86-64) mit Portainer, erreichbar **nur im Heimnetz
+bzw. über VPN**, hinter dem Reverse-Proxy, der auf der NAS ohnehin läuft
+(Synology-Reverse-Proxy oder Nginx Proxy Manager).
 
 ```
-${DATA_ROOT}/
-├── postgres/     Datenbank
-├── minio/        Originalbilder + Vorschauen
-├── caddy/        TLS-Zertifikate
-└── backups/      pg_dump-Archive + Bild-Spiegel
+git push (main)
+   └─ GitHub Actions (.github/workflows/images.yml)
+        ├─ prüft: Typen, Lint, Unit-Tests
+        ├─ baut und lädt nach ghcr.io:
+        │    ghcr.io/soschlegel/familiy-tree          (App)
+        │    ghcr.io/soschlegel/familiy-tree-migrate  (Schema + Admin)
+        │    ghcr.io/soschlegel/familiy-tree-minio    (Objektspeicher, nur bei neuer Version)
+        └─ setzt Branch "deploy" auf diesen Commit
+Portainer (beobachtet "deploy") ─ lädt die Images ─ startet den Stack neu
 ```
 
-Damit erfasst die NAS-Sicherungsaufgabe genau ein Verzeichnis.
+Auf der NAS wird nichts gebaut, und der Stack braucht keine Dateien aus dem
+Repository außer `docker-compose.yml` selbst.
 
-**Einrichtung:**
+**Dienste** ([docker-compose.yml](docker-compose.yml)):
 
-1. In Portainer: *Stacks → Add stack → Repository*, dieses Repo eintragen.
-2. Unter *Environment variables* setzen:
+| Dienst | Aufgabe |
+|---|---|
+| `db` | PostgreSQL 17, kein Port nach außen |
+| `storage` | MinIO (Bilder), kein Port nach außen |
+| `storage-init` | legt beim Start den Bucket an, beendet sich |
+| `backup-db` | Datenbank-Dump nach `backups/` — bei jedem Start **vor** der Migration, und auf Abruf |
+| `backup-media` | spiegelt die Bilder lesbar nach `backups/media` — bei jedem Start und auf Abruf |
+| `migrate` | wendet Migrationen an, legt `INITIAL_ADMIN_EMAIL` als Admin an, beendet sich |
+| `app` | die Anwendung; startet erst nach erfolgreichem `migrate`; Port `127.0.0.1:3080` für den Proxy |
+| `proxy` | *optional* (Profil `caddy`): eigener Reverse-Proxy, falls keiner vorhanden ist |
+| `db-access` | *optional* (Profil `db-access`): Datenbank für den MCP-Server am PC |
 
-   | Variable | Beispiel |
-   |---|---|
-   | `DATA_ROOT` | `/volume1/docker/familytree` |
-   | `POSTGRES_PASSWORD` | (langes Zufallspasswort) |
-   | `S3_ACCESS_KEY` / `S3_SECRET_KEY` | (Zufallswerte) |
-   | `AUTH_SECRET` | Ausgabe von `openssl rand -base64 32` |
-   | `DOMAIN` | `stammbaum.example.de` |
-   | `PUBLIC_URL` | `https://stammbaum.example.de` |
-   | `INITIAL_ADMIN_EMAIL` | deine Adresse |
-   | `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` | aus der OAuth-App |
+Alle Daten liegen als Bind-Mounts unter **einem** Pfad — genau dieses
+Verzeichnis muss die NAS-Sicherung erfassen:
 
-3. Deploy. Der Container legt beim Start das Schema an und macht
-   `INITIAL_ADMIN_EMAIL` zum Administrator.
+```
+${DATA_ROOT}/              z.B. /volume1/docker/familytree
+├── postgres/     Datenbank (gehört UID 70, Rechte 0700 — nicht ändern)
+├── minio/        Originalbilder + Vorschauen (MinIO-internes Format)
+├── backups/      db_<Datum>.sql.gz + media/ (lesbare Kopie der Bilder)
+└── caddy/        nur mit Profil caddy: Zertifikate
+```
 
-`ENABLE_DEV_LOGIN` dort **nicht** setzen.
+Die Unterordner legt Docker beim ersten Start selbst an; vorher muss nur der
+gemeinsame Ordner (bei Synology meist `docker`) existieren. Der
+Postgres-Container stellt Besitzer und Rechte von `postgres/` selbst ein —
+danach in der File Station **keine** Berechtigungen auf Unterordner anwenden,
+sonst startet die Datenbank nicht mehr (Fehler „data directory has invalid
+permissions“). Alle anderen Container laufen als root und brauchen nichts.
+Auf einer Synology ist das nicht ausprobiert; siehe
+[Fehlersuche](#fehlersuche).
 
-### Voraussetzung für OAuth
+### Erste Installation
 
-Der Callback muss von Google/GitHub erreichbar sein — die Instanz braucht also
-eine öffentliche Domain mit TLS (Caddy holt das Zertifikat automatisch). Rein
-im LAN funktioniert OAuth nicht; dort bliebe nur der Dev-Login oder ein
-Wechsel auf E-Mail+Passwort.
+Voraussetzungen: Portainer CE 2.19 oder neuer (Git-Stacks mit
+Umgebungsvariablen und Docker Compose v2), ausgehender Internetzugang der NAS
+(Images laden, OAuth-Anmeldung).
+
+1. **Images bauen lassen.** Auf `main` pushen (oder unter *Actions → Images →
+   Run workflow* von Hand starten) und warten, bis der Lauf grün ist. Der
+   erste Lauf dauert länger, weil MinIO aus dem Quelltext gebaut wird. Danach
+   gibt es den Branch `deploy`.
+2. **Pakete freigeben.** Neue Pakete auf ghcr.io sind privat, auch bei einem
+   öffentlichen Repository. Für jedes der drei Pakete (`familiy-tree`,
+   `familiy-tree-migrate`, `familiy-tree-minio`): GitHub → Profil →
+   *Packages* → Paket → *Package settings* → *Danger Zone* → *Change
+   visibility* → *Public* → Namen bestätigen. (Lässt sich nicht rückgängig
+   machen; die Images enthalten keine Geheimnisse.)
+   *Alternative ohne Veröffentlichung:* GitHub → Settings → Developer
+   settings → *Personal access tokens (classic)* → Token nur mit
+   `read:packages`; in Portainer *Registries → Add registry → Custom
+   registry*, URL `ghcr.io`, Benutzername `soschlegel`, Token als Passwort.
+3. **Adresse festlegen.** Unter welcher Adresse die Familie den Stammbaum
+   aufruft, z.B. `https://stammbaum.example.de` — das wird `PUBLIC_URL`.
+   Der Name muss im Heimnetz (und im VPN) auf die NAS zeigen: lokaler
+   DNS-Eintrag im Router/Pi-hole oder ein öffentlicher DNS-Eintrag, der auf
+   die **private** IP der NAS zeigt. Welche Adressen OAuth akzeptiert, steht
+   unter [Anmeldung (OAuth) im Heimnetz](#anmeldung-oauth-im-heimnetz).
+4. **OAuth-App anlegen** (GitHub und/oder Google) mit der Callback-URL
+   `<PUBLIC_URL>/api/auth/callback/github` bzw. `…/google`.
+5. **Stack anlegen.** Portainer → *Stacks → Add stack*:
+   - *Name:* `familytree` (bestimmt die Containernamen, z.B.
+     `familytree-app-1` — die Befehle in diesem Abschnitt gehen davon aus)
+   - *Build method:* **Repository**
+   - *Repository URL:* `https://github.com/soschlegel/familiy-tree`
+   - *Repository reference:* `refs/heads/deploy`
+   - *Compose path:* `docker-compose.yml`
+   - *Authentication:* aus (öffentliches Repository)
+   - *GitOps updates:* an — *Mechanism* **Polling**, *Fetch interval* `5m`;
+     **Re-pull image** an; *Force redeployment* aus (siehe
+     [Updates](#updates))
+   - *Environment variables:* *Advanced mode* → Inhalt von
+     [stack.env.example](stack.env.example) einfügen und die Werte ausfüllen.
+     Pflicht: `DATA_ROOT`, `POSTGRES_PASSWORD`, `S3_ACCESS_KEY`,
+     `S3_SECRET_KEY`, `AUTH_SECRET`, `PUBLIC_URL`, `INITIAL_ADMIN_EMAIL` und
+     mindestens ein OAuth-Paar. Zufallswerte mit `openssl rand -hex 32` (für
+     `AUTH_SECRET`: `openssl rand -base64 32`) — Passwörter nur aus
+     Hex-Zeichen, weil `POSTGRES_PASSWORD` in einer URL steht.
+     `ENABLE_DEV_LOGIN` **nicht** setzen (der Stack schaltet ihn ohnehin ab).
+   - *Deploy the stack.*
+6. **Start prüfen.** *Stacks → familytree*: `migrate` ist „exited“ mit
+   Code 0 und zeigt im Log `[migrate] Fertig.`; `app` steht auf
+   „healthy“. Auf der NAS: `curl http://127.0.0.1:3080/api/health` →
+   `{"status":"ok"}`.
+7. **Reverse-Proxy einrichten**, siehe [Reverse-Proxy](#reverse-proxy).
+8. **Erste Anmeldung:** `PUBLIC_URL` öffnen, mit dem GitHub-/Google-Konto
+   anmelden, dessen E-Mail `INITIAL_ADMIN_EMAIL` ist. Weitere Personen unter
+   *Benutzer* (`/admin/users`) eintragen — nur eingetragene E-Mails kommen
+   hinein.
+9. **Sicherung planen**, siehe [Sicherung](#sicherung).
+
+### Anmeldung (OAuth) im Heimnetz
+
+OAuth funktioniert auch ohne öffentlich erreichbare Instanz. Beim
+Authorization-Code-Verfahren schickt der Anbieter den **Browser** zurück an
+die Callback-URL; GitHub/Google rufen die NAS nie selbst auf. Die NAS braucht
+nur **ausgehenden** Internetzugang (Token-Abruf bei `github.com` bzw.
+`oauth2.googleapis.com`). Eine Portweiterleitung ist nicht nötig.
+
+Regeln für die Adresse:
+
+- `PUBLIC_URL` ist **genau** die Adresse, die im Browser eingegeben wird
+  (Schema, Host, ggf. Port). Daraus bildet die App die Callback-URL
+  `<PUBLIC_URL>/api/auth/callback/<anbieter>` und entscheidet über die
+  Cookies. Nur über diese Adresse anmelden — nicht parallel über IP:Port.
+- **GitHub** (Settings → Developer settings → OAuth Apps): akzeptiert laut
+  Doku jede Callback-URL und prüft sie nur auf exakte Übereinstimmung — auch
+  `http://` und interne Namen wie `http://nas.fritz.box:3080`.
+- **Google** (Cloud Console → APIs & Services → Credentials → OAuth client
+  ID, Typ Web): Redirect-URIs müssen laut Doku **HTTPS** verwenden, dürfen
+  **keine IP-Adresse** sein und müssen auf einer Endung der Public Suffix
+  List enden (Ausnahme nur `localhost`). Interne Endungen wie `.local`,
+  `.lan`, `.home` oder `.internal` scheiden damit aus. Für Google also eine
+  eigene Domain (z.B. `stammbaum.example.de`, per DNS auf die private
+  NAS-IP) mit HTTPS am Reverse-Proxy. Der Zustimmungsbildschirm darf im
+  Status „Testing“ bleiben; dann die Familienmitglieder als Testnutzer
+  eintragen.
+
+Beides ist aus der Anbieter-Dokumentation abgeleitet (Stand 11/2026), nicht
+auf dieser NAS ausprobiert — beim ersten Deploy einmal durchspielen.
+
+**HTTP oder HTTPS:**
+
+- `PUBLIC_URL=http://…` — Cookies ohne `Secure`-Flag, funktioniert im LAN.
+  Das Sitzungs-Cookie geht dann unverschlüsselt durchs Heimnetz; nur mit
+  GitHub möglich.
+- `PUBLIC_URL=https://…` — Cookies mit `Secure` und `__Secure-`-Präfix. TLS
+  endet am Reverse-Proxy, die App selbst spricht HTTP. Das passt, weil
+  Auth.js Schema und Host aus `AUTH_URL` (= `PUBLIC_URL`) nimmt und nicht aus
+  der Anfrage; `AUTH_TRUST_HOST=true` setzt der Stack.
+- Der Proxy muss den ursprünglichen `Host`-Header durchreichen (oder
+  `X-Forwarded-Host` setzen). Next.js vergleicht bei Formular-Aktionen — auch
+  beim Klick auf „Anmelden mit …“ — `Origin` mit dem Host; passt das nicht,
+  passiert beim Klick nichts bzw. das Log zeigt „Invalid Server Actions
+  request“.
+
+### Reverse-Proxy
+
+Die App lauscht auf `127.0.0.1:3080` (änderbar: `APP_PORT`, `APP_BIND`).
+Für den Proxy wichtig:
+
+| Punkt | Einstellung |
+|---|---|
+| Ziel | `http://127.0.0.1:3080` (bzw. LAN-IP der NAS, siehe NPM) |
+| Upload-Größe | Bilder bis 15 MB (`MAX_UPLOAD_BYTES`), ZIP-Importe unter *Daten* (`/admin/data`) deutlich mehr — Limit mindestens 20 MB, besser 1 GB |
+| Zeitlimit | großer ZIP-Import kann über 60 s dauern — Lese-Timeout 300 s |
+| Header | `Host` unverändert durchreichen; `X-Forwarded-For`/`-Proto` schaden nicht |
+| WebSocket | nicht nötig |
+
+**Synology (DSM 7)** — Systemsteuerung → Anmeldeportal → Erweitert →
+Reverse Proxy → Erstellen:
+
+- *Quelle:* Protokoll `HTTPS`, Hostname `stammbaum.example.de`, Port `443`
+  (oder `HTTP`/`80`, wenn `PUBLIC_URL` mit `http://` beginnt)
+- *Ziel:* Protokoll `HTTP`, Hostname `localhost`, Port `3080`
+- Zertifikat: Systemsteuerung → Sicherheit → Zertifikat → *Einstellungen* —
+  dem neuen Eintrag ein Zertifikat zuweisen. Let's Encrypt über DSM braucht
+  Erreichbarkeit von außen; ohne Portfreigabe ein Zertifikat per DNS-Challenge
+  besorgen und importieren (oder NPM nehmen, s.u.).
+
+DSM reicht den `Host`-Header nach bisheriger Erfahrung durch. Das
+Upload-Limit lässt sich in der DSM-Oberfläche nicht einstellen — nach dem
+Einrichten ein Bild mit ~15 MB hochladen. Kommt „413 Request Entity Too
+Large“, ist der DSM-Proxy für diese App ungeeignet; dann Nginx Proxy Manager
+oder das Caddy-Profil verwenden. (Nicht auf einer Synology ausprobiert.)
+
+**Nginx Proxy Manager** — läuft meist selbst in einem Container; dort zeigt
+`127.0.0.1` auf NPM selbst. Deshalb im Stack `APP_BIND` auf die LAN-IP der NAS
+setzen (z.B. `192.168.178.10`) und in NPM *Hosts → Proxy Hosts → Add Proxy
+Host*:
+
+- *Domain Names:* `stammbaum.example.de`; *Scheme:* `http`; *Forward
+  Hostname/IP:* LAN-IP der NAS; *Forward Port:* `3080`; *Websockets
+  Support:* aus
+- *SSL:* Zertifikat; ohne Erreichbarkeit von außen *Use a DNS Challenge*
+  (API-Token des DNS-Anbieters)
+- *Advanced → Custom Nginx Configuration:*
+
+  ```nginx
+  client_max_body_size 1g;
+  proxy_read_timeout 300s;
+  ```
+
+NPM reicht `Host` und `X-Forwarded-*` von sich aus durch.
+
+**Ohne vorhandenen Proxy:** Stack-Variable `COMPOSE_PROFILES=caddy` startet
+Caddy mit inline hinterlegter Konfiguration (kein Bind-Mount aus dem Repo).
+Standard: HTTPS mit Caddys eigener Zertifizierungsstelle (`tls internal`) auf
+Port `8443`, HTTP auf `8080`; einstellbar über `CADDY_SITE` (Hostname),
+`CADDY_HTTPS_PORT`, `CADDY_HTTP_PORT`, `CADDY_BIND`, `CADDY_MAX_BODY` und
+`CADDY_TLS` (`internal` oder eine E-Mail für Let's Encrypt — nur bei
+öffentlicher Erreichbarkeit). `PUBLIC_URL` dann z.B.
+`https://stammbaum.fritz.box:8443`. Der Browser warnt, bis das Stammzertifikat
+aus `${DATA_ROOT}/caddy/data/caddy/pki/authorities/local/root.crt` auf den
+Geräten importiert ist. Ob Portainer `COMPOSE_PROFILES` aus den
+Stack-Variablen an Compose weitergibt, ist nicht auf der NAS geprüft (Docker
+Compose selbst liest die Variable aus der Env-Datei, die Portainer übergibt);
+erscheint kein `proxy`-Container, liegt es daran.
+
+### Updates
+
+Mit den Einstellungen aus Schritt 5 läuft ein Update ohne Handgriff:
+Push auf `main` → Actions baut und prüft (ca. 5–10 min) → Branch `deploy`
+rückt nach → Portainer bemerkt das beim nächsten Abruf (≤ 5 min), lädt die
+Images neu (*Re-pull image*) und startet den Stack: `backup-db` →
+`migrate` → `app`.
+
+**Warum `deploy` statt `main`:** Würde Portainer `main` beobachten, sähe es
+den neuen Commit sofort, der Image-Build läuft dann aber noch. Portainer
+würde das alte `latest` erneut laden — und erst beim *nächsten* Commit
+nachziehen. Schlimmer: eine neue `docker-compose.yml` könnte auf Images
+treffen, die es noch nicht gibt. Der Workflow setzt `deploy` erst, wenn alle
+Images fertig sind; Compose-Datei und Images passen so immer zusammen.
+*Force redeployment* bleibt aus: es würde den Stack bei jedem Abruf neu
+starten — und damit jedes Mal Sicherung und Migration laufen lassen.
+Webhooks scheiden aus, weil GitHub die NAS nicht erreicht.
+
+**Version festhalten / zurückrollen:** Stack-Variable `IMAGE_TAG` setzen und
+*Update the stack* mit *Re-pull image*:
+
+| `IMAGE_TAG` | Bedeutung |
+|---|---|
+| `latest` (Standard) | jeweils der neueste Stand von `main` |
+| `sha-1a2b3c4` | genau dieser Commit (die ersten 7 Zeichen, siehe GitHub → Packages) |
+| `1.2.0` / `1.2` | ein Release; entsteht durch einen Git-Tag `v1.2.0` |
+
+Achtung beim Zurückrollen über eine Migration hinweg: Die Datenbank behält
+das neuere Schema. Bei rein ergänzenden Migrationen läuft die ältere App
+weiter; sonst die Sicherung vor dem Update einspielen
+([Wiederherstellung](#wiederherstellung)). Zum Zurückkehren `IMAGE_TAG`
+wieder auf `latest` setzen.
+
+**Von Hand aktualisieren:** *Stacks → familytree → Pull and redeploy*.
+
+### Datenbank vom PC aus (MCP)
+
+Der [MCP-Server](#ki-recherche-über-mcp) braucht direkten Zugriff auf die
+Datenbank. Standardmäßig ist sie von außen **nicht** erreichbar. Bei Bedarf:
+
+1. Stack-Variablen `COMPOSE_PROFILES=db-access` und `DB_ACCESS_BIND=<LAN-IP
+   der NAS>` (Port: `DB_ACCESS_PORT`, Standard `15432`) setzen, *Update the
+   stack*. Der Dienst `db-access` leitet diesen Port an die Datenbank weiter;
+   `db` selbst veröffentlicht weiterhin nichts.
+2. Am PC: `DATABASE_URL=postgresql://familytree:<POSTGRES_PASSWORD>@<LAN-IP>:15432/familytree`
+   in der MCP-Konfiguration (`env`) eintragen.
+3. Danach Variablen wieder entfernen und *Update the stack* — `db-access`
+   verschwindet.
+
+Sicherheit: Das ist der Eigentümer-Zugang zur Datenbank — wer ihn hat, kann
+alles lesen und ändern, an Rechteprüfung und Audit-Log vorbei. Nur auf die
+LAN-IP binden, nie im Router freigeben, nur so lange wie nötig. Über VPN
+verbundene Geräte erreichen ihn ebenfalls. Vorsichtiger: `DB_ACCESS_BIND`
+auf `127.0.0.1` lassen und per SSH-Tunnel zugreifen
+(`ssh -N -L 15432:127.0.0.1:15432 <benutzer>@<nas>`, dann
+`@localhost:15432` in der URL) — setzt SSH auf der NAS mit erlaubter
+Portweiterleitung voraus (bei DSM nicht geprüft).
+
+### Fehlersuche
+
+Logs: Portainer → *Stacks → familytree* → Container → *Logs*, oder auf der
+NAS `docker logs familytree-migrate-1` (bzw. `-app-1`, `-backup-db-1`, …).
+
+| Symptom | Ursache / Abhilfe |
+|---|---|
+| Deploy bricht ab mit „… fehlt“ | Pflichtvariable nicht gesetzt (Meldung nennt sie) |
+| „pull access denied“ / „denied“ für `ghcr.io/…` | Paket noch privat (Schritt 2) oder Workflow noch nicht gelaufen |
+| Portainer findet `refs/heads/deploy` nicht | Workflow auf `main` noch nie erfolgreich durchgelaufen |
+| `app` startet nicht, `migrate` Exit ≠ 0 | Log von `migrate` lesen; „ABBRUCH: Die Schemaänderung ist nicht rein ergänzend“ → [Schema und Migrationen](#schema-und-migrationen) |
+| `migrate` startet nicht, `backup-db` Exit ≠ 0 | Sicherung fehlgeschlagen (Platz, Rechte auf `backups/`) — die Migration läuft absichtlich nicht ohne Sicherung |
+| `db` startet nicht: „invalid permissions“ / „Operation not permitted“ | Rechte von `postgres/` verändert (File Station/ACL). Bei Neuinstallation den leeren Ordner löschen und neu deployen; sonst per SSH `chown -R 70:70` und `chmod 700` darauf |
+| `app` „unhealthy“ | `docker logs familytree-app-1`; `/api/health` meldet nur, ob die Datenbank antwortet |
+| Anmeldung: GitHub „redirect_uri is not associated“ / Google „redirect_uri_mismatch“ | Callback-URL beim Anbieter ≠ `<PUBLIC_URL>/api/auth/callback/…` (Schema, Port, Schreibweise) |
+| Klick auf „Anmelden mit …“ tut nichts, Log „Invalid Server Actions request“ | Proxy reicht `Host` nicht durch |
+| Nach der Anmeldung wieder auf `/login` | Seite über eine andere Adresse als `PUBLIC_URL` aufgerufen, oder `https://`-`PUBLIC_URL` über `http://` geöffnet |
+| „Anmeldung fehlgeschlagen … nicht freigeschaltet“ | E-Mail des Kontos steht nicht in der Benutzerliste (oder gesperrt); bei falscher OAuth-Konfiguration erscheint dieselbe Meldung — dann das Log von `app` lesen |
+| Upload bricht ab, 413 | Upload-Limit des Proxys (siehe Tabelle oben) |
+| Port 3080 belegt | `APP_PORT` ändern und im Proxy anpassen |
 
 ## Schema und Migrationen
 
@@ -508,14 +771,27 @@ beim Start anhand der Datenbank:
 |---|---|
 | leere Datenbank (Neuinstallation) | `prisma migrate deploy` |
 | Datenbank mit Migrationshistorie | `prisma migrate deploy` |
-| bestehende Installation ohne Historie (früher per `db push` angelegt) | wie bisher `prisma db push` |
+| bestehende Installation ohne Historie (früher per `db push` angelegt) | `prisma db push`, aber **nur bei rein ergänzenden Änderungen** — sonst Abbruch |
 
-Bestehende Installationen ändern ihr Verhalten also nicht von selbst.
+Für den letzten Fall prüft der Container vorher den Unterschied zwischen
+Datenbank und Schema (`prisma migrate diff`, Prüfung in
+[docker/schema-diff-check.mjs](docker/schema-diff-check.mjs)). Rein
+ergänzend sind neue Tabellen, Spalten, Indizes, Fremdschlüssel,
+Enum-Werte und Standardwerte. Alles andere — Tabelle/Spalte/Typ löschen,
+Spaltentyp ändern, Umbenennen, `NOT NULL` erzwingen — bricht mit
+„ABBRUCH: Die Schemaänderung ist nicht rein ergänzend“ und der Liste der
+betroffenen SQL-Anweisungen ab; die Datenbank bleibt unverändert, die App
+startet nicht. Dann entweder auf Migrationen umstellen (Baselining, unten)
+oder — wenn der Verlust wirklich gewollt ist — einmalig die Stack-Variable
+`MIGRATE_ALLOW_DATA_LOSS=true` setzen, neu deployen und die Variable wieder
+entfernen. Die Sicherung, die `backup-db` vor jeder Migration anlegt, liegt
+dann in `${DATA_ROOT}/backups`.
 
 **Update auf ungenaue Daten und Quellen:** Es ist nichts von Hand zu tun.
 Eine per `db push` angelegte Installation bekommt die neuen Spalten (mit
 Standardwerten, die den bisherigen Daten entsprechen) und die beiden neuen
-Tabellen beim nächsten Start des `migrate`-Containers über `db push`; eine
+Tabellen beim nächsten Start des `migrate`-Containers über `db push` (rein
+ergänzend, läuft also ohne Rückfrage durch); eine
 Installation mit Migrationshistorie über `migrate deploy`. Vorhandene Daten
 bleiben unverändert. Lokal genügt `npm run db:push` (bzw. `npm run
 db:migrate` bei Migrationshistorie) und ein Neustart von `npm run dev`.
@@ -535,28 +811,87 @@ npx prisma migrate resolve --applied 0_init
 npx prisma migrate resolve --applied 20261116000000_ungenaue_daten_und_quellen
 ```
 
-Auf der NAS z.B. über `docker compose run --rm migrate sh` im
-migrate-Container. Ab dann läuft dort beim Start `migrate deploy`.
+Auf der NAS (SSH, Stack `familytree`) in einem Einmal-Container aus dem
+Migrator-Image, darin die Befehle oben ausführen:
+
+```sh
+docker run --rm -it --network familytree_default \
+  -e DATABASE_URL='postgresql://familytree:<POSTGRES_PASSWORD>@db:5432/familytree' \
+  ghcr.io/soschlegel/familiy-tree-migrate:latest sh
+```
+
+Ab dann läuft dort beim Start `migrate deploy`.
 
 Lokal (`docker-compose.dev.yml`) gilt dasselbe: `npm run db:push` bleibt
 möglich; wer auf Migrationen umstellen will, baselinet wie oben.
 
 ## Sicherung
 
-```bash
-DATA_ROOT=/volume1/docker/familytree ./scripts/backup.sh
+Zwei Dienste im Stack erledigen die Sicherung nach `${DATA_ROOT}/backups`:
+
+- `backup-db` — `pg_dump` der Datenbank als `db_<Datum>_<Zeit>.sql.gz`
+  (mit `--clean --if-exists`, also direkt wieder einspielbar). Löscht Dumps,
+  die älter als `BACKUP_KEEP_DAYS` (Standard 30) Tage sind.
+- `backup-media` — spiegelt den Bucket nach `backups/media` (lesbare
+  Dateien statt MinIO-internem Format; im Bucket gelöschte Bilder
+  verschwinden auch aus dem Spiegel).
+
+Beide laufen **bei jedem Stack-Start** — `backup-db` vor der Migration, damit
+es zu jedem Update eine Sicherung vom Stand davor gibt. Mehrere Updates am
+Tag ergeben entsprechend mehrere Dumps.
+
+**Täglich planen (Synology):** Systemsteuerung → Aufgabenplaner → Erstellen →
+Geplante Aufgabe → Benutzerdefiniertes Script; Benutzer `root`; Zeitplan
+z.B. täglich 03:00; Script:
+
+```sh
+docker start -a familytree-backup-db-1 && docker start -a familytree-backup-media-1
 ```
 
-Schreibt `db_<datum>.sql.gz` und spiegelt die Bilder nach
-`${DATA_ROOT}/backups/media`. Als geplante Aufgabe im NAS-Aufgabenplaner
-eintragen. Aufbewahrung über `BACKUP_KEEP_DAYS` (Standard 30).
+Das startet nur die vorhandenen Container erneut — es braucht weder eine
+Repo-Kopie noch `docker compose` auf der NAS. `-a` hängt die Ausgabe ans
+Aufgabenprotokoll; ein Fehlschlag lässt die Aufgabe fehlschlagen (Mail-
+Benachrichtigung im Aufgabenplaner einschalten). Mit Repo-Kopie geht
+dasselbe über `./scripts/backup.sh [Stackname]`.
 
-Wiederherstellung:
+**NAS-Sicherung (Hyper Backup o.ä.):** `${DATA_ROOT}` vollständig sichern.
+Maßgeblich sind die Dumps in `backups/` — die Rohdateien unter `postgres/`
+sind im laufenden Betrieb nur zusammen mit einem Snapshot (Btrfs) konsistent.
+Zusätzlich ist der ZIP-Export unter `/admin/data` ein vollständiges,
+instanzunabhängiges Backup ([Austauschformat](#austauschformat)).
 
-```bash
-gunzip -c db_2026-07-19_0300.sql.gz | docker compose exec -T db \
-  psql -U familytree -d familytree
+### Wiederherstellung
+
+Beispiel für Stack `familytree` und `DATA_ROOT=/volume1/docker/familytree`,
+per SSH als root auf der NAS. Funktioniert genauso auf einer frisch
+installierten NAS (erst den Stack wie oben deployen).
+
+```sh
+# 1. App anhalten
+docker stop familytree-app-1
+
+# 2. Datenbank: Schema leeren, Dump einspielen
+docker exec -i familytree-db-1 psql -U familytree -d familytree -v ON_ERROR_STOP=1 \
+  -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+gunzip -c /volume1/docker/familytree/backups/db_2026-11-16_030000.sql.gz \
+  | docker exec -i familytree-db-1 psql -U familytree -d familytree -v ON_ERROR_STOP=1 -q
+
+# 3. Bilder zurück in den Bucket (Schlüssel wie in den Stack-Variablen)
+docker run --rm --network familytree_default \
+  -v /volume1/docker/familytree/backups/media:/restore:ro \
+  -e S3_ACCESS_KEY=… -e S3_SECRET_KEY=… \
+  --entrypoint sh ghcr.io/soschlegel/familiy-tree-minio:RELEASE.2025-10-15T17-29-55Z -c \
+  'mc alias set local http://storage:9000 "$S3_ACCESS_KEY" "$S3_SECRET_KEY" >/dev/null &&
+   mc mirror --overwrite /restore local/familytree'
+
+# 4. Wieder starten — Portainer: Stacks → familytree → "Update the stack"
+#    (sichert den eingespielten Stand, wendet ggf. neuere Migrationen an,
+#    startet die App). Stammt der Dump vom selben Programmstand, genügt
+#    auch: docker start familytree-app-1
 ```
+
+Ist der Dump älter als der aktuelle Programmstand, holt `migrate` beim
+nächsten Stack-Start die fehlenden Migrationen nach.
 
 ## Austauschformat
 

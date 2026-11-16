@@ -122,7 +122,9 @@ export function UserAdmin({
         {notice && !error && <p className="alert-success">{notice}</p>}
       </div>
 
-      <div className="card overflow-x-auto">
+      {/* relative: hält die absolut positionierte sr-only-Beschriftung im
+          Scrollbereich — sonst verbreitert sie auf dem Telefon die Seite. */}
+      <div className="card relative overflow-x-auto">
         <table className="w-full text-sm">
           <caption className="sr-only">Benutzer</caption>
           <thead className="border-b border-stone-200 text-left text-stone-600 dark:border-stone-800 dark:text-stone-400">

@@ -26,6 +26,7 @@ import {
   validationError,
 } from "./errors";
 import { listPersonCitations, type PersonCitation } from "./sources";
+import { removeOrphanedMedia } from "./media";
 import {
   iso,
   toPersonRef,
@@ -645,14 +646,30 @@ export async function deletePerson(
     );
   }
 
+  // Bilder der Person und ihrer Beziehungen (Hochzeitsfotos) merken: das
+  // Löschen entfernt per Cascade nur die Zuordnungen, nicht die Bilder selbst.
+  const mediaIds = (
+    await prisma.mediaAsset.findMany({
+      where: {
+        OR: [
+          { persons: { some: { personId: id } } },
+          { relationships: { some: { relationship: { OR: [{ fromPersonId: id }, { toPersonId: id }] } } } },
+        ],
+      },
+      select: { id: true },
+    })
+  ).map((m) => m.id);
+
   await prisma.person.delete({ where: { id } });
+
+  const removedMedia = await removeOrphanedMedia(mediaIds);
 
   await audit({
     userId: scope.userId,
     action: "DELETE",
     entityType: "Person",
     entityId: id,
-    diff: { relationCount },
+    diff: { relationCount, removedMedia },
   });
 
   return { ok: true, relationCount };

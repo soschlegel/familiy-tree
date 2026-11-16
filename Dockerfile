@@ -27,13 +27,16 @@ RUN npx prisma generate && npm run build
 FROM node:22-alpine AS migrator
 WORKDIR /app
 ENV NODE_ENV=production
+# Kein "Update available"-Kasten im Log; Prisma-Updates laufen über package.json.
+ENV PRISMA_HIDE_UPDATE_MESSAGE=1
 RUN apk add --no-cache libc6-compat
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/package.json ./package.json
-COPY docker/seed-admin.mjs docker/db-state.mjs ./docker/
+COPY docker/seed-admin.mjs docker/db-state.mjs docker/schema-diff-check.mjs docker/tcp-forward.mjs ./docker/
 COPY docker/migrate.sh /migrate.sh
-RUN chmod +x /migrate.sh
+# sed: falls das Skript unter Windows mit CRLF ausgecheckt wurde.
+RUN sed -i 's/\r$//' /migrate.sh && chmod +x /migrate.sh
 CMD ["/migrate.sh"]
 
 # ---------------------------------------------------------------------------
