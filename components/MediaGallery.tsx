@@ -178,7 +178,7 @@ export function MediaGallery({
                   />
                 </a>
                 {item.isPrimary && (
-                  <span className="absolute left-2 top-2 rounded-full bg-brass-500 px-2 py-0.5 text-[10px] font-semibold text-white shadow">
+                  <span className="absolute left-2 top-2 rounded-full bg-brass-700 px-2 py-0.5 text-[10px] font-semibold text-white shadow">
                     {primaryLabel}
                   </span>
                 )}

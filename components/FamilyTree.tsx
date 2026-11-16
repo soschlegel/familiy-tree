@@ -975,7 +975,7 @@ function TreeCanvas({
 
   return (
     <TreeNavContext.Provider value={nav}>
-    <div className="space-y-2">
+    <div className="flex flex-1 flex-col gap-2">
       <div className="flex flex-wrap items-start gap-2" role="toolbar" aria-label="Baumansicht">
         <div className="relative w-full sm:w-64" ref={searchBoxRef}>
           <label htmlFor="tree-search" className="sr-only">
@@ -1055,7 +1055,9 @@ function TreeCanvas({
         </div>
 
         {families.length > 0 && (
-          <div className="relative" ref={familyMenuRef}>
+          // In der Fokus-Ansicht ist der Filter abgeschaltet — auf dem Telefon
+          // dann gar nicht erst zeigen, die Werkzeugleiste ist dort knapp.
+          <div className={`relative ${focusData ? "max-sm:hidden" : ""}`} ref={familyMenuRef}>
             <button
               ref={familyTriggerRef}
               type="button"
@@ -1258,7 +1260,7 @@ function TreeCanvas({
         data-view={activeView}
         data-focus-id={currentFocus ?? undefined}
         aria-busy={pending}
-        className="relative h-[calc(100dvh-11.5rem)] min-h-[420px] w-full overflow-hidden rounded-2xl border border-stone-200 bg-[radial-gradient(ellipse_at_top,rgb(var(--surface)),rgb(var(--paper))_70%)] shadow-card dark:border-stone-800"
+        className="relative min-h-[420px] w-full flex-1 overflow-hidden rounded-2xl border border-stone-200 bg-[radial-gradient(ellipse_at_top,rgb(var(--surface)),rgb(var(--paper))_70%)] shadow-card dark:border-stone-800"
       >
         <ReactFlow
           nodes={nodes}

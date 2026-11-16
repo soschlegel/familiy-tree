@@ -6,6 +6,8 @@ build/
 .env
 .env.local
 .env*.local
+# Echte Werte für den Produktivstack (Vorlage: stack.env.example)
+stack.env
 
 # Persistente Container-Daten (lokal). Auf der NAS liegt DATA_ROOT ohnehin
 # außerhalb des Repos.

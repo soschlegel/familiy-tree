@@ -15,6 +15,7 @@ import {
   validationError,
 } from "./errors";
 import { toRelationshipDto, type RelationshipDto } from "./dto";
+import { removeOrphanedMedia } from "./media";
 import { fuzzyColumns, fuzzyField, type FuzzyDate } from "../dates";
 
 /** Validierte Eingabe -> Prisma-Spalten (Anker, Genauigkeit, Zusatz). */
@@ -260,14 +261,21 @@ export async function deleteRelationship(
     "diese Beziehung zu löschen",
   );
 
+  // Hochzeitsbilder hängen nur an der Beziehung — ohne sie wären sie verwaist.
+  const mediaIds = (
+    await prisma.relationshipMedia.findMany({ where: { relationshipId: id }, select: { mediaId: true } })
+  ).map((m) => m.mediaId);
+
   await prisma.relationship.delete({ where: { id } });
+
+  const removedMedia = await removeOrphanedMedia(mediaIds);
 
   await audit({
     userId: scope.userId,
     action: "DELETE",
     entityType: "Relationship",
     entityId: id,
-    diff: toRelationshipDto(existing),
+    diff: { ...toRelationshipDto(existing), removedMedia },
   });
 
   return { ok: true };

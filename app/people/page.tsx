@@ -212,7 +212,7 @@ export default async function PeoplePage({
               ← Zurück
             </Link>
           ) : (
-            <span className="btn-secondary pointer-events-none opacity-40" aria-hidden>
+            <span className="btn-secondary pointer-events-none opacity-40" aria-hidden aria-disabled="true">
               ← Zurück
             </span>
           )}
@@ -236,7 +236,7 @@ export default async function PeoplePage({
               Weiter →
             </Link>
           ) : (
-            <span className="btn-secondary pointer-events-none opacity-40" aria-hidden>
+            <span className="btn-secondary pointer-events-none opacity-40" aria-hidden aria-disabled="true">
               Weiter →
             </span>
           )}

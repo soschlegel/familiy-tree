@@ -1,9 +1,29 @@
+# Build-Kontext klein halten: nur, was der Next-Build und der Migrator brauchen.
 node_modules
 .next
 .next-mock
 data
 .git
+.github
 .env
-.env.local
+.env.*
+!.env.example
 *.md
 !README.md
+*.log
+*.tsbuildinfo
+
+# Tests und Testergebnisse gehören nicht ins Image.
+e2e
+playwright.config.ts
+playwright-report
+test-results
+blob-report
+coverage
+
+# Betriebsdateien (Compose, MinIO-Build, Backup-Skript)
+docker-compose*.yml
+docker/minio
+scripts/backup.sh
+stack.env*
+.mcp.json

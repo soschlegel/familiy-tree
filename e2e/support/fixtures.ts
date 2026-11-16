@@ -59,8 +59,11 @@ export function watchPage(page: Page, guard: Guard, extraAllow: RegExp[]) {
 
 type Fixtures = {
   consoleGuard: Guard;
-  /** Weitere Rolle in einem eigenen Browser-Kontext (mit derselben Überwachung). */
-  loginAs: (role: Role) => Promise<{ page: Page; context: BrowserContext }>;
+  /**
+   * Weitere Rolle in einem eigenen Browser-Kontext (mit derselben Überwachung);
+   * null = ohne Anmeldung.
+   */
+  loginAs: (role: Role | null) => Promise<{ page: Page; context: BrowserContext }>;
 };
 
 export const test = base.extend<Fixtures>({
@@ -80,7 +83,9 @@ export const test = base.extend<Fixtures>({
   loginAs: async ({ browser, consoleGuard }, use) => {
     const opened: BrowserContext[] = [];
     await use(async (role) => {
-      const context = await browser.newContext({ storageState: authFile(role) });
+      const context = await browser.newContext({
+        storageState: role ? authFile(role) : { cookies: [], origins: [] },
+      });
       opened.push(context);
       const page = await context.newPage();
       watchPage(page, consoleGuard, consoleGuard.patterns);
@@ -162,4 +167,24 @@ export async function waitForTree(page: Page) {
   await expect(tree).toHaveAttribute("aria-busy", "false");
   await expect(page.getByTestId("tree-person").first()).toBeAttached();
   return tree;
+}
+
+/**
+ * Wartet, bis React ein Element hydriert hat. Nach einer vollständigen
+ * Navigation (z.B. GET-Formular) ist die Seite sonst schon bedienbar, aber
+ * Ereignisse wie onChange hängen noch nicht daran.
+ */
+export async function waitForHydration(page: Page, selector: string) {
+  await page.waitForFunction(
+    (sel) => {
+      const el = document.querySelector(sel);
+      return Boolean(el) && Object.keys(el!).some((k) => k.startsWith("__reactProps"));
+    },
+    selector,
+  );
+}
+
+/** Browsermeldung für eine absichtlich fehlschlagende Anfrage (z.B. 404, 409). */
+export function httpError(status: number): RegExp {
+  return new RegExp(`Failed to load resource: the server responded with a status of ${status}(?!\\d)`);
 }

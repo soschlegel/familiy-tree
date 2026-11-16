@@ -1,31 +1,39 @@
 #!/bin/sh
-# Sichert Datenbank und Bilder in ${DATA_ROOT}/backups.
+# Löst die Sicherung im laufenden Produktivstack aus: Datenbank-Dump und
+# Bilder-Spiegel nach ${DATA_ROOT}/backups (siehe README, "Sicherung").
 #
-# Auf der NAS als geplante Aufgabe eintragen, z.B. täglich um 03:00:
-#   /volume1/docker/familytree/repo/scripts/backup.sh
+#   ./scripts/backup.sh [Stackname]      (Standard: familytree)
 #
-# Die Bilddateien liegen bereits unter ${DATA_ROOT}/minio und werden vom
-# NAS-Backup miterfasst — der mc-Mirror hier erzeugt zusätzlich eine
-# konsistente, unmittelbar lesbare Kopie ohne MinIO-interne Struktur.
+# Die eigentliche Arbeit machen die Stack-Dienste backup-db und backup-media;
+# dieses Skript startet nur deren (bereits vorhandene) Container erneut. Es
+# braucht deshalb weder eine Repo-Kopie noch docker compose auf der NAS — im
+# Synology-Aufgabenplaner genügt derselbe Einzeiler:
+#
+#   docker start -a familytree-backup-db-1 && docker start -a familytree-backup-media-1
 set -eu
 
-DATA_ROOT="${DATA_ROOT:-./data}"
-STAMP="$(date +%Y-%m-%d_%H%M)"
-DEST="${DATA_ROOT}/backups"
-KEEP_DAYS="${BACKUP_KEEP_DAYS:-30}"
+PROJECT="${1:-${STACK_NAME:-familytree}}"
 
-mkdir -p "$DEST"
+container() {
+  docker ps -aq \
+    --filter "label=com.docker.compose.project=${PROJECT}" \
+    --filter "label=com.docker.compose.service=$1" | head -n 1
+}
 
-echo "[backup] Datenbank -> ${DEST}/db_${STAMP}.sql.gz"
-docker compose exec -T db pg_dump \
-  -U "${POSTGRES_USER:-familytree}" \
-  -d "${POSTGRES_DB:-familytree}" \
-  | gzip > "${DEST}/db_${STAMP}.sql.gz"
-
-echo "[backup] Bilder -> ${DEST}/media"
-docker compose run --rm backup
-
-echo "[backup] Alte Sicherungen (> ${KEEP_DAYS} Tage) entfernen"
-find "$DEST" -name 'db_*.sql.gz' -mtime "+${KEEP_DAYS}" -delete
+for service in backup-db backup-media; do
+  id="$(container "$service")"
+  if [ -z "$id" ]; then
+    echo "[backup] Kein Container für ${service} im Stack '${PROJECT}' gefunden." >&2
+    echo "[backup] Stackname prüfen (Portainer: Stacks) oder Stack einmal deployen." >&2
+    exit 1
+  fi
+  echo "[backup] ${service} …"
+  docker start -a "$id"
+  code="$(docker inspect -f '{{.State.ExitCode}}' "$id")"
+  if [ "$code" != "0" ]; then
+    echo "[backup] ${service} ist mit Code ${code} fehlgeschlagen." >&2
+    exit 1
+  fi
+done
 
 echo "[backup] Fertig."
