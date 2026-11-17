@@ -1,7 +1,7 @@
 import sharp from "sharp";
 import { randomUUID } from "node:crypto";
 
-import { putObject } from "./storage";
+import { MEDIA_SUBDIRS, putObject } from "./storage";
 
 /** Formate, die beim Upload angenommen werden (laut sharp-Metadaten). */
 export const ALLOWED_IMAGE_FORMATS = new Set([
@@ -31,7 +31,7 @@ export type StoredImage = {
 
 /**
  * Prüft ein Bild, erzeugt Original (max. 2000px) und Vorschau (320px) als
- * WebP und legt beide im Objektspeicher ab. Gemeinsame Verarbeitung für
+ * WebP und legt beide im Medienordner (MEDIA_DIR) ab. Gemeinsame Verarbeitung für
  * Upload, Import und Mock-Daten, damit alle Bilder gleich aussehen.
  *
  * `.rotate()` wendet die EXIF-Orientierung an, bevor die Metadaten wegfallen —
@@ -57,8 +57,8 @@ export async function processAndStoreImage(
   }
 
   const id = options.keyBase ?? randomUUID();
-  const storageKey = `originals/${id}.webp`;
-  const thumbnailKey = `thumbs/${id}.webp`;
+  const storageKey = `${MEDIA_SUBDIRS.originals}/${id}.webp`;
+  const thumbnailKey = `${MEDIA_SUBDIRS.thumbs}/${id}.webp`;
 
   const pipeline = sharp(input).rotate();
   const [original, thumbnail] = await Promise.all([
@@ -71,8 +71,8 @@ export async function processAndStoreImage(
   ]);
 
   await Promise.all([
-    putObject(storageKey, original.data, "image/webp"),
-    putObject(thumbnailKey, thumbnail, "image/webp"),
+    putObject(storageKey, original.data),
+    putObject(thumbnailKey, thumbnail),
   ]);
 
   return {

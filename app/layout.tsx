@@ -5,6 +5,7 @@ import "./globals.css";
 import "reactflow/dist/style.css";
 import { auth, signOut } from "@/lib/auth";
 import { can } from "@/lib/authz";
+import { prisma } from "@/lib/prisma";
 import { MainContainer, NavBar, type NavItem } from "@/components/NavBar";
 
 export const metadata: Metadata = {
@@ -41,6 +42,17 @@ export default async function RootLayout({
   const session = await auth();
   const user = session?.user;
 
+  // „KI-Zugang“ nur zeigen, wenn er dem Benutzer etwas nützt: mit Recht, oder
+  // mit noch nicht widerrufenen Schlüsseln (die er dort widerrufen kann). Die
+  // Seite selbst erreicht jeder und erklärt dort die Lage.
+  const ai = user
+    ? await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { aiAccess: true, _count: { select: { apiTokens: { where: { revokedAt: null } } } } },
+      })
+    : null;
+  const showAi = Boolean(ai && (ai.aiAccess !== "NONE" || ai._count.apiTokens > 0));
+
   const items: NavItem[] = user
     ? [
         { href: "/tree", label: "Baum" },
@@ -51,6 +63,7 @@ export default async function RootLayout({
         // darf); der Import ist auf der Seite selbst Administratoren
         // vorbehalten.
         { href: "/admin/data", label: "Daten" },
+        ...(showAi ? [{ href: "/ai-access", label: "KI-Zugang" }] : []),
         ...(can(user.role, "family:manage")
           ? [{ href: "/admin/families", label: "Familien" }]
           : []),

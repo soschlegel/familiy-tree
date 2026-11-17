@@ -21,9 +21,8 @@ test-results
 blob-report
 coverage
 
-# Betriebsdateien (Compose, MinIO-Build, Backup-Skript)
+# Betriebsdateien (Compose, Backup-Skript)
 docker-compose*.yml
-docker/minio
 scripts/backup.sh
 stack.env*
 .mcp.json

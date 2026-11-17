@@ -41,6 +41,27 @@ test.describe("als Admin", () => {
     await expect(nav(page).getByRole("link", { name: "Daten" })).not.toHaveAttribute("aria-current", /.*/);
   });
 
+  test.describe("schmalster Desktop (1024 px, Grenze lg)", () => {
+    test.use({ viewport: { width: 1024, height: 768 } });
+
+    test("alle Menüpunkte und Abmelden in einer Zeile, kein Menü-Knopf", async ({ page }) => {
+      await page.goto("/people");
+      await expect(page.getByRole("button", { name: "Menü" })).toBeHidden();
+      const tops = new Set<number>();
+      for (const label of [...ALL, "KI-Zugang", ...ADMIN_ONLY]) {
+        const link = nav(page).getByRole("link", { name: label, exact: true });
+        await expect(link).toBeVisible();
+        tops.add(Math.round((await link.boundingBox())!.y));
+      }
+      expect(tops.size, "Menüpunkte auf mehreren Zeilen").toBe(1);
+      // Der Name wird gekürzt statt umzubrechen — die Kopfzeile bleibt einzeilig.
+      const header = (await nav(page).boundingBox())!;
+      const signOut = (await nav(page).getByRole("button", { name: "Abmelden" }).boundingBox())!;
+      expect(header.height).toBeLessThan(58);
+      expect(signOut.x + signOut.width).toBeLessThanOrEqual(1024);
+    });
+  });
+
   test.describe("Telefon (390 px)", () => {
     test.use({ viewport: { width: 390, height: 844 } });
 

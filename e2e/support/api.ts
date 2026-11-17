@@ -89,3 +89,10 @@ export function tinyPng(rgb: [number, number, number] = [200, 80, 60], size = 24
     chunk("IEND", Buffer.alloc(0)),
   ]);
 }
+
+/**
+ * Ein Import des ganzen Mock-Bestands schreibt rund 500 Datensätze einzeln
+ * (app/api/import/route.ts) — im Dev-Modus und neben parallel laufenden Tests
+ * dauert das deutlich länger als die üblichen 10 Sekunden.
+ */
+export const IMPORT_TIMEOUT = 60_000;

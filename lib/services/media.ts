@@ -4,7 +4,7 @@ import { deleteObject } from "../storage";
 /**
  * Löscht Bilder, die an nichts mehr hängen — weder an einer Person noch an
  * einer Beziehung noch als Scan einer Quelle —, samt Dateien im
- * Objektspeicher. Ein Bild, das noch woanders zugeordnet ist, bleibt.
+ * Medienordner. Ein Bild, das noch woanders zugeordnet ist, bleibt.
  * Liefert die IDs der gelöschten Bilder.
  */
 export async function removeOrphanedMedia(candidateIds: string[]): Promise<string[]> {
@@ -20,7 +20,7 @@ export async function removeOrphanedMedia(candidateIds: string[]): Promise<strin
   });
   if (orphans.length === 0) return [];
   await prisma.mediaAsset.deleteMany({ where: { id: { in: orphans.map((o) => o.id) } } });
-  // Objektspeicher nach der Datenbank aufräumen (wie beim Löschen eines
+  // Dateien nach der Datenbank aufräumen (wie beim Löschen eines
   // einzelnen Bildes): schlägt das fehl, bleibt nur eine verwaiste Datei.
   await Promise.all(
     orphans

@@ -7,13 +7,14 @@
 # Docker-Host nicht auffindbar.
 #
 # Alle persistenten Daten liegen als Bind-Mounts unter EINEM Pfad
-# (${DATA_ROOT}), damit die NAS-Sicherung genau ein Verzeichnis erfasst.
+# (${DATA_ROOT}), damit die NAS-Sicherung genau ein Verzeichnis erfasst —
+# auch die Bilder: gewöhnliche Dateien in ${DATA_ROOT}/media.
 #
 # Variablen: siehe stack.env.example (in Portainer unter "Environment
 # variables" eintragen). Ablauf beim Start:
 #
-#   db, storage ─> storage-init (Bucket) ─> backup-media
-#   db ─> backup-db (Sicherung) ─> migrate (Schema, Admin) ─> app
+#   db ─> backup-db (Sicherung) ─> migrate (Schema, Admin) ─┐
+#   media-init (Bilderordner, Rechte) ─────────────────────┴─> app
 #
 # Lokal testen ohne fertige Images: siehe docker-compose.build.yml.
 
@@ -37,7 +38,8 @@ services:
       POSTGRES_INITDB_ARGS: "--locale=C.UTF-8 --encoding=UTF8"
     volumes:
       - ${DATA_ROOT:?DATA_ROOT fehlt (absoluter Pfad auf der NAS, z.B. /volume1/docker/familytree)}/postgres:/var/lib/postgresql/data
-    # Kein Port nach außen. Zugriff vom PC (MCP-Server): Profil db-access.
+    # Kein Port nach außen. KI-Assistenten (MCP) arbeiten über die App
+    # (/api/mcp mit persönlichem Schlüssel), nie direkt mit der Datenbank.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 10s
@@ -45,52 +47,55 @@ services:
       retries: 10
       start_period: 30s
 
-  # MinIO, aus dem Quelltext gebaut (docker/minio/Dockerfile) — offizielle
-  # Images gibt es nicht mehr. Enthält auch den Client mc.
-  storage:
-    image: ${MINIO_IMAGE:-ghcr.io/soschlegel/familiy-tree-minio:RELEASE.2025-10-15T17-29-55Z}
-    restart: unless-stopped
-    logging: *logging
-    command: ["server", "/data"]
-    environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY:?S3_ACCESS_KEY fehlt (erzeugen mit openssl rand -hex 16)}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?S3_SECRET_KEY fehlt (erzeugen mit openssl rand -hex 32)}
-      # Die Web-Konsole wird nicht gebraucht und ist ohnehin nicht erreichbar.
-      MINIO_BROWSER: "off"
-    volumes:
-      - ${DATA_ROOT}/minio:/data
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-T", "5", "-O", "/dev/null", "http://127.0.0.1:9000/minio/health/live"]
-      interval: 10s
-      timeout: 6s
-      retries: 10
-      start_period: 20s
-
-  # Einmal-Job: legt den Bucket an, falls er fehlt, und beendet sich.
-  storage-init:
-    image: ${MINIO_IMAGE:-ghcr.io/soschlegel/familiy-tree-minio:RELEASE.2025-10-15T17-29-55Z}
+  # Einmal-Job: bereitet den Bilderordner ${DATA_ROOT}/media vor und beendet
+  # sich. Die App läuft als uid 1001 (nextjs) und legt darin originals/ und
+  # thumbs/ an. Fehlt der Ordner auf der NAS, erzeugt Docker ihn beim Mount
+  # als root — die App könnte dann nicht schreiben. Deshalb hier als root:
+  #   1. Ordner anlegen und alles, was nicht uid 1001 gehört, übereignen.
+  #      Beim ersten Start ist das der Ordner selbst, nach einer
+  #      Wiederherstellung (cp als root) die zurückkopierten Dateien, sonst
+  #      nichts — der Lauf kostet bei jedem Start praktisch nichts.
+  #      chown -h: Symlinks selbst ändern, nie ihr Ziel.
+  #   2. Schreibtest genau mit der Identität der App (1001:65533 — die
+  #      Primärgruppe von nextjs im Image ist nogroup). Scheitert er trotz
+  #      chown, liegt es an ACLs des gemeinsamen Ordners (Synology) oder an
+  #      einem Netzlaufwerk ohne chown — dann bricht der Job mit Hinweis ab,
+  #      und die App startet nicht (README, "Fehlersuche").
+  # Warum ein eigener Dienst statt chown beim App-Start: die App läuft
+  # bewusst nicht als root. postgres:17-alpine wird für db/backup-db ohnehin
+  # geladen und bringt chown, find und gosu mit — kein zusätzliches Image.
+  media-init:
+    image: postgres:17-alpine
     restart: "no"
     logging: *logging
-    depends_on:
-      storage:
-        condition: service_healthy
-    environment:
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
-      S3_SECRET_KEY: ${S3_SECRET_KEY}
-      S3_BUCKET: ${S3_BUCKET:-familytree}
+    user: "0:0"
+    volumes:
+      - ${DATA_ROOT}/media:/data/media
     entrypoint:
       - /bin/sh
       - -c
       - |
         set -eu
-        mc alias set local http://storage:9000 "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY" >/dev/null
-        mc mb --ignore-existing "local/$$S3_BUCKET"
-        echo "Bucket bereit."
+        dir=/data/media
+        mkdir -p "$$dir"
+        find "$$dir" ! -user 1001 -exec chown -h 1001:1001 {} +
+        probe="$$dir/.schreibtest"
+        if gosu 1001:65533 sh -c 'touch "$$1" && rm -f "$$1"' sh "$$probe"; then
+          echo "[media-init] Bilderordner bereit (für uid 1001 beschreibbar)."
+        else
+          echo "[media-init] FEHLER: Die App (uid 1001) kann nicht in DATA_ROOT/media schreiben," >&2
+          echo "[media-init] obwohl der Ordner ihr gehört — vermutlich ACLs des gemeinsamen" >&2
+          echo "[media-init] Ordners. Abhilfe: README, Abschnitt Fehlersuche (Bilderordner)." >&2
+          ls -lnd "$$dir" >&2 || true
+          exit 1
+        fi
 
   # Sicherung der Datenbank nach ${DATA_ROOT}/backups. Läuft bei jedem
   # Stack-Start VOR der Migration (Sicherung vor Schemaänderung) und lässt
   # sich jederzeit erneut auslösen:
   #   docker start -a <stackname>-backup-db-1
+  # Die Bilder brauchen keinen eigenen Sicherungsdienst: sie liegen als
+  # Dateien in ${DATA_ROOT}/media und gehören direkt in die NAS-Sicherung.
   backup-db:
     image: postgres:17-alpine
     restart: "no"
@@ -119,30 +124,6 @@ services:
         find /backups -maxdepth 1 -name 'db_*.sql.gz' -mtime "+$$BACKUP_KEEP_DAYS" -print -delete
         echo "[backup] Datenbank gesichert."
 
-  # Spiegelt die Bilder lesbar nach ${DATA_ROOT}/backups/media. Erneut
-  # auslösen: docker start -a <stackname>-backup-media-1
-  backup-media:
-    image: ${MINIO_IMAGE:-ghcr.io/soschlegel/familiy-tree-minio:RELEASE.2025-10-15T17-29-55Z}
-    restart: "no"
-    logging: *logging
-    depends_on:
-      storage-init:
-        condition: service_completed_successfully
-    environment:
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
-      S3_SECRET_KEY: ${S3_SECRET_KEY}
-      S3_BUCKET: ${S3_BUCKET:-familytree}
-    volumes:
-      - ${DATA_ROOT}/backups/media:/backup/media
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        set -eu
-        mc alias set local http://storage:9000 "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY" >/dev/null
-        mc mirror --overwrite --remove --quiet "local/$$S3_BUCKET" /backup/media
-        echo "[backup] Bilder gespiegelt."
-
   # Wendet das Schema an und legt den Admin an. Läuft bei jedem Stack-Start
   # einmal und beendet sich; die App startet erst danach.
   migrate:
@@ -168,9 +149,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      storage:
-        condition: service_healthy
-      storage-init:
+      media-init:
         condition: service_completed_successfully
       migrate:
         condition: service_completed_successfully
@@ -188,11 +167,14 @@ services:
       INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-}
       # Der Dev-Login bleibt in Produktion aus (greift dort ohnehin nicht).
       ENABLE_DEV_LOGIN: "false"
-      S3_ENDPOINT: http://storage:9000
-      S3_BUCKET: ${S3_BUCKET:-familytree}
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
-      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      # Bilder als gewöhnliche Dateien (originals/, thumbs/), benannt nach den
+      # Schlüsseln in der Datenbank — Dump + Kopie dieses Ordners ergeben
+      # zusammen eine vollständige Sicherung. /api/health meldet 503, wenn
+      # der Ordner nicht beschreibbar ist.
+      MEDIA_DIR: /data/media
       MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-15728640}
+    volumes:
+      - ${DATA_ROOT}/media:/data/media
     # Ein Port für den Reverse-Proxy der NAS. Standard: nur 127.0.0.1 — der
     # Proxy auf der NAS selbst (Synology) erreicht ihn, sonst niemand.
     # Läuft der Proxy in einem Container (Nginx Proxy Manager), APP_BIND auf
@@ -239,21 +221,3 @@ services:
     volumes:
       - ${DATA_ROOT}/caddy/data:/data
       - ${DATA_ROOT}/caddy/config:/config
-
-  # --- Optional: Datenbankzugriff vom PC (MCP-Server) ----------------------
-  # Aktivieren mit COMPOSE_PROFILES=db-access (mehrere: "caddy,db-access").
-  # Leitet ${DB_ACCESS_BIND}:${DB_ACCESS_PORT} an die Datenbank weiter.
-  # Standard 127.0.0.1 = nur auf der NAS selbst; für den PC DB_ACCESS_BIND
-  # auf die LAN-IP der NAS setzen. Nur bei Bedarf einschalten (README).
-  db-access:
-    image: ${IMAGE_REPO:-ghcr.io/soschlegel/familiy-tree}-migrate:${IMAGE_TAG:-latest}
-    profiles: ["db-access"]
-    restart: unless-stopped
-    logging: *logging
-    init: true
-    depends_on:
-      db:
-        condition: service_healthy
-    command: ["node", "docker/tcp-forward.mjs"]
-    ports:
-      - "${DB_ACCESS_BIND:-127.0.0.1}:${DB_ACCESS_PORT:-15432}:5432"

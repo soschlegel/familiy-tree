@@ -326,7 +326,7 @@ export const POST = route("data:import", async (ctx, req) => {
     }
   }
 
-  // Bilder: Datei in den Objektspeicher legen, Vorschau neu erzeugen.
+  // Bilder: Datei in den Medienordner legen, Vorschau neu erzeugen.
   const importedMedia = new Set<string>();
 
   for (const m of data.media) {

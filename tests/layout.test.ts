@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { layoutGenerations, layoutTimeline } from "@/lib/layout-generations";
-import { NODE_WIDTH, type LayoutNode, type TreeData } from "@/lib/tree-layout";
+import { EVENT_BOX, layoutGenerations, layoutTimeline } from "@/lib/layout-generations";
+import { NODE_HEIGHT, NODE_WIDTH, type LayoutNode, type TreeData } from "@/lib/tree-layout";
 import { mockTreeData } from "./helpers";
 
 const CONNECTOR = 56;
@@ -145,5 +145,34 @@ describe("layoutTimeline", () => {
     expect(t.nodes).toHaveLength(data.persons.length);
     expect(t.axis.ticks.length).toBeGreaterThan(5);
     expect(t.events.length).toBeGreaterThan(0);
+  });
+});
+
+describe("layoutTimeline — Hochzeiten", () => {
+  it("legt keine Hochzeit auf eine Personenkarte oder eine andere Hochzeit (Mock-Daten)", () => {
+    const t = layoutTimeline(mockTreeData());
+    const boxes = t.nodes.map((n) => ({ id: n.person.id, x: n.x, y: n.y, w: width(n), h: NODE_HEIGHT }));
+    const hit = (a: { x: number; y: number; w: number; h: number }, b: typeof a) =>
+      a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    const placed: { id: string; x: number; y: number; w: number; h: number }[] = [];
+    const overlaps: string[] = [];
+    for (const ev of t.events) {
+      const p = t.eventPositions.get(ev.id)!;
+      const box = { id: ev.id, x: p.x, y: p.y, w: EVENT_BOX.width, h: EVENT_BOX.height };
+      for (const b of [...boxes, ...placed]) if (hit(box, b)) overlaps.push(`${ev.id} / ${b.id}`);
+      placed.push(box);
+    }
+    expect(overlaps).toEqual([]);
+  });
+
+  it("bleibt nah an ihrem Jahr", () => {
+    const data = mockTreeData();
+    const t = layoutTimeline(data);
+    for (const ev of t.events) {
+      const p = t.eventPositions.get(ev.id)!;
+      const year = new Date(ev.date!).getUTCFullYear();
+      // höchstens rund eine Kartenhöhe neben dem eigenen Jahr
+      expect(Math.abs(p.y - t.axis.toY(year)), ev.id).toBeLessThanOrEqual(NODE_HEIGHT + EVENT_BOX.height + 16);
+    }
   });
 });

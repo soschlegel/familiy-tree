@@ -109,7 +109,28 @@ export type MockUser = {
   name: string;
   role: "ADMIN" | "EDITOR" | "VIEWER";
   status: "INVITED" | "ACTIVE" | "BLOCKED";
+  /** KI-Recht (MCP). */
+  aiAccess: "NONE" | "READ" | "WRITE";
   families: { familyKey: FamilyKey; role: "EDITOR" | "VIEWER" }[];
+};
+
+/**
+ * KI-Zugangsschlüssel mit FESTEM, öffentlich dokumentiertem Geheimnis — NUR
+ * für Tests und die Mock-Umgebung. Der Seed läuft ausschließlich gegen
+ * Datenbanken namens …_mock/…_test; in eine echte Datenbank gelangen diese
+ * Schlüssel nie.
+ */
+export type MockApiToken = {
+  id: string;
+  userId: string;
+  name: string;
+  /** Vollständiger Schlüssel (ftk_<12 hex>_<43 Zeichen>). */
+  secret: string;
+  prefix: string;
+  level: "READ" | "WRITE";
+  createdAt: Date;
+  expiresAt: Date | null;
+  revokedAt: Date | null;
 };
 
 export type MockImage = {
@@ -166,6 +187,7 @@ export type MockLandmarks = {
 export type MockData = {
   families: MockFamily[];
   users: MockUser[];
+  apiTokens: MockApiToken[];
   persons: MockPerson[];
   relationships: MockRelationship[];
   images: MockImage[];
@@ -782,21 +804,22 @@ export function generateMockData(seed: number = MOCK_SEED): MockData {
 
   // --- Benutzer -------------------------------------------------------------
   const users: MockUser[] = [
-    { id: "mock-user-admin", email: "admin@example.test", name: "Ada Admin", role: "ADMIN", status: "ACTIVE", families: [] },
+    { id: "mock-user-admin", email: "admin@example.test", name: "Ada Admin", role: "ADMIN", status: "ACTIVE", aiAccess: "WRITE", families: [] },
     {
       id: "mock-user-editor",
       email: "editor@example.test",
       name: "Erik Editor",
       role: "EDITOR",
       status: "ACTIVE",
+      aiAccess: "WRITE",
       families: [
         { familyKey: "A", role: "EDITOR" },
         { familyKey: "B", role: "VIEWER" },
       ],
     },
-    { id: "mock-user-viewer", email: "viewer@example.test", name: "Vera Viewer", role: "VIEWER", status: "ACTIVE", families: [{ familyKey: "A", role: "VIEWER" }] },
-    { id: "mock-user-nofamily", email: "nofamily@example.test", name: "Nora Ohnefamilie", role: "VIEWER", status: "ACTIVE", families: [] },
-    { id: "mock-user-blocked", email: "blocked@example.test", name: "Bernd Gesperrt", role: "VIEWER", status: "BLOCKED", families: [{ familyKey: "A", role: "VIEWER" }] },
+    { id: "mock-user-viewer", email: "viewer@example.test", name: "Vera Viewer", role: "VIEWER", status: "ACTIVE", aiAccess: "READ", families: [{ familyKey: "A", role: "VIEWER" }] },
+    { id: "mock-user-nofamily", email: "nofamily@example.test", name: "Nora Ohnefamilie", role: "VIEWER", status: "ACTIVE", aiAccess: "NONE", families: [] },
+    { id: "mock-user-blocked", email: "blocked@example.test", name: "Bernd Gesperrt", role: "VIEWER", status: "BLOCKED", aiAccess: "READ", families: [{ familyKey: "A", role: "VIEWER" }] },
   ];
 
   // --- Bilder ---------------------------------------------------------------
@@ -1173,6 +1196,7 @@ export function generateMockData(seed: number = MOCK_SEED): MockData {
   return {
     families,
     users,
+    apiTokens: mockApiTokens(),
     persons: persons.map(({ line: _line, married: _married, ...p }) => ({
       ...p,
       familyKeys: [...new Set(p.familyKeys)].sort() as FamilyKey[],
@@ -1183,4 +1207,72 @@ export function generateMockData(seed: number = MOCK_SEED): MockData {
     citations,
     landmarks,
   };
+}
+
+// ---------------------------------------------------------------------------
+// KI-Zugangsschlüssel (nur Tests)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fester Testschlüssel: "ftk_" + 12-stellige Kennung + "_" + Klartext-Etikett,
+ * auf 43 Zeichen aufgefüllt. Absichtlich lesbar und erkennbar — NIE in einer
+ * echten Datenbank verwenden.
+ */
+function mockSecret(publicId: string, label: string): string {
+  const body = `nur-fuer-tests-${label}-`.padEnd(43, "0").slice(0, 43);
+  return `ftk_${publicId}_${body}`;
+}
+
+const MOCK_TOKEN_CREATED = new Date("2026-01-01T00:00:00Z");
+const MOCK_TOKEN_VALID = new Date("2099-12-31T00:00:00Z");
+
+/**
+ * Feste Schlüssel für die Tests (tests/ai-access.db.test.ts):
+ *   admin-write     Admin, WRITE                  → wirksam WRITE
+ *   editor-write    Editor, WRITE                 → wirksam WRITE (Familie A bearbeiten, B nur lesen)
+ *   editor-read     Editor, READ                  → wirksam READ
+ *   viewer-read     Betrachter, READ              → wirksam READ
+ *   viewer-write    Betrachter (Recht READ), WRITE → wirksam READ (gedeckelt)
+ *   editor-revoked  widerrufen                    → REVOKED
+ *   editor-expired  abgelaufen                    → EXPIRED
+ *   nofamily-read   Benutzer ohne KI-Recht        → NO_PERMISSION
+ *   blocked-read    gesperrter Benutzer           → USER_BLOCKED
+ */
+export const MOCK_API_TOKEN_KEYS = [
+  "admin-write",
+  "editor-write",
+  "editor-read",
+  "viewer-read",
+  "viewer-write",
+  "editor-revoked",
+  "editor-expired",
+  "nofamily-read",
+  "blocked-read",
+] as const;
+export type MockApiTokenKey = (typeof MOCK_API_TOKEN_KEYS)[number];
+
+function mockApiTokens(): MockApiToken[] {
+  const defs: [MockApiTokenKey, string, string, "READ" | "WRITE", Partial<MockApiToken>][] = [
+    ["admin-write", "00000000a001", "mock-user-admin", "WRITE", {}],
+    ["editor-write", "00000000e001", "mock-user-editor", "WRITE", {}],
+    ["editor-read", "00000000e002", "mock-user-editor", "READ", {}],
+    ["viewer-read", "00000000b001", "mock-user-viewer", "READ", {}],
+    ["viewer-write", "00000000b002", "mock-user-viewer", "WRITE", {}],
+    ["editor-revoked", "00000000e003", "mock-user-editor", "WRITE", { revokedAt: new Date("2026-02-01T00:00:00Z") }],
+    ["editor-expired", "00000000e004", "mock-user-editor", "WRITE", { expiresAt: new Date("2026-03-01T00:00:00Z") }],
+    ["nofamily-read", "00000000f001", "mock-user-nofamily", "READ", {}],
+    ["blocked-read", "00000000d001", "mock-user-blocked", "READ", {}],
+  ];
+  return defs.map(([key, publicId, userId, level, extra]) => ({
+    id: `mock-token-${key}`,
+    userId,
+    name: `Test: ${key}`,
+    secret: mockSecret(publicId, key),
+    prefix: `ftk_${publicId}`,
+    level,
+    createdAt: MOCK_TOKEN_CREATED,
+    expiresAt: MOCK_TOKEN_VALID,
+    revokedAt: null,
+    ...extra,
+  }));
 }

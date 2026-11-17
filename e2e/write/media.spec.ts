@@ -1,43 +1,21 @@
-import { existsSync } from "node:fs";
-
-import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import JSZip from "jszip";
 import type { Page } from "@playwright/test";
 
 import { test, expect, authFile, acceptDialogs, waitForTree } from "../support/fixtures";
-import { apiAs, createPerson, deletePerson, tinyPng, uniq, type CreatedPerson } from "../support/api";
+import { apiAs, createPerson, deletePerson, IMPORT_TIMEOUT, tinyPng, uniq, type CreatedPerson } from "../support/api";
 
 /**
  * Bilder als Bearbeiter: hochladen, Porträt festlegen (erscheint im Baum und
- * in der Personenliste), löschen — und beim Löschen der Person verschwinden
- * auch die Dateien im Mock-Bucket.
+ * in der Personenliste), im ZIP-Export enthalten, löschen — und nach dem
+ * Löschen der Person stellt der Import des vorherigen Exports Person und Bild
+ * wieder her. Alles nur über die App, ohne direkten Zugriff auf den Speicher —
+ * so taugt der Test auch nach einem Wechsel des Speicher-Backends.
  */
 test.describe.configure({ mode: "serial" });
 test.use({ storageState: authFile("editor") });
 
-if (existsSync(".env")) process.loadEnvFile(".env");
-const s3 = new S3Client({
-  endpoint: process.env.S3_ENDPOINT ?? "http://localhost:9100",
-  region: process.env.S3_REGION ?? "us-east-1",
-  forcePathStyle: true,
-  credentials: {
-    accessKeyId: process.env.S3_ACCESS_KEY ?? "minioadmin",
-    secretAccessKey: process.env.S3_SECRET_KEY ?? "minioadmin",
-  },
-});
-// Immer der Mock-Bucket (siehe scripts/mock.mjs), nie der normale.
-const BUCKET = process.env.MOCK_S3_BUCKET ?? "familytree-mock";
-
-async function objectExists(key: string) {
-  try {
-    await s3.send(new HeadObjectCommand({ Bucket: BUCKET, Key: key }));
-    return true;
-  } catch (err) {
-    if ((err as { name?: string }).name === "NotFound") return false;
-    throw err;
-  }
-}
-
-type Asset = { id: string; storageKey: string; thumbnailKey: string | null };
+type Asset = { id: string };
+let zipBackup: Buffer;
 
 const tag = uniq();
 let p: CreatedPerson;
@@ -120,22 +98,63 @@ test("Bild löschen", async ({ page }) => {
   await expect(gallery.getByText("Bild gelöscht.")).toBeVisible();
   await expect(gallery.getByRole("heading")).toHaveText("Bilder (1)");
   expect((await page.request.get(`/api/media/${assets[0].id}`)).status()).toBe(404);
-  expect(await objectExists(assets[0].storageKey)).toBe(false);
 });
 
-test("Person löschen entfernt auch ihre Bilddateien", async ({ page }) => {
-  const remaining = assets[1];
-  expect(await objectExists(remaining.storageKey)).toBe(true);
-  if (remaining.thumbnailKey) expect(await objectExists(remaining.thumbnailKey)).toBe(true);
+test("ZIP-Export enthält das Porträt", async () => {
+  const api = await apiAs("editor");
+  const res = await api.get("/api/export?format=zip");
+  expect(res.status()).toBe(200);
+  zipBackup = await res.body();
+  await api.dispose();
+  const zip = await JSZip.loadAsync(zipBackup);
+  const data = JSON.parse(await zip.file("stammbaum.json")!.async("string"));
+  const entry = data.media.find((m: { id: string }) => m.id === assets[1].id);
+  expect(entry, "Bild im Export").toBeTruthy();
+  const person = data.persons.find((x: { id: string }) => x.id === p.id);
+  expect(person.media).toEqual([{ mediaId: assets[1].id, isPrimary: true }]);
+  const file = zip.file(`media/${entry.fileName}`);
+  expect(file, entry.fileName).not.toBeNull();
+  expect(Buffer.from((await file!.async("uint8array")).slice(8, 12)).toString("ascii")).toBe("WEBP");
+});
 
+test("Person löschen entfernt ihr Bild, der Import stellt beides wieder her", async ({ page, loginAs }) => {
   acceptDialogs(page);
   await page.goto(`/people/${p.id}`);
   await page.getByRole("button", { name: "Person löschen" }).click();
   await page.waitForURL(/\/people\?deleted=/);
 
   const admin = await apiAs("admin");
-  expect((await admin.get(`/api/media/${remaining.id}`)).status()).toBe(404);
+  // Auch für den Admin weg: das Bild hängt an nichts mehr und ist gelöscht.
+  expect((await admin.get(`/api/media/${assets[1].id}`)).status()).toBe(404);
   await admin.dispose();
-  expect(await objectExists(remaining.storageKey)).toBe(false);
-  if (remaining.thumbnailKey) expect(await objectExists(remaining.thumbnailKey)).toBe(false);
+
+  // Den vorher gezogenen ZIP-Export auf diese Person beschränken und einspielen.
+  const zip = await JSZip.loadAsync(zipBackup);
+  const data = JSON.parse(await zip.file("stammbaum.json")!.async("string"));
+  data.persons = data.persons.filter((x: { id: string }) => x.id === p.id);
+  data.relationships = [];
+  data.sources = [];
+  data.citations = [];
+  data.media = data.media.filter((m: { id: string }) => m.id === assets[1].id);
+  zip.file("stammbaum.json", JSON.stringify(data));
+  const buffer = await zip.generateAsync({ type: "nodebuffer" });
+
+  const { page: adminPage } = await loginAs("admin");
+  adminPage.on("dialog", (d) => void d.accept());
+  await adminPage.goto("/admin/data");
+  await adminPage.getByLabel("Exportdatei (JSON oder ZIP)").setInputFiles({ name: "backup.zip", mimeType: "application/zip", buffer });
+  await adminPage.getByRole("button", { name: "Vorschau" }).click();
+  const status = adminPage.getByRole("status").filter({ hasText: "Personen:" });
+  // Bild ist wirklich neu — es war mit der Person gelöscht worden.
+  await expect(status).toContainText("Personen: 1 neu, 0 aktualisiert");
+  await expect(status).toContainText("Bilder: 1 neu, 0 bereits vorhanden");
+  await adminPage.getByRole("button", { name: "Import ausführen" }).click();
+  await expect(adminPage.getByRole("status").filter({ hasText: "Import abgeschlossen" })).toBeVisible({ timeout: IMPORT_TIMEOUT });
+
+  await adminPage.goto(`/people/${p.id}`);
+  const gallery = adminPage.getByTestId("gallery-person");
+  await expect(gallery.getByRole("heading")).toHaveText("Bilder (1)");
+  const img = gallery.locator(`img[src="/api/media/${assets[1].id}?variant=thumb"]`);
+  await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth)).toBeGreaterThan(0);
+  await expect(gallery.getByText("Porträt", { exact: true })).toBeVisible();
 });

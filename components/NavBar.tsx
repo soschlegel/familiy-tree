@@ -39,7 +39,7 @@ export function NavBar({
   useDismiss(open, close, [menuRef, toggleRef], toggleRef);
 
   const linkClass = (active: boolean) =>
-    `rounded-full px-3 py-1 text-sm font-medium transition ${
+    `whitespace-nowrap rounded-full px-3 py-1 text-sm font-medium transition ${
       active
         ? "bg-accent-700 text-white dark:bg-accent-300 dark:text-stone-950"
         : "text-stone-600 hover:bg-stone-900/5 hover:text-stone-900 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-stone-50"
@@ -56,7 +56,7 @@ export function NavBar({
           <span className="font-serif text-lg font-semibold tracking-tight">Stammbaum</span>
         </Link>
 
-        <ul className="hidden items-center gap-1 md:flex">
+        <ul className="hidden items-center gap-1 lg:flex">
           {items.map((item) => {
             const active = isActive(pathname, item.href);
             return (
@@ -73,15 +73,19 @@ export function NavBar({
           })}
         </ul>
 
-        <div className="ml-auto hidden items-center gap-3 text-sm md:flex">
-          <span className="muted">{userLabel}</span>
+        {/* Bei knapper Breite (ab lg mit allen Menüpunkten) wird der Name
+            gekürzt statt umzubrechen; vollständig steht er im Tooltip. */}
+        <div className="ml-auto hidden min-w-0 items-center gap-3 text-sm lg:flex">
+          <span className="muted min-w-0 truncate" title={userLabel}>
+            {userLabel}
+          </span>
           {signOut}
         </div>
 
         <button
           ref={toggleRef}
           type="button"
-          className="btn-secondary ml-auto md:hidden"
+          className="btn-secondary ml-auto lg:hidden"
           aria-expanded={open}
           aria-controls="mobile-menu"
           onClick={() => setOpen((o) => !o)}
@@ -95,7 +99,7 @@ export function NavBar({
         <div
           ref={menuRef}
           id="mobile-menu"
-          className="absolute inset-x-0 top-full z-40 border-b border-stone-200 bg-white px-4 pb-4 pt-2 shadow-lg md:hidden dark:border-stone-800 dark:bg-stone-900"
+          className="absolute inset-x-0 top-full z-40 border-b border-stone-200 bg-white px-4 pb-4 pt-2 shadow-lg lg:hidden dark:border-stone-800 dark:bg-stone-900"
         >
           <ul className="flex flex-col gap-1">
             {items.map((item) => {

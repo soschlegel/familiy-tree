@@ -103,8 +103,9 @@ export function registerPrompts(server: McpServer, ctx: ToolContext): void {
     },
     async (uri, variables) => {
       const id = String(Array.isArray(variables.id) ? variables.id[0] : variables.id);
-      const scope = await ctx.resolveScope();
-      const data = scope ? await personResource(scope, id) : null;
+      const auth = await ctx.authorize("READ");
+      if (!auth.ok) throw new Error(`Zugriff verweigert: ${auth.message}`);
+      const data = await personResource(auth.scope, id);
       if (!data) throw new Error("Person nicht gefunden (oder für diesen Benutzer nicht sichtbar)");
       return {
         contents: [{ uri: uri.href, mimeType: "application/json", text: JSON.stringify(data) }],

@@ -8,17 +8,6 @@
 # Nicht für Portainer gedacht — dort baut die NAS nichts selbst.
 
 services:
-  storage:
-    image: familytree-local/minio:dev
-    build:
-      context: docker/minio
-
-  storage-init:
-    image: familytree-local/minio:dev
-
-  backup-media:
-    image: familytree-local/minio:dev
-
   migrate:
     image: familytree-local/migrate:dev
     build:
@@ -30,6 +19,3 @@ services:
     build:
       context: .
       target: runner
-
-  db-access:
-    image: familytree-local/migrate:dev

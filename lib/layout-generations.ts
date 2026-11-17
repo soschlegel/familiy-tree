@@ -40,6 +40,13 @@ const V_GAP = 112;
 const CONNECTOR = 56;
 
 /**
+ * Platzbedarf einer Hochzeit auf dem Zeitstrahl (components/MarriageNode:
+ * Bild bis 56px, darunter das Datum), gemessen ab ihrer linken oberen Ecke.
+ */
+export const EVENT_BOX = { width: 88, height: 84 } as const;
+const EVENT_GAP = 6;
+
+/**
  * Ein Kasten im Layout: eine Person, ein Ehepaar auf einer Doppelkarte — oder
  * ein Platzhalter.
  *
@@ -1362,14 +1369,52 @@ export function layoutTimeline(data: TreeData) {
     });
   }
 
+  /**
+   * Die Hochzeit steht auf ihrem Jahr zwischen den Partnern. Liegt dort schon
+   * eine Personenkarte (oder eine andere Hochzeit), weicht sie auf die
+   * nächste freie Stelle aus — sonst verdeckte der Marker die Karte (in den
+   * Mock-Daten an rund 26 Stellen). Seitlich ausweichen ist billiger als
+   * senkrecht: eine senkrechte Verschiebung verfälscht die Zeitachse.
+   */
+  const blockers = nodes.map((n) => ({ x: n.x, y: n.y, w: boxWidth(n), h: NODE_HEIGHT }));
+  const eventBlocked = (x: number, y: number) =>
+    blockers.some(
+      (b) =>
+        x < b.x + b.w + EVENT_GAP &&
+        b.x < x + EVENT_BOX.width + EVENT_GAP &&
+        y < b.y + b.h + EVENT_GAP &&
+        b.y < y + EVENT_BOX.height + EVENT_GAP,
+    );
+  /** Kosten je Pixel Abweichung: senkrecht (Zeit) viermal so teuer wie seitlich. */
+  const VERTICAL_COST = 4;
   const eventPositions = new Map<string, { x: number; y: number }>();
   for (const ev of events) {
     const ax = anchorX.get(ev.partnerAId)!;
     const bx = anchorX.get(ev.partnerBId)!;
-    eventPositions.set(ev.id, {
-      x: (ax + bx) / 2,
-      y: toY(yearOf(ev.date)!),
-    });
+    const wantedX = (ax + bx) / 2;
+    const wantedY = toY(yearOf(ev.date)!);
+    let best = { x: wantedX, y: wantedY };
+    if (eventBlocked(wantedX, wantedY)) {
+      const xs = [wantedX];
+      const ys = [wantedY];
+      for (const b of blockers) {
+        xs.push(b.x + b.w + EVENT_GAP, b.x - EVENT_BOX.width - EVENT_GAP);
+        ys.push(b.y + b.h + EVENT_GAP, b.y - EVENT_BOX.height - EVENT_GAP);
+      }
+      let bestCost = Infinity;
+      for (const x of xs) {
+        for (const y of x === wantedX ? ys : [wantedY]) {
+          const cost = Math.abs(x - wantedX) + VERTICAL_COST * Math.abs(y - wantedY);
+          // Gleichstand: der Reihe nach (deterministisch) der erste.
+          if (cost < bestCost && !eventBlocked(x, y)) {
+            bestCost = cost;
+            best = { x, y };
+          }
+        }
+      }
+    }
+    eventPositions.set(ev.id, best);
+    blockers.push({ x: best.x, y: best.y, w: EVENT_BOX.width, h: EVENT_BOX.height });
   }
 
   const axis = {

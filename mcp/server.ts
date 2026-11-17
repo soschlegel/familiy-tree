@@ -1,36 +1,45 @@
 /**
- * MCP-Server für die KI-gestützte Ahnenforschung (stdio).
+ * MCP-Server für die KI-gestützte Ahnenforschung (stdio) — NUR für Entwicklung
+ * und automatische Tests. Er greift direkt auf die Datenbank zu und nimmt die
+ * Identität aus Umgebungsvariablen; deshalb startet er ausschließlich gegen
+ * Datenbanken, deren Name auf _mock oder _test endet. Der reguläre Zugang ist
+ * der MCP-Endpunkt der App mit persönlichem Schlüssel.
  *
  *   MCP_USER_EMAIL   Benutzer, als der der Server handelt (Pflicht)
  *   MCP_ALLOW_WRITE  "true" schaltet die Schreibwerkzeuge frei (Standard: aus)
- *   DATABASE_URL     wie die Web-App; ohne Angabe aus .env im Projektverzeichnis
+ *   DATABASE_URL     Mock-/Testdatenbank; ohne Angabe aus .env im Projektverzeichnis
  *
- * Start: `npm run -s mcp` (echte Datenbank laut .env) bzw. `npm run -s mcp:mock`.
+ * Zusätzlich gilt das KI-Recht des Benutzers (User.aiAccess): ohne Recht kein
+ * Start, mit Recht „lesen" keine Schreibwerkzeuge, auch nicht mit
+ * MCP_ALLOW_WRITE. Geprüft wird bei jedem Werkzeugaufruf neu
+ * (lib/services/ai-access.ts, authorizeAiCall).
+ *
+ * Start: `npm run -s mcp:stdio` (= node scripts/mock.mjs mcp, setzt die Mock-Datenbank).
  * Wichtig: stdout ist dem Protokoll vorbehalten — Meldungen gehen nach stderr.
  */
 import { protocolOut } from "./bootstrap";
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 import { prisma } from "../lib/prisma";
-import { scopeForEmail } from "../lib/services";
-import { registerReadTools, registerWriteTools, type ToolContext } from "./tools";
-import { registerPrompts } from "./prompts";
+import { authorizeAiCall, type AiAuthResult, type AiCredential } from "../lib/services";
+import type { ToolContext } from "./tools";
+import { createMcpServer } from "./register";
 
-const INSTRUCTIONS = `Family-tree database for genealogical research (German family history; data, names and labels are German).
-
-- Start with search_persons (name words, family, birth-year range, place) to get person IDs; get_statistics gives an overview.
-- get_person returns the full record incl. research notes and relatives; get_kinship names the relationship between two persons in German.
-- For research leads use find_data_gaps (missing data), check_consistency (contradicting dates), find_possible_duplicates and get_timeline.
-- Persons shown as {"name":"Nicht freigegeben","restricted":true} exist but are hidden from this user. Do not guess about them.
-- Dates are ISO in their real precision: "1850-03-12", "1850-03" or "1850"; uncertain ones carry a German prefix ("um 1850" = about, "vor 1900" = before, "nach 1723" = after) and fields …Precision (DAY/MONTH/YEAR), …Qualifier (EXACT/ABOUT/BEFORE/AFTER), …Text. "lifespan" is "birth – death" with "?" for unknown. Write dates exactly as precise as the evidence — never pad a year to a full date.
-- Sources: search_sources / get_source list recorded documents (church books, civil registry, census, gravestones, family papers, oral tradition, websites); get_person shows each person's citations. find_data_gaps(kinds: ["unsourced"]) lists facts without a citation.
-- The server acts as one app user with that user's family permissions. Write tools exist only if enabled; every write is audited. Never invent facts. Record evidence as a citation: find or create the source (search_sources, create_source) and attach it to the fact with cite_source (page/entry in "detail"). Research notes (update_person append_note) are for reasoning and open questions; a free-text "source" there is only a hint, not a citation.`;
+/** Gleiche Regel wie scripts/mock.mjs und prisma/seed-mock.ts. */
+const MOCK_DATABASE = /_(mock|test)$/;
 
 function fail(message: string): never {
   console.error(`[mcp] ${message}`);
   process.exit(1);
+}
+
+function databaseName(): string {
+  try {
+    return decodeURIComponent(new URL(process.env.DATABASE_URL ?? "").pathname.replace(/^\//, ""));
+  } catch {
+    return "";
+  }
 }
 
 function databaseLabel(): string {
@@ -43,6 +52,18 @@ function databaseLabel(): string {
 }
 
 async function main(): Promise<void> {
+  // Vor jeder Verbindung: nie gegen eine echte Datenbank.
+  const dbName = databaseName();
+  if (!MOCK_DATABASE.test(dbName)) {
+    console.error(
+      `[mcp] Abbruch: DATABASE_URL zeigt auf "${dbName || "(keine)"}". ` +
+        "Der lokale stdio-Modus greift direkt auf die Datenbank zu und läuft deshalb nur " +
+        "gegen Datenbanken, deren Name auf _mock oder _test endet.\n" +
+        "       Bitte `npm run -s mcp:stdio` verwenden; echte Daten nur über den MCP-Endpunkt der App mit persönlichem Schlüssel.",
+    );
+    process.exit(2);
+  }
+
   const email = process.env.MCP_USER_EMAIL?.trim();
   if (!email) {
     fail(
@@ -51,33 +72,37 @@ async function main(): Promise<void> {
     );
   }
   const allowWrite = process.env.MCP_ALLOW_WRITE?.trim().toLowerCase() === "true";
+  const credential: AiCredential = { kind: "dev", email, allowWrite };
 
-  let scope;
+  let auth: AiAuthResult;
   try {
-    scope = await scopeForEmail(email);
+    auth = await authorizeAiCall(credential, "READ");
   } catch (err) {
     const detail = (err as Error).message.split("\n").map((l) => l.trim()).filter(Boolean).pop();
     fail(`Datenbank ${databaseLabel()} nicht erreichbar: ${detail}`);
   }
-  if (!scope) {
-    fail(`Benutzer ${email} ist in ${databaseLabel()} unbekannt oder gesperrt — Start abgebrochen.`);
+  if (!auth.ok) {
+    fail(`Benutzer ${email} in ${databaseLabel()}: ${auth.message} [${auth.reason}] — Start abgebrochen.`);
+  }
+
+  // Schreibwerkzeuge nur, wenn beides zutrifft: MCP_ALLOW_WRITE und KI-Recht
+  // WRITE. Der Wächter prüft trotzdem jeden einzelnen Aufruf erneut.
+  const writeTools = allowWrite && auth.level === "WRITE";
+  if (allowWrite && !writeTools) {
+    console.error(
+      `[mcp] Hinweis: MCP_ALLOW_WRITE=true, aber ${email} hat nur das KI-Recht „lesen" — Schreibwerkzeuge bleiben aus.`,
+    );
   }
 
   const ctx: ToolContext = {
-    email,
-    allowWrite,
-    // Bei jedem Aufruf neu auflösen: zwei kleine Abfragen, dafür wirken
-    // Rollenänderungen und Sperren sofort.
-    resolveScope: () => scopeForEmail(email),
+    label: email,
+    allowWrite: writeTools,
+    // Bei jedem Aufruf neu prüfen: wenige kleine Abfragen, dafür wirken
+    // Sperren sowie Rollen- und KI-Rechteänderungen sofort.
+    authorize: (need) => authorizeAiCall(credential, need),
   };
 
-  const server = new McpServer(
-    { name: "familytree", title: "Stammbaum", version: "0.1.0" },
-    { instructions: INSTRUCTIONS },
-  );
-  registerReadTools(server, ctx);
-  if (allowWrite) registerWriteTools(server, ctx);
-  registerPrompts(server, ctx);
+  const server = createMcpServer(ctx);
 
   const transport = new StdioServerTransport(process.stdin, protocolOut);
 
@@ -96,12 +121,13 @@ async function main(): Promise<void> {
 
   await server.connect(transport);
 
+  const scope = auth.scope;
   const role = scope.isAdmin
     ? "Administrator"
     : `${scope.families.size} Familie(n), davon ${[...scope.families.values()].filter((r) => r === "EDITOR").length} bearbeitbar`;
   console.error(
-    `[mcp] Stammbaum-MCP bereit — Benutzer ${email} (${role}), Datenbank ${databaseLabel()}, ` +
-      `Schreibwerkzeuge ${allowWrite ? "AKTIV" : "aus"}.`,
+    `[mcp] Stammbaum-MCP bereit (Entwicklungsmodus) — Benutzer ${email} (${role}), Datenbank ${databaseLabel()}, ` +
+      `KI-Recht ${auth.user.aiAccess}, Schreibwerkzeuge ${writeTools ? "AKTIV" : "aus"}.`,
   );
 }
 

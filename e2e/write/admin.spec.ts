@@ -39,7 +39,7 @@ test("Benutzer einladen und Rolle ändern", async ({ page }) => {
   await role.selectOption({ label: "Betrachter" });
   await expect(page.getByText(`Rolle von ${email} geändert.`)).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("row").filter({ hasText: email }).getByRole("combobox")).toHaveValue("VIEWER");
+  await expect(page.getByRole("row").filter({ hasText: email }).getByRole("combobox", { name: `Rolle von ${email}` })).toHaveValue("VIEWER");
 });
 
 test("Doppelte Einladung wird abgelehnt", async ({ page, consoleGuard }) => {
@@ -54,7 +54,7 @@ test("die eigene Rolle lässt sich nicht ändern", async ({ page }) => {
   await page.goto("/admin/users");
   const self = page.getByRole("row").filter({ hasText: "admin@example.test" });
   await expect(self).toContainText("(du)");
-  await expect(self.getByRole("combobox")).toBeDisabled();
+  await expect(self.getByRole("combobox", { name: "Rolle von admin@example.test" })).toBeDisabled();
   await expect(self.getByRole("button", { name: "sperren" })).toHaveCount(0);
 
   // Auch an der Oberfläche vorbei nicht.

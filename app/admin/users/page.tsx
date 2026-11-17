@@ -8,6 +8,7 @@ export const metadata = { title: "Benutzer" };
 export default async function UsersPage() {
   const session = await requirePage("user:manage");
 
+  const now = new Date();
   const users = await prisma.user.findMany({
     orderBy: [{ role: "asc" }, { email: "asc" }],
     select: {
@@ -17,6 +18,15 @@ export default async function UsersPage() {
       role: true,
       status: true,
       lastLoginAt: true,
+      aiAccess: true,
+      // Aktive KI-Schlüssel: nicht widerrufen, nicht abgelaufen.
+      _count: {
+        select: {
+          apiTokens: {
+            where: { revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+          },
+        },
+      },
     },
   });
 
@@ -32,9 +42,10 @@ export default async function UsersPage() {
       </div>
 
       <UserAdmin
-        users={users.map((u) => ({
+        users={users.map(({ _count, ...u }) => ({
           ...u,
           lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
+          activeTokens: _count.apiTokens,
         }))}
         currentUserId={session.user.id}
       />

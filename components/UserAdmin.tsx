@@ -1,9 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 import { apiFetch, jsonBody } from "./api-client";
+import { ApiTokenList } from "./ApiTokenList";
+import {
+  AI_ACCESS_LABEL,
+  aiRank,
+  countKeys,
+  type AiAccessLevel,
+  type TokenRow,
+} from "./ai-access-labels";
 
 type Row = {
   id: string;
@@ -12,7 +21,17 @@ type Row = {
   role: "ADMIN" | "EDITOR" | "VIEWER";
   status: "INVITED" | "ACTIVE" | "BLOCKED";
   lastLoginAt: string | null;
+  aiAccess: AiAccessLevel;
+  /** Nicht widerrufene, nicht abgelaufene KI-Schlüssel. */
+  activeTokens: number;
 };
+
+/** Was eine Änderung des KI-Rechts für vorhandene Schlüssel bedeutet. */
+function aiAccessEffect(from: AiAccessLevel, to: AiAccessLevel, keys: number): string {
+  if (keys === 0 || aiRank(to) >= aiRank(from)) return "";
+  if (to === "NONE") return " Die vorhandenen Schlüssel funktionieren ab sofort nicht mehr.";
+  return " Schlüssel mit Schreibrecht wirken ab sofort nur noch lesend.";
+}
 
 const ROLE_LABEL: Record<Row["role"], string> = {
   ADMIN: "Administrator",
@@ -71,6 +90,62 @@ export function UserAdmin({
 
   const patch = (id: string, data: Partial<Pick<Row, "role" | "status">>, success: string) =>
     call(`/api/users/${id}`, jsonBody("PATCH", data), success);
+
+  // --- KI-Zugang -----------------------------------------------------------
+  const [openKeys, setOpenKeys] = useState<string | null>(null);
+  const [keys, setKeys] = useState<Record<string, TokenRow[] | "loading" | "error">>({});
+
+  async function loadKeys(userId: string) {
+    setKeys((k) => ({ ...k, [userId]: "loading" }));
+    const res = await apiFetch<{ tokens: TokenRow[] }>(
+      `/api/ai-tokens?all=1&userId=${encodeURIComponent(userId)}`,
+    );
+    setKeys((k) => ({ ...k, [userId]: res.ok ? res.data.tokens : "error" }));
+    if (!res.ok) setError(res.message);
+  }
+
+  function toggleKeys(userId: string) {
+    if (openKeys === userId) {
+      setOpenKeys(null);
+      return;
+    }
+    setOpenKeys(userId);
+    void loadKeys(userId);
+  }
+
+  async function setAiAccess(u: Row, to: AiAccessLevel) {
+    if (to === u.aiAccess) return;
+    if (
+      to === "NONE" &&
+      !confirm(
+        `KI-Zugang von ${u.email} entziehen?` +
+          (u.activeTokens > 0
+            ? `\n\n${countKeys(u.activeTokens)} funktionieren dann sofort nicht mehr. ` +
+              "Sie bleiben gespeichert und wirken wieder, falls der Zugang erneut vergeben wird — " +
+              "wer das nicht will, widerruft sie zusätzlich."
+            : "")
+      )
+    )
+      return;
+    const ok = await call(
+      `/api/users/${u.id}/ai-access`,
+      jsonBody("PUT", { aiAccess: to }),
+      `KI-Zugang von ${u.email}: ${AI_ACCESS_LABEL[to]}.${aiAccessEffect(u.aiAccess, to, u.activeTokens)}`,
+    );
+    // Wirksame Stufen in einer offenen Schlüsselliste neu darstellen.
+    if (ok && openKeys === u.id) void loadKeys(u.id);
+  }
+
+  async function revokeKey(u: Row, t: TokenRow) {
+    if (!confirm(`Schlüssel „${t.name}“ (${t.prefix}…) von ${u.email} widerrufen? Er funktioniert danach sofort nicht mehr.`))
+      return;
+    const ok = await call(
+      `/api/ai-tokens/${t.id}`,
+      { method: "DELETE" },
+      `Schlüssel „${t.name}“ von ${u.email} widerrufen.`,
+    );
+    if (ok) void loadKeys(u.id);
+  }
 
   return (
     <div className="space-y-4">
@@ -133,6 +208,7 @@ export function UserAdmin({
               <th scope="col" className="px-2 font-medium">Rolle</th>
               <th scope="col" className="px-2 font-medium">Status</th>
               <th scope="col" className="px-2 font-medium">Letzte Anmeldung</th>
+              <th scope="col" className="px-2 font-medium">KI-Zugang</th>
               <th scope="col">
                 <span className="sr-only">Aktionen</span>
               </th>
@@ -142,8 +218,11 @@ export function UserAdmin({
             {users.map((u) => {
               const self = u.id === currentUserId;
               const blocking = u.status !== "BLOCKED";
+              const open = openKeys === u.id;
+              const list = keys[u.id];
               return (
-                <tr key={u.id}>
+                <Fragment key={u.id}>
+                <tr data-testid="user-row" data-email={u.email}>
                   <td className="whitespace-nowrap px-3 py-2">
                     {u.email}
                     {self && <span className="ml-2 text-xs muted">(du)</span>}
@@ -175,6 +254,36 @@ export function UserAdmin({
                   <td className="whitespace-nowrap px-2 muted">
                     {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString("de-DE") : "nie"}
                   </td>
+                  <td className="px-2">
+                    <div className="flex items-center gap-2">
+                      <select
+                        className="field"
+                        aria-label={`KI-Zugang von ${u.email}`}
+                        value={u.aiAccess}
+                        disabled={busy}
+                        onChange={(e) => void setAiAccess(u, e.target.value as AiAccessLevel)}
+                      >
+                        {(Object.keys(AI_ACCESS_LABEL) as AiAccessLevel[]).map((value) => (
+                          <option key={value} value={value}>
+                            {AI_ACCESS_LABEL[value]}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="btn-link whitespace-nowrap"
+                        aria-expanded={open}
+                        aria-controls={`ai-keys-${u.id}`}
+                        data-testid="user-ai-keys-toggle"
+                        onClick={() => toggleKeys(u.id)}
+                      >
+                        <span className="sr-only">{`Schlüssel von ${u.email}: ${u.activeTokens} aktiv`}</span>
+                        <span aria-hidden>
+                          Schlüssel: {u.activeTokens} aktiv {open ? "▴" : "▾"}
+                        </span>
+                      </button>
+                    </div>
+                  </td>
                   <td className="px-3 text-right">
                     {!self && (
                       <button
@@ -199,11 +308,56 @@ export function UserAdmin({
                     )}
                   </td>
                 </tr>
+                {open && (
+                  <tr id={`ai-keys-${u.id}`} data-testid="user-ai-keys">
+                    <td colSpan={6} className="bg-stone-50/70 px-3 py-3 dark:bg-stone-900/40">
+                      {/* sticky + feste Breite: bleibt auf dem Telefon im
+                          sichtbaren Teil, auch wenn die Tabelle seitlich
+                          gescrollt ist. */}
+                      <div className="sticky left-3 w-[min(48rem,calc(100vw-4.5rem))]">
+                      <p className="mb-2 text-xs font-medium text-stone-600 dark:text-stone-400">
+                        KI-Schlüssel von {u.email}
+                      </p>
+                      {list === "loading" || list === undefined ? (
+                        <p className="text-sm muted">Lädt…</p>
+                      ) : list === "error" ? (
+                        <p className="text-sm muted">Schlüssel konnten nicht geladen werden.</p>
+                      ) : list.length === 0 ? (
+                        <p className="text-sm muted">Noch keine Schlüssel angelegt.</p>
+                      ) : (
+                        <div className="card overflow-hidden">
+                          <ApiTokenList
+                            tokens={list}
+                            userAccess={u.aiAccess}
+                            busy={busy}
+                            onRevoke={(t) => void revokeKey(u, t)}
+                            label={`KI-Schlüssel von ${u.email}`}
+                          />
+                        </div>
+                      )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               );
             })}
           </tbody>
         </table>
       </div>
+
+      <p className="text-sm muted" data-testid="ai-access-hint">
+        <strong className="font-medium text-stone-700 dark:text-stone-300">KI-Zugang</strong> erlaubt
+        einem KI-Assistenten (z.B. Claude Code) über persönliche Schlüssel den Zugriff im Namen des
+        Benutzers. Er gilt nur, wenn er hier ausdrücklich vergeben ist — auch Administratoren haben
+        ihn sonst nicht. Die Familienrechte gelten zusätzlich: „lesen und schreiben“ erlaubt nie
+        mehr, als der Benutzer in der App selbst darf. Herabsetzen wirkt sofort auf alle vorhandenen
+        Schlüssel. Eigene Schlüssel verwaltet jeder unter{" "}
+        <Link href="/ai-access" className="underline">
+          KI-Zugang
+        </Link>
+        .
+      </p>
     </div>
   );
 }

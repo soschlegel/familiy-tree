@@ -1,30 +1,28 @@
 /**
  * Füllt eine SEPARATE Mock-Datenbank mit deterministischen Testdaten
- * (siehe prisma/mock-data.ts) und legt Platzhalterbilder im Mock-Bucket ab.
+ * (siehe prisma/mock-data.ts) und legt Platzhalterbilder im Mock-Medienordner
+ * ab.
  *
  * Aufruf über `npm run db:mock` bzw. `npm run mock:setup` (scripts/mock.mjs
- * setzt DATABASE_URL und S3_BUCKET passend). Direkt aufgerufen verweigert das
- * Skript den Dienst +
-        , solange der Datenbankname nicht auf _mock oder _test
- * endet — es löscht vor dem Befüllen ALLE Daten der Zieldatenbank.
+ * setzt DATABASE_URL und MEDIA_DIR passend). Direkt aufgerufen verweigert das
+ * Skript den Dienst, solange der Datenbankname nicht auf _mock oder _test
+ * und der Medienordner nicht auf -mock oder -test endet — es löscht vor dem
+ * Befüllen ALLE Daten der Zieldatenbank und ALLE Dateien im Medienordner.
  *
- * Wiederholbar: jeder Lauf leert die Mock-Datenbank und den Mock-Bucket und
- * baut alles neu auf.
+ * Wiederholbar: jeder Lauf leert die Mock-Datenbank und den Mock-Medienordner
+ * und baut alles neu auf.
  */
+import { mkdir, readdir, rm } from "node:fs/promises";
+import path from "node:path";
+
 import { PrismaClient } from "@prisma/client";
-import {
-  CreateBucketCommand,
-  DeleteObjectsCommand,
-  HeadBucketCommand,
-  ListObjectsV2Command,
-  S3Client,
-} from "@aws-sdk/client-s3";
 import sharp from "sharp";
 
+import { hashToken } from "../lib/ai-tokens";
 import { generateMockData, type MockImage } from "./mock-data";
 
 const MOCK_NAME = /_(mock|test)$/;
-const MOCK_BUCKET = /-(mock|test)$/;
+const MOCK_MEDIA_DIR = /-(mock|test)$/;
 
 function databaseName(url: string): string {
   try {
@@ -46,6 +44,21 @@ function assertMockDatabase(url: string | undefined): string {
     process.exit(2);
   }
   return name;
+}
+
+/** Wie bei der Datenbank: geleert wird nur ein Ordner namens …-mock/…-test. */
+function assertMockMediaDir(dir: string | undefined): string {
+  const resolved = dir?.trim() ? path.resolve(dir) : "";
+  if (!resolved || !MOCK_MEDIA_DIR.test(path.basename(resolved))) {
+    console.error(
+      `[mock] Abbruch: MEDIA_DIR zeigt auf "${resolved || "(keinen Ordner)"}". ` +
+        "Dieses Skript löscht alle Dateien im Medienordner und läuft deshalb nur " +
+        "gegen Ordner, deren Name auf -mock oder -test endet.\n" +
+        "       Bitte `npm run db:mock` bzw. `npm run mock:setup` verwenden.",
+    );
+    process.exit(2);
+  }
+  return resolved;
 }
 
 // ---------------------------------------------------------------------------
@@ -95,55 +108,18 @@ async function renderImage(img: MockImage): Promise<Buffer> {
 }
 
 /**
- * Bucket erreichbar machen: anlegen, falls er fehlt, und leeren, damit ein
- * erneuter Lauf keine verwaisten Dateien hinterlässt. Liefert false, wenn der
- * Objektspeicher nicht erreichbar ist — dann geht es ohne Bilder weiter.
+ * Mock-Medienordner anlegen, falls er fehlt, und leeren, damit ein erneuter
+ * Lauf keine verwaisten Dateien hinterlässt. Der Ordner selbst bleibt stehen
+ * (er könnte ein Mount sein), nur sein Inhalt wird gelöscht.
  */
-async function prepareBucket(bucket: string): Promise<boolean> {
-  const client = new S3Client({
-    endpoint: process.env.S3_ENDPOINT ?? "http://localhost:9100",
-    region: process.env.S3_REGION ?? "us-east-1",
-    forcePathStyle: true,
-    maxAttempts: 1,
-    credentials: {
-      accessKeyId: process.env.S3_ACCESS_KEY ?? "minioadmin",
-      secretAccessKey: process.env.S3_SECRET_KEY ?? "minioadmin",
-    },
-  });
-
-  try {
-    try {
-      await client.send(new HeadBucketCommand({ Bucket: bucket }));
-    } catch (err) {
-      const status = (err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
-      if (status !== 404) throw err;
-      await client.send(new CreateBucketCommand({ Bucket: bucket }));
-      console.log(`[mock] Bucket ${bucket} angelegt.`);
-    }
-
-    let token: string | undefined;
-    let removed = 0;
-    do {
-      const page = await client.send(
-        new ListObjectsV2Command({ Bucket: bucket, ContinuationToken: token }),
-      );
-      const keys = (page.Contents ?? []).map((o) => ({ Key: o.Key! }));
-      if (keys.length > 0) {
-        await client.send(new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: keys } }));
-        removed += keys.length;
-      }
-      token = page.IsTruncated ? page.NextContinuationToken : undefined;
-    } while (token);
-    if (removed > 0) console.log(`[mock] ${removed} alte Objekte aus ${bucket} entfernt.`);
-    return true;
-  } catch (err) {
-    console.warn(
-      `[mock] WARNUNG: Objektspeicher (${process.env.S3_ENDPOINT}) nicht erreichbar — ` +
-        `es werden keine Bilder angelegt. (${(err as Error).name}: ${(err as Error).message})`,
-    );
-    return false;
-  } finally {
-    client.destroy();
+async function prepareMediaDir(dir: string): Promise<void> {
+  await mkdir(dir, { recursive: true });
+  const entries = await readdir(dir);
+  await Promise.all(
+    entries.map((e) => rm(path.join(dir, e), { recursive: true, force: true })),
+  );
+  if (entries.length > 0) {
+    console.log(`[mock] ${entries.length} alte Einträge aus ${dir} entfernt.`);
   }
 }
 
@@ -155,25 +131,22 @@ async function main() {
   const url = process.env.DATABASE_URL;
   const dbName = assertMockDatabase(url);
 
-  const bucket = process.env.S3_BUCKET && MOCK_BUCKET.test(process.env.S3_BUCKET)
-    ? process.env.S3_BUCKET
-    : "familytree-mock";
-  // lib/storage liest den Bucket beim Import — deshalb vor dem dynamischen
-  // Import setzen.
-  process.env.S3_BUCKET = bucket;
+  const mediaDir = assertMockMediaDir(process.env.MEDIA_DIR);
+  // lib/storage liest MEDIA_DIR bei jedem Aufruf; hier aufgelöst festhalten.
+  process.env.MEDIA_DIR = mediaDir;
 
   const data = generateMockData();
   const prisma = new PrismaClient({ datasourceUrl: url });
 
   try {
-    console.log(`[mock] Ziel: Datenbank ${dbName}, Bucket ${bucket}`);
+    console.log(`[mock] Ziel: Datenbank ${dbName}, Medienordner ${mediaDir}`);
 
     // Alles leeren. TRUNCATE … CASCADE ist schneller als deleteMany je
     // Tabelle und hält sich nicht mit Fremdschlüsseln auf.
     await prisma.$executeRawUnsafe(
       `TRUNCATE TABLE "AuditLog", "Citation", "Source", "RelationshipMedia", "PersonMedia", "MediaAsset",
         "Relationship", "PersonFamily", "Person", "UserFamily", "Family",
-        "Session", "Account", "VerificationToken", "User" CASCADE`,
+        "Session", "Account", "VerificationToken", "ApiToken", "User" CASCADE`,
     );
 
     const familyId = new Map(data.families.map((f) => [f.key, f.id]));
@@ -189,6 +162,22 @@ async function main() {
         name: u.name,
         role: u.role,
         status: u.status,
+        aiAccess: u.aiAccess,
+      })),
+    });
+    // Feste Testschlüssel (prisma/mock-data.ts) — gespeichert wird wie im
+    // Betrieb nur der Hash.
+    await prisma.apiToken.createMany({
+      data: data.apiTokens.map((t) => ({
+        id: t.id,
+        userId: t.userId,
+        name: t.name,
+        prefix: t.prefix,
+        secretHash: hashToken(t.secret),
+        level: t.level,
+        createdAt: t.createdAt,
+        expiresAt: t.expiresAt,
+        revokedAt: t.revokedAt,
       })),
     });
     await prisma.userFamily.createMany({
@@ -209,7 +198,8 @@ async function main() {
 
     let imageCount = 0;
     const createdImages = new Set<string>();
-    if (data.images.length > 0 && (await prepareBucket(bucket))) {
+    await prepareMediaDir(mediaDir);
+    if (data.images.length > 0) {
       const { processAndStoreImage } = await import("../lib/media-processing");
       for (const img of data.images) {
         const stored = await processAndStoreImage(await renderImage(img), {
@@ -262,8 +252,9 @@ async function main() {
     console.log("[mock] Benutzer (Dev-Login):");
     for (const u of data.users) {
       const fam = u.families.map((f) => `${f.familyKey}:${f.role}`).join(" ") || "–";
-      console.log(`         ${u.email.padEnd(24)} ${u.role.padEnd(7)} ${u.status.padEnd(8)} ${fam}`);
+      console.log(`         ${u.email.padEnd(24)} ${u.role.padEnd(7)} ${u.status.padEnd(8)} KI:${u.aiAccess.padEnd(5)} ${fam}`);
     }
+    console.log(`[mock] ${data.apiTokens.length} feste KI-Testschlüssel (nur Tests, siehe prisma/mock-data.ts).`);
   } finally {
     await prisma.$disconnect();
   }

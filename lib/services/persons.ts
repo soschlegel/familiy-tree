@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
 import { prisma } from "../prisma";
-import { audit } from "../audit";
+import { audit, auditActor } from "../audit";
 import {
   canEditPerson,
   canViewPerson,
@@ -569,7 +569,7 @@ export async function createPerson(
   });
 
   await audit({
-    userId: scope.userId,
+    ...auditActor(scope),
     action: "CREATE",
     entityType: "Person",
     entityId: person.id,
@@ -610,7 +610,7 @@ export async function updatePerson(
   await prisma.person.update({ where: { id }, data: columns });
 
   await audit({
-    userId: scope.userId,
+    ...auditActor(scope),
     action: "UPDATE",
     entityType: "Person",
     entityId: id,
@@ -665,7 +665,7 @@ export async function deletePerson(
   const removedMedia = await removeOrphanedMedia(mediaIds);
 
   await audit({
-    userId: scope.userId,
+    ...auditActor(scope),
     action: "DELETE",
     entityType: "Person",
     entityId: id,
@@ -726,7 +726,7 @@ export async function setPersonFamilies(
   ]);
 
   await audit({
-    userId: scope.userId,
+    ...auditActor(scope),
     action: "UPDATE",
     entityType: "Person",
     entityId: id,

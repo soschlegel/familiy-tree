@@ -24,4 +24,5 @@ export * from "./kinship";
 export * from "./timeline";
 export * from "./consistency";
 export * from "./sources";
+export * from "./ai-access";
 export { loadGraph, type GraphPerson, type GraphRelationship, type LoadedGraph } from "./graph-data";

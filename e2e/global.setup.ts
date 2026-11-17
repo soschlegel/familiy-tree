@@ -8,7 +8,7 @@ import { AUTH_DIR, authFile } from "./support/fixtures";
 import { L, USERS, type Role } from "./support/mock";
 
 /**
- * Bekannter Ausgangszustand für jeden Lauf: Mock-Datenbank und -Bucket neu
+ * Bekannter Ausgangszustand für jeden Lauf: Mock-Datenbank und -Medienordner neu
  * aufbauen (scripts/mock.mjs verweigert alles, was nicht auf _mock/_test
  * endet), je Rolle einmal anmelden und die wichtigsten Routen einmal
  * aufrufen — im Dev-Modus kompiliert Next.js jede Route beim ersten Aufruf,

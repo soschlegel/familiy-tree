@@ -48,6 +48,9 @@ test.afterAll(async () => {
   const api = await apiAs("admin");
   for (const id of [sourceId, inlineSourceId]) if (id) await deleteSource(api, id);
   for (const person of [p, q]) if (person) await deletePerson(api, person.id);
+  // Nichts von diesem Lauf darf übrig bleiben (sonst stimmen spätere Zählungen nicht).
+  const left = (await (await api.get(`/api/sources?q=${encodeURIComponent(tag)}`)).json()) as { title: string }[];
+  expect(left.map((s) => s.title)).toEqual([]);
   await api.dispose();
 });
 
@@ -204,6 +207,9 @@ test("neue Quelle direkt beim Zitieren anlegen", async ({ page }) => {
   const row = section.getByTestId("citations-name").getByTestId("citation-row");
   await expect(row).toContainText(`E2E Gespräch ${tag}`);
   await row.getByRole("link", { name: `E2E Gespräch ${tag}` }).click();
+  // Erst auf die Quellenseite warten — sonst stünde hier die Personen-ID, und
+  // das Aufräumen ginge ins Leere.
+  await page.waitForURL(/\/sources\/[\w-]+$/);
   inlineSourceId = new URL(page.url()).pathname.split("/").pop();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(`E2E Gespräch ${tag}`);
 });

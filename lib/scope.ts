@@ -21,6 +21,20 @@ export type Scope = {
   isAdmin: boolean;
   /** familyId -> Rolle in dieser Familie */
   families: Map<string, FamilyRole>;
+  /**
+   * Gesetzt, wenn der Aufruf über den KI-Kanal (MCP) kommt — sonst Web-App.
+   * Die Dienste geben ihn an das Audit weiter (lib/audit.ts, auditActor); die
+   * Familienrechte oben gelten unverändert zusätzlich.
+   */
+  via?: ScopeVia;
+};
+
+export type ScopeVia = {
+  channel: "MCP";
+  /** ApiToken.id; null im lokalen Entwicklungsmodus (stdio, ohne Schlüssel). */
+  tokenId: string | null;
+  /** Wirksame Stufe dieses Aufrufs: min(Schlüssel, Benutzerrecht). */
+  level: "READ" | "WRITE";
 };
 
 export async function loadScope(
