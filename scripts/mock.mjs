@@ -6,22 +6,29 @@
 //   node scripts/mock.mjs seed    nur neu befüllen (Datenbank muss existieren)
 //   node scripts/mock.mjs dev     Dev-Server gegen die Mock-Daten auf Port 3100
 //   node scripts/mock.mjs env     berechnete Umgebung anzeigen
-//   node scripts/mock.mjs mcp     MCP-Server (stdio) gegen die Mock-Daten
+//   node scripts/mock.mjs mcp     MCP-Server (stdio, nur Entwicklung/Tests) gegen die Mock-Daten
+//   node scripts/mock.mjs mcp-key [name]
+//                                 festen Mock-Schlüssel für den MCP-Endpunkt
+//                                 ausgeben (Standard: editor-read), z.B. für
+//                                 FAMILYTREE_MCP_KEY in .mcp.json
 //
 // Die Mock-Datenbank liegt neben der normalen auf demselben Postgres. Ihr Name
 // wird aus DATABASE_URL abgeleitet (…/familytree -> …/familytree_mock) oder
 // über MOCK_DATABASE_URL gesetzt. Die normale Datenbank wird nie angefasst.
+// Ebenso die Bilder: sie liegen in einem eigenen Ordner (Standard
+// ./data/media-mock, änderbar über MOCK_MEDIA_DIR; der Name muss auf -mock
+// oder -test enden), nie im normalen MEDIA_DIR.
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 
 const MOCK_PORT = process.env.MOCK_PORT ?? "3100";
-const MOCK_BUCKET = process.env.MOCK_S3_BUCKET ?? "familytree-mock";
+const MOCK_MEDIA_DIR = resolve(root, process.env.MOCK_MEDIA_DIR ?? join("data", "media-mock"));
 
 if (existsSync(join(root, ".env"))) {
   try {
@@ -52,11 +59,18 @@ if (!/_(mock|test)$/.test(databaseName)) {
   process.exit(2);
 }
 
+if (!/-(mock|test)$/.test(basename(MOCK_MEDIA_DIR))) {
+  console.error(
+    `[mock] Abbruch: Medienordner "${MOCK_MEDIA_DIR}" endet nicht auf -mock oder -test.`,
+  );
+  process.exit(2);
+}
+
 /** Umgebung für alle Mock-Befehle. */
 const mockEnv = {
   ...process.env,
   DATABASE_URL: databaseUrl,
-  S3_BUCKET: MOCK_BUCKET,
+  MEDIA_DIR: MOCK_MEDIA_DIR,
   AUTH_URL: `http://localhost:${MOCK_PORT}`,
   AUTH_TRUST_HOST: "true",
   AUTH_SECRET:
@@ -135,7 +149,7 @@ async function seed() {
 
 async function dev() {
   console.log(
-    `[mock] Dev-Server: http://localhost:${MOCK_PORT}  (Datenbank ${databaseName}, Bucket ${MOCK_BUCKET})`,
+    `[mock] Dev-Server: http://localhost:${MOCK_PORT}  (Datenbank ${databaseName}, Bilder ${MOCK_MEDIA_DIR})`,
   );
   console.log("[mock] Anmelden per Dev-Login, z.B. admin@example.test");
   await run([bin.next, "dev", "-p", MOCK_PORT]);
@@ -161,13 +175,28 @@ try {
       // stdout ausgeben — das gehört allein dem MCP-Protokoll.
       await run([bin.tsx, "mcp/server.ts"]);
       break;
+    case "mcp-key": {
+      // Nur die festen, öffentlich bekannten Testschlüssel der Mock-Daten
+      // (prisma/mock-data.ts) — gelten ausschließlich in der Mock-Datenbank.
+      // Ausgabe: nur der Schlüssel, damit er sich direkt in eine Variable
+      // übernehmen lässt.
+      const name = process.argv[3] ?? "editor-read";
+      const script = [
+        `import("./prisma/mock-data.ts").then((m) => {`,
+        `  const t = m.generateMockData().apiTokens.find((x) => x.id === "mock-token-" + process.env.MCP_KEY_NAME);`,
+        `  if (!t) { console.error("[mock] Unbekannter Schlüssel. Verfügbar: " + m.MOCK_API_TOKEN_KEYS.join(", ")); process.exit(1); }`,
+        `  console.log(t.secret);`,
+        `});`,
+      ].join("\n");
+      await run([bin.tsx, "--eval", script], { env: { ...mockEnv, MCP_KEY_NAME: name } });
+      break;
+    }
     case "env":
       console.log(
         JSON.stringify(
           {
             DATABASE_URL: databaseUrl,
-            S3_BUCKET: MOCK_BUCKET,
-            S3_ENDPOINT: mockEnv.S3_ENDPOINT,
+            MEDIA_DIR: MOCK_MEDIA_DIR,
             AUTH_URL: mockEnv.AUTH_URL,
             NEXT_DIST_DIR: mockEnv.NEXT_DIST_DIR,
           },
@@ -177,7 +206,7 @@ try {
       );
       break;
     default:
-      console.error("Aufruf: node scripts/mock.mjs <setup|seed|dev|env|mcp>");
+      console.error("Aufruf: node scripts/mock.mjs <setup|seed|dev|env|mcp|mcp-key>");
       process.exit(1);
   }
 } catch (err) {

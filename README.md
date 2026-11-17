@@ -26,11 +26,17 @@ Bildarchiv und rollenbasierter Benutzerverwaltung.
   Jahresachse, bei dem früher Geborene weiter oben stehen und Hochzeiten als
   eigene Ereignisse einsortiert werden
 - **Bilder** — Upload pro Person, frei wählbares Primärbild (erscheint im
-  Stammbaum), eigene Bilder an Hochzeiten, automatische Vorschaubilder,
-  Auslieferung nur an angemeldete Nutzer
+  Stammbaum), eigene Bilder an Hochzeiten, automatische Vorschaubilder;
+  abgelegt als WebP-Dateien in einem Ordner (`MEDIA_DIR`), ausgeliefert nur
+  durch die App an angemeldete Nutzer
 - **Export und Import** — JSON oder ZIP inklusive Bilddateien, Import mit
   Vorschau und Zusammenführung
-- **Änderungsprotokoll** — jede Mutation landet im `AuditLog`
+- **KI-Zugang** — KI-Assistenten (Claude Code, Claude Desktop) recherchieren
+  über die MCP-Schnittstelle der App mit und tragen auf Wunsch Ergebnisse samt
+  Belegen ein; nur mit vom Administrator freigegebenem Recht, persönlichem
+  Schlüssel und den Familienrechten des Benutzers ([KI-Zugang](#ki-zugang-mcp))
+- **Änderungsprotokoll** — jede Mutation landet im `AuditLog`, Änderungen
+  durch die KI mit dem verwendeten Schlüssel
 
 ## Technik
 
@@ -39,8 +45,9 @@ Bildarchiv und rollenbasierter Benutzerverwaltung.
 | Frontend + API | Next.js 15 (App Router), TypeScript, Tailwind |
 | Datenbank | PostgreSQL 17 + Prisma |
 | Anmeldung | Auth.js v5 (GitHub, Google, Dev-Login) |
-| Bilder | MinIO (S3-kompatibel), sharp |
+| Bilder | Dateien im Medienordner (`MEDIA_DIR`), sharp |
 | Visualisierung | React Flow (Layout selbst geschrieben, `lib/layout-generations.ts`) |
+| KI-Schnittstelle | MCP (`@modelcontextprotocol/sdk`), Streamable HTTP unter `/api/mcp`, Anmeldung mit persönlichem Schlüssel |
 | Betrieb | Docker Compose (Portainer), Images aus GitHub Actions über ghcr.io |
 
 ## Lokal starten
@@ -49,7 +56,7 @@ Bildarchiv und rollenbasierter Benutzerverwaltung.
 cp .env.example .env      # AUTH_SECRET und INITIAL_ADMIN_EMAIL anpassen
 npm install
 
-docker compose -f docker-compose.dev.yml up -d   # Postgres + MinIO
+docker compose -f docker-compose.dev.yml up -d   # Postgres
 npm run db:push                                   # Schema anlegen
 npm run db:seed                                   # Admin + Demofamilie
 npm run dev
@@ -57,11 +64,36 @@ npm run dev
 
 → http://localhost:3000
 
-MinIO ist lokal unter **Port 9100** (S3-API) und **9101** (Web-Konsole)
-erreichbar, nicht unter dem Standardport 9000 — der ist auf manchen Rechnern
-belegt (z.B. durch Zscaler). Andere Ports über `MINIO_API_PORT` /
-`MINIO_CONSOLE_PORT` beim `docker compose`-Aufruf setzen und `S3_ENDPOINT` in
-der `.env` anpassen.
+Bilder legt die App als Dateien unter `MEDIA_DIR` ab (lokal `./data/media`,
+per `.gitignore` ausgenommen; der Ordner wird bei Bedarf angelegt). Der
+Schlüssel in der Datenbank (`MediaAsset.storageKey`, z.B.
+`originals/<uuid>.webp`, Vorschau unter `thumbs/`) ist der relative Pfad
+darunter. `GET /api/health` meldet `error`, wenn der Ordner nicht beschreibbar
+ist; der genaue Grund steht im Server-Log.
+
+### Umstieg von MinIO (ältere Installationen)
+
+Frühere Versionen legten die Bilder in einem MinIO-Bucket ab. Die Schlüssel
+sind unverändert, die Dateien müssen nur einmal aus dem Bucket in den
+Medienordner kopiert werden. MinIOs Datenordner (z.B. `data/dev-minio`)
+enthält keine normalen Dateien — kopiert wird deshalb über den noch laufenden
+MinIO-Container (Namen mit `docker ps` ermitteln; Zugangsdaten und Bucket wie
+bisher in der `.env`, lokal `minioadmin`/`familytree`):
+
+```bash
+C=familiy-tree-storage-1           # Name des MinIO-Containers
+docker exec $C sh -c 'mc alias set alt http://localhost:9000 minioadmin minioadmin >/dev/null &&
+  rm -rf /tmp/media-export && mc mirror alt/familytree /tmp/media-export'
+mkdir -p data/media
+docker cp $C:/tmp/media-export/. data/media/
+docker exec $C rm -rf /tmp/media-export
+```
+
+Zur Kontrolle muss die Zahl der Dateien unter `data/media` zur Zahl der
+Schlüssel in der Datenbank passen
+(`SELECT count(*) + count("thumbnailKey") FROM "MediaAsset";`). Danach werden
+Container und `data/dev-minio` nicht mehr gebraucht; `docker compose up`
+meldet den Container bis dahin als verwaist („orphan“).
 
 Ohne konfiguriertes OAuth greift der **Dev-Login** (`ENABLE_DEV_LOGIN=true`):
 E-Mail eingeben, kein Passwort. Er funktioniert nur mit `NODE_ENV=development`
@@ -83,15 +115,101 @@ erreichbar oder leer ist — vorher also `npm run mock:setup`. Die Tests greifen
 nie auf die normale Datenbank zu; schreibende Tests räumen ihre eigenen
 Datensätze wieder ab.
 
+### Tests
+
+**Unit- und Dienst-Tests** (Vitest, Ordner `tests/`): `npm test`. Ohne
+laufende Mock-Datenbank überspringen sich die `*.db.test.ts` mit Hinweis, der
+Rest läuft trotzdem (so auch in der CI).
+
+**End-to-End-Tests** (Playwright, Ordner `e2e/`) bedienen die App im Browser
+(Chromium) gegen die Mock-Umgebung.
+
+Voraussetzungen: Docker Desktop läuft (`docker compose -f
+docker-compose.dev.yml up -d` — Postgres), die Mock-Datenbank ist
+einmal angelegt (`npm run mock:setup`), und einmalig `npx playwright install
+chromium`.
+
+| Befehl | Zweck | Dauer (Dev-Server warm) |
+|---|---|---|
+| `npm run test:e2e` | alles: setup → read → write | ca. 7–8 min |
+| `npm run test:e2e:setup` | nur Ausgangszustand: Mock-Daten neu, Anmeldungen, Vorwärmen | ca. 1:15 min |
+| `npm run test:e2e:read` | setup + lesende Tests (`e2e/read/`, 106 Tests, 4 parallel) | ca. 3 min ohne Setup (frisch kompiliert gut 4 min) |
+| `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 42 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 3 min ohne Setup |
+| `npm run test:e2e:headed` | alles mit sichtbarem Browser, ein Test nach dem anderen | |
+| `npm run test:e2e:ui` | Playwright-Oberfläche: Tests einzeln starten, Schritte ansehen | |
+| `npm run test:e2e:report` | HTML-Bericht des letzten Laufs öffnen | |
+
+Alle `test:e2e*`-Befehle reichen weitere Argumente an `playwright test`
+durch (nach `--`), z.B. eine einzelne Datei oder einen Testnamen:
+
+```bash
+npm run test:e2e:write -- e2e/write/sources.spec.ts
+npm run test:e2e:read -- e2e/read/permissions.spec.ts -g "Betrachter"
+npm run test:e2e -- e2e/read/export.spec.ts e2e/write/media.spec.ts
+```
+
+Mit Filter (Datei oder `-g`) läuft `npm run test:e2e` in drei Schritten
+nacheinander: Setup, die passenden lesenden, dann die passenden ändernden
+Tests. Sonst zöge ein Filter auf eine `write`-Datei alle lesenden Tests als
+Abhängigkeit mit. Der HTML-Bericht enthält danach nur den letzten Schritt.
+
+**Setup überspringen:** Ist der Ausgangszustand schon vorbereitet (gerade
+`npm run test:e2e:setup` gelaufen, Dev-Server läuft noch), spart
+`--skip-setup` (oder Umgebungsvariable `E2E_SKIP_SETUP=1`) die gut eine
+Minute Setup: `npm run test:e2e:write -- --skip-setup e2e/write/sources.spec.ts`.
+Die ändernden Tests räumen ihre Datensätze selbst ab und lassen sich daher
+mehrfach hintereinander ohne neues Setup laufen; die lesenden zählen gegen den
+frisch befüllten Stand und brauchen ein Setup, nachdem ändernde Tests liefen.
+
+Tipp für schnelles Arbeiten: `npm run dev:mock` in einem eigenen Terminal
+starten — Playwright benutzt ihn mit, und nicht jeder Lauf zahlt den Kaltstart.
+
+**Auf mehrere Terminals verteilen (Sharding):** einmal `npm run
+test:e2e:setup`, dann in jedem Terminal einen Teil mit `--skip-setup` — etwa
+`npm run test:e2e:read -- --skip-setup --shard=1/2` und
+`npm run test:e2e:read -- --skip-setup --shard=2/2`. Ohne `--skip-setup`
+würde jeder Teil die Mock-Daten neu aufbauen, während die anderen noch laufen.
+Die ändernden Tests erst nach den lesenden starten (sie verändern Zählungen).
+Mehr Parallelität bringt gegen den Dev-Server wenig: 4 statt 2 Worker für die
+ändernden Tests waren langsamer und liefen in Zeitüberschreitungen.
+
+Ablauf: Playwright startet `npm run dev:mock` auf Port 3100 (läuft dort schon
+ein Server, wird er mitbenutzt und hinterher nicht beendet — bewusst der
+Dev-Server, weil der Dev-Login in Produktion abgeschaltet ist). Das Projekt
+`setup` baut die Mock-Daten neu auf (`npm run db:mock`), meldet jede Rolle
+einmal an (`e2e/.auth/`) und ruft die Seiten einmal auf, damit Next.js sie
+vorab kompiliert. Danach laufen die lesenden Tests (`e2e/read/`) parallel, erst
+dann die ändernden (`e2e/write/`); diese legen eigene, „E2E …“ benannte
+Datensätze an und räumen sie wieder ab. Jeder Test schlägt außerdem fehl, wenn
+im Browser ein unerwarteter Konsolenfehler oder eine nicht abgefangene
+Ausnahme auftritt (`e2e/support/fixtures.ts`). Die Tests sprechen nur mit der
+App (Browser und HTTP-API), nie direkt mit Datenbank oder Medienordner. Den
+KI-Zugang prüfen `e2e/write/ai-access.spec.ts` (Recht vergeben, Schlüssel
+anlegen und widerrufen) und `e2e/read/mcp-http.spec.ts` (`/api/mcp` mit den
+festen Mock-Schlüsseln; abgelehnte Anfragen mit zufälliger
+`X-Forwarded-For`-Adresse, damit wiederholte Läufe gegen denselben
+Dev-Server nicht in die Sperre nach Fehlversuchen laufen).
+
+**Fehlersuche bei einem roten E2E-Test:**
+
+- `npm run test:e2e:report` öffnen; bei Fehlschlägen liegen dort Screenshot
+  und Trace (`npx playwright show-trace test-results/…/trace.zip` zeigt jeden
+  Schritt mit DOM, Netzwerk und Konsole).
+- Den Test einzeln und sichtbar wiederholen:
+  `npm run test:e2e:write -- --skip-setup e2e/write/sources.spec.ts --headed -g "Quelle löschen"`.
+- Wackelt ein Test, mit `--repeat-each=3` wiederholen.
+- Nach einem abgebrochenen Lauf können „E2E …“-Datensätze übrig sein — das
+  nächste Setup baut die Mock-Daten ohnehin neu auf.
+
 ## Mock-Daten
 
 Für Entwicklung, Tests und Vorführungen gibt es einen deterministischen
 Testdatensatz in einer **eigenen Datenbank** (`familytree_mock`) und einem
-**eigenen Bucket** (`familytree-mock`) — die normale Datenbank bleibt
-unberührt.
+**eigenen Medienordner** (`./data/media-mock`) — die normale Datenbank und
+`./data/media` bleiben unberührt.
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d   # Postgres + MinIO
+docker compose -f docker-compose.dev.yml up -d   # Postgres
 npm run mock:setup    # Datenbank anlegen, Schema anwenden, befüllen, Bilder erzeugen
 npm run dev:mock      # Dev-Server gegen die Mock-Daten: http://localhost:3100
 ```
@@ -107,10 +225,11 @@ Die Befehle laufen über `scripts/mock.mjs` (plattformunabhängig, auch unter
 Windows). Der Name der Mock-Datenbank wird aus `DATABASE_URL` abgeleitet
 (`…/familytree` → `…/familytree_mock`) oder über `MOCK_DATABASE_URL` gesetzt.
 `prisma/seed-mock.ts` verweigert den Dienst, wenn der Datenbankname nicht auf
-`_mock` oder `_test` endet. Jeder Lauf leert Mock-Datenbank und Mock-Bucket und
-baut alles neu auf; das Ergebnis ist bei jedem Lauf identisch, einschließlich
-der IDs (`mock-p-001`, `mock-r-0001`, `mock-family-a`, …). Ist MinIO nicht
-erreichbar, wird ohne Bilder befüllt (mit Warnung).
+`_mock` oder `_test` endet, und ebenso, wenn der Medienordner nicht auf `-mock`
+oder `-test` endet (anderer Ordner über `MOCK_MEDIA_DIR`). Jeder Lauf leert
+Mock-Datenbank und Mock-Medienordner und baut alles neu auf; das Ergebnis ist
+bei jedem Lauf identisch, einschließlich der IDs (`mock-p-001`, `mock-r-0001`,
+`mock-family-a`, …).
 
 **Inhalt** (Generator: `prisma/mock-data.ts`, auch direkt in Tests nutzbar;
 Quellen `mock-s-01` … `mock-s-09`, Belege `mock-c-001` …):
@@ -139,13 +258,24 @@ Die IDs dieser Sonderfälle liefert `generateMockData().landmarks`.
 
 **Benutzer** (Anmeldung per Dev-Login, nur E-Mail):
 
-| E-Mail | Rolle | Familien |
-|---|---|---|
-| `admin@example.test` | Administrator | alle |
-| `editor@example.test` | Bearbeiter | A bearbeiten, B lesen |
-| `viewer@example.test` | Betrachter | A lesen |
-| `nofamily@example.test` | Betrachter | keine |
-| `blocked@example.test` | gesperrt | (A lesen) — Anmeldung schlägt fehl |
+| E-Mail | Rolle | Familien | KI-Zugang |
+|---|---|---|---|
+| `admin@example.test` | Administrator | alle | lesen und schreiben |
+| `editor@example.test` | Bearbeiter | A bearbeiten, B lesen | lesen und schreiben |
+| `viewer@example.test` | Betrachter | A lesen | lesen |
+| `nofamily@example.test` | Betrachter | keine | kein Zugang |
+| `blocked@example.test` | gesperrt | (A lesen) — Anmeldung schlägt fehl | (lesen) |
+
+**Feste KI-Schlüssel** für Tests und Entwicklung, ebenfalls deterministisch
+(`npm run -s mcp:key <name>` gibt den Schlüssel aus, Standard `editor-read`):
+`admin-write`, `editor-write`, `editor-read`, `viewer-read`, `viewer-write`
+(Schlüssel „schreiben“ beim Betrachter mit Recht „lesen“ — wirkt nur lesend),
+`editor-revoked` (widerrufen), `editor-expired` (abgelaufen),
+`nofamily-read` (Benutzer ohne KI-Recht → 403), `blocked-read` (gesperrter
+Benutzer → 401). Sie stehen öffentlich im Repository
+([prisma/mock-data.ts](prisma/mock-data.ts)) und existieren nur in der
+Mock-Datenbank — in einer echten Installation legt sie niemand an, und dort
+funktionieren sie nicht.
 
 ## Fokus-Ansicht
 
@@ -311,22 +441,21 @@ ohne Deployment:
 
 Client-ID und Secret in die `.env` eintragen, `npm run dev` neu starten.
 
-## KI-Recherche über MCP
+## KI-Zugang (MCP)
 
-Der Ordner [mcp](mcp) enthält einen [MCP-Server](https://modelcontextprotocol.io)
-(Model Context Protocol, stdio). Damit kann ein KI-Assistent wie Claude Code
-oder Claude Desktop direkt mit den Stammbaumdaten arbeiten: Fragen zu Personen
-und Verwandtschaft beantworten, Lücken und Widersprüche finden und — nur wenn
-ausdrücklich freigeschaltet — Rechercheergebnisse eintragen.
+Ein KI-Assistent wie Claude Code oder Claude Desktop kann direkt mit den
+Stammbaumdaten arbeiten: Fragen zu Personen und Verwandtschaft beantworten,
+Lücken und Widersprüche finden und — wenn freigegeben — Rechercheergebnisse
+samt Belegen eintragen. Die App bietet dafür unter `/api/mcp` eine
+Schnittstelle nach dem [Model Context Protocol](https://modelcontextprotocol.io)
+(MCP). Der Assistent meldet sich dort mit einem **persönlichen Schlüssel** an
+und handelt dann **als dieser Benutzer**: Alles läuft über die
+[Dienstschicht](#dienstschicht), Sichtbarkeit nach Familien, Platzhalter für
+verborgene Personen („Nicht freigegeben“), Rechteprüfung, Validierung und
+Audit-Log gelten genau wie in der Weboberfläche. Einen Zugang an der App
+vorbei direkt zur Datenbank gibt es nicht.
 
-Der Server handelt immer **als ein Benutzer der App** und geht vollständig
-über die [Dienstschicht](#dienstschicht): Sichtbarkeit nach Familien,
-Platzhalter für verborgene Personen („Nicht freigegeben“), Rechteprüfung,
-Validierung und Audit-Log gelten genau wie in der Weboberfläche. Der Benutzer
-wird bei jedem Aufruf neu geladen — eine Rollenänderung oder Sperre wirkt
-sofort, ohne Neustart.
-
-### Werkzeuge
+### Was die KI kann
 
 | Werkzeug | Zweck |
 |---|---|
@@ -343,7 +472,7 @@ sofort, ohne Neustart.
 | `search_sources` | Quellen suchen (Titel, Verfasser, Archiv, Signatur; Art) mit Zahl der sichtbaren Belege |
 | `get_source` | Quelle mit Abschrift und allem, wofür sie zitiert wird (verborgene Belege nur gezählt) |
 
-Nur mit `MCP_ALLOW_WRITE=true`:
+Nur mit der Stufe „lesen und schreiben“ (siehe unten) kommen hinzu:
 
 | Werkzeug | Zweck |
 |---|---|
@@ -355,100 +484,219 @@ Nur mit `MCP_ALLOW_WRITE=true`:
 | `delete_relationship` | eine falsche Verknüpfung entfernen (die verknüpften Personen lassen sich nicht umhängen, nur löschen und neu anlegen) |
 | `set_person_families` | Familienzuordnung setzen |
 
-Personen löschen kann der Server bewusst nicht. Dazu kommen zwei
-Prompt-Vorlagen (`research_person`, `review_data_quality`) und die Ressource
-`familytree://person/{id}`. Ergebnisse sind kompaktes JSON (zusätzlich als
-`structuredContent` mit Ausgabeschema); Personen erscheinen überall als
-`{ id, name, lifespan }`. Daten stehen im ISO-Format in ihrer echten
-Genauigkeit (`1850-03-12`, `1850-03`, `1850`), dazu `…Precision`,
-`…Qualifier` und ein deutscher `…Text` („um 1850“); die Lebensspanne lautet
-z.B. „um 1850 – vor 1920“. Eingaben der Schreibwerkzeuge akzeptieren dieselben
-Formen wie die Oberfläche (`1850`, `um 1850`, `vor 1900`, `ABT 1850`, …)
-und speichern sie unverändert genau. Die Server-Anweisungen und der Prompt
-`research_person` leiten das Modell an, Erkenntnisse als Beleg
-(`create_source` + `cite_source`) festzuhalten statt nur als Notiz.
+Personen, Quellen oder Bilder löschen kann die KI bewusst nicht. Dazu kommen
+zwei Prompt-Vorlagen (`research_person`, `review_data_quality`) und die
+Ressource `familytree://person/{id}`. Die Ergebnisse sind kompaktes JSON;
+Daten stehen in ihrer echten Genauigkeit (`1850`, `um 1850`, `vor 1900` —
+siehe [Ungenaue Daten](#ungenaue-daten)), und Eingaben akzeptieren dieselben
+Formen wie die Oberfläche. Die Anweisungen an das Modell verlangen, Erkenntnisse
+als Beleg (`create_source` + `cite_source`) festzuhalten statt nur als Notiz.
 
-### Umgebungsvariablen
+### Wer darf was
 
-| Variable | Bedeutung |
+- **Der Administrator vergibt den KI-Zugang je Benutzer** unter *Benutzer*
+  (`/admin/users`, Spalte „KI-Zugang“): *kein Zugang* (Standard), *lesen*
+  oder *lesen und schreiben*. Die Rolle Administrator schließt ihn **nicht**
+  ein — auch der Admin muss ihn sich selbst ausdrücklich geben.
+- **Die Familienrechte gelten zusätzlich.** Die KI sieht nur, was der
+  Benutzer sieht, und schreibt nur in Familien, die er bearbeiten darf. „Lesen
+  und schreiben“ für einen Betrachter erlaubt also trotzdem keine Änderung.
+- **Jeder Schlüssel hat eine eigene Stufe** (lesen oder lesen und
+  schreiben). Wirksam ist die niedrigere von beiden: Schlüssel „lesen und
+  schreiben“ bei einem Benutzer mit KI-Recht „lesen“ wirkt nur lesend.
+- **Änderungen wirken sofort.** Rechte, Schlüssel und Sperre werden bei
+  jedem einzelnen Aufruf neu geprüft. Herabsetzen auf „lesen“, Entziehen,
+  Widerrufen eines Schlüssels oder Sperren des Benutzers greifen beim
+  nächsten Aufruf — ohne Neustart von App oder Assistent.
+- **Schlüssel verwaltet nur die Weboberfläche**, nie die KI selbst: Anlegen,
+  Widerrufen und Rechte vergeben gehen über die MCP-Schnittstelle nicht.
+- **Alles wird protokolliert.** Jede Änderung durch die KI steht im
+  Audit-Log unter dem Benutzer, mit Kanal `MCP` und dem verwendeten
+  Schlüssel; KI-Notizen tragen zusätzlich „KI-Recherche“ und Datum. Die
+  letzten Änderungen über die KI (auf der NAS, per SSH):
+
+  ```sh
+  docker exec familytree-db-1 psql -U familytree -d familytree -c '
+    SELECT a."createdAt", a.action, a."entityType", a."entityId", t.prefix, t.name
+    FROM "AuditLog" a LEFT JOIN "ApiToken" t ON t.id = a."apiTokenId"
+    WHERE a.channel IS NOT NULL ORDER BY a."createdAt" DESC LIMIT 50;'
+  ```
+
+Alles, was der Assistent abruft, geht an den jeweiligen KI-Anbieter — bei
+lebenden Personen bedenken.
+
+### Einrichten: Schritt für Schritt
+
+1. **Recht geben.** Als Administrator unter *Benutzer* beim eigenen Konto
+   „KI-Zugang“ auf *lesen* stellen (für die Recherche genügt das; *lesen und
+   schreiben* erst, wenn die KI auch eintragen soll).
+2. **Schlüssel anlegen.** In der Navigation erscheint *KI-Zugang*
+   (`/ai-access`, jeder Benutzer verwaltet dort seine eigenen Schlüssel).
+   Namen vergeben, der sagt, wo der Schlüssel liegt (z.B. „Laptop – Claude
+   Code“), Stufe und Gültigkeit wählen (Standard 90, höchstens 365 Tage),
+   *Anlegen*. Der Schlüssel (`ftk_…`) wird **genau einmal** angezeigt —
+   gleich kopieren. Die Seite zeigt dazu die Adresse der Schnittstelle
+   (`<PUBLIC_URL>/api/mcp`) und den fertigen Befehl für Claude Code.
+3. **Claude Code verbinden** (in einem Terminal, einmal je Rechner):
+
+   ```bash
+   claude mcp add --transport http --scope user stammbaum https://stammbaum.example.de/api/mcp --header "Authorization: Bearer ftk_…"
+   ```
+
+   `--scope user` macht den Stammbaum in allen Projekten verfügbar. Prüfen:
+   `claude mcp list` zeigt `stammbaum: … ✔ Connected`. Der Schlüssel steht
+   danach im Klartext in der Benutzerkonfiguration von Claude Code
+   (`%USERPROFILE%\.claude.json` unter Windows, `~/.claude.json` sonst) —
+   nicht in einem Projektordner, nicht im Repository. Entfernen:
+   `claude mcp remove stammbaum --scope user` (löscht ihn aus der Datei);
+   danach den Schlüssel in der App widerrufen.
+4. **Claude Desktop verbinden** (nur nach Dokumentation, *hier nicht
+   getestet*). Claude Desktop spricht MCP-Server mit eigenem Schlüssel über
+   die Brücke [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) an
+   (braucht Node.js). In `%APPDATA%\Claude\claude_desktop_config.json`
+   (Windows) bzw. `~/Library/Application Support/Claude/claude_desktop_config.json`
+   (macOS):
+
+   ```json
+   {
+     "mcpServers": {
+       "stammbaum": {
+         "command": "npx",
+         "args": [
+           "-y", "mcp-remote", "https://stammbaum.example.de/api/mcp",
+           "--header", "Authorization:${AUTH_HEADER}"
+         ],
+         "env": { "AUTH_HEADER": "Bearer ftk_…" }
+       }
+     }
+   }
+   ```
+
+   Kein Leerzeichen nach `Authorization:` — der Wert kommt aus `env`, weil
+   Leerzeichen in `args` unter Windows nicht sicher ankommen. Bei einer
+   `http://`-Adresse (nicht `localhost`) zusätzlich `"--allow-http"` an die
+   `args` anhängen. Danach Claude Desktop neu starten. Der Schlüssel steht
+   im Klartext in dieser Datei; zum Entfernen den Eintrag löschen und den
+   Schlüssel widerrufen.
+5. **claude.ai im Browser und die Claude-App auf dem Telefon** können sich
+   **nicht** verbinden, solange der Stammbaum nur im Heimnetz erreichbar ist:
+   Ihre „Connectors“ werden von Anthropics Servern aus aufgerufen, nicht vom
+   eigenen Gerät, und erreichen die NAS deshalb nicht. Außerdem melden sie
+   sich per OAuth an, nicht mit einem festen Schlüssel. Ein Zugang dafür
+   (OAuth) ist als eigener Schritt geplant.
+
+### Schlüssel richtig verwenden
+
+- **Ein Schlüssel je Gerät und Zweck** — dann lässt sich einer gezielt
+  widerrufen, und die Liste auf `/ai-access` zeigt je Schlüssel, wann er
+  zuletzt benutzt wurde. Höchstens 10 aktive Schlüssel je Benutzer.
+- **Standardmäßig „lesen“.** Einen Schlüssel „lesen und schreiben“ nur
+  anlegen, wenn die KI wirklich eintragen soll.
+- **Ablauf:** Schlüssel laufen nach der gewählten Zeit ab (Standard 90 Tage)
+  und antworten dann mit 401; dann einen neuen anlegen und im Client
+  austauschen (`claude mcp remove …` und neu `add`).
+- **Schlüssel verraten?** (z.B. in einen Chat, eine Datei im Repository oder
+  einen Screenshot geraten): sofort auf `/ai-access` widerrufen — wirkt beim
+  nächsten Aufruf. Der Administrator kann unter *Benutzer* über „Schlüssel:
+  … aktiv“ jeden Schlüssel widerrufen oder das KI-Recht entziehen. Alle
+  Schlüssel beginnen mit `ftk_` und lassen sich so in Dateien suchen
+  (`git grep ftk_`, `findstr /s /c:ftk_ *`); die App speichert nur einen
+  Hash und schreibt nie den ganzen Schlüssel ins Log, höchstens den Anfang
+  `ftk_<12 Zeichen>`, wie er auch in der Schlüsselliste steht.
+
+### Schnittstelle (Kurzreferenz)
+
+| | |
 |---|---|
-| `MCP_USER_EMAIL` | **Pflicht.** E-Mail des Benutzers, als der der Server handelt. Unbekannt oder gesperrt → Start wird abgebrochen. |
-| `MCP_ALLOW_WRITE` | `true` schaltet die Schreibwerkzeuge frei. Standard: aus (nur lesen). |
-| `DATABASE_URL` | Datenbank wie bei der App. Ohne Angabe gilt die `.env` im Projektordner — unabhängig davon, aus welchem Verzeichnis der Client den Server startet. |
+| Adresse | `<PUBLIC_URL>/api/mcp` |
+| Verfahren | MCP „Streamable HTTP“, nur `POST`, zustandslos, Antworten als JSON (kein SSE, kein WebSocket) |
+| Anmeldung | nur `Authorization: Bearer ftk_…` — die Anmeldung der Weboberfläche (Cookie) zählt nicht, Schlüssel in der URL ebenso wenig |
+| Origin | Anfragen ohne `Origin`-Header (Claude Code, `mcp-remote`) sind erlaubt; mit `Origin` nur die eigene Adresse (`PUBLIC_URL`) oder Einträge in `MCP_ALLOWED_ORIGINS` (kommagetrennt). Das braucht nur ein MCP-Client, der im Browser läuft (z.B. der MCP Inspector) — die Variable reicht der Stack nicht durch |
+| Größe | Anfrage höchstens 1 MiB |
 
-### Starten
+| Status | Bedeutung |
+|---|---|
+| 200 | in Ordnung |
+| 401 | Schlüssel fehlt, ist falsch, widerrufen oder abgelaufen, oder der Benutzer ist gesperrt — bewusst ohne Angabe des Grundes |
+| 403 | Schlüssel gültig, aber der Benutzer hat kein KI-Recht (mehr); oder fremder `Origin` |
+| 405 | andere Methode als `POST` |
+| 413 | Anfrage größer als 1 MiB |
+| 429 | nach 20 fehlgeschlagenen Anmeldungen von derselben Adresse innerhalb von 10 Minuten — bis zum Ende dieser 10 Minuten, auch mit richtigem Schlüssel (`Retry-After` nennt die Sekunden). Ein Neustart der App hebt die Sperre auf |
 
-```bash
-npm run -s mcp:mock    # gegen die Mock-Datenbank (wie npm run dev:mock)
-npm run -s mcp         # gegen DATABASE_URL laut .env
-```
+### Fehlersuche KI-Zugang
 
-`-s` ist wichtig: ohne schreibt npm seine Kopfzeile auf stdout, das allein dem
-Protokoll gehört. Der Server selbst leitet alle übrigen
-Ausgaben (auch Prisma) nach stderr um. MCP-Clients startet man am besten ohne
-npm direkt mit `node`, wie unten.
+| Symptom | Ursache / Abhilfe |
+|---|---|
+| `claude mcp list`: „Server rejected the configured Authorization header (HTTP 401)“ | Schlüssel abgelaufen, widerrufen, falsch kopiert, oder der Benutzer ist gesperrt. Auf `/ai-access` nachsehen, ggf. neuen Schlüssel anlegen |
+| 403 | KI-Recht fehlt oder wurde entzogen — Administrator fragen (*Benutzer*, Spalte „KI-Zugang“) |
+| 429 | zu viele Fehlversuche, meist ein Client mit altem Schlüssel in einer Schleife. Den Client korrigieren und 10 Minuten warten |
+| 401, obwohl der Schlüssel stimmt; im Browser funktioniert die App | Der Reverse-Proxy reicht den `Authorization`-Header nicht durch — siehe [Reverse-Proxy](#reverse-proxy) |
+| Alle KI-Clients bekommen gleichzeitig 429 | Der Proxy setzt kein `X-Forwarded-For`; dann sieht die App alle Anfragen von derselben Adresse und sperrt alle zusammen |
+| Entwicklung: „Missing environment variables: FAMILYTREE_MCP_KEY“ bzw. `familytree-mock` fehlt in `claude mcp list` | Variable vor dem Start von Claude Code setzen (siehe unten) |
 
-**Claude Code:** Die Datei [.mcp.json](.mcp.json) im Projekt registriert den
-Server `familytree-mock` — Mock-Datenbank, Benutzer `admin@example.test`,
-nur lesend. Claude Code fragt beim ersten Öffnen des Projekts, ob es den Server
-zulassen soll. Er wird mit `node scripts/mock.mjs mcp` gestartet (kein `npx`,
-das unter Windows nur über `cmd /c` liefe).
+### Entwicklung und Tests
 
-**Gegen die echte Datenbank** einen eigenen Eintrag anlegen, am besten
-benutzerbezogen statt im Projekt, z.B.:
+Für die Entwicklung läuft alles gegen die [Mock-Daten](#mock-daten); die
+echte Datenbank bleibt unberührt.
 
-```bash
-claude mcp add stammbaum --scope user -e MCP_USER_EMAIL=deine@mail.de -- node C:/Pfad/zu/familiy-tree/node_modules/tsx/dist/cli.mjs C:/Pfad/zu/familiy-tree/mcp/server.ts
-```
+1. `npm run dev:mock` — App gegen `familytree_mock` auf
+   `http://localhost:3100`, Schnittstelle unter
+   `http://localhost:3100/api/mcp`.
+2. Schlüssel setzen. Die Mock-Daten enthalten feste, öffentlich bekannte
+   Testschlüssel ([Mock-Daten](#mock-daten)); `npm run -s mcp:key [name]` gibt
+   einen aus (Standard `editor-read`). In dem Terminal, aus dem Claude Code
+   startet:
 
-Liegt die Datenbank auf der NAS, ist sie standardmäßig von außen nicht
-erreichbar — wie man sie bei Bedarf freischaltet, steht unter
-[Datenbank vom PC aus (MCP)](#datenbank-vom-pc-aus-mcp).
+   ```bash
+   export FAMILYTREE_MCP_KEY=$(npm run -s mcp:key)          # Bash
+   ```
 
-**Claude Desktop** (`%APPDATA%\Claude\claude_desktop_config.json` unter
-Windows):
+   ```powershell
+   $env:FAMILYTREE_MCP_KEY = npm run -s mcp:key             # PowerShell
+   ```
 
-```json
-{
-  "mcpServers": {
-    "stammbaum": {
-      "command": "node",
-      "args": [
-        "C:\\Pfad\\zu\\familiy-tree\\node_modules\\tsx\\dist\\cli.mjs",
-        "C:\\Pfad\\zu\\familiy-tree\\mcp\\server.ts"
-      ],
-      "env": {
-        "MCP_USER_EMAIL": "deine@mail.de",
-        "MCP_ALLOW_WRITE": "false"
-      }
-    }
-  }
-}
-```
+   Die Variable gilt nur für dieses Terminal und alles, was daraus startet.
+   Für Claude Code in VS Code also VS Code aus diesem Terminal starten
+   (`code .`; nicht eigens ausprobiert).
 
-`DATABASE_URL` kann zusätzlich in `env` stehen; sonst gilt die `.env` des
-Projekts. **Schreiben freischalten:** `MCP_ALLOW_WRITE` auf `"true"` setzen und
-den Client neu starten — die Schreibwerkzeuge erscheinen erst dann.
+3. Die Datei [.mcp.json](.mcp.json) im Projekt trägt den Server
+   `familytree-mock` (`http://localhost:3100/api/mcp`, Header
+   `Authorization: Bearer ${FAMILYTREE_MCP_KEY}`) für Claude Code ein. Beim
+   ersten Start von `claude` im Projektordner fragt Claude Code, ob es den
+   Projekt-Server zulassen soll. Ohne gesetzte Variable lässt Claude Code den
+   Server mit der Warnung „Missing environment variables“ weg.
+4. Direkt ausprobieren, ohne KI:
 
-### Sicherheit
+   ```bash
+   curl -s -X POST http://localhost:3100/api/mcp \
+     -H "Authorization: Bearer $FAMILYTREE_MCP_KEY" \
+     -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+     -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+   ```
 
-- Der Server hat **die Rechte des konfigurierten Benutzers** — nicht mehr, aber
-  auch nicht weniger. Für reine Recherche einen Betrachter-Zugang verwenden;
-  ein Administrator sieht und ändert alles, auch Personen ohne Familie.
-- Er braucht **direkten Datenbankzugriff** (`DATABASE_URL` mit Zugangsdaten) und
-  läuft deshalb lokal auf einem Rechner, der die Datenbank erreicht. Die
-  Zugangsdaten nicht in eingecheckte Dateien schreiben.
-- Alles, was der Assistent abruft, geht an den jeweiligen KI-Anbieter — bei
-  lebenden Personen bedenken.
-- Schreibzugriff ist standardmäßig aus. Jede Änderung landet im Audit-Log unter
-  dem konfigurierten Benutzer; KI-Notizen sind mit „KI-Recherche“ und Datum
-  gekennzeichnet. Personen löschen ist nicht möglich.
+   ```powershell
+   (Invoke-RestMethod -Method Post -Uri http://localhost:3100/api/mcp `
+     -Headers @{ Authorization = "Bearer $env:FAMILYTREE_MCP_KEY"; Accept = "application/json, text/event-stream" } `
+     -ContentType "application/json" -Body '{"jsonrpc":"2.0","id":1,"method":"tools/list"}').result.tools.name
+   ```
 
-Tests: `tests/mcp.db.test.ts` startet den Server über stdio mit dem SDK-Client
-gegen die Mock-Datenbank (alle Lesewerkzeuge als Admin, Maskierung als
-Betrachter — auch bei familienübergreifenden Quellen —, Schreibwerkzeuge samt
-ungenauer Daten, Quellen, Belegen und Audit-Log als Bearbeiter, Start wie in
-`.mcp.json`) und überspringt sich ohne Mock-Datenbank.
+Daneben gibt es den MCP-Server noch als eigenständigen Prozess über stdio
+([mcp/server.ts](mcp/server.ts), `npm run -s mcp:stdio`) — **nur für
+automatische Tests und Entwicklung**. Er greift ohne Schlüssel direkt auf die
+Datenbank zu und nimmt den Benutzer aus `MCP_USER_EMAIL` (Schreibwerkzeuge
+zusätzlich nur mit `MCP_ALLOW_WRITE=true` und KI-Recht „lesen und
+schreiben“). Deshalb startet er nur gegen Datenbanken, deren Name auf `_mock`
+oder `_test` endet, und bricht gegen jede andere ab — echte Daten gibt es nur
+über `/api/mcp`.
+
+Tests: `tests/mcp-http.db.test.ts` prüft den Endpunkt mit dem HTTP-Client des
+SDK (Schlüssel-Matrix, Werkzeuge je Stufe, Maskierung, Schreiben mit Audit,
+Sperre nach Fehlversuchen, Größenlimit, keine Geheimnisse im Log),
+`tests/ai-access.db.test.ts` die Rechte- und Schlüssellogik,
+`tests/mcp.db.test.ts` den stdio-Server (alle Werkzeuge, Maskierung,
+Schreiben samt ungenauer Daten, Quellen, Belegen und Audit-Log, Start wie mit
+`npm run -s mcp:stdio`). Alle überspringen sich ohne Mock-Datenbank; die
+E2E-Tests dazu stehen unter [Tests](#tests).
 
 ## Betrieb auf der NAS (Portainer)
 
@@ -463,27 +711,31 @@ git push (main)
         ├─ baut und lädt nach ghcr.io:
         │    ghcr.io/soschlegel/familiy-tree          (App)
         │    ghcr.io/soschlegel/familiy-tree-migrate  (Schema + Admin)
-        │    ghcr.io/soschlegel/familiy-tree-minio    (Objektspeicher, nur bei neuer Version)
         └─ setzt Branch "deploy" auf diesen Commit
 Portainer (beobachtet "deploy") ─ lädt die Images ─ startet den Stack neu
 ```
 
 Auf der NAS wird nichts gebaut, und der Stack braucht keine Dateien aus dem
-Repository außer `docker-compose.yml` selbst.
+Repository außer `docker-compose.yml` selbst. Die übrigen Images
+(`postgres:17-alpine`, optional `caddy`) kommen unverändert von Docker Hub.
 
 **Dienste** ([docker-compose.yml](docker-compose.yml)):
 
 | Dienst | Aufgabe |
 |---|---|
 | `db` | PostgreSQL 17, kein Port nach außen |
-| `storage` | MinIO (Bilder), kein Port nach außen |
-| `storage-init` | legt beim Start den Bucket an, beendet sich |
+| `media-init` | legt den Bilderordner `media/` an, übergibt ihn der App (uid 1001) und prüft, dass sie schreiben kann; beendet sich |
 | `backup-db` | Datenbank-Dump nach `backups/` — bei jedem Start **vor** der Migration, und auf Abruf |
-| `backup-media` | spiegelt die Bilder lesbar nach `backups/media` — bei jedem Start und auf Abruf |
 | `migrate` | wendet Migrationen an, legt `INITIAL_ADMIN_EMAIL` als Admin an, beendet sich |
-| `app` | die Anwendung; startet erst nach erfolgreichem `migrate`; Port `127.0.0.1:3080` für den Proxy |
+| `app` | die Anwendung; startet erst nach erfolgreichem `media-init` und `migrate`; Bilder in `media/`; Port `127.0.0.1:3080` für den Proxy |
 | `proxy` | *optional* (Profil `caddy`): eigener Reverse-Proxy, falls keiner vorhanden ist |
-| `db-access` | *optional* (Profil `db-access`): Datenbank für den MCP-Server am PC |
+
+Der KI-Zugang braucht keinen eigenen Dienst und keinen zusätzlichen Port: er
+läuft in der App unter `/api/mcp` ([KI-Zugang](#ki-zugang-mcp)). Wer früher
+das Profil `db-access` für den MCP-Server am PC eingeschaltet hatte:
+`db-access` aus `COMPOSE_PROFILES` und `DB_ACCESS_*` aus den
+Stack-Variablen streichen (der Dienst existiert nicht mehr; ein verbliebener
+Eintrag schadet nicht, startet aber auch nichts).
 
 Alle Daten liegen als Bind-Mounts unter **einem** Pfad — genau dieses
 Verzeichnis muss die NAS-Sicherung erfassen:
@@ -491,19 +743,38 @@ Verzeichnis muss die NAS-Sicherung erfassen:
 ```
 ${DATA_ROOT}/              z.B. /volume1/docker/familytree
 ├── postgres/     Datenbank (gehört UID 70, Rechte 0700 — nicht ändern)
-├── minio/        Originalbilder + Vorschauen (MinIO-internes Format)
-├── backups/      db_<Datum>.sql.gz + media/ (lesbare Kopie der Bilder)
+├── media/        Bilder als gewöhnliche Dateien (gehört UID 1001)
+│   ├── originals/    Originale
+│   └── thumbs/       Vorschauen
+├── backups/      db_<Datum>_<Zeit>.sql.gz
 └── caddy/        nur mit Profil caddy: Zertifikate
 ```
 
+Die Dateinamen unter `media/` sind die Schlüssel aus der Datenbank. Ein
+Datenbank-Dump plus eine Kopie von `media/` ist deshalb eine vollständige
+Sicherung ([Sicherung](#sicherung)).
+
 Die Unterordner legt Docker beim ersten Start selbst an; vorher muss nur der
-gemeinsame Ordner (bei Synology meist `docker`) existieren. Der
-Postgres-Container stellt Besitzer und Rechte von `postgres/` selbst ein —
-danach in der File Station **keine** Berechtigungen auf Unterordner anwenden,
-sonst startet die Datenbank nicht mehr (Fehler „data directory has invalid
-permissions“). Alle anderen Container laufen als root und brauchen nichts.
-Auf einer Synology ist das nicht ausprobiert; siehe
-[Fehlersuche](#fehlersuche).
+gemeinsame Ordner (bei Synology meist `docker`) existieren. Besitzer und
+Rechte richten die Container selbst ein:
+
+- `postgres/` — der Postgres-Container (UID 70, `0700`).
+- `media/` — der Einmal-Dienst `media-init`. Docker legt fehlende Ordner als
+  root an; die App läuft aber bewusst nicht als root, sondern als UID 1001.
+  `media-init` (läuft als root, aus dem ohnehin geladenen Postgres-Image)
+  übereignet deshalb bei jedem Start alles in `media/`, was nicht UID 1001
+  gehört — beim ersten Start den leeren Ordner, nach einer Wiederherstellung
+  die zurückkopierten Dateien, sonst nichts — und prüft mit einer
+  Testdatei, dass die App dort schreiben kann. Klappt das nicht, bricht er
+  mit Hinweis ab und die App startet nicht (siehe
+  [Fehlersuche](#fehlersuche), Bilderordner).
+- `backups/`, `caddy/` — Container, die als root laufen; nichts zu tun.
+
+Danach in der File Station **keine** Berechtigungen auf diese Unterordner
+anwenden (insbesondere nicht „auf Unterordner und Dateien anwenden“) — sonst
+startet die Datenbank nicht mehr („data directory has invalid permissions“)
+oder die App kann keine Bilder mehr speichern. Auf einer Synology ist das
+nicht ausprobiert.
 
 ### Erste Installation
 
@@ -512,12 +783,11 @@ Umgebungsvariablen und Docker Compose v2), ausgehender Internetzugang der NAS
 (Images laden, OAuth-Anmeldung).
 
 1. **Images bauen lassen.** Auf `main` pushen (oder unter *Actions → Images →
-   Run workflow* von Hand starten) und warten, bis der Lauf grün ist. Der
-   erste Lauf dauert länger, weil MinIO aus dem Quelltext gebaut wird. Danach
-   gibt es den Branch `deploy`.
+   Run workflow* von Hand starten) und warten, bis der Lauf grün ist (ca.
+   5–10 min). Danach gibt es den Branch `deploy`.
 2. **Pakete freigeben.** Neue Pakete auf ghcr.io sind privat, auch bei einem
-   öffentlichen Repository. Für jedes der drei Pakete (`familiy-tree`,
-   `familiy-tree-migrate`, `familiy-tree-minio`): GitHub → Profil →
+   öffentlichen Repository. Für beide Pakete (`familiy-tree` und
+   `familiy-tree-migrate`): GitHub → Profil →
    *Packages* → Paket → *Package settings* → *Danger Zone* → *Change
    visibility* → *Public* → Namen bestätigen. (Lässt sich nicht rückgängig
    machen; die Images enthalten keine Geheimnisse.)
@@ -546,17 +816,20 @@ Umgebungsvariablen und Docker Compose v2), ausgehender Internetzugang der NAS
      [Updates](#updates))
    - *Environment variables:* *Advanced mode* → Inhalt von
      [stack.env.example](stack.env.example) einfügen und die Werte ausfüllen.
-     Pflicht: `DATA_ROOT`, `POSTGRES_PASSWORD`, `S3_ACCESS_KEY`,
-     `S3_SECRET_KEY`, `AUTH_SECRET`, `PUBLIC_URL`, `INITIAL_ADMIN_EMAIL` und
-     mindestens ein OAuth-Paar. Zufallswerte mit `openssl rand -hex 32` (für
-     `AUTH_SECRET`: `openssl rand -base64 32`) — Passwörter nur aus
-     Hex-Zeichen, weil `POSTGRES_PASSWORD` in einer URL steht.
+     Pflicht: `DATA_ROOT`, `POSTGRES_PASSWORD`, `AUTH_SECRET`, `PUBLIC_URL`,
+     `INITIAL_ADMIN_EMAIL` und mindestens ein OAuth-Paar. Nur zwei
+     Zufallswerte: `POSTGRES_PASSWORD` mit `openssl rand -hex 32` (nur
+     Hex-Zeichen, weil es in einer URL steht), `AUTH_SECRET` mit
+     `openssl rand -base64 32`.
      `ENABLE_DEV_LOGIN` **nicht** setzen (der Stack schaltet ihn ohnehin ab).
    - *Deploy the stack.*
-6. **Start prüfen.** *Stacks → familytree*: `migrate` ist „exited“ mit
-   Code 0 und zeigt im Log `[migrate] Fertig.`; `app` steht auf
-   „healthy“. Auf der NAS: `curl http://127.0.0.1:3080/api/health` →
-   `{"status":"ok"}`.
+6. **Start prüfen.** *Stacks → familytree*: `media-init` und `migrate` sind
+   „exited“ mit Code 0 (Logs: `[media-init] Bilderordner bereit …` bzw.
+   `[migrate] Fertig.`); `app` steht auf „healthy“. Auf der NAS:
+   `curl http://127.0.0.1:3080/api/health` → `{"status":"ok"}` — das prüft
+   Datenbank **und** Schreibrecht auf `media/` samt `originals/` und
+   `thumbs/`. `ls -lnd
+   /volume1/docker/familytree/media` zeigt den Ordner mit Besitzer `1001`.
 7. **Reverse-Proxy einrichten**, siehe [Reverse-Proxy](#reverse-proxy).
 8. **Erste Anmeldung:** `PUBLIC_URL` öffnen, mit dem GitHub-/Google-Konto
    anmelden, dessen E-Mail `INITIAL_ADMIN_EMAIL` ist. Weitere Personen unter
@@ -619,8 +892,9 @@ Für den Proxy wichtig:
 | Ziel | `http://127.0.0.1:3080` (bzw. LAN-IP der NAS, siehe NPM) |
 | Upload-Größe | Bilder bis 15 MB (`MAX_UPLOAD_BYTES`), ZIP-Importe unter *Daten* (`/admin/data`) deutlich mehr — Limit mindestens 20 MB, besser 1 GB |
 | Zeitlimit | großer ZIP-Import kann über 60 s dauern — Lese-Timeout 300 s |
-| Header | `Host` unverändert durchreichen; `X-Forwarded-For`/`-Proto` schaden nicht |
-| WebSocket | nicht nötig |
+| Header | `Host` unverändert durchreichen; `Authorization` durchreichen (KI-Zugang; tun alle drei unten ohne Zutun); `X-Forwarded-For` mit der Adresse des Clients **anhängen** — daran hängt die Sperre nach Fehlversuchen am KI-Zugang. Fehlt der Header, teilen sich alle KI-Clients eine Sperre |
+| WebSocket, SSE | nicht nötig (auch nicht für den KI-Zugang) |
+| Erreichbarkeit | die App nur über den Proxy: `APP_BIND` nie auf `0.0.0.0` — wer die App direkt erreicht, kann `X-Forwarded-For` selbst setzen |
 
 **Synology (DSM 7)** — Systemsteuerung → Anmeldeportal → Erweitert →
 Reverse Proxy → Erstellen:
@@ -638,6 +912,12 @@ Upload-Limit lässt sich in der DSM-Oberfläche nicht einstellen — nach dem
 Einrichten ein Bild mit ~15 MB hochladen. Kommt „413 Request Entity Too
 Large“, ist der DSM-Proxy für diese App ungeeignet; dann Nginx Proxy Manager
 oder das Caddy-Profil verwenden. (Nicht auf einer Synology ausprobiert.)
+
+`X-Forwarded-For` setzen DSM, NPM und Caddy nach ihrer Standardkonfiguration
+selbst; auf der NAS ist das nicht geprüft. Prüfen lässt es sich mit einem
+absichtlich falschen KI-Schlüssel von einem anderen Gerät aus: `docker logs
+familytree-app-1 2>&1 | grep mcp-http` muss bei `Absender` die Adresse dieses
+Geräts zeigen, nicht `127.0.0.1` oder die des Proxys.
 
 **Nginx Proxy Manager** — läuft meist selbst in einem Container; dort zeigt
 `127.0.0.1` auf NPM selbst. Deshalb im Stack `APP_BIND` auf die LAN-IP der NAS
@@ -707,28 +987,16 @@ wieder auf `latest` setzen.
 
 **Von Hand aktualisieren:** *Stacks → familytree → Pull and redeploy*.
 
-### Datenbank vom PC aus (MCP)
-
-Der [MCP-Server](#ki-recherche-über-mcp) braucht direkten Zugriff auf die
-Datenbank. Standardmäßig ist sie von außen **nicht** erreichbar. Bei Bedarf:
-
-1. Stack-Variablen `COMPOSE_PROFILES=db-access` und `DB_ACCESS_BIND=<LAN-IP
-   der NAS>` (Port: `DB_ACCESS_PORT`, Standard `15432`) setzen, *Update the
-   stack*. Der Dienst `db-access` leitet diesen Port an die Datenbank weiter;
-   `db` selbst veröffentlicht weiterhin nichts.
-2. Am PC: `DATABASE_URL=postgresql://familytree:<POSTGRES_PASSWORD>@<LAN-IP>:15432/familytree`
-   in der MCP-Konfiguration (`env`) eintragen.
-3. Danach Variablen wieder entfernen und *Update the stack* — `db-access`
-   verschwindet.
-
-Sicherheit: Das ist der Eigentümer-Zugang zur Datenbank — wer ihn hat, kann
-alles lesen und ändern, an Rechteprüfung und Audit-Log vorbei. Nur auf die
-LAN-IP binden, nie im Router freigeben, nur so lange wie nötig. Über VPN
-verbundene Geräte erreichen ihn ebenfalls. Vorsichtiger: `DB_ACCESS_BIND`
-auf `127.0.0.1` lassen und per SSH-Tunnel zugreifen
-(`ssh -N -L 15432:127.0.0.1:15432 <benutzer>@<nas>`, dann
-`@localhost:15432` in der URL) — setzt SSH auf der NAS mit erlaubter
-Portweiterleitung voraus (bei DSM nicht geprüft).
+**Was ein Neustart des Stacks tut** (lokal nachgeprüft): Hat sich das
+App-Image geändert, hält Compose die alte App **zuerst** an und startet die
+neue erst nach `media-init`, `backup-db` und `migrate` — eine Migration läuft
+also nie neben der alten App. Ohne neues Image (*Update the stack* ohne
+Änderung) laufen die drei Einmal-Jobs erneut, die App läuft dabei weiter;
+das ist harmlos, weil `migrate deploy` dann nichts einzuspielen hat (gleiches
+Migrator-Image, gleiche Migrationen). Nur wer eine **nicht
+abwärtskompatible** Migration ohne passendes neues App-Image einspielt
+(z.B. `IMAGE_TAG` nur teilweise umgestellt), sollte vorher
+`docker stop familytree-app-1` ausführen.
 
 ### Fehlersuche
 
@@ -743,13 +1011,42 @@ NAS `docker logs familytree-migrate-1` (bzw. `-app-1`, `-backup-db-1`, …).
 | `app` startet nicht, `migrate` Exit ≠ 0 | Log von `migrate` lesen; „ABBRUCH: Die Schemaänderung ist nicht rein ergänzend“ → [Schema und Migrationen](#schema-und-migrationen) |
 | `migrate` startet nicht, `backup-db` Exit ≠ 0 | Sicherung fehlgeschlagen (Platz, Rechte auf `backups/`) — die Migration läuft absichtlich nicht ohne Sicherung |
 | `db` startet nicht: „invalid permissions“ / „Operation not permitted“ | Rechte von `postgres/` verändert (File Station/ACL). Bei Neuinstallation den leeren Ordner löschen und neu deployen; sonst per SSH `chown -R 70:70` und `chmod 700` darauf |
-| `app` „unhealthy“ | `docker logs familytree-app-1`; `/api/health` meldet nur, ob die Datenbank antwortet |
+| `app` startet nicht, `media-init` Exit ≠ 0, Log „FEHLER: Die App (uid 1001) kann nicht … schreiben“ | ACLs des gemeinsamen Ordners verhindern das Schreiben trotz Besitzer 1001 → [Bilderordner nicht beschreibbar](#bilderordner-nicht-beschreibbar) |
+| `app` „unhealthy“, `/api/health` → `{"status":"error"}` (503) | Datenbank nicht erreichbar **oder** `media/`, `media/originals/` bzw. `media/thumbs/` nicht beschreibbar (z.B. Rechte nachträglich in der File Station geändert, oder nach einer Wiederherstellung gehören die Unterordner root). Welches, steht in `docker logs familytree-app-1` (`[health] Medienordner: … /data/media/originals nicht beschreibbar (EACCES)`). Für `media/`: Stack neu starten (`media-init` repariert Besitzer), sonst [Bilderordner nicht beschreibbar](#bilderordner-nicht-beschreibbar) |
+| Einzelne Bilder fehlen (kaputtes Bildsymbol), `/api/media/…` antwortet 404 | Datei fehlt in `media/`, der Datenbankeintrag existiert aber — typisch nach einer Wiederherstellung, bei der `media/` älter ist als der Dump ([Wiederherstellung](#wiederherstellung)). Datei aus einer neueren NAS-Sicherung zurückholen oder das Bild in der App löschen und neu hochladen |
 | Anmeldung: GitHub „redirect_uri is not associated“ / Google „redirect_uri_mismatch“ | Callback-URL beim Anbieter ≠ `<PUBLIC_URL>/api/auth/callback/…` (Schema, Port, Schreibweise) |
 | Klick auf „Anmelden mit …“ tut nichts, Log „Invalid Server Actions request“ | Proxy reicht `Host` nicht durch |
 | Nach der Anmeldung wieder auf `/login` | Seite über eine andere Adresse als `PUBLIC_URL` aufgerufen, oder `https://`-`PUBLIC_URL` über `http://` geöffnet |
 | „Anmeldung fehlgeschlagen … nicht freigeschaltet“ | E-Mail des Kontos steht nicht in der Benutzerliste (oder gesperrt); bei falscher OAuth-Konfiguration erscheint dieselbe Meldung — dann das Log von `app` lesen |
 | Upload bricht ab, 413 | Upload-Limit des Proxys (siehe Tabelle oben) |
 | Port 3080 belegt | `APP_PORT` ändern und im Proxy anpassen |
+
+#### Bilderordner nicht beschreibbar
+
+`media-init` übereignet `media/` an UID 1001 und testet dann, ob die App
+dort eine Datei anlegen kann. Scheitert der Test trotzdem, entscheiden
+nicht die Unix-Rechte, sondern Windows-artige ACLs des gemeinsamen Ordners
+(Synology: File Station → *Eigenschaften → Berechtigung*). UID 1001 ist kein
+DSM-Benutzer und lässt sich dort nicht auswählen. Abhilfe per SSH als root
+(Stack vorher anhalten; Pfad anpassen; nicht auf einer Synology
+ausprobiert):
+
+```sh
+M=/volume1/docker/familytree/media
+synoacltool -get "$M"          # zeigt die ACL; "Linux mode" = keine ACL
+synoacltool -del "$M"          # ACL nur von media/ entfernen
+chown -R 1001:1001 "$M"
+chmod -R u+rwX "$M"
+```
+
+Danach *Update the stack*; `media-init` muss „Bilderordner bereit“ melden.
+`synoacltool -del` wirkt nur auf `media/`; bereits vorhandene Dateien darin
+mit eigener ACL ggf. einzeln (`find "$M" -exec synoacltool -del {} \;`).
+Die gröbere Alternative in der File Station: für `media/` der Gruppe
+*Everyone* Lesen/Schreiben geben (*auf diesen Ordner, Unterordner und
+Dateien anwenden*). Auf einem Netzlaufwerk, das `chown` verweigert (NFS mit
+`root_squash`, SMB), muss `media/` stattdessen auf dem Server UID 1001
+gehören oder für alle beschreibbar sein.
 
 ## Schema und Migrationen
 
@@ -760,6 +1057,7 @@ Das Schema liegt in `prisma/schema.prisma`, die Migrationen in
 |---|---|
 | `0_init` | Ausgangsstand |
 | `20261116000000_ungenaue_daten_und_quellen` | Genauigkeit/Zusatz für alle Daten (Spalten mit Standardwert), Tabellen `Source` und `Citation` — rein ergänzend, keine Datenumstellung |
+| `20261117000000_ki_zugang` | KI-Zugang: `User.aiAccess` (Standard „kein Zugang“), Tabelle `ApiToken`, im `AuditLog` die Spalten `channel` und `apiTokenId` — rein ergänzend; nach dem Update hat niemand KI-Zugang, bis der Administrator ihn vergibt |
 
 Schemaänderungen künftig mit `npm run db:migrate` (`prisma migrate dev`) als
 Migration anlegen und mit einchecken.
@@ -787,10 +1085,10 @@ oder — wenn der Verlust wirklich gewollt ist — einmalig die Stack-Variable
 entfernen. Die Sicherung, die `backup-db` vor jeder Migration anlegt, liegt
 dann in `${DATA_ROOT}/backups`.
 
-**Update auf ungenaue Daten und Quellen:** Es ist nichts von Hand zu tun.
-Eine per `db push` angelegte Installation bekommt die neuen Spalten (mit
-Standardwerten, die den bisherigen Daten entsprechen) und die beiden neuen
-Tabellen beim nächsten Start des `migrate`-Containers über `db push` (rein
+**Update auf ungenaue Daten und Quellen bzw. KI-Zugang:** Es ist nichts von
+Hand zu tun. Eine per `db push` angelegte Installation bekommt die neuen
+Spalten (mit Standardwerten, die den bisherigen Daten entsprechen) und die
+neuen Tabellen beim nächsten Start des `migrate`-Containers über `db push` (rein
 ergänzend, läuft also ohne Rückfrage durch); eine
 Installation mit Migrationshistorie über `migrate deploy`. Vorhandene Daten
 bleiben unverändert. Lokal genügt `npm run db:push` (bzw. `npm run
@@ -809,6 +1107,7 @@ npx prisma migrate diff --from-url "$DATABASE_URL" \
 # 2. Alle vorhandenen Migrationen als bereits angewendet markieren:
 npx prisma migrate resolve --applied 0_init
 npx prisma migrate resolve --applied 20261116000000_ungenaue_daten_und_quellen
+npx prisma migrate resolve --applied 20261117000000_ki_zugang
 ```
 
 Auf der NAS (SSH, Stack `familytree`) in einem Einmal-Container aus dem
@@ -827,44 +1126,69 @@ möglich; wer auf Migrationen umstellen will, baselinet wie oben.
 
 ## Sicherung
 
-Zwei Dienste im Stack erledigen die Sicherung nach `${DATA_ROOT}/backups`:
+Eine vollständige Sicherung besteht aus genau zwei Teilen:
 
-- `backup-db` — `pg_dump` der Datenbank als `db_<Datum>_<Zeit>.sql.gz`
-  (mit `--clean --if-exists`, also direkt wieder einspielbar). Löscht Dumps,
-  die älter als `BACKUP_KEEP_DAYS` (Standard 30) Tage sind.
-- `backup-media` — spiegelt den Bucket nach `backups/media` (lesbare
-  Dateien statt MinIO-internem Format; im Bucket gelöschte Bilder
-  verschwinden auch aus dem Spiegel).
+1. **Datenbank-Dump** — `backups/db_<Datum>_<Zeit>.sql.gz`, erzeugt vom
+   Dienst `backup-db` (`pg_dump --clean --if-exists`, also direkt wieder
+   einspielbar). Er löscht Dumps, die älter als `BACKUP_KEEP_DAYS`
+   (Standard 30) Tage sind.
+2. **Bilderordner** — `media/` selbst. Die Bilder sind gewöhnliche Dateien,
+   benannt nach den Schlüsseln in der Datenbank; es gibt keinen eigenen
+   Sicherungsdienst und keine zweite Kopie innerhalb von `${DATA_ROOT}` (sie
+   läge auf demselben Datenträger und würde die NAS-Sicherung nur
+   vergrößern). Gesichert wird `media/` von der NAS-Sicherung.
 
-Beide laufen **bei jedem Stack-Start** — `backup-db` vor der Migration, damit
-es zu jedem Update eine Sicherung vom Stand davor gibt. Mehrere Updates am
-Tag ergeben entsprechend mehrere Dumps.
+`backup-db` läuft **bei jedem Stack-Start vor der Migration**, damit es zu
+jedem Update eine Sicherung vom Stand davor gibt (mehrere Updates am Tag
+ergeben mehrere Dumps), und zusätzlich täglich per Aufgabenplaner.
 
 **Täglich planen (Synology):** Systemsteuerung → Aufgabenplaner → Erstellen →
 Geplante Aufgabe → Benutzerdefiniertes Script; Benutzer `root`; Zeitplan
 z.B. täglich 03:00; Script:
 
 ```sh
-docker start -a familytree-backup-db-1 && docker start -a familytree-backup-media-1
+docker start -a familytree-backup-db-1
 ```
 
-Das startet nur die vorhandenen Container erneut — es braucht weder eine
+Das startet nur den vorhandenen Container erneut — es braucht weder eine
 Repo-Kopie noch `docker compose` auf der NAS. `-a` hängt die Ausgabe ans
 Aufgabenprotokoll; ein Fehlschlag lässt die Aufgabe fehlschlagen (Mail-
 Benachrichtigung im Aufgabenplaner einschalten). Mit Repo-Kopie geht
 dasselbe über `./scripts/backup.sh [Stackname]`.
 
-**NAS-Sicherung (Hyper Backup o.ä.):** `${DATA_ROOT}` vollständig sichern.
-Maßgeblich sind die Dumps in `backups/` — die Rohdateien unter `postgres/`
-sind im laufenden Betrieb nur zusammen mit einem Snapshot (Btrfs) konsistent.
-Zusätzlich ist der ZIP-Export unter `/admin/data` ein vollständiges,
+**NAS-Sicherung (Hyper Backup o.ä.) — Pflicht:** `${DATA_ROOT}` vollständig
+sichern, mindestens `backups/` **und** `media/`, mit Versionierung (sonst
+überschreibt eine versehentliche Löschung die einzige Kopie). Zeitplan
+**nach** dem Dump, z.B. Dump 03:00, Hyper Backup 03:30 — dann stammt
+`media/` in jeder Version vom selben oder einem etwas späteren Zeitpunkt als
+der Dump darin, und genau das braucht eine konsistente Wiederherstellung
+(siehe unten). Die Rohdateien unter `postgres/` sind im laufenden Betrieb
+nur zusammen mit einem Snapshot (Btrfs) konsistent; maßgeblich sind die
+Dumps. Zusätzlich ist der ZIP-Export unter `/admin/data` ein vollständiges,
 instanzunabhängiges Backup ([Austauschformat](#austauschformat)).
+
+**Wenn Dump und Bilder nicht exakt zusammenpassen:**
+
+| Lage | Folge |
+|---|---|
+| `media/` neuer als der Dump (Bilder nach dem Dump hochgeladen) | verwaiste Dateien ohne Datenbankeintrag — harmlos, belegen nur Platz |
+| `media/` älter als der Dump bzw. Datei fehlt | Datenbankeintrag ohne Datei — das Bild erscheint als kaputtes Symbol, `/api/media/…` antwortet 404; der Rest der App läuft normal. Datei aus einer neueren Sicherung holen oder Bild löschen und neu hochladen |
+
+Deshalb: Bilder immer vom selben oder einem späteren Zeitpunkt als der Dump
+zurückspielen — nie umgekehrt.
 
 ### Wiederherstellung
 
 Beispiel für Stack `familytree` und `DATA_ROOT=/volume1/docker/familytree`,
 per SSH als root auf der NAS. Funktioniert genauso auf einer frisch
-installierten NAS (erst den Stack wie oben deployen).
+installierten NAS (erst den Stack wie oben deployen; `postgres/` **nicht**
+aus der NAS-Sicherung zurückholen, sondern den Dump einspielen).
+
+Vorher aus der NAS-Sicherung (Hyper Backup → *Wiederherstellen* →
+*Daten*, Ziel ein eigener Ordner) den gewünschten Dump und den Ordner
+`media/` derselben Version holen — z.B. nach `/volume1/restore/familytree/`.
+Ein Dump, der noch in `backups/` liegt, kann direkt verwendet werden; dann
+`media/` aus einer NAS-Sicherung vom selben Tag oder später.
 
 ```sh
 # 1. App anhalten
@@ -876,22 +1200,22 @@ docker exec -i familytree-db-1 psql -U familytree -d familytree -v ON_ERROR_STOP
 gunzip -c /volume1/docker/familytree/backups/db_2026-11-16_030000.sql.gz \
   | docker exec -i familytree-db-1 psql -U familytree -d familytree -v ON_ERROR_STOP=1 -q
 
-# 3. Bilder zurück in den Bucket (Schlüssel wie in den Stack-Variablen)
-docker run --rm --network familytree_default \
-  -v /volume1/docker/familytree/backups/media:/restore:ro \
-  -e S3_ACCESS_KEY=… -e S3_SECRET_KEY=… \
-  --entrypoint sh ghcr.io/soschlegel/familiy-tree-minio:RELEASE.2025-10-15T17-29-55Z -c \
-  'mc alias set local http://storage:9000 "$S3_ACCESS_KEY" "$S3_SECRET_KEY" >/dev/null &&
-   mc mirror --overwrite /restore local/familytree'
+# 3. Bilder zurückkopieren — ergänzend (vorhandene neuere Dateien bleiben,
+#    sie sind nur verwaist und schaden nicht). Besitzer egal, siehe 4.
+cp -a /volume1/restore/familytree/media/. /volume1/docker/familytree/media/
 
-# 4. Wieder starten — Portainer: Stacks → familytree → "Update the stack"
-#    (sichert den eingespielten Stand, wendet ggf. neuere Migrationen an,
-#    startet die App). Stammt der Dump vom selben Programmstand, genügt
-#    auch: docker start familytree-app-1
+# 4. Wieder starten — Portainer: Stacks → familytree → "Update the stack".
+#    Das lässt media-init laufen (übereignet die zurückkopierten Dateien an
+#    die App), sichert den eingespielten Stand, wendet ggf. neuere
+#    Migrationen an und startet die App. Ohne Portainer, bei gleichem
+#    Programmstand:
+#    docker start -a familytree-media-init-1 && docker start familytree-app-1
 ```
 
-Ist der Dump älter als der aktuelle Programmstand, holt `migrate` beim
-nächsten Stack-Start die fehlenden Migrationen nach.
+Danach `curl http://127.0.0.1:3080/api/health` → `{"status":"ok"}` und
+einige Personen mit Bildern ansehen. Ist der Dump älter als der aktuelle
+Programmstand, holt `migrate` beim nächsten Stack-Start die fehlenden
+Migrationen nach.
 
 ## Austauschformat
 
@@ -928,7 +1252,8 @@ ohne das Schema zu ändern.
 Person ──< Relationship >── Person     type: PARENT_OF | PARTNER_OF
 Person ──< PersonMedia >── MediaAsset
 Source ──< Citation >── Person | Relationship   fact: NAME | BIRTH | DEATH | PARTNERSHIP | PARENTAGE | OTHER
-User (= Allowlist) ──< AuditLog
+User (= Allowlist) ──< AuditLog     über den KI-Zugang: channel = MCP, apiTokenId
+User ──< ApiToken                    KI-Schlüssel (nur der Hash), aiAccess am User
 ```
 
 Regeln für Beziehungen (geprüft in [lib/validation.ts](lib/validation.ts) und
@@ -986,6 +1311,14 @@ Familie bearbeiten und in einer anderen nur lesen.
 | Benutzer einladen und sperren | | | ✓ |
 | Daten importieren | | | ✓ |
 | Personen ohne Familienzuordnung sehen | | | ✓ |
+| KI-Zugang vergeben, fremde KI-Schlüssel widerrufen | | | ✓ |
+
+Der **KI-Zugang** liegt quer dazu: Der Administrator gibt ihn je Benutzer
+(kein Zugang, lesen, lesen und schreiben), auch sich selbst ausdrücklich. Mit
+eigenen Schlüsseln (Seite *KI-Zugang*) darf ein KI-Assistent dann höchstens,
+was der Benutzer laut Tabelle ohnehin darf — „lesen“ verbietet ihm auch dort
+das Ändern, wo der Benutzer bearbeiten darf. Einzelheiten:
+[KI-Zugang](#ki-zugang-mcp).
 
 Die Prüfung läuft serverseitig in [lib/api.ts](lib/api.ts) (Route-Handler) und
 [lib/session.ts](lib/session.ts) (Seiten). Die UI blendet zusätzlich aus, das

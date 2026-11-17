@@ -15,8 +15,15 @@ import { defineConfig, devices } from "@playwright/test";
  *   write  — ändernde Tests; legen eigene, als „E2E …“ benannte Datensätze
  *            an und räumen sie wieder ab. Laufen erst nach „read“, damit
  *            Zählungen dort nicht von ihnen abhängen.
+ *
+ * Teilläufe über scripts/e2e.mjs (npm run test:e2e:read / :write / :setup):
+ *   E2E_AREA=write      „write“ hängt dann nur am Setup, nicht an „read“
+ *   E2E_SKIP_SETUP=1    kein Setup (Zustand schon vorbereitet)
+ * Siehe README, Abschnitt „Tests“.
  */
 const PORT = Number(process.env.MOCK_PORT ?? 3100);
+const SETUP = process.env.E2E_SKIP_SETUP === "1" ? [] : ["setup"];
+const WRITE_DEPS = process.env.E2E_AREA === "write" ? SETUP : ["read"];
 const BASE_URL = `http://localhost:${PORT}`;
 
 export default defineConfig({
@@ -29,6 +36,7 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: 0,
   workers: process.env.CI ? 2 : 4,
+  // „list“: Fortschritt je Test während des Laufs.
   reporter: [["list"], ["html", { outputFolder: "playwright-report", open: "never" }]],
   use: {
     baseURL: BASE_URL,
@@ -49,15 +57,18 @@ export default defineConfig({
     {
       name: "read",
       testDir: "./e2e/read",
-      dependencies: ["setup"],
+      dependencies: SETUP,
       fullyParallel: true,
       use: { ...devices["Desktop Chrome"], locale: "de-DE", timezoneId: "Europe/Berlin" },
     },
     {
       name: "write",
       testDir: "./e2e/write",
-      dependencies: ["read"],
-      // Dateien untereinander parallel, Tests einer Datei nacheinander.
+      dependencies: WRITE_DEPS,
+      // Dateien untereinander parallel, Tests einer Datei nacheinander. Die
+      // Dateien legen je eigene Datensätze an und vertragen sich; mehr als 2
+      // Worker bringen gegen den Dev-Server aber nichts (gemessen: 4 Worker
+      // 4:05 statt 2:37 min für --repeat-each=2, dazu Zeitüberschreitungen).
       fullyParallel: false,
       workers: 2,
       use: { ...devices["Desktop Chrome"], locale: "de-DE", timezoneId: "Europe/Berlin" },

@@ -14,8 +14,7 @@ const MAX_BYTES = Number(process.env.MAX_UPLOAD_BYTES ?? 15 * 1024 * 1024);
 export const runtime = "nodejs";
 
 /**
- * Upload läuft bewusst durch den Server statt per presigned URL direkt zum
- * Objektspeicher: sharp parst das Bild ohnehin (Thumbnail), und damit ist der
+ * Upload läuft bewusst durch den Server: sharp parst das Bild ohnehin (Thumbnail), und damit ist der
  * Dateityp echt validiert statt nur anhand des Content-Type-Headers geraten.
  * Bei diesem Volumen ist der Durchsatz kein Thema.
  */

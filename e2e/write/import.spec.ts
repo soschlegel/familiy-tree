@@ -2,7 +2,7 @@ import JSZip from "jszip";
 import type { APIRequestContext, Page } from "@playwright/test";
 
 import { test, expect, authFile, acceptDialogs } from "../support/fixtures";
-import { apiAs, createPerson, deletePerson, deleteSource, tinyPng, uniq, type CreatedPerson } from "../support/api";
+import { apiAs, createPerson, deletePerson, deleteSource, IMPORT_TIMEOUT, tinyPng, uniq, type CreatedPerson } from "../support/api";
 import { mock } from "../support/mock";
 
 /**
@@ -132,7 +132,7 @@ test("geänderter JSON-Export: Vorschau, dann Import", async ({ page }) => {
   expect((await before.json()).person.notes).toBeNull();
 
   await page.getByRole("button", { name: "Import ausführen" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Import abgeschlossen" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Import abgeschlossen" })).toBeVisible({ timeout: IMPORT_TIMEOUT });
   await expect(page.getByRole("button", { name: "Import ausführen" })).toBeDisabled();
 
   await page.goto(`/people/${target.id}`);
@@ -165,6 +165,13 @@ test("ZIP-Export mit neuem Bild", async ({ page }) => {
   full.relationships = full.relationships.filter((r) => keep.has(r.fromPersonId as string) && keep.has(r.toPersonId as string));
   full.sources = [];
   full.citations = [];
+  // Nur Bilder der behaltenen Datensätze — Bilder paralleler Tests können
+  // zwischen Export und Import schon wieder gelöscht sein.
+  const used = new Set([
+    ...full.persons.flatMap((x) => (x.media as { mediaId: string }[]).map((m) => m.mediaId)),
+    ...full.relationships.flatMap((r) => (r.media as { mediaId: string }[]).map((m) => m.mediaId)),
+  ]);
+  full.media = full.media.filter((m) => used.has(m.id as string));
 
   const p = full.persons.find((x) => x.id === target.id)!;
   p.media = [{ mediaId, isPrimary: true }];
@@ -176,7 +183,7 @@ test("ZIP-Export mit neuem Bild", async ({ page }) => {
   const status = await chooseFile(page, "export.zip", "application/zip", buffer);
   await expect(status).toContainText("Bilder: 1 neu");
   await page.getByRole("button", { name: "Import ausführen" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Import abgeschlossen" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Import abgeschlossen" })).toBeVisible({ timeout: IMPORT_TIMEOUT });
 
   await page.goto(`/people/${target.id}`);
   const gallery = page.getByTestId("gallery-person");
@@ -226,7 +233,7 @@ test("Datei im alten Format (Version 1) ohne neue Felder", async ({ page }) => {
   await expect(status).toContainText("Personen: 1 neu, 0 aktualisiert");
   await expect(status).toContainText("Beziehungen: 1 neu, 0 aktualisiert");
   await page.getByRole("button", { name: "Import ausführen" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Import abgeschlossen" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Import abgeschlossen" })).toBeVisible({ timeout: IMPORT_TIMEOUT });
 
   await page.goto(`/people/${v1Person}`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(`E2E Alt${tag} Version1`);

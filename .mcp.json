@@ -1,12 +1,10 @@
 {
   "mcpServers": {
     "familytree-mock": {
-      "type": "stdio",
-      "command": "node",
-      "args": ["scripts/mock.mjs", "mcp"],
-      "env": {
-        "MCP_USER_EMAIL": "admin@example.test",
-        "MCP_ALLOW_WRITE": "false"
+      "type": "http",
+      "url": "http://localhost:3100/api/mcp",
+      "headers": {
+        "Authorization": "Bearer ${FAMILYTREE_MCP_KEY}"
       }
     }
   }

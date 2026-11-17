@@ -1,7 +1,7 @@
 /**
  * Löschen einer Person bzw. Beziehung räumt deren Bilder mit ab — samt
- * Dateien im Objektspeicher (hier durch eine Attrappe ersetzt, damit der
- * Test keinen Bucket anfasst). Bilder, die noch woanders hängen, bleiben.
+ * Dateien im Medienordner (hier durch eine Attrappe ersetzt, damit der
+ * Test keine Dateien anfasst). Bilder, die noch woanders hängen, bleiben.
  *
  * Läuft gegen die Mock-Datenbank und überspringt sich ohne sie.
  */
@@ -9,12 +9,11 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const deleted = vi.hoisted(() => [] as string[]);
 vi.mock("@/lib/storage", () => ({
-  BUCKET: "attrappe",
   deleteObject: vi.fn(async (key: string) => {
     deleted.push(key);
   }),
   putObject: vi.fn(),
-  getObjectStream: vi.fn(),
+  openObject: vi.fn(),
   getObjectBuffer: vi.fn(),
 }));
 

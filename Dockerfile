@@ -33,7 +33,7 @@ RUN apk add --no-cache libc6-compat
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/package.json ./package.json
-COPY docker/seed-admin.mjs docker/db-state.mjs docker/schema-diff-check.mjs docker/tcp-forward.mjs ./docker/
+COPY docker/seed-admin.mjs docker/db-state.mjs docker/schema-diff-check.mjs ./docker/
 COPY docker/migrate.sh /migrate.sh
 # sed: falls das Skript unter Windows mit CRLF ausgecheckt wurde.
 RUN sed -i 's/\r$//' /migrate.sh && chmod +x /migrate.sh
@@ -48,6 +48,17 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
+
+# Bilderordner. Im Stack wird ${DATA_ROOT}/media darübergemountet (Rechte
+# richtet dort der Dienst media-init ein); angelegt wird er hier, damit das
+# Image auch ohne Mount startet und /api/health "ok" meldet — die Bilder
+# liegen dann nur im Container und sind mit ihm weg.
+# Bewusst kein VOLUME: das würde bei jedem Start ohne Mount stillschweigend
+# ein anonymes Volume anlegen, das bei Updates nicht mitwandert und in
+# keiner Sicherung auftaucht. Der Bind-Mount in docker-compose.yml ist der
+# einzige vorgesehene Speicherort.
+RUN mkdir -p /data/media && chown nextjs:nodejs /data/media
+ENV MEDIA_DIR=/data/media
 
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./

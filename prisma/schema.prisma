@@ -35,6 +35,9 @@ model User {
   status        UserStatus @default(INVITED)
   createdAt     DateTime   @default(now())
   lastLoginAt   DateTime?
+  // KI-Zugang (MCP): nur ausdrücklich von einem Admin vergeben — auch die
+  // Rolle ADMIN schließt ihn nicht ein (lib/services/ai-access.ts).
+  aiAccess      AiAccess   @default(NONE)
 
   accounts Account[]
   sessions Session[]
@@ -43,6 +46,56 @@ model User {
   auditLogs      AuditLog[]
   families       UserFamily[]
   createdSources Source[]     @relation("SourceCreator")
+  apiTokens      ApiToken[]
+}
+
+// ---------------------------------------------------------------------------
+// KI-Zugang (MCP)
+// ---------------------------------------------------------------------------
+
+// Geordnete Stufe statt zweier Schalter: „schreiben ohne lesen" ist so gar
+// nicht darstellbar. WRITE schließt READ ein.
+enum AiAccess {
+  NONE
+  READ
+  WRITE
+}
+
+enum ApiTokenLevel {
+  READ
+  WRITE
+}
+
+// Herkunft eines Zugangsschlüssels: PERSONAL = vom Benutzer in der App
+// erzeugt; OAUTH = später über einen OAuth-Ablauf (z.B. claude.ai) ausgestellt.
+enum ApiTokenKind {
+  PERSONAL
+  OAUTH
+}
+
+// Persönlicher, widerrufbarer Zugangsschlüssel für den MCP-Endpunkt.
+// Gespeichert wird nie das Geheimnis, nur sein SHA-256-Hash (lib/ai-tokens.ts).
+// Die wirksame Stufe ist min(level, User.aiAccess) und wird bei jeder Prüfung
+// neu berechnet — ein Herabsetzen der Benutzerrechte wirkt also sofort, ohne
+// die Schlüssel umzuschreiben.
+model ApiToken {
+  id         String        @id @default(cuid())
+  userId     String
+  name       String
+  // Nicht geheimer Anfang des Schlüssels ("ftk_" + 12 Hex-Zeichen): zum
+  // Wiedererkennen in Listen und zum Nachschlagen bei der Prüfung.
+  prefix     String        @unique
+  secretHash String
+  level      ApiTokenLevel
+  kind       ApiTokenKind  @default(PERSONAL)
+  createdAt  DateTime      @default(now())
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // ---------------------------------------------------------------------------
@@ -233,7 +286,7 @@ model Relationship {
 
 model MediaAsset {
   id           String   @id @default(cuid())
-  storageKey   String   @unique // Objektschlüssel im S3/MinIO-Bucket
+  storageKey   String   @unique // relativer Dateipfad unterhalb von MEDIA_DIR
   thumbnailKey String?
   // Ursprünglicher Dateiname beim Upload. Dient als menschenlesbarer Verweis
   // im Export — der storageKey ist eine UUID und sagt niemandem etwas.
@@ -361,17 +414,29 @@ model Citation {
 // Audit
 // ---------------------------------------------------------------------------
 
+// Kanal einer Änderung. Ohne Angabe (null): Web-App bzw. Einträge aus der Zeit
+// vor dem KI-Zugang.
+enum AuditChannel {
+  MCP
+}
+
 model AuditLog {
-  id         String   @id @default(cuid())
+  id         String        @id @default(cuid())
   userId     String?
   action     String // CREATE | UPDATE | DELETE
-  entityType String // Person | Relationship | MediaAsset | User | Family | Source | Citation
+  entityType String // Person | Relationship | MediaAsset | User | Family | Source | Citation | ApiToken
   entityId   String
   diff       Json?
-  createdAt  DateTime @default(now())
+  // Kanal und Schlüssel (ApiToken.id, nie das Geheimnis). Bewusst ohne
+  // Fremdschlüssel: der Verweis bleibt auch nach dem Löschen des Benutzers
+  // samt seiner Schlüssel erhalten.
+  channel    AuditChannel?
+  apiTokenId String?
+  createdAt  DateTime      @default(now())
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([entityType, entityId])
   @@index([createdAt])
+  @@index([apiTokenId])
 }

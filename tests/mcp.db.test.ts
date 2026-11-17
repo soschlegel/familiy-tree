@@ -7,7 +7,9 @@
  * - Editor mit MCP_ALLOW_WRITE=true: Schreibwerkzeuge samt Audit-Log,
  *   ungenaue Daten, Quellen und Belege. Legt nur eigene, klar benannte
  *   Testpersonen und -quellen an und räumt sie wieder ab.
- * - Start genau wie in .mcp.json: Handshake und sauberes stdout.
+ * - Start wie mit `npm run -s mcp:stdio`: Handshake und sauberes stdout.
+ * - Nur gegen Mock-/Testdatenbanken; KI-Recht des Benutzers (User.aiAccess)
+ *   gilt zusätzlich zu MCP_ALLOW_WRITE und wird bei jedem Aufruf neu geprüft.
  *
  * Überspringt sich ohne Mock-Datenbank.
  */
@@ -544,6 +546,8 @@ describe.skipIf(Boolean(skipReason))("MCP-Server (stdio, Mock-Datenbank)", () =>
       });
       expect(sourceAudit.some((e) => e.entityType === "Source" && e.action === "CREATE")).toBe(true);
       expect(sourceAudit.filter((e) => e.entityType === "Citation" && e.action === "CREATE")).toHaveLength(2);
+      // Jede Änderung ist dem KI-Kanal zugeordnet (lokaler Modus: ohne Schlüssel).
+      for (const e of [...entries, ...sourceAudit]) expect(e).toMatchObject({ channel: "MCP", apiTokenId: null });
 
       // Sofort aufräumen, damit spätere Tests wieder die reinen Mock-Daten sehen.
       await prisma.source.deleteMany({ where: { id: { in: createdSources } } });
@@ -558,9 +562,15 @@ describe.skipIf(Boolean(skipReason))("MCP-Server (stdio, Mock-Datenbank)", () =>
   );
 
   it(
-    "Start verweigert ohne, mit unbekanntem und mit gesperrtem Benutzer",
+    "Start verweigert ohne, mit unbekanntem, gesperrtem und Benutzer ohne KI-Recht",
     () => {
-      for (const email of [undefined, "niemand@example.test", "blocked@example.test"]) {
+      const expected: [string | undefined, RegExp][] = [
+        [undefined, /MCP_USER_EMAIL ist nicht gesetzt/],
+        ["niemand@example.test", /\[USER_UNKNOWN\]/],
+        ["blocked@example.test", /gesperrt\. \[USER_BLOCKED\]/],
+        ["nofamily@example.test", /kein KI-Zugang freigeschaltet\. \[NO_PERMISSION\]/],
+      ];
+      for (const [email, message] of expected) {
         const r = spawnSync(process.execPath, [TSX, SERVER], {
           cwd: ROOT,
           env: serverEnv({ MCP_USER_EMAIL: email }) as NodeJS.ProcessEnv,
@@ -570,26 +580,87 @@ describe.skipIf(Boolean(skipReason))("MCP-Server (stdio, Mock-Datenbank)", () =>
         });
         expect(r.status, String(email)).toBe(1);
         expect(r.stdout).toBe("");
-        expect(r.stderr).toMatch(email ? /unbekannt oder gesperrt/ : /MCP_USER_EMAIL ist nicht gesetzt/);
+        expect(r.stderr).toMatch(message);
       }
     },
     TIMEOUT,
   );
 
   it(
-    "Start wie in .mcp.json: Handshake und sauberes stdout",
-    async () => {
-      const config = JSON.parse(readFileSync(path.join(ROOT, ".mcp.json"), "utf8"));
-      const entry = Object.values(config.mcpServers)[0] as {
-        command: string;
-        args: string[];
-        env: Record<string, string>;
-      };
-      expect(entry.env.MCP_ALLOW_WRITE).toBe("false");
+    "Start verweigert gegen Datenbanken, die nicht auf _mock oder _test enden",
+    () => {
+      // Port 1: selbst wenn die Prüfung fehlte, gäbe es dort keine Datenbank.
+      for (const name of ["familytree", "familytree_mock_backup", "mock"]) {
+        const r = spawnSync(process.execPath, [TSX, SERVER], {
+          cwd: ROOT,
+          env: serverEnv({
+            MCP_USER_EMAIL: "admin@example.test",
+            DATABASE_URL: `postgresql://familytree:familytree@127.0.0.1:1/${name}`,
+          }) as NodeJS.ProcessEnv,
+          input: "",
+          encoding: "utf8",
+          timeout: 30_000,
+        });
+        expect(r.status, name).toBe(2);
+        expect(r.stdout).toBe("");
+        expect(r.stderr).toContain(`"${name}"`);
+        expect(r.stderr).toContain("_mock oder _test");
+        expect(r.stderr).not.toContain("nicht erreichbar");
+      }
+    },
+    TIMEOUT,
+  );
 
-      const child = spawn(entry.command === "node" ? process.execPath : entry.command, entry.args, {
+  it(
+    "KI-Recht „lesen“: keine Schreibwerkzeuge, auch mit MCP_ALLOW_WRITE=true",
+    async () => {
+      const s = await connect("viewer@example.test", true);
+      expect((await s.client.listTools()).tools.map((t) => t.name).sort()).toEqual(READ_TOOLS);
+      expect(s.stderr()).toContain("Schreibwerkzeuge bleiben aus");
+      expect((await s.call("get_statistics")).isError).toBe(false);
+      expect(s.errors).toEqual([]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "Rechteänderung während der Sitzung wirkt beim nächsten Aufruf",
+    async () => {
+      const s = await connect("editor@example.test", true);
+      try {
+        await prisma.user.update({ where: { id: "mock-user-editor" }, data: { aiAccess: "READ" } });
+        const write = await s.call("update_person", { person_id: L.crossMarriedPartnerA, append_note: "darf nicht" });
+        expect(write.isError).toBe(true);
+        expect(write.text).toContain("[INSUFFICIENT_LEVEL]");
+        expect((await s.call("get_statistics")).isError).toBe(false);
+
+        await prisma.user.update({ where: { id: "mock-user-editor" }, data: { aiAccess: "NONE" } });
+        const read = await s.call("get_statistics");
+        expect(read.isError).toBe(true);
+        expect(read.text).toContain("[NO_PERMISSION]");
+
+        await prisma.user.update({ where: { id: "mock-user-editor" }, data: { aiAccess: "WRITE", status: "BLOCKED" } });
+        const blocked = await s.call("get_statistics");
+        expect(blocked.text).toContain("[USER_BLOCKED]");
+      } finally {
+        await prisma.user.update({ where: { id: "mock-user-editor" }, data: { aiAccess: "WRITE", status: "ACTIVE" } });
+      }
+      expect(s.errors).toEqual([]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "Start wie mit npm run mcp:stdio (node scripts/mock.mjs mcp): Handshake und sauberes stdout",
+    async () => {
+      // Der stdio-Modus ist nicht mehr der Standard in .mcp.json (dort steht
+      // der HTTP-Endpunkt), bleibt aber über das npm-Skript startbar.
+      const pkg = JSON.parse(readFileSync(path.join(ROOT, "package.json"), "utf8"));
+      expect(pkg.scripts["mcp:stdio"]).toBe("node scripts/mock.mjs mcp");
+
+      const child = spawn(process.execPath, ["scripts/mock.mjs", "mcp"], {
         cwd: ROOT,
-        env: serverEnv(entry.env) as NodeJS.ProcessEnv,
+        env: serverEnv({ MCP_USER_EMAIL: "admin@example.test", MCP_ALLOW_WRITE: "false" }) as NodeJS.ProcessEnv,
         stdio: "pipe",
       });
       let stdout = "";

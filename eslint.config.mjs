@@ -37,6 +37,15 @@ const config = [
       ],
     },
   },
+  {
+    // Playwright-Tests sind kein React-Code: Fixtures heißen `use(...)` und
+    // träfen sonst fälschlich die Hook-Regeln. Nur hier, nicht für die App.
+    files: ["e2e/**/*.ts", "playwright.config.ts"],
+    rules: {
+      "react-hooks/rules-of-hooks": "off",
+      "react-hooks/exhaustive-deps": "off",
+    },
+  },
 ];
 
 export default config;

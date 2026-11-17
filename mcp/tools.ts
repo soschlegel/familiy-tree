@@ -37,6 +37,8 @@ import {
   updatePerson,
   updateRelationship,
   validationError,
+  type AiAuthResult,
+  type AiLevel,
   type CitationTarget,
   type DataGapKind,
   type LineageResult,
@@ -54,11 +56,16 @@ import { CITATION_CONFIDENCES, CITATION_FACTS, SOURCE_KINDS } from "../lib/valid
 import { appendResearchNote, dateFields, isoDay, ref, type PersonLike } from "./format";
 
 export type ToolContext = {
-  /** E-Mail des Benutzers, als der der Server handelt. */
-  email: string;
+  /** Wer zugreift — nur für Meldungen (E-Mail bzw. Schlüssel-Präfix). */
+  label: string;
+  /** Schreibwerkzeuge sind registriert (steuert auch den Hinweis in den Prompts). */
   allowWrite: boolean;
-  /** Liefert den aktuellen Scope (null = unbekannt oder gesperrt). */
-  resolveScope: () => Promise<Scope | null>;
+  /**
+   * Wächter pro Aufruf (lib/services/ai-access.ts, authorizeAiCall): prüft
+   * den Zugang jedes Mal neu und verlangt die nötige Stufe. Liefert den Scope
+   * samt KI-Kanal fürs Audit oder einen Grund für die Ablehnung.
+   */
+  authorize: (need: AiLevel) => Promise<AiAuthResult>;
 };
 
 // ---------------------------------------------------------------------------
@@ -87,25 +94,29 @@ function serviceErrorText(err: ServiceError): string {
 }
 
 /**
- * Hüllt ein Werkzeug: Scope frisch auflösen (Rollenänderungen und Sperren
- * wirken sofort), ServiceError in eine isError-Antwort übersetzen.
+ * Hüllt ein Werkzeug: Zugang bei jedem Aufruf frisch prüfen (Widerruf,
+ * Sperre, Rechte- und Rollenänderungen wirken sofort), die nötige KI-Stufe
+ * verlangen und ServiceError in eine isError-Antwort übersetzen.
  */
-function run<A>(ctx: ToolContext, fn: (scope: Scope, args: A) => Promise<Data>) {
+function run<A>(ctx: ToolContext, fn: (scope: Scope, args: A) => Promise<Data>, need: AiLevel = "READ") {
   return async (args: A): Promise<CallToolResult> => {
     try {
-      const scope = await ctx.resolveScope();
-      if (!scope) {
-        return errorResult(
-          `Der konfigurierte Benutzer ${ctx.email} ist unbekannt oder gesperrt — keine Abfrage möglich.`,
-        );
+      const auth = await ctx.authorize(need);
+      if (!auth.ok) {
+        return errorResult(`Zugriff verweigert (${ctx.label}): ${auth.message} [${auth.reason}]`);
       }
-      return textResult(await fn(scope, args));
+      return textResult(await fn(auth.scope, args));
     } catch (err) {
       if (err instanceof ServiceError) return errorResult(serviceErrorText(err));
       console.error("[mcp] Werkzeugfehler:", err);
       return errorResult(`Interner Fehler: ${(err as Error).message ?? String(err)}`);
     }
   };
+}
+
+/** Wie run, verlangt aber die Stufe WRITE. */
+function runWrite<A>(ctx: ToolContext, fn: (scope: Scope, args: A) => Promise<Data>) {
+  return run(ctx, fn, "WRITE");
 }
 
 const READ_ONLY = {
@@ -842,7 +853,9 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
 }
 
 // ---------------------------------------------------------------------------
-// Schreibende Werkzeuge (nur mit MCP_ALLOW_WRITE=true)
+// Schreibende Werkzeuge (nur bei wirksamer KI-Stufe WRITE: Schlüssel und
+// Benutzerrecht „lesen und schreiben“; im stdio-Testmodus zusätzlich
+// MCP_ALLOW_WRITE=true)
 // ---------------------------------------------------------------------------
 
 const personFieldsInput = {
@@ -927,7 +940,7 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         openWorldHint: false,
       },
     },
-    run(ctx, async (scope, a) => {
+    runWrite(ctx, async (scope, a) => {
       const p = await createPerson(scope, {
         ...personFields(a),
         familyIds: a.family_ids,
@@ -962,7 +975,7 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         openWorldHint: false,
       },
     },
-    run(ctx, async (scope, a) => {
+    runWrite(ctx, async (scope, a) => {
       const patch: Record<string, unknown> = personFields(a);
       if (a.append_note) {
         const current = await getPersonDetail(scope, a.person_id);
@@ -1004,7 +1017,7 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         openWorldHint: false,
       },
     },
-    run(ctx, async (scope, a) => {
+    runWrite(ctx, async (scope, a) => {
       const r = await createRelationship(scope, {
         type: a.type,
         subtype: a.subtype,
@@ -1042,7 +1055,7 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         openWorldHint: false,
       },
     },
-    run(ctx, async (scope, a) => {
+    runWrite(ctx, async (scope, a) => {
       const patch = Object.fromEntries(
         Object.entries({
           subtype: a.subtype,
@@ -1077,7 +1090,7 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         openWorldHint: false,
       },
     },
-    run(ctx, async (scope, a) => {
+    runWrite(ctx, async (scope, a) => {
       await deleteRelationship(scope, a.relationship_id);
       return { deleted: true, relationshipId: a.relationship_id };
     }),
@@ -1104,7 +1117,7 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         openWorldHint: false,
       },
     },
-    run(ctx, async (scope, a) => {
+    runWrite(ctx, async (scope, a) => {
       const r = await setPersonFamilies(scope, a.person_id, a.family_ids);
       return { personId: a.person_id, familyIds: r.familyIds };
     }),
@@ -1138,7 +1151,7 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         openWorldHint: false,
       },
     },
-    run(ctx, async (scope, a) => {
+    runWrite(ctx, async (scope, a) => {
       const s = await createSource(scope, {
         title: a.title,
         kind: a.kind,
@@ -1181,7 +1194,7 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         openWorldHint: false,
       },
     },
-    run(ctx, async (scope, a) => {
+    runWrite(ctx, async (scope, a) => {
       const c = await createCitation(scope, {
         sourceId: a.source_id,
         personId: a.person_id,

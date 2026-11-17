@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
 import { prisma } from "../prisma";
-import { audit } from "../audit";
+import { audit, auditActor } from "../audit";
 import { canViewMedia } from "../media-scope";
 import {
   canEditPerson,
@@ -475,7 +475,7 @@ export async function createSource(scope: Scope, input: unknown): Promise<Source
   const source = await prisma.source.create({ data: { ...columns, createdById: scope.userId } });
 
   await audit({
-    userId: scope.userId,
+    ...auditActor(scope),
     action: "CREATE",
     entityType: "Source",
     entityId: source.id,
@@ -499,7 +499,7 @@ export async function updateSource(scope: Scope, id: string, patch: unknown): Pr
   const source = await prisma.source.update({ where: { id }, data: columns });
 
   await audit({
-    userId: scope.userId,
+    ...auditActor(scope),
     action: "UPDATE",
     entityType: "Source",
     entityId: id,
@@ -523,7 +523,7 @@ export async function deleteSource(
 
   await prisma.source.delete({ where: { id } });
   await audit({
-    userId: scope.userId,
+    ...auditActor(scope),
     action: "DELETE",
     entityType: "Source",
     entityId: id,
@@ -614,7 +614,7 @@ export async function createCitation(scope: Scope, input: unknown): Promise<Cita
   });
 
   await audit({
-    userId: scope.userId,
+    ...auditActor(scope),
     action: "CREATE",
     entityType: "Citation",
     entityId: citation.id,
@@ -652,7 +652,7 @@ export async function updateCitation(scope: Scope, id: string, patch: unknown): 
 
   const citation = await prisma.citation.update({ where: { id }, data });
   await audit({
-    userId: scope.userId,
+    ...auditActor(scope),
     action: "UPDATE",
     entityType: "Citation",
     entityId: id,
@@ -665,7 +665,7 @@ export async function deleteCitation(scope: Scope, id: string): Promise<{ ok: tr
   const existing = await loadCitationForEdit(scope, id, "diesen Beleg zu entfernen");
   await prisma.citation.delete({ where: { id } });
   await audit({
-    userId: scope.userId,
+    ...auditActor(scope),
     action: "DELETE",
     entityType: "Citation",
     entityId: id,

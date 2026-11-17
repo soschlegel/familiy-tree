@@ -401,3 +401,36 @@ export const citationInput = z
   });
 
 export const citationPatch = z.object(citationFields).partial();
+
+// ---------------------------------------------------------------------------
+// KI-Zugang (MCP)
+// ---------------------------------------------------------------------------
+
+export const AI_ACCESS_LEVELS = ["NONE", "READ", "WRITE"] as const;
+export type AiAccessName = (typeof AI_ACCESS_LEVELS)[number];
+
+export const API_TOKEN_LEVELS = ["READ", "WRITE"] as const;
+export type ApiTokenLevelName = (typeof API_TOKEN_LEVELS)[number];
+
+/** Höchstzahl gleichzeitig aktiver Schlüssel je Benutzer. */
+export const MAX_ACTIVE_API_TOKENS = 10;
+/** Gültigkeit neuer Schlüssel in Tagen: Standard und Höchstwert. */
+export const API_TOKEN_DEFAULT_DAYS = 90;
+export const API_TOKEN_MAX_DAYS = 365;
+
+/** Admin: KI-Recht eines Benutzers setzen. */
+export const aiAccessInput = z.object({
+  aiAccess: z.enum(AI_ACCESS_LEVELS),
+});
+
+/** Benutzer: neuen Schlüssel anlegen. */
+export const apiTokenCreateInput = z.object({
+  name: z.string().trim().min(1, "Bitte einen Namen angeben").max(80, "Höchstens 80 Zeichen"),
+  level: z.enum(API_TOKEN_LEVELS),
+  expiresInDays: z
+    .number()
+    .int("Ganze Tage angeben")
+    .min(1, "Mindestens 1 Tag")
+    .max(API_TOKEN_MAX_DAYS, `Höchstens ${API_TOKEN_MAX_DAYS} Tage`)
+    .optional(),
+});

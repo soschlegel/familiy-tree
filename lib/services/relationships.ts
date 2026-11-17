@@ -1,5 +1,5 @@
 import { prisma } from "../prisma";
-import { audit } from "../audit";
+import { audit, auditActor } from "../audit";
 import { canEditRelationshipBetween, canViewPerson, familyIdsOf, type Scope } from "../scope";
 import {
   MAX_BIOLOGICAL_PARENTS,
@@ -182,7 +182,7 @@ export async function createRelationship(
   });
 
   await audit({
-    userId: scope.userId,
+    ...auditActor(scope),
     action: "CREATE",
     entityType: "Relationship",
     entityId: relationship.id,
@@ -237,7 +237,7 @@ export async function updateRelationship(
   });
 
   await audit({
-    userId: scope.userId,
+    ...auditActor(scope),
     action: "UPDATE",
     entityType: "Relationship",
     entityId: id,
@@ -271,7 +271,7 @@ export async function deleteRelationship(
   const removedMedia = await removeOrphanedMedia(mediaIds);
 
   await audit({
-    userId: scope.userId,
+    ...auditActor(scope),
     action: "DELETE",
     entityType: "Relationship",
     entityId: id,

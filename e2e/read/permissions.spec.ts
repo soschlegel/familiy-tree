@@ -44,6 +44,8 @@ test.describe("Betrachter (nur Familie A)", () => {
   });
 
   test("Baum: Fokus und ganzer Baum ohne fremde Namen", async ({ page }) => {
+    // Viele Seiten/Aufrufe nacheinander — unter Last im Dev-Modus langsam.
+    test.slow();
     await page.goto(`/tree?focus=${L.crossMarriedIntoA}&up=4&down=4`);
     await waitForTree(page);
     await expect(page.locator('[data-testid="tree-person"][data-restricted="true"]').first()).toBeAttached();
@@ -110,6 +112,8 @@ test.describe("Betrachter (nur Familie A)", () => {
   });
 
   test("keine Bearbeitungselemente", async ({ page }) => {
+    // Viele Seiten/Aufrufe nacheinander — unter Last im Dev-Modus langsam.
+    test.slow();
     await page.goto(`/people/${L.founders.A}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(fullName(L.founders.A));
     await expect(page.getByRole("link", { name: "Bearbeiten" })).toHaveCount(0);
@@ -137,6 +141,8 @@ test.describe("Betrachter (nur Familie A)", () => {
   });
 
   test("API-Änderungen werden abgelehnt (403 bzw. 404)", async () => {
+    // Viele Seiten/Aufrufe nacheinander — unter Last im Dev-Modus langsam.
+    test.slow();
     const api = await apiAs("viewer");
     const A = L.founders.A;
     const before = await (await api.get(`/api/persons/${A}`)).json();

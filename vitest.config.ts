@@ -41,7 +41,13 @@ export default defineConfig({
     // anderen Dateien dagegen — deshalb Dateien nacheinander.
     fileParallelism: false,
     hookTimeout: 30_000,
-    // Nie gegen die normale Datenbank: alle Tests sehen nur die Mock-DB.
-    env: { DATABASE_URL: mockDatabaseUrl(), NODE_ENV: "test" },
+    // Nie gegen die normale Datenbank und den normalen Medienordner: alle
+    // Tests sehen nur die Mock-DB und einen eigenen Testordner (Tests, die
+    // Dateien schreiben, setzen MEDIA_DIR ohnehin auf ein Temp-Verzeichnis).
+    env: {
+      DATABASE_URL: mockDatabaseUrl(),
+      MEDIA_DIR: path.resolve(__dirname, "data", "media-test"),
+      NODE_ENV: "test",
+    },
   },
 });
