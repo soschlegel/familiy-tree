@@ -893,6 +893,7 @@ async function applyInTx(
 
   // --- Rohdaten ---------------------------------------------------------------
   const rawRows: Prisma.ImportRawRecordCreateManyInput[] = [];
+  let superseded = 0;
   const replaceTargets = { personId: new Set<string>(), relationshipId: new Set<string>(), sourceId: new Set<string>() };
   for (const [i, r] of data.rawRecords.entries()) {
     const json = JSON.stringify(r.content ?? null);
@@ -900,6 +901,21 @@ async function applyInTx(
     if (size > MAX_RAW_RECORD_BYTES) {
       bad("rawRecords", String(i), "content", `Rohdaten zu groß (${size} Bytes, höchstens ${MAX_RAW_RECORD_BYTES}) — die Originaldatei des Laufs enthält sie`);
       continue;
+    }
+    // Nichts geht verloren: Gehört der Datensatz zu einer Beziehung, die an
+    // einer Regel der App scheitert (z.B. Paar, das zugleich Eltern und Kind
+    // ist; dritter leiblicher Elternteil), bleibt er bei einer der beteiligten
+    // Personen erhalten — mit Vermerk, warum. Ereignisse und Belege der
+    // Beziehung stecken im Original und gehen so mit. Ohne „replace“: er soll
+    // die eigenen Rohdaten der Person nicht überholen. Liegt derselbe Stand
+    // dort schon (erneuter Import), wird er nicht doppelt abgelegt.
+    if (r.relationshipRef && !r.relationshipId && isBad("relationships", r.relationshipRef)) {
+      const rehomed = await rehomeRejected(r);
+      if (rehomed === "duplicate") continue;
+      if (rehomed) {
+        rawRows.push({ batchId: data.batchId ?? null, ...rehomed, sizeBytes: Buffer.byteLength(JSON.stringify(rehomed.content), "utf8") });
+        continue;
+      }
     }
     const t = await targetOf({ ...r, eventRef: null, eventId: null });
     const hasTarget = Boolean(r.personRef || r.personId || r.relationshipRef || r.relationshipId || r.sourceRef || r.sourceId);
@@ -923,13 +939,21 @@ async function applyInTx(
       sizeBytes: size,
     });
   }
-  let superseded = 0;
   const or: Prisma.ImportRawRecordWhereInput[] = [];
   if (replaceTargets.personId.size) or.push({ personId: { in: [...replaceTargets.personId] } });
   if (replaceTargets.relationshipId.size) or.push({ relationshipId: { in: [...replaceTargets.relationshipId] } });
   if (replaceTargets.sourceId.size) or.push({ sourceId: { in: [...replaceTargets.sourceId] } });
   if (or.length) {
-    if (write) superseded = (await db.importRawRecord.updateMany({ where: { OR: or, supersededAt: null }, data: { supersededAt: now } })).count;
+    // Abgelehnte Beziehungen, die bei einer Person liegen, überholt nur ein
+    // neuer Stand derselben Familie (rehomeRejected), nicht der Personendatensatz.
+    if (write) {
+      superseded += (
+        await db.importRawRecord.updateMany({
+          where: { OR: or, supersededAt: null, NOT: { recordType: { endsWith: REJECTED_RAW_SUFFIX } } },
+          data: { supersededAt: now },
+        })
+      ).count;
+    }
   }
   if (write) await db.importRawRecord.createMany({ data: rawRows });
 
@@ -1021,6 +1045,49 @@ async function applyInTx(
     }
   }
 
+  /**
+   * Rohdatensatz einer abgelehnten Beziehung an die erste auffindbare
+   * beteiligte Person hängen (siehe Aufruf). Liefert die Zeile, "duplicate",
+   * wenn genau dieser Stand dort schon aktiv liegt, oder null, wenn keine
+   * Person greifbar ist (dann gilt der Datensatz wie bisher als ungültig).
+   */
+  async function rehomeRejected(r: z.infer<typeof rawRecordItem>) {
+    const rel = data.relationships.find((x) => x.ref === r.relationshipRef);
+    if (!rel) return null;
+    const involved: string[] = [];
+    for (const [ref, id] of [[rel.fromRef, rel.fromId], [rel.toRef, rel.toId]] as const) {
+      if (!ref && !id) continue;
+      const v = await pointer("persons", "person", ref, id);
+      if (v && v !== "missing" && !isInvalidId("persons", v)) involved.push(v);
+    }
+    const personId = involved[0];
+    if (!personId) return null;
+    const why = invalid.find((x) => x.section === "relationships" && x.ref === r.relationshipRef)?.message ?? "Regel der App";
+    const kind = rel.type === "PARTNER_OF" ? "Partnerschaft" : "Eltern-Kind-Beziehung";
+    const base = r.content && typeof r.content === "object" && !Array.isArray(r.content) ? (r.content as Record<string, unknown>) : { value: r.content ?? null };
+    // Verweise auf Quellen dieses Imports (Xref → ref) in App-IDs übersetzen.
+    const sourceIds: Record<string, string> = {};
+    const refs = base.sourceRefs && typeof base.sourceRefs === "object" ? (base.sourceRefs as Record<string, unknown>) : {};
+    for (const [xref, ref] of Object.entries(refs)) {
+      if (typeof ref !== "string") continue;
+      const v = await pointer("sources", "source", ref, null);
+      if (v && v !== "missing" && !isInvalidId("sources", v)) sourceIds[xref] = v;
+    }
+    const content = { ...base, rejected: { type: rel.type, reason: why, personIds: involved, sourceIds } } as Prisma.InputJsonValue;
+    const reason = `${kind} nicht übernehmbar (${why}) — Original bleibt bei dieser Person erhalten`;
+    const recordType = `${r.recordType}${REJECTED_RAW_SUFFIX}`;
+    const prior = await db.importRawRecord.findMany({
+      where: { personId, recordType, xref: r.xref ?? null, supersededAt: null },
+      select: { id: true, content: true },
+    });
+    if (prior.some((s) => stableJson(s.content) === stableJson(content))) return "duplicate" as const;
+    // Anderer Stand derselben abgelehnten Familie: der alte gilt als überholt.
+    if (write && prior.length) {
+      superseded += (await db.importRawRecord.updateMany({ where: { id: { in: prior.map((x) => x.id) } }, data: { supersededAt: now } })).count;
+    }
+    return { personId, recordType, xref: r.xref ?? null, content, reason };
+  }
+
   async function targetOf(x: {
     personRef?: string | null;
     personId?: string | null;
@@ -1048,6 +1115,26 @@ async function applyInTx(
     }
     return n === 1 ? found : null;
   }
+}
+
+/**
+ * Endung der Datensatzart für Rohdaten einer beim Import abgelehnten
+ * Beziehung, die ersatzweise bei einer beteiligten Person liegen (z.B.
+ * "GEDCOM_FAM:ABGELEHNT"). Der GEDCOM-Export schreibt sie als Familie zurück.
+ */
+export const REJECTED_RAW_SUFFIX = ":ABGELEHNT";
+
+/** JSON mit sortierten Schlüsseln — Postgres (jsonb) speichert Schlüssel in eigener Reihenfolge. */
+function stableJson(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(stableJson).join(",")}]`;
+  if (v && typeof v === "object") {
+    return `{${Object.keys(v as Record<string, unknown>)
+      .filter((k) => (v as Record<string, unknown>)[k] !== undefined)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${stableJson((v as Record<string, unknown>)[k])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(v ?? null);
 }
 
 async function updateRow(db: Db, entity: ImportEntity, id: string, row: Record<string, unknown>) {
@@ -1126,7 +1213,13 @@ async function checkRelationshipRules(
     return false;
   };
 
-  for (const e of edges) {
+  // Eltern-Kind-Kanten zuerst: Widersprechen sich eine Abstammung und eine
+  // Partnerschaft derselben zwei Personen (z.B. Kind als Partner seiner
+  // Mutter), trägt die Abstammung den Baum, und die Partnerschaft ist der
+  // wahrscheinlichere Fehler — sie wird ausgelassen, nicht die Abstammung.
+  // Innerhalb einer Art bleibt die Reihenfolge der Datei (stabile Sortierung).
+  const ordered = [...edges].sort((x, y) => Number(x.type !== "PARENT_OF") - Number(y.type !== "PARENT_OF"));
+  for (const e of ordered) {
     const pk = pairKey(e.from, e.to);
     const typed = `${e.type}|${pk}`;
     if (seenTyped.has(typed)) {

@@ -19,6 +19,13 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # DATABASE_URL wird zur Buildzeit nur von `prisma generate` gelesen, nicht
 # verbunden — ein Platzhalter genügt.
 ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
+# Build-Angabe für die Fußzeile („Build 2026.11.19 · 68c8471“), von der
+# GitHub-Action übergeben (JJJJ.MM.TT und Commit). Next.js setzt
+# NEXT_PUBLIC_* beim Build fest ein; leer = „Build lokal“ (lib/build-info.ts).
+# Erst hier deklariert, damit die Stufen davor im Cache bleiben.
+ARG BUILD_DATE=""
+ARG BUILD_SHA=""
+ENV NEXT_PUBLIC_BUILD_DATE=$BUILD_DATE NEXT_PUBLIC_BUILD_SHA=$BUILD_SHA
 RUN npx prisma generate && npm run build
 
 # ---------------------------------------------------------------------------

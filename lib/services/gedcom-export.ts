@@ -38,6 +38,7 @@ import {
 } from "../gedcom-import/mapping";
 import type { EventTypeName } from "../events";
 import { buildExport } from "./exchange-export";
+import { REJECTED_RAW_SUFFIX } from "./import-apply";
 
 /**
  * GEDCOM-Export (5.5.1, UTF-8) aus dem sichtbaren Bestand — dieselbe Grenze
@@ -250,7 +251,7 @@ export type GedcomExportResult = {
   fileName: string;
   /** Bilddateien für die ZIP-Variante: Name im Archiv → Speicherschlüssel. */
   mediaFiles: Map<string, string>;
-  stats: { persons: number; families: number; sources: number; events: number; media: number; extensionsFromRaw: number; droppedPointers: number };
+  stats: { persons: number; families: number; sources: number; events: number; media: number; extensionsFromRaw: number; droppedPointers: number; rejectedFamilies: number };
   warnings: number;
 };
 
@@ -258,9 +259,9 @@ export async function buildGedcomExport(scope: Scope, options: { mediaPrefix?: s
   const { data, keyByFileName } = await buildExport(scope);
   const d = data as unknown as {
     persons: (Row & { id: string; media: { mediaId: string; isPrimary: boolean }[] })[];
-    relationships: (Row & { id: string; type: string; subtype: string; fromPersonId: string; toPersonId: string })[];
+    relationships: (Row & { id: string; type: string; subtype: string; fromPersonId: string; toPersonId: string; media?: { mediaId: string; isPrimary: boolean }[] })[];
     media: { id: string; fileName: string; caption: string | null; mimeType: string }[];
-    sources: (Row & { id: string; title: string })[];
+    sources: (Row & { id: string; title: string; mediaId?: string | null })[];
     citations: (Row & { id: string; sourceId: string; personId: string | null; relationshipId: string | null; eventId: string | null; fact: string })[];
     events: (Row & { id: string; personId: string | null; relationshipId: string | null; type: EventTypeName; isAlternative: boolean })[];
     personNames: (Row & { id: string; personId: string; type: string })[];
@@ -321,6 +322,27 @@ export async function buildGedcomExport(scope: Scope, options: { mediaPrefix?: s
   const mediaById = new Map(d.media.map((m) => [m.id, m]));
   const mediaUrlsOf = new Map<string, Set<string>>();
   for (const x of d.externalIds) if (x.mediaId && x.system === "MEDIA_URL") mediaUrlsOf.set(x.mediaId, new Set([...(mediaUrlsOf.get(x.mediaId) ?? []), x.value]));
+  /**
+   * Verweis auf eine mitexportierte Bilddatei (im ZIP unter media/). Personen,
+   * Partnerschaften und Quellen nutzen dieselbe Form — sonst läge ein Bild im
+   * Archiv, auf das die .ged-Datei nirgends verweist.
+   */
+  const appMediaLink = (mediaId: string, primary: boolean): GedcomMediaLink | null => {
+    const asset = mediaById.get(mediaId);
+    if (!asset) return null;
+    return {
+      primary,
+      extensions: [],
+      inline: {
+        files: [{ location: `${prefix}${asset.fileName}`, isUrl: false, format: asset.mimeType.split("/")[1] ?? "webp" }],
+        ...(asset.caption ? { title: asset.caption } : {}),
+        notes: [],
+        citations: [],
+        externalIds: [],
+        extensions: [],
+      },
+    };
+  };
 
   const citationsBy = (field: "personId" | "relationshipId" | "eventId", id: string) => d.citations.filter((c) => c[field] === id);
   const citationOf = (c: (typeof d.citations)[number], idx: OriginalIndex | null, raw: RawContent): GedcomCitation => {
@@ -360,6 +382,7 @@ export async function buildGedcomExport(scope: Scope, options: { mediaPrefix?: s
   };
 
   let extensionsFromRaw = 0;
+  let rejectedFamilies = 0;
 
   // --- Personen ---------------------------------------------------------------
   const persons: GedcomPerson[] = d.persons.map((p) => {
@@ -463,21 +486,10 @@ export async function buildGedcomExport(scope: Scope, options: { mediaPrefix?: s
     const media: GedcomMediaLink[] = [];
     const downloadedUrls = new Set<string>();
     for (const m of p.media) {
-      const asset = mediaById.get(m.mediaId);
-      if (!asset) continue;
+      const link = appMediaLink(m.mediaId, m.isPrimary);
+      if (!link) continue;
       for (const u of mediaUrlsOf.get(m.mediaId) ?? []) downloadedUrls.add(u);
-      media.push({
-        primary: m.isPrimary,
-        extensions: [],
-        inline: {
-          files: [{ location: `${prefix}${asset.fileName}`, isUrl: false, format: asset.mimeType.split("/")[1] ?? "webp" }],
-          ...(asset.caption ? { title: asset.caption } : {}),
-          notes: [],
-          citations: [],
-          externalIds: [],
-          extensions: [],
-        },
-      });
+      media.push(link);
     }
     for (const l of orig?.media ?? []) {
       if (l.mediaId || !l.inline) continue;
@@ -560,9 +572,11 @@ export async function buildGedcomExport(scope: Scope, options: { mediaPrefix?: s
     fam.notes = inlineNote(f.r.notes as string | null);
     fam.citations = f.cites.filter((c) => !(f.married && c.fact === "PARTNERSHIP" && f.events.some((e) => e.type === "MARRIAGE"))).map((c) => citationOf(c, f.idx, f.raw));
     fam.externalIds = extIdsOf.get(f.r.id) ?? [];
+    const famMedia = (f.r.media ?? []).map((m) => appMediaLink(m.mediaId, m.isPrimary)).filter((m): m is GedcomMediaLink => m !== null);
+    fam.media = famMedia;
     if (f.orig) {
       fam.extensions = f.orig.extensions ?? [];
-      fam.media = (f.orig.media ?? []).filter((m) => !m.mediaId);
+      fam.media = [...famMedia, ...(f.orig.media ?? []).filter((m) => !m.mediaId)];
       if (f.orig.privacy) fam.privacy = f.orig.privacy;
       if (f.orig.updated) fam.updated = f.orig.updated;
       if (f.orig.changed) fam.changed = f.orig.changed;
@@ -570,6 +584,50 @@ export async function buildGedcomExport(scope: Scope, options: { mediaPrefix?: s
       extensionsFromRaw++;
     }
   }
+  // Abgelehnte Familien (Beziehung verstieß beim Import gegen eine Regel der
+  // App, z.B. Paar zugleich Eltern und Kind): ihr Original liegt in den
+  // Rohdaten einer beteiligten Person. Wieder als FAM ausgeben, damit ein
+  // Hin- und Rückweg die Familie behält — Partner und Ereignisse, Notizen und
+  // Belege; Kinder nicht (ihre Abstammung steht bei den übrigen Familien,
+  // ein zweites FAMC wäre doppelt). Nur wenn beide Partner exportiert werden.
+  const personXref = new Map<string, string>();
+  for (const r of d.rawRecords) if (!r.superseded && r.recordType === RAW_TYPES.person && r.personId && r.xref) personXref.set(r.personId, r.xref);
+  const exportedSources = new Set(d.sources.map((s) => s.id));
+  /** Belege des Originals auf exportierte Quellen umbiegen; nicht auffindbare entfallen (sie stehen im Original). */
+  const remapCitations = (list: GedcomCitation[] | undefined, sourceIds: Record<string, string>) =>
+    (list ?? []).flatMap((c) => {
+      if (!c.sourceId) return [c];
+      const id = sourceIds[c.sourceId] ?? xrefMap.get(c.sourceId);
+      return id && exportedSources.has(id) ? [{ ...c, sourceId: id }] : [];
+    });
+  for (const r of d.rawRecords) {
+    if (r.superseded || r.recordType !== `${RAW_TYPES.family}${REJECTED_RAW_SUFFIX}` || !r.personId) continue;
+    const c = r.content as RawContent & { rejected?: { type: string; reason: string; personIds?: string[]; sourceIds?: Record<string, string> } };
+    if (c?.format !== RAW_FORMAT || !c.rejected || c.rejected.type !== "PARTNER_OF") continue;
+    const orig = c.record as unknown as GedcomFamily | undefined;
+    if (!orig) continue;
+    // Partner über die Xref ihres eigenen Originaldatensatzes zuordnen (eindeutig
+    // je Person, auch wenn mehrere Bäume dieselben Xrefs benutzen).
+    const involved = c.rejected.personIds ?? [];
+    const partners = orig.partners.map((x) => involved.find((id) => personXref.get(id) === x) ?? xrefMap.get(x));
+    if (partners.length !== 2 || partners.some((p) => !p || !personIds.has(p))) continue;
+    const id = `REJ-${r.personId}-${r.xref ?? families.length}`;
+    if (famById.has(id)) continue;
+    const fam: GedcomFamily = {
+      ...orig,
+      id,
+      partners: partners as string[],
+      children: [],
+      events: orig.events.map((e) => ({ ...e, citations: remapCitations(e.citations, c.rejected!.sourceIds ?? {}), media: (e.media ?? []).filter((m) => !m.mediaId), notes: inlineNotes(e.notes, c) })),
+      notes: inlineNotes(orig.notes, c),
+      citations: remapCitations(orig.citations, c.rejected.sourceIds ?? {}),
+      media: (orig.media ?? []).filter((m) => !m.mediaId),
+    };
+    families.push(fam);
+    famById.set(id, fam);
+    rejectedFamilies++;
+  }
+
   // Belege zur Abstammung: am Kind (GEDCOM kennt keinen Ort dafür an der Familie)
   const personById = new Map(persons.map((p) => [p.id, p]));
   for (const r of d.relationships.filter((x) => x.type === "PARENT_OF")) {
@@ -595,6 +653,7 @@ export async function buildGedcomExport(scope: Scope, options: { mediaPrefix?: s
       externalIds: extIdsOf.get(s.id) ?? [],
       extensions: [],
     };
+    const srcMedia = s.mediaId ? appMediaLink(s.mediaId, false) : null;
     if (s.author) src.author = String(s.author);
     if (s.kindLabel) src.sourceType = String(s.kindLabel);
     const appNotes = (s.notes as string | null) ?? "";
@@ -614,6 +673,7 @@ export async function buildGedcomExport(scope: Scope, options: { mediaPrefix?: s
       } else src.notes = inlineNote(appNotes);
       extensionsFromRaw++;
     } else src.notes = inlineNote(appNotes);
+    if (srcMedia) src.media.unshift(srcMedia);
     if (s.repository) {
       const name = String(s.repository);
       let rid = repoByName.get(name);
@@ -671,6 +731,7 @@ export async function buildGedcomExport(scope: Scope, options: { mediaPrefix?: s
       events: persons.reduce((n, p) => n + p.events.length, 0) + families.reduce((n, f) => n + f.events.length, 0),
       media: mediaFiles.size,
       extensionsFromRaw,
+      rejectedFamilies,
       droppedPointers,
     },
     warnings: result.warnings.length,

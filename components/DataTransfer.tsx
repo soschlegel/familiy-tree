@@ -11,6 +11,9 @@ type Plan = {
   media: { create: number; skip: number; withoutFile: number };
   sources?: { create: number; update: number };
   citations?: { create: number; update: number };
+  // Austauschformat 3: Lebensereignisse und weitere Namen (ältere Server liefern sie nicht).
+  events?: { create: number; update: number };
+  personNames?: { create: number; update: number };
   warnings: string[];
 };
 
@@ -63,11 +66,15 @@ export function DataTransfer({ canImport }: { canImport: boolean }) {
       (plan.sources?.create ?? 0) +
       (plan.sources?.update ?? 0) +
       (plan.citations?.create ?? 0) +
-      (plan.citations?.update ?? 0)
+      (plan.citations?.update ?? 0) +
+      (plan.events?.create ?? 0) +
+      (plan.events?.update ?? 0) +
+      (plan.personNames?.create ?? 0) +
+      (plan.personNames?.update ?? 0)
     : 0;
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
       <section className={box}>
         <h2 className="section-title">Export</h2>
         <p className="mt-1 text-sm muted">
@@ -128,14 +135,14 @@ export function DataTransfer({ canImport }: { canImport: boolean }) {
               className="block w-full text-sm file:mr-3 file:rounded-lg file:border file:border-stone-300 file:bg-surface file:px-3 file:py-1.5 file:text-sm dark:file:border-stone-700 dark:file:text-stone-100"
             />
 
-            <div className="mt-3 flex gap-2">
+            <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => void send(false)}
                 disabled={!file || busy}
                 className="btn-secondary"
               >
-                {busy ? "Prüfe…" : "Vorschau"}
+                {busy ? "Prüfe…" : "Vorschau der JSON/ZIP-Datei"}
               </button>
               <button
                 type="button"
@@ -178,6 +185,16 @@ export function DataTransfer({ canImport }: { canImport: boolean }) {
                 Bilder: {plan.media.create} neu, {plan.media.skip} bereits
                 vorhanden
               </li>
+              {plan.events && (
+                <li>
+                  Lebensereignisse: {plan.events.create} neu, {plan.events.update} aktualisiert
+                </li>
+              )}
+              {plan.personNames && (
+                <li>
+                  Weitere Namen: {plan.personNames.create} neu, {plan.personNames.update} aktualisiert
+                </li>
+              )}
               {plan.sources && (
                 <li>
                   Quellen: {plan.sources.create} neu, {plan.sources.update} aktualisiert
