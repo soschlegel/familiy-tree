@@ -13,10 +13,10 @@
 # <major>.<minor> (Git-Tags v*). Nach erfolgreichem Build auf main wird der
 # Branch "deploy" auf genau diesen Commit gesetzt — Portainer beobachtet
 # "deploy" statt "main" und sieht neue Compose-Dateien so erst, wenn die
-# passenden Images fertig sind (README, "Updates").
+# passende Image fertig ist (README, "Updates").
 #
-# Das Paket auf ghcr.io bleibt privat; Portainer meldet sich mit einem
-# Token (classic, nur read:packages) an der Registry an (README).
+# Neue Pakete auf ghcr.io sind zunächst privat — das Paket einmalig auf
+# "Public" stellen (README, Erste Installation, Schritt 2).
 
 name: Images
 
