@@ -3,15 +3,18 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { apiFetch } from "./api-client";
+
 type Plan = {
   persons: { create: number; update: number };
   relationships: { create: number; update: number };
   media: { create: number; skip: number; withoutFile: number };
+  sources?: { create: number; update: number };
+  citations?: { create: number; update: number };
   warnings: string[];
 };
 
-const box =
-  "rounded-lg border border-stone-200 p-4 dark:border-stone-800";
+const box = "card p-5";
 
 export function DataTransfer({ canImport }: { canImport: boolean }) {
   const router = useRouter();
@@ -22,14 +25,15 @@ export function DataTransfer({ canImport }: { canImport: boolean }) {
   const [error, setError] = useState<string | null>(null);
 
   async function send(apply: boolean) {
-    if (!file) return;
+    if (!file || busy) return;
+    if (apply && !confirm("Import jetzt ausführen? Bestehende Einträge mit gleicher ID werden überschrieben.")) return;
     setBusy(true);
     setError(null);
 
     const form = new FormData();
     form.append("file", file);
 
-    const res = await fetch(`/api/import?apply=${apply}`, {
+    const res = await apiFetch<{ plan: Plan }>(`/api/import?apply=${apply}`, {
       method: "POST",
       body: form,
     });
@@ -37,14 +41,12 @@ export function DataTransfer({ canImport }: { canImport: boolean }) {
     setBusy(false);
 
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? `Fehler ${res.status}`);
+      setError(res.message);
       setPlan(null);
       return;
     }
 
-    const body = await res.json();
-    setPlan(body.plan);
+    setPlan(res.data.plan);
     setApplied(apply);
     if (apply) {
       setFile(null);
@@ -57,49 +59,51 @@ export function DataTransfer({ canImport }: { canImport: boolean }) {
       plan.persons.update +
       plan.relationships.create +
       plan.relationships.update +
-      plan.media.create
+      plan.media.create +
+      (plan.sources?.create ?? 0) +
+      (plan.sources?.update ?? 0) +
+      (plan.citations?.create ?? 0) +
+      (plan.citations?.update ?? 0)
     : 0;
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
       <section className={box}>
-        <h2 className="font-medium">Export</h2>
-        <p className="mt-1 text-sm text-stone-500">
-          Personen, Beziehungen und Bildzuordnungen als JSON. Das ZIP enthält
+        <h2 className="section-title">Export</h2>
+        <p className="mt-1 text-sm muted">
+          Personen, Beziehungen, Quellen mit Belegen und Bildzuordnungen als JSON. Das ZIP enthält
           zusätzlich die Bilddateien und eignet sich als vollständige Sicherung
           oder für den Umzug auf eine andere Instanz.
         </p>
         <div className="mt-3 flex gap-2">
-          <a
-            href="/api/export?format=zip"
-            className="rounded-lg bg-stone-900 px-3 py-1.5 text-sm text-white transition hover:bg-stone-700"
-          >
+          <a href="/api/export?format=zip" className="btn-primary">
             ZIP mit Bildern
           </a>
-          <a
-            href="/api/export?format=json"
-            className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm transition hover:bg-stone-100 dark:border-stone-700 dark:hover:bg-stone-800"
-          >
+          <a href="/api/export?format=json" className="btn-secondary">
             Nur JSON
           </a>
         </div>
       </section>
 
       <section className={box}>
-        <h2 className="font-medium">Import</h2>
+        <h2 className="section-title">Import</h2>
         {!canImport ? (
-          <p className="mt-1 text-sm text-stone-500">
+          <p className="mt-1 text-sm muted">
             Nur Administratoren können Daten einspielen.
           </p>
         ) : (
           <>
-            <p className="mt-1 text-sm text-stone-500">
+            <p className="mt-1 text-sm muted">
               JSON oder ZIP aus einem Export. Bestehende Einträge werden anhand
               ihrer ID erkannt und aktualisiert, unbekannte ergänzt.{" "}
               <strong className="font-medium">Nichts wird gelöscht.</strong>
             </p>
 
+            <label htmlFor="import-file" className="field-label mt-3">
+              Exportdatei (JSON oder ZIP)
+            </label>
             <input
+              id="import-file"
               type="file"
               accept=".json,.zip,application/json,application/zip"
               onChange={(e) => {
@@ -108,22 +112,24 @@ export function DataTransfer({ canImport }: { canImport: boolean }) {
                 setApplied(false);
                 setError(null);
               }}
-              className="mt-3 block w-full text-sm file:mr-3 file:rounded-lg file:border file:border-stone-300 file:bg-transparent file:px-3 file:py-1.5 file:text-sm"
+              className="block w-full text-sm file:mr-3 file:rounded-lg file:border file:border-stone-300 file:bg-surface file:px-3 file:py-1.5 file:text-sm dark:file:border-stone-700 dark:file:text-stone-100"
             />
 
             <div className="mt-3 flex gap-2">
               <button
+                type="button"
                 onClick={() => void send(false)}
                 disabled={!file || busy}
-                className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm transition hover:bg-stone-100 disabled:opacity-50 dark:border-stone-700 dark:hover:bg-stone-800"
+                className="btn-secondary"
               >
                 {busy ? "Prüfe…" : "Vorschau"}
               </button>
               <button
+                type="button"
                 onClick={() => void send(true)}
                 disabled={!file || busy || !plan || applied}
                 title={!plan ? "Erst die Vorschau ansehen" : undefined}
-                className="rounded-lg bg-stone-900 px-3 py-1.5 text-sm text-white transition hover:bg-stone-700 disabled:opacity-50"
+                className="btn-primary"
               >
                 Import ausführen
               </button>
@@ -132,13 +138,13 @@ export function DataTransfer({ canImport }: { canImport: boolean }) {
         )}
 
         {error && (
-          <p className="mt-3 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
+          <p role="alert" className="alert-error mt-3">
             {error}
           </p>
         )}
 
         {plan && (
-          <div className="mt-3 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm dark:border-stone-700 dark:bg-stone-900">
+          <div role="status" className={`mt-3 text-sm ${applied ? "alert-success" : "alert-info"}`}>
             <p className="mb-2 font-medium">
               {applied
                 ? "Import abgeschlossen"
@@ -146,7 +152,7 @@ export function DataTransfer({ canImport }: { canImport: boolean }) {
                   ? "Es gibt nichts zu übernehmen"
                   : "Vorschau — noch nichts geändert"}
             </p>
-            <ul className="space-y-0.5 text-stone-600 dark:text-stone-400">
+            <ul className="space-y-0.5">
               <li>
                 Personen: {plan.persons.create} neu, {plan.persons.update}{" "}
                 aktualisiert
@@ -159,10 +165,20 @@ export function DataTransfer({ canImport }: { canImport: boolean }) {
                 Bilder: {plan.media.create} neu, {plan.media.skip} bereits
                 vorhanden
               </li>
+              {plan.sources && (
+                <li>
+                  Quellen: {plan.sources.create} neu, {plan.sources.update} aktualisiert
+                </li>
+              )}
+              {plan.citations && (
+                <li>
+                  Belege: {plan.citations.create} neu, {plan.citations.update} aktualisiert
+                </li>
+              )}
             </ul>
 
             {plan.warnings.length > 0 && (
-              <ul className="mt-2 space-y-0.5 text-amber-700 dark:text-amber-500">
+              <ul className="mt-2 space-y-0.5 text-brass-700 dark:text-brass-300">
                 {plan.warnings.slice(0, 8).map((w, i) => (
                   <li key={i}>⚠ {w}</li>
                 ))}

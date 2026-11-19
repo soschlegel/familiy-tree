@@ -3,10 +3,12 @@ import { requirePage } from "@/lib/session";
 import { UserAdmin } from "@/components/UserAdmin";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Benutzer" };
 
 export default async function UsersPage() {
   const session = await requirePage("user:manage");
 
+  const now = new Date();
   const users = await prisma.user.findMany({
     orderBy: [{ role: "asc" }, { email: "asc" }],
     select: {
@@ -16,23 +18,34 @@ export default async function UsersPage() {
       role: true,
       status: true,
       lastLoginAt: true,
+      aiAccess: true,
+      // Aktive KI-Schlüssel: nicht widerrufen, nicht abgelaufen.
+      _count: {
+        select: {
+          apiTokens: {
+            where: { revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+          },
+        },
+      },
     },
   });
 
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold">Benutzerverwaltung</h1>
-        <p className="text-sm text-stone-500">
+        <p className="eyebrow">Verwaltung</p>
+        <h1 className="page-title">Benutzer</h1>
+        <p className="mt-1 text-sm muted">
           Nur hier eingetragene E-Mail-Adressen können sich anmelden — ein
           gültiges Google- oder GitHub-Konto allein genügt nicht.
         </p>
       </div>
 
       <UserAdmin
-        users={users.map((u) => ({
+        users={users.map(({ _count, ...u }) => ({
           ...u,
           lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
+          activeTokens: _count.apiTokens,
         }))}
         currentUserId={session.user.id}
       />

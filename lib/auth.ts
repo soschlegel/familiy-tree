@@ -129,7 +129,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       if (token.blocked) {
         // Erzwingt einen ungültigen Zustand -> Nutzer landet auf /login.
-        return { ...session, expires: new Date(0).toISOString() };
+        // `user` ausdrücklich leeren: auth() in Server-Components ergänzt
+        // sonst den Token als `user` (next-auth: `{ user, ...session }`). Die
+        // Login-Seite hielt die Sitzung dann für gültig und schickte zurück
+        // zum Baum, der wieder zur Anmeldung — eine Weiterleitungsschleife.
+        return { user: undefined, expires: new Date(0).toISOString() } as unknown as typeof session;
       }
       session.user.id = token.sub!;
       session.user.role = (token.role as Role) ?? "VIEWER";

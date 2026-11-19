@@ -2,9 +2,25 @@
 
 import type { EdgeProps } from "reactflow";
 
+import { NODE_HEIGHT } from "@/lib/tree-layout";
+
+export type ParentSubtype = "BIOLOGICAL" | "ADOPTIVE" | "STEP" | "FOSTER";
+
+/**
+ * Linienbild je Art der Elternschaft. Unterscheidung über Strichmuster UND
+ * Farbe, damit sie auch ohne Farbsehen und im Ausdruck lesbar bleibt.
+ */
+export const PARENT_EDGE_STYLE: Record<ParentSubtype, { dash?: string; className: string }> = {
+  BIOLOGICAL: { className: "stroke-stone-400 dark:stroke-stone-500" },
+  ADOPTIVE: { dash: "7 4", className: "stroke-accent-500 dark:stroke-accent-300" },
+  STEP: { dash: "2 4", className: "stroke-brass-500 dark:stroke-brass-400" },
+  FOSTER: { dash: "9 3 2 3", className: "stroke-violet-500 dark:stroke-violet-300" },
+};
+
 export type ParentEdgeData = {
   /** "parent" = Abstammung, "event" = Anbindung an ein Hochzeitsereignis. */
   variant?: "parent" | "event";
+  subtype?: ParentSubtype;
   /** Spur für das waagerechte Stück; trennt die Linien mehrerer Eltern. */
   lane?: number;
   /** Korridor durch übersprungene Ebenen (Linien über mehrere Generationen). */
@@ -49,6 +65,8 @@ function orthogonalPath(points: [number, number][], radius: number): string {
 const BUS_DROP = 34;
 /** Höhenversatz je Spur, damit sich Linien verschiedener Eltern nicht decken. */
 const LANE_STEP = 20;
+/** Anzahl der Spuren (siehe laneOf in lib/layout-generations.ts). */
+const LANES = 4;
 const RADIUS = 10;
 
 /**
@@ -74,12 +92,17 @@ export function ParentEdge({
 }: EdgeProps<ParentEdgeData>) {
   const isEvent = data?.variant === "event";
 
-  // Genug Platz lassen, wenn Ziel und Quelle dicht beieinander liegen.
-  const gap = targetY - sourceY;
-  const drop = BUS_DROP + (data?.lane ?? 0) * LANE_STEP;
+  const waypoints = data?.waypoints ?? [];
+
+  // Platz bis zur nächsten Kartenreihe: bei Korridoren bis zur Reihe des
+  // ersten Platzhalters, sonst bis zum Ziel. Die Spuren teilen sich diesen
+  // Platz — bei engem Reihenabstand rücken sie zusammen, statt am unteren
+  // Rand aufeinanderzufallen.
+  const gap = waypoints.length > 0 ? waypoints[0].y - NODE_HEIGHT / 2 - sourceY : targetY - sourceY;
+  const step = Math.max(6, Math.min(LANE_STEP, (gap - 20 - BUS_DROP) / (LANES - 1)));
+  const drop = BUS_DROP + Math.min(data?.lane ?? 0, LANES - 1) * step;
   const busY = sourceY + Math.min(drop, Math.max(gap - 20, 12));
 
-  const waypoints = data?.waypoints ?? [];
   const corners: [number, number][] = [
     [sourceX, sourceY],
     [sourceX, busY],
@@ -110,15 +133,17 @@ export function ParentEdge({
         `M ${sourceX} ${sourceY} L ${targetX} ${targetY}`
       : orthogonalPath(corners, RADIUS);
 
+  const style = PARENT_EDGE_STYLE[data?.subtype ?? "BIOLOGICAL"] ?? PARENT_EDGE_STYLE.BIOLOGICAL;
+
   return (
     <path
       id={id}
       d={path}
       fill="none"
-      strokeWidth={1.5}
+      strokeWidth={isEvent || style.dash ? 1.75 : 1.5}
       strokeLinecap="round"
-      stroke={isEvent ? "#fb7185" : "#c7c2be"}
-      strokeDasharray={isEvent ? "5 4" : undefined}
+      className={isEvent ? "stroke-rose-400" : style.className}
+      strokeDasharray={isEvent ? "5 4" : style.dash}
       opacity={data?.dimmed ? 0.15 : 1}
     />
   );

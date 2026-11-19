@@ -6,6 +6,7 @@ import { editableFamilyIds } from "@/lib/scope";
 import { PersonForm } from "@/components/PersonForm";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Person anlegen" };
 
 export default async function NewPersonPage() {
   const { scope } = await requireScope();
@@ -22,8 +23,14 @@ export default async function NewPersonPage() {
   });
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Person anlegen</h1>
+    <div className="space-y-5">
+      <div>
+        <p className="eyebrow">Neu im Archiv</p>
+        <h1 className="page-title">Person anlegen</h1>
+        <p className="mt-1 text-sm muted">
+          Eltern, Kinder und Partner kommen danach auf der Personenseite dazu.
+        </p>
+      </div>
       <PersonForm families={families} />
     </div>
   );

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 import { auth } from "./auth";
 import { can, type Action } from "./authz";
-import { loadScope, type Scope } from "./scope";
+import { loadScope } from "./scope";
 
 /**
  * Für Server-Components. Bewusst kein middleware.ts: Auth.js bräuchte dort

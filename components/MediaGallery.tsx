@@ -1,7 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useId, useState } from "react";
+
+import { apiFetch, jsonBody } from "./api-client";
 
 export type GalleryItem = {
   mediaId: string;
@@ -34,146 +36,189 @@ export function MediaGallery({
   compact?: boolean;
 }) {
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const headingId = useId();
+  const inputId = useId();
 
   const ownerField = owner.kind === "person" ? "personId" : "relationshipId";
+  const primaryLabel = owner.kind === "person" ? "Porträt" : "Hauptbild";
 
-  async function upload(files: FileList | null) {
-    if (!files?.length) return;
-    setBusy(true);
+  async function upload(input: HTMLInputElement) {
+    const files = input.files;
+    if (!files?.length || busy) return;
+    setBusy("upload");
     setError(null);
+    setNotice(null);
 
     // Nacheinander statt parallel: so bleibt die Reihenfolge stabil und der
     // Server bekommt bei mehreren großen Bildern keinen Speicherstoß.
+    let done = 0;
     for (const file of Array.from(files)) {
       const form = new FormData();
       form.append("file", file);
       form.append(ownerField, owner.id);
 
-      const res = await fetch("/api/media", { method: "POST", body: form });
+      const res = await apiFetch("/api/media", { method: "POST", body: form });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setError(`${file.name}: ${body.error ?? res.status}`);
+        setError(`${file.name}: ${res.message}`);
         break;
       }
+      done++;
     }
 
-    setBusy(false);
+    // Dieselbe Datei soll sich danach erneut wählen lassen.
+    input.value = "";
+    setBusy(null);
+    if (done > 0) setNotice(done === 1 ? "Bild hochgeladen." : `${done} Bilder hochgeladen.`);
     router.refresh();
   }
 
   async function makePrimary(mediaId: string) {
-    setBusy(true);
+    if (busy) return;
+    setBusy(mediaId);
     setError(null);
-    const res = await fetch(`/api/media/${mediaId}/primary`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [ownerField]: owner.id }),
-    });
+    setNotice(null);
+    const res = await apiFetch(`/api/media/${mediaId}/primary`, jsonBody("POST", { [ownerField]: owner.id }));
+    setBusy(null);
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? `Fehler ${res.status}`);
+      setError(res.message);
+      return;
     }
-    setBusy(false);
+    setNotice(`Als ${primaryLabel} festgelegt.`);
     router.refresh();
   }
 
   async function remove(mediaId: string) {
-    if (!confirm("Bild wirklich löschen?")) return;
-    setBusy(true);
-    const res = await fetch(`/api/media/${mediaId}`, { method: "DELETE" });
-    if (!res.ok) setError(`Löschen fehlgeschlagen (${res.status})`);
-    setBusy(false);
+    if (busy) return;
+    if (!confirm("Bild wirklich löschen? Das lässt sich nicht rückgängig machen.")) return;
+    setBusy(mediaId);
+    setError(null);
+    setNotice(null);
+    const res = await apiFetch(`/api/media/${mediaId}`, { method: "DELETE" });
+    setBusy(null);
+    if (!res.ok) {
+      setError(res.message);
+      return;
+    }
+    setNotice("Bild gelöscht.");
     router.refresh();
   }
 
-  const primaryLabel =
-    owner.kind === "person" ? "Primärbild" : "Hauptbild";
+  const Heading = compact ? "h4" : "h2";
 
   return (
-    <section className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className={compact ? "text-sm font-medium" : "font-medium"}>
-          {title} ({items.length})
-        </h2>
+    <section className="space-y-3" aria-labelledby={headingId} data-testid={`gallery-${owner.kind}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Heading
+          id={headingId}
+          className={compact ? "text-sm font-semibold" : "section-title"}
+        >
+          {title}{" "}
+          <span className="font-sans text-sm font-normal muted">({items.length})</span>
+        </Heading>
         {canUpload && (
-          <label className="cursor-pointer rounded-lg border border-stone-300 px-3 py-1.5 text-sm transition hover:bg-stone-100 dark:border-stone-700 dark:hover:bg-stone-800">
-            {busy ? "Lädt…" : "Bilder hinzufügen"}
+          <>
             <input
+              id={inputId}
               type="file"
               accept="image/*"
               multiple
-              hidden
-              disabled={busy}
-              onChange={(e) => upload(e.target.files)}
+              className="sr-only"
+              disabled={busy !== null}
+              onChange={(e) => void upload(e.currentTarget)}
             />
-          </label>
+            <label
+              htmlFor={inputId}
+              className={`btn-secondary cursor-pointer ${compact ? "btn-sm" : ""} ${busy ? "pointer-events-none opacity-50" : ""}`}
+            >
+              {busy === "upload" ? "Lädt hoch…" : "Bilder hinzufügen"}
+            </label>
+          </>
         )}
       </div>
 
-      {error && (
-        <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
-          {error}
-        </p>
-      )}
+      <div aria-live="polite">
+        {error && (
+          <p role="alert" className="alert-error">
+            {error}
+          </p>
+        )}
+        {notice && !error && <p className="alert-success">{notice}</p>}
+      </div>
 
       {items.length === 0 ? (
-        <p className="text-sm text-stone-500">Noch keine Bilder.</p>
+        <p className="text-sm muted">Noch keine Bilder.</p>
       ) : (
-        <div
+        <ul
           className={`grid gap-3 ${
-            compact ? "grid-cols-4 sm:grid-cols-8" : "grid-cols-3 sm:grid-cols-5"
+            compact ? "grid-cols-3 sm:grid-cols-4" : "grid-cols-2 sm:grid-cols-4 lg:grid-cols-5"
           }`}
         >
           {items.map((item) => (
-            <figure key={item.mediaId} className="group relative">
-              <a
-                href={`/api/media/${item.mediaId}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`/api/media/${item.mediaId}?variant=thumb`}
-                  alt={item.caption ?? ""}
-                  className={`aspect-square w-full rounded-lg object-cover ring-offset-2 transition ${
-                    item.isPrimary
-                      ? "ring-2 ring-amber-500"
-                      : "ring-0 hover:ring-2 hover:ring-stone-300"
-                  }`}
-                />
-              </a>
-
-              {item.isPrimary ? (
-                <span className="absolute left-1 top-1 rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-medium text-white shadow">
-                  {primaryLabel}
-                </span>
-              ) : (
-                canUpload && (
-                  <button
-                    onClick={() => makePrimary(item.mediaId)}
-                    disabled={busy}
-                    title={`Als ${primaryLabel} festlegen`}
-                    className="absolute left-1 top-1 hidden rounded bg-stone-900/85 px-1.5 py-0.5 text-[10px] text-white shadow group-hover:block"
-                  >
-                    ★ {primaryLabel}
-                  </button>
-                )
-              )}
-
-              {canDelete && (
-                <button
-                  onClick={() => remove(item.mediaId)}
-                  disabled={busy}
-                  className="absolute right-1 top-1 hidden rounded bg-red-600/90 px-1.5 py-0.5 text-[10px] text-white shadow group-hover:block"
+            <li key={item.mediaId} className="group relative">
+              <figure>
+                <a
+                  href={`/api/media/${item.mediaId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block overflow-hidden rounded-xl"
+                  aria-label={`${item.caption ?? "Bild"} in voller Größe öffnen`}
                 >
-                  Löschen
-                </button>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/api/media/${item.mediaId}?variant=thumb`}
+                    alt={item.caption ?? (item.isPrimary ? primaryLabel : "Bild")}
+                    loading="lazy"
+                    decoding="async"
+                    className={`aspect-square w-full rounded-xl object-cover transition duration-300 group-hover:scale-[1.03] ${
+                      busy === item.mediaId ? "opacity-50" : ""
+                    }`}
+                  />
+                </a>
+                {item.isPrimary && (
+                  <span className="absolute left-2 top-2 rounded-full bg-brass-700 px-2 py-0.5 text-[10px] font-semibold text-white shadow">
+                    {primaryLabel}
+                  </span>
+                )}
+                {item.caption && (
+                  <figcaption className="mt-1 truncate text-xs muted">{item.caption}</figcaption>
+                )}
+              </figure>
+
+              {(canUpload || canDelete) && (
+                // Aktionen auf dem Telefon immer sichtbar, sonst bei Zeiger
+                // oder Tastaturfokus — nicht nur beim Überfahren mit der Maus.
+                <div className="absolute inset-x-2 bottom-2 flex justify-between gap-1 opacity-100 transition sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
+                  {canUpload && !item.isPrimary ? (
+                    <button
+                      type="button"
+                      onClick={() => void makePrimary(item.mediaId)}
+                      disabled={busy !== null}
+                      className="rounded-full bg-stone-900/80 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur hover:bg-stone-900"
+                    >
+                      Als {primaryLabel}
+                    </button>
+                  ) : (
+                    <span />
+                  )}
+                  {canDelete && (
+                    <button
+                      type="button"
+                      onClick={() => void remove(item.mediaId)}
+                      disabled={busy !== null}
+                      className="rounded-full bg-red-700/90 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur hover:bg-red-700"
+                      aria-label="Bild löschen"
+                    >
+                      Löschen
+                    </button>
+                  )}
+                </div>
               )}
-            </figure>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </section>
   );

@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { apiFetch } from "./api-client";
+
 /**
  * Löschen mit zweistufiger Bestätigung: Hat die Person noch Beziehungen,
  * antwortet die API mit 409 und nennt deren Anzahl. Erst dann wird die
@@ -22,16 +24,16 @@ export function DeletePersonButton({
   const [error, setError] = useState<string | null>(null);
 
   async function remove() {
-    if (!confirm(`„${personName}" wirklich löschen?`)) return;
+    if (busy) return;
+    if (!confirm(`„${personName}" wirklich löschen? Das lässt sich nicht rückgängig machen.`)) return;
 
     setBusy(true);
     setError(null);
 
-    let res = await fetch(`/api/persons/${personId}`, { method: "DELETE" });
+    let res = await apiFetch(`/api/persons/${personId}`, { method: "DELETE" });
 
-    if (res.status === 409) {
-      const body = await res.json().catch(() => ({}));
-      const count = body.relationCount ?? 0;
+    if (!res.ok && res.status === 409) {
+      const count = Number(res.body.relationCount ?? 0);
       const ok = confirm(
         `„${personName}" ist noch mit ${count} Beziehung(en) verknüpft.\n\n` +
           `Beim Löschen gehen diese Verbindungen verloren — Eltern und Kinder ` +
@@ -41,33 +43,32 @@ export function DeletePersonButton({
         setBusy(false);
         return;
       }
-      res = await fetch(`/api/persons/${personId}?force=true`, {
-        method: "DELETE",
-      });
+      res = await apiFetch(`/api/persons/${personId}?force=true`, { method: "DELETE" });
     }
 
-    setBusy(false);
-
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? `Löschen fehlgeschlagen (${res.status})`);
+      setBusy(false);
+      setError(res.message);
       return;
     }
 
-    router.push("/people");
+    router.push(`/people?deleted=${encodeURIComponent(personName)}`);
     router.refresh();
   }
 
   return (
-    <div className="text-right">
-      <button
-        onClick={remove}
-        disabled={busy}
-        className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
-      >
-        {busy ? "Löschen…" : "Person löschen"}
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <p className="text-sm muted">
+        Löscht die Person samt ihrer Beziehungen und Bildzuordnungen.
+      </p>
+      <button type="button" onClick={() => void remove()} disabled={busy} className="btn-danger">
+        {busy ? "Löscht…" : "Person löschen"}
       </button>
-      {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
+      {error && (
+        <p role="alert" className="alert-error w-full">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
