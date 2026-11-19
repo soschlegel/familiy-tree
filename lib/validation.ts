@@ -4,9 +4,12 @@ import {
   asFuzzyDate,
   certainlyBefore,
   dateBounds,
+  fuzzyDateProblem,
+  MAX_DATE_PHRASE_LENGTH,
   parseFuzzyDate,
   type FuzzyDate,
 } from "./dates";
+import { EVENT_TYPES, PERSON_NAME_TYPES } from "./events";
 
 // ---------------------------------------------------------------------------
 // Fachregeln — bewusst als reine Funktionen, damit API, Dienste (lib/services)
@@ -67,6 +70,8 @@ function singleDateIssues(
 ): RuleIssue[] {
   const issues: RuleIssue[] = [];
   if (f.date.getUTCFullYear() < MIN_YEAR) issues.push({ path, message: labels.tooEarly });
+  const problem = fuzzyDateProblem(f);
+  if (problem) issues.push({ path, message: problem });
   if (dateBounds(f, { tolerant: false }).start > latestAllowed) {
     issues.push({ path, message: labels.future });
   }
@@ -188,7 +193,7 @@ function addIssues(ctx: z.RefinementCtx, issues: RuleIssue[]) {
 export const fuzzyDateInput = z
   .string()
   .trim()
-  .max(60)
+  .max(100)
   .optional()
   .nullable()
   .transform((v, ctx): FuzzyDate | null => {
@@ -202,6 +207,27 @@ export const fuzzyDateInput = z
 
 const optionalDate = fuzzyDateInput;
 
+/**
+ * Wortlaut eines Datums (…Phrase): wie es in der Quelle steht, wenn es sich
+ * nicht strukturiert darstellen lässt. Leer = keiner.
+ */
+export const datePhraseInput = z
+  .string()
+  .trim()
+  .max(MAX_DATE_PHRASE_LENGTH)
+  .optional()
+  .nullable()
+  .transform((v) => (v ? v : null));
+const optionalPhrase = datePhraseInput;
+
+const shortText = z
+  .string()
+  .trim()
+  .max(200)
+  .optional()
+  .nullable()
+  .transform((v) => (v ? v : null));
+
 const optionalText = z
   .string()
   .trim()
@@ -214,11 +240,17 @@ const personFields = z.object({
   givenName: z.string().trim().min(1, "Vorname fehlt").max(120),
   familyName: optionalText,
   birthName: optionalText,
+  nickname: shortText,
+  namePrefix: shortText,
+  nameSuffix: shortText,
   gender: z.enum(["MALE", "FEMALE", "OTHER", "UNKNOWN"]).default("UNKNOWN"),
   birthDate: optionalDate,
+  birthDatePhrase: optionalPhrase,
   birthPlace: optionalText,
   deathDate: optionalDate,
+  deathDatePhrase: optionalPhrase,
   deathPlace: optionalText,
+  deathCause: optionalText,
   notes: z
     .string()
     .trim()
@@ -256,7 +288,11 @@ export const relationshipInput = z
     fromPersonId: z.string().min(1),
     toPersonId: z.string().min(1),
     startDate: optionalDate,
+    startDatePhrase: optionalPhrase,
+    startPlace: optionalText,
     endDate: optionalDate,
+    endDatePhrase: optionalPhrase,
+    endPlace: optionalText,
     notes: optionalText,
   })
   .transform((r) => ({ ...r, subtype: r.subtype ?? defaultSubtype(r.type) }))
@@ -280,7 +316,11 @@ export const relationshipPatch = z
   .object({
     subtype: z.enum(ALL_SUBTYPES),
     startDate: optionalDate,
+    startDatePhrase: optionalPhrase,
+    startPlace: optionalText,
     endDate: optionalDate,
+    endDatePhrase: optionalPhrase,
+    endPlace: optionalText,
     notes: optionalText,
   })
   .partial();
@@ -312,7 +352,7 @@ export const SOURCE_KINDS = [
 ] as const;
 export type SourceKindName = (typeof SOURCE_KINDS)[number];
 
-export const CITATION_FACTS = ["NAME", "BIRTH", "DEATH", "PARTNERSHIP", "PARENTAGE", "OTHER"] as const;
+export const CITATION_FACTS = ["NAME", "BIRTH", "DEATH", "PARTNERSHIP", "PARENTAGE", "OTHER", "EVENT"] as const;
 export type CitationFactName = (typeof CITATION_FACTS)[number];
 
 export const CITATION_CONFIDENCES = ["HIGH", "MEDIUM", "LOW"] as const;
@@ -338,11 +378,13 @@ const sourceUrl = z
 const sourceFields = z.object({
   title: z.string().trim().min(1, "Bitte einen Titel angeben").max(300),
   kind: z.enum(SOURCE_KINDS).default("OTHER"),
+  kindLabel: shortText,
   author: optionalText,
   repository: optionalText,
   callNumber: optionalText,
   url: sourceUrl,
   date: optionalDate,
+  datePhrase: optionalPhrase,
   notes: z
     .string()
     .trim()
@@ -375,6 +417,13 @@ export const sourcePatch = sourceFields.partial().superRefine((s, ctx) => addIss
 const citationFields = {
   fact: z.enum(CITATION_FACTS).default("OTHER"),
   detail: optionalText,
+  text: z
+    .string()
+    .trim()
+    .max(20000)
+    .optional()
+    .nullable()
+    .transform((v) => (v ? v : null)),
   confidence: z
     .enum(CITATION_CONFIDENCES)
     .optional()
@@ -382,20 +431,24 @@ const citationFields = {
     .transform((v) => v ?? null),
 };
 
-/** Beleg: genau eines von personId und relationshipId. */
+/**
+ * Beleg: genau eines von personId, relationshipId und eventId. Bei eventId
+ * setzt der Dienst den Träger des Ereignisses selbst ein (fact = EVENT).
+ */
 export const citationInput = z
   .object({
     sourceId: z.string().trim().min(1, "Bitte eine Quelle wählen"),
     personId: z.string().trim().min(1).optional().nullable(),
     relationshipId: z.string().trim().min(1).optional().nullable(),
+    eventId: z.string().trim().min(1).optional().nullable(),
     ...citationFields,
   })
   .superRefine((c, ctx) => {
-    if (Boolean(c.personId) === Boolean(c.relationshipId)) {
+    if ([c.personId, c.relationshipId, c.eventId].filter(Boolean).length !== 1) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["personId"],
-        message: "Ein Beleg gehört zu genau einer Person oder genau einer Beziehung",
+        message: "Ein Beleg gehört zu genau einer Person, einer Beziehung oder einem Ereignis",
       });
     }
   });
@@ -434,3 +487,102 @@ export const apiTokenCreateInput = z.object({
     .max(API_TOKEN_MAX_DAYS, `Höchstens ${API_TOKEN_MAX_DAYS} Tage`)
     .optional(),
 });
+
+// ---------------------------------------------------------------------------
+// Lebensereignisse und Namen
+// ---------------------------------------------------------------------------
+
+const eventFields = {
+  type: z.enum(EVENT_TYPES),
+  label: shortText,
+  isAlternative: z.boolean().default(false),
+  date: optionalDate,
+  datePhrase: optionalPhrase,
+  place: optionalText,
+  address: optionalText,
+  value: optionalText,
+  cause: optionalText,
+  age: z
+    .string()
+    .trim()
+    .max(60)
+    .optional()
+    .nullable()
+    .transform((v) => (v ? v : null)),
+  agency: optionalText,
+  notes: z
+    .string()
+    .trim()
+    .max(20000)
+    .optional()
+    .nullable()
+    .transform((v) => (v ? v : null)),
+  sortOrder: z.number().int().min(-100000).max(100000).default(0),
+};
+
+/** Datum eines Ereignisses: plausibel, nicht sicher in der Zukunft. */
+export function eventDateIssues(e: { date?: DateValue }, now: Date = new Date()): RuleIssue[] {
+  const f = asFuzzyDate(e.date);
+  if (!f) return [];
+  return singleDateIssues(
+    "date",
+    f,
+    { tooEarly: `Jahr vor ${MIN_YEAR} ist nicht plausibel`, future: "Datum liegt zu weit in der Zukunft" },
+    now.getTime() + FUTURE_TOLERANCE_MS,
+  );
+}
+
+/** Neues Ereignis: an genau einer Person oder Beziehung. Art-Regeln: lib/events.ts (im Dienst). */
+export const eventInput = z
+  .object({
+    personId: z.string().trim().min(1).optional().nullable(),
+    relationshipId: z.string().trim().min(1).optional().nullable(),
+    ...eventFields,
+  })
+  .superRefine((e, ctx) => {
+    if (Boolean(e.personId) === Boolean(e.relationshipId)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["personId"],
+        message: "Ein Ereignis gehört zu genau einer Person oder genau einer Beziehung",
+      });
+    }
+    addIssues(ctx, eventDateIssues(e));
+  });
+
+/** Teil-Update; der Träger ist fest. Ohne Standardwerte, damit Fehlendes unverändert bleibt. */
+export const eventPatch = z
+  .object({
+    ...eventFields,
+    isAlternative: z.boolean(),
+    sortOrder: z.number().int().min(-100000).max(100000),
+  })
+  .partial()
+  .superRefine((e, ctx) => addIssues(ctx, eventDateIssues(e)));
+
+const personNameFields = {
+  type: z.enum(PERSON_NAME_TYPES).default("OTHER"),
+  givenName: shortText,
+  familyName: shortText,
+  prefix: shortText,
+  suffix: shortText,
+  nickname: shortText,
+  label: shortText,
+  notes: optionalText,
+  sortOrder: z.number().int().min(-100000).max(100000).default(0),
+};
+
+const nameNotEmpty = (n: { givenName?: string | null; familyName?: string | null; nickname?: string | null }) =>
+  Boolean(n.givenName || n.familyName || n.nickname);
+
+export const personNameInput = z
+  .object({ personId: z.string().trim().min(1), ...personNameFields })
+  .refine(nameNotEmpty, { message: "Bitte mindestens Vorname, Nachname oder Rufname angeben", path: ["givenName"] });
+
+export const personNamePatch = z
+  .object({
+    ...personNameFields,
+    type: z.enum(PERSON_NAME_TYPES),
+    sortOrder: z.number().int().min(-100000).max(100000),
+  })
+  .partial();

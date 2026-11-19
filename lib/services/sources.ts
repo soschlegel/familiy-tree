@@ -576,6 +576,7 @@ const FACT_LABEL: Record<CitationFact, string> = {
   PARTNERSHIP: "Heirat/Partnerschaft",
   PARENTAGE: "Abstammung",
   OTHER: "Sonstiges",
+  EVENT: "Ereignis",
 };
 
 function assertFact(fact: CitationFact, allowed: readonly CitationFact[]) {
