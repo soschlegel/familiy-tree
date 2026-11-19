@@ -91,11 +91,20 @@ jobs:
             type=sha,prefix=sha-,format=short
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+      # Build-Angabe für die Fußzeile der App: Datum (deutsche Zeit) und
+      # Commit dieses Laufs, siehe Dockerfile (ARG BUILD_DATE/BUILD_SHA).
+      - name: Build-Angabe
+        run: |
+          echo "BUILD_DATE=$(TZ=Europe/Berlin date +%Y.%m.%d)" >> "$GITHUB_ENV"
+          echo "BUILD_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
       - name: Anwendung (runner)
         uses: docker/build-push-action@v7
         with:
           context: .
           target: runner
+          build-args: |
+            BUILD_DATE=${{ env.BUILD_DATE }}
+            BUILD_SHA=${{ env.BUILD_SHA }}
           platforms: linux/amd64
           push: true
           provenance: false

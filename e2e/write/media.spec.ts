@@ -135,6 +135,12 @@ test("Person löschen entfernt ihr Bild, der Import stellt beides wieder her", a
   data.relationships = [];
   data.sources = [];
   data.citations = [];
+  // Nur diese Person: Ereignisse, Namen, Fremdkennungen und Rohdaten anderer
+  // (gleichzeitig laufender) Tests nicht auf den Stand des Exports zurücksetzen.
+  data.events = (data.events ?? []).filter((e: { personId: string | null }) => e.personId === p.id);
+  data.personNames = (data.personNames ?? []).filter((n: { personId: string }) => n.personId === p.id);
+  data.externalIds = [];
+  data.rawRecords = [];
   data.media = data.media.filter((m: { id: string }) => m.id === assets[1].id);
   zip.file("stammbaum.json", JSON.stringify(data));
   const buffer = await zip.generateAsync({ type: "nodebuffer" });
@@ -143,12 +149,12 @@ test("Person löschen entfernt ihr Bild, der Import stellt beides wieder her", a
   adminPage.on("dialog", (d) => void d.accept());
   await adminPage.goto("/admin/data");
   await adminPage.getByLabel("Exportdatei (JSON oder ZIP)").setInputFiles({ name: "backup.zip", mimeType: "application/zip", buffer });
-  await adminPage.getByRole("button", { name: "Vorschau", exact: true }).click();
+  await adminPage.getByRole("button", { name: "Vorschau der JSON/ZIP-Datei" }).click();
   const status = adminPage.getByRole("status").filter({ hasText: "Personen:" });
   // Bild ist wirklich neu — es war mit der Person gelöscht worden.
   await expect(status).toContainText("Personen: 1 neu, 0 aktualisiert");
   await expect(status).toContainText("Bilder: 1 neu, 0 bereits vorhanden");
-  await adminPage.getByRole("button", { name: "Import ausführen" }).click();
+  await adminPage.getByRole("button", { name: "Import ausführen", exact: true }).click();
   await expect(adminPage.getByRole("status").filter({ hasText: "Import abgeschlossen" })).toBeVisible({ timeout: IMPORT_TIMEOUT });
 
   await adminPage.goto(`/people/${p.id}`);

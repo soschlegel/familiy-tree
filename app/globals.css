@@ -6,6 +6,8 @@
    (siehe tailwind.config.ts). */
 :root {
   color-scheme: light dark;
+  /* Höhe der Fußzeile mit der Build-Angabe (app/layout.tsx, Baumseite). */
+  --footer-h: 1.75rem;
 
   --paper: 246 242 234;
   --surface: 255 253 248;

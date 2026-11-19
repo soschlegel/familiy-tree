@@ -94,8 +94,8 @@ async function exportFor(api: APIRequestContext): Promise<Exchange> {
 async function chooseFile(page: Page, name: string, mimeType: string, buffer: Buffer) {
   await page.goto("/admin/data");
   await page.getByLabel("Exportdatei (JSON oder ZIP)").setInputFiles({ name, mimeType, buffer });
-  await expect(page.getByRole("button", { name: "Import ausführen" })).toBeDisabled();
-  await page.getByRole("button", { name: "Vorschau", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Import ausführen", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Vorschau der JSON/ZIP-Datei" }).click();
   return page.getByRole("status").filter({ hasText: "Personen:" });
 }
 
@@ -109,6 +109,8 @@ test("geänderter JSON-Export: Vorschau, dann Import", async ({ page }) => {
   const relationships = data.relationships.length;
   const sources = data.sources.length;
   const citations = data.citations.length;
+  const events = data.events.length;
+  const names = data.personNames.length;
   expect(persons).toBe(mock.persons.length + 1);
 
   // Änderung: Notiz und ungenaues Geburtsdatum der Testperson, dazu eine
@@ -201,16 +203,18 @@ test("geänderter JSON-Export: Vorschau, dann Import", async ({ page }) => {
   await expect(status).toContainText(`Personen: 0 neu, ${persons} aktualisiert`);
   await expect(status).toContainText(`Beziehungen: 0 neu, ${relationships} aktualisiert`);
   await expect(status).toContainText(`Quellen: 1 neu, ${sources} aktualisiert`);
-  // Zwei neue Belege: Geburt und Wohnort-Ereignis. (Ereignisse und Namen zeigt die Vorschau bisher nicht an.)
+  // Zwei neue Belege: Geburt und Wohnort-Ereignis; zwei neue Ereignisse, ein weiterer Name.
   await expect(status).toContainText(`Belege: 2 neu, ${citations} aktualisiert`);
+  await expect(status).toContainText(`Lebensereignisse: 2 neu, ${events} aktualisiert`);
+  await expect(status).toContainText(`Weitere Namen: 1 neu, ${names} aktualisiert`);
   await expect(status).toContainText(`Bilder: 0 neu, ${data.media.length} bereits vorhanden`);
   // Noch nichts geändert.
   const before = await page.request.get(`/api/persons/${target.id}`);
   expect((await before.json()).person.notes).toBeNull();
 
-  await page.getByRole("button", { name: "Import ausführen" }).click();
+  await page.getByRole("button", { name: "Import ausführen", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "Import abgeschlossen" })).toBeVisible({ timeout: IMPORT_TIMEOUT });
-  await expect(page.getByRole("button", { name: "Import ausführen" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Import ausführen", exact: true })).toBeDisabled();
 
   await page.goto(`/people/${target.id}`);
   await expect(page.getByRole("region", { name: "Notizen" })).toContainText(`Per Import geändert ${tag}`);
@@ -254,6 +258,13 @@ test("ZIP-Export mit neuem Bild", async ({ page }) => {
   full.relationships = full.relationships.filter((r) => keep.has(r.fromPersonId as string) && keep.has(r.toPersonId as string));
   full.sources = [];
   full.citations = [];
+  // Ereignisse, Namen, Fremdkennungen und Rohdaten paralleler Tests (z.B. des
+  // GEDCOM-Imports) nicht auf einen älteren Stand zurückschreiben.
+  const rels = new Set(full.relationships.map((r) => r.id as string));
+  full.events = full.events.filter((e) => (e.personId ? keep.has(e.personId as string) : rels.has(e.relationshipId as string)));
+  full.personNames = full.personNames.filter((n) => keep.has(n.personId as string));
+  full.externalIds = [];
+  full.rawRecords = [];
   // Nur Bilder der behaltenen Datensätze — Bilder paralleler Tests können
   // zwischen Export und Import schon wieder gelöscht sein.
   const used = new Set([
@@ -271,7 +282,7 @@ test("ZIP-Export mit neuem Bild", async ({ page }) => {
 
   const status = await chooseFile(page, "export.zip", "application/zip", buffer);
   await expect(status).toContainText("Bilder: 1 neu");
-  await page.getByRole("button", { name: "Import ausführen" }).click();
+  await page.getByRole("button", { name: "Import ausführen", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "Import abgeschlossen" })).toBeVisible({ timeout: IMPORT_TIMEOUT });
 
   await page.goto(`/people/${target.id}`);
@@ -321,7 +332,7 @@ test("Datei im alten Format (Version 1) ohne neue Felder", async ({ page }) => {
   const status = await chooseFile(page, "alt.json", "application/json", Buffer.from(JSON.stringify(v1)));
   await expect(status).toContainText("Personen: 1 neu, 0 aktualisiert");
   await expect(status).toContainText("Beziehungen: 1 neu, 0 aktualisiert");
-  await page.getByRole("button", { name: "Import ausführen" }).click();
+  await page.getByRole("button", { name: "Import ausführen", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "Import abgeschlossen" })).toBeVisible({ timeout: IMPORT_TIMEOUT });
 
   await page.goto(`/people/${v1Person}`);
@@ -343,7 +354,7 @@ test("kaputte Datei wird mit Meldung abgelehnt", async ({ page, consoleGuard }) 
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify({ version: 2, persons: [{ id: "x" }], relationships: [] })),
   });
-  await page.getByRole("button", { name: "Vorschau", exact: true }).click();
+  await page.getByRole("button", { name: "Vorschau der JSON/ZIP-Datei" }).click();
   await expect(page.getByRole("alert").filter({ hasText: "Datei entspricht nicht dem Austauschformat" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Import ausführen" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Import ausführen", exact: true })).toBeDisabled();
 });

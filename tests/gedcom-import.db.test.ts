@@ -350,6 +350,60 @@ describe.skipIf(Boolean(skipReason))("GEDCOM-Import (Testdatenbank)", () => {
     expect(r.counts.relationships.invalid).toBe(1);
   });
 
+  it("abgelehnte Partnerschaft (Kind ⚭ Mutter): Abstammung bleibt, Original samt Ereignissen bei einer Person, Export enthält die Familie", async () => {
+    const v = newVariant();
+    // F2: Otto (Kind aus F1) als Partner seiner Mutter Maria, mit Heirat und Wohnort-Ereignis.
+    const text = gedcom(v).replace(
+      "0 @S1@ SOUR",
+      ["0 @F2@ FAM", `1 _UID ${v.uid}F2`, "1 HUSB @I3@", "1 WIFE @I2@", "1 MARR", "2 DATE 1905", "2 PLAC Fernstadt", "1 RESI", "2 PLAC Fernstadt", "2 SOUR @S1@", "3 PAGE S. 99", "0 @S1@ SOUR"].join(CRLF),
+    );
+    const plan = await startGedcomImport(admin, { fileName: `test-${v.guid}.ged`, bytes: Buffer.from(text) });
+    trees.push(plan.sourceTreeId);
+    expect(plan.counts.relationships.invalid).toBe(1);
+    const inv = (await listGedcomPlanItems(admin, plan.batchId, { kind: "relationships", group: "invalid" })).items[0];
+    expect(inv.label).toMatch(/Otto.*⚭.*Maria|Maria.*⚭.*Otto/);
+    expect(inv.reason).toMatch(/Eltern und Kind können nicht als Partner verbunden werden — nicht übernehmbar, Original bleibt bei .+ erhalten$/);
+    const invEvents = (await listGedcomPlanItems(admin, plan.batchId, { kind: "events", group: "invalid" })).items;
+    expect(invEvents.length).toBeGreaterThanOrEqual(1);
+    for (const e of invEvents) expect(e.reason).toMatch(/Original bleibt bei .+ erhalten/);
+
+    const r = await applyGedcomImport(admin, plan.batchId, {});
+    expect(r.counts.relationships.invalid).toBe(1);
+    const otto = await personByUid(`${v.uid}03`);
+    const maria = await personByUid(`${v.uid}02`);
+    // Die Abstammung (Maria → Otto) blieb, die widersprüchliche Partnerschaft nicht.
+    expect(await prisma.relationship.count({ where: { type: "PARENT_OF", fromPersonId: maria.id, toPersonId: otto.id } })).toBe(1);
+    expect(await prisma.relationship.count({ where: { type: "PARTNER_OF", OR: [{ fromPersonId: otto.id }, { toPersonId: otto.id }] } })).toBe(0);
+    // Original der Familie F2 liegt aktiv bei einer der beiden Personen, mit Vermerk.
+    const kept = await prisma.importRawRecord.findMany({ where: { personId: { in: [otto.id, maria.id] }, recordType: "GEDCOM_FAM:ABGELEHNT", xref: "F2", supersededAt: null } });
+    expect(kept).toHaveLength(1);
+    expect(kept[0].reason).toMatch(/^Partnerschaft nicht übernehmbar \(Eltern und Kind können nicht als Partner verbunden werden\) — Original bleibt bei dieser Person erhalten$/);
+    expect(JSON.stringify(kept[0].content)).toContain("Fernstadt");
+    expect((kept[0].content as { rejected?: { type: string } }).rejected?.type).toBe("PARTNER_OF");
+
+    // Erneuter Import derselben Datei legt das Original nicht doppelt ab.
+    const plan2 = await startGedcomImport(admin, { fileName: `test-${v.guid}.ged`, bytes: Buffer.from(text) });
+    await applyGedcomImport(admin, plan2.batchId, {});
+    expect(await prisma.importRawRecord.count({ where: { personId: { in: [otto.id, maria.id] }, recordType: "GEDCOM_FAM:ABGELEHNT", xref: "F2", supersededAt: null } })).toBe(1);
+
+    // Export: die Familie steht wieder drin — beide Partner, Heirat 1905 in Fernstadt, Wohnort mit Beleg; ohne Kinder.
+    const doc = parseGedcom((await buildGedcomExport(admin)).bytes).document;
+    const uidOf = (p: { externalIds: { type: string; value: string }[] }) => p.externalIds.find((x) => x.type === "UID")?.value;
+    const ottoOut = doc.persons.find((p) => uidOf(p) === `${v.uid}03`)!;
+    const mariaOut = doc.persons.find((p) => uidOf(p) === `${v.uid}02`)!;
+    const fam = doc.families.find((f) => f.partners.includes(ottoOut.id) && f.partners.includes(mariaOut.id));
+    expect(fam).toBeTruthy();
+    expect(fam!.children).toHaveLength(0);
+    const marr = fam!.events.find((e) => e.type === "MARRIAGE");
+    expect(marr?.date?.original).toBe("1905");
+    expect(marr?.place?.name).toBe("Fernstadt");
+    const resi = fam!.events.find((e) => e.type === "RESIDENCE");
+    expect(resi?.citations[0]?.sourceId).toBeTruthy();
+    expect(doc.sources.some((s) => s.id === resi!.citations[0].sourceId)).toBe(true);
+    // Otto bleibt Kind von Maria (FAMC der eigentlichen Familie).
+    expect(doc.families.some((f) => f.partners.includes(mariaOut.id) && f.children.some((c) => c.childId === ottoOut.id))).toBe(true);
+  });
+
   it("Vorschlag für von Hand angelegte Person; nur nach Bestätigung zugeordnet", async () => {
     const v = newVariant();
     const surname = `Vorschlag${v.uid.slice(1, 7)}`;
