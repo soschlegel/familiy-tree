@@ -18,6 +18,7 @@ import {
   mediaDir,
   openObject,
   putObject,
+  renameWithRetry,
   resolveKey,
 } from "@/lib/storage";
 
@@ -106,6 +107,47 @@ describe("Dateien", () => {
     const got = await getObjectBuffer("thumbs/race.webp");
     expect(got?.equals(a) || got?.equals(b)).toBe(true);
     expect(await readdir(path.join(root, "thumbs"))).toEqual(["race.webp"]);
+  });
+
+  it("viele parallele Schreibvorgänge auf denselben Schlüssel scheitern nicht (Windows: EPERM beim rename)", async () => {
+    // Unter Windows lehnt rename ein Ziel ab, das gerade ein anderer
+    // Schreibvorgang ersetzt; putObject wiederholt dann begrenzt.
+    for (let i = 0; i < 20; i++) {
+      await Promise.all(
+        ["a", "b", "c"].map((c) => putObject("thumbs/race-viele.webp", Buffer.alloc(100_000, c))),
+      );
+    }
+    const got = await getObjectBuffer("thumbs/race-viele.webp");
+    expect(got?.length).toBe(100_000);
+    await deleteObject("thumbs/race-viele.webp");
+  });
+
+  it("renameWithRetry wiederholt nur EPERM/EBUSY/EACCES und nur begrenzt", async () => {
+    const fail = (code: string) => Object.assign(new Error(code), { code });
+    let calls = 0;
+    await renameWithRetry("a", "b", async () => {
+      calls++;
+      if (calls < 3) throw fail(calls === 1 ? "EPERM" : "EBUSY");
+    });
+    expect(calls).toBe(3);
+
+    calls = 0;
+    await expect(
+      renameWithRetry("a", "b", async () => {
+        calls++;
+        throw fail("ENOSPC");
+      }),
+    ).rejects.toMatchObject({ code: "ENOSPC" });
+    expect(calls).toBe(1);
+
+    calls = 0;
+    await expect(
+      renameWithRetry("a", "b", async () => {
+        calls++;
+        throw fail("EPERM");
+      }),
+    ).rejects.toMatchObject({ code: "EPERM" });
+    expect(calls).toBe(8);
   });
 
   it("fehlende Datei: Buffer und Stream liefern null", async () => {
