@@ -1226,6 +1226,21 @@ Danach startet die App normal. Lokal (`docker-compose.dev.yml`) bleibt
 `npm run db:push` möglich; eine so angelegte Datenbank lässt sich aber nicht
 mit dem Produktiv-Image betreiben, ohne sie wie oben zu baselinen.
 
+**Prisma-CLI im Image:** Das Image enthält nur das Paket `prisma` mit seinen
+Abhängigkeiten in den Versionen aus `package-lock.json` (unter
+`/opt/prisma-cli`, aufgerufen über `prisma`, siehe
+[docker/prisma.sh](docker/prisma.sh)), ohne Query-Engine, Client-Vorlage und
+WebAssembly-Engines — die Schema-Engine (Binärdatei für linux-musl) bleibt.
+Nach einem Prisma-Update deshalb einmal prüfen, bevor es auf die NAS geht:
+
+```bash
+docker build -t familytree-local/app:dev .
+# ohne Netz: Schema Engine muss gefunden werden, kein Download-Versuch
+docker run --rm --network none --entrypoint prisma familytree-local/app:dev --version
+# dann den Stack lokal mit docker-compose.build.yml starten; im Log von app:
+# "All migrations have been successfully applied." bzw. "No pending migrations"
+```
+
 ## Sicherung
 
 Eine vollständige Sicherung besteht aus genau zwei Teilen:
