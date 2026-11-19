@@ -3,11 +3,16 @@ import Link from "next/link";
 import { requireScope } from "@/lib/session";
 import {
   findDataGaps,
+  findInconsistencies,
   findPossibleDuplicates,
   getStatistics,
+  RELATIONSHIP_GAP_KINDS,
   type DataGapKind,
   type PersonBrief,
+  type PersonRef,
+  type RelationshipGapKind,
 } from "@/lib/services";
+import type { ConsistencyKind } from "@/lib/consistency";
 import { lifeSpan } from "@/lib/tree-layout";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +37,29 @@ const GAP_LABEL: Record<DataGapKind, { title: string; hint: string }> = {
   },
 };
 
+const REL_GAP_LABEL: Record<RelationshipGapKind, { title: string; hint: string }> = {
+  marriageWithoutPlace: { title: "Ehe ohne Ort", hint: "Heiratsort steht oft im Kirchenbuch oder Familienbuch" },
+  partnershipUnknownStatus: {
+    title: "Ehestand unbekannt",
+    hint: "Partnerschaft ohne Angabe, ob verheiratet — meist aus einem Import",
+  },
+};
+
+/** Überschriften der Plausibilitätsprüfung (lib/consistency.ts). */
+const CONSISTENCY_LABEL: Record<ConsistencyKind, string> = {
+  deathBeforeBirth: "Tod vor der Geburt",
+  parentTooYoung: "Elternteil sehr jung",
+  parentTooOld: "Elternteil sehr alt",
+  bornAfterParentDeath: "Geboren nach dem Tod eines Elternteils",
+  lifespanOver110: "Über 110 Jahre alt",
+  partnershipTooYoung: "Partnerschaft in sehr jungem Alter",
+  partnershipAfterDeath: "Partnerschaft nach dem Tod",
+  overlappingMarriages: "Sich überschneidende Ehen",
+  burialBeforeDeath: "Beerdigung vor dem Tod",
+  eventBeforeBirth: "Ereignis vor der Geburt",
+  eventAfterDeath: "Ereignis nach dem Tod",
+};
+
 const fullName = (p: PersonBrief) => [p.givenName, p.familyName].filter(Boolean).join(" ");
 
 function PersonLink({ person, detail }: { person: PersonBrief; detail?: string }) {
@@ -43,6 +71,28 @@ function PersonLink({ person, detail }: { person: PersonBrief; detail?: string }
       <span className="truncate font-medium">{fullName(person)}</span>
       <span className="ml-auto shrink-0 text-xs muted">{detail ?? lifeSpan(person)}</span>
     </Link>
+  );
+}
+
+/** Beide Partner einer Beziehungslücke; nicht freigegebene als Platzhalter. */
+function PairLink({ persons, relationshipId, detail }: { persons: PersonRef[]; relationshipId: string; detail?: string }) {
+  const first = persons.find((p): p is PersonBrief => !p.restricted);
+  const names = persons.map((p) => (p.restricted ? "Nicht freigegeben" : fullName(p))).join(" & ");
+  const body = (
+    <>
+      <span className="truncate font-medium">{names}</span>
+      {detail && <span className="ml-auto shrink-0 text-xs muted">{detail}</span>}
+    </>
+  );
+  return first ? (
+    <Link
+      href={`/people/${first.id}?rel=${relationshipId}`}
+      className="flex items-baseline gap-2 rounded-md px-2 py-1 text-sm hover:bg-stone-100 dark:hover:bg-stone-800"
+    >
+      {body}
+    </Link>
+  ) : (
+    <span className="flex items-baseline gap-2 px-2 py-1 text-sm">{body}</span>
   );
 }
 
@@ -63,15 +113,18 @@ function Stat({ label, value, sub }: { label: string; value: string | number; su
  */
 export default async function ResearchPage() {
   const { scope } = await requireScope();
-  const [stats, gaps, duplicates] = await Promise.all([
+  const [stats, gaps, duplicates, consistency] = await Promise.all([
     getStatistics(scope),
     findDataGaps(scope, { limit: 25 }),
     findPossibleDuplicates(scope, { limit: 20 }),
+    findInconsistencies(scope, { limit: 200 }),
   ]);
 
   const gapKinds = (Object.keys(GAP_LABEL) as DataGapKind[]).filter(
     (k) => gaps.counts[k] > 0,
   );
+  const relGapKinds = RELATIONSHIP_GAP_KINDS.filter((k) => gaps.relationshipGaps.counts[k] > 0);
+  const issueKinds = (Object.keys(CONSISTENCY_LABEL) as ConsistencyKind[]).filter((k) => consistency.counts[k] > 0);
   const maxFamily = Math.max(1, ...stats.families.map((f) => f.personCount));
   const span =
     stats.birthYears.earliest && stats.birthYears.latest
@@ -147,7 +200,7 @@ export default async function ResearchPage() {
                 </h2>
                 <p className="text-sm muted">Ansatzpunkte für die weitere Suche.</p>
               </div>
-              {gapKinds.length === 0 ? (
+              {gapKinds.length === 0 && relGapKinds.length === 0 ? (
                 <p className="alert-success">Keine Lücken gefunden — vorbildlich.</p>
               ) : (
                 <div className="space-y-2">
@@ -170,6 +223,30 @@ export default async function ResearchPage() {
                         {gaps.counts[k] > gaps.items[k].length && (
                           <li className="px-2 py-1 text-xs muted">
                             … und {gaps.counts[k] - gaps.items[k].length} weitere
+                          </li>
+                        )}
+                      </ul>
+                    </details>
+                  ))}
+                  {relGapKinds.map((k) => (
+                    <details key={k} className="card group" data-testid={`gap-${k}`}>
+                      <summary className="flex cursor-pointer list-none items-center gap-3 p-3">
+                        <span className="min-w-0 flex-1">
+                          <span className="block font-medium">{REL_GAP_LABEL[k].title}</span>
+                          <span className="block text-xs muted">{REL_GAP_LABEL[k].hint}</span>
+                        </span>
+                        <span className="badge-accent tabular-nums">{gaps.relationshipGaps.counts[k]}</span>
+                        <span aria-hidden className="text-xs muted transition group-open:rotate-90">▸</span>
+                      </summary>
+                      <ul className="border-t border-stone-200 p-2 dark:border-stone-800">
+                        {gaps.relationshipGaps.items[k].map((item) => (
+                          <li key={item.relationshipId}>
+                            <PairLink persons={item.persons} relationshipId={item.relationshipId} detail={item.detail} />
+                          </li>
+                        ))}
+                        {gaps.relationshipGaps.counts[k] > gaps.relationshipGaps.items[k].length && (
+                          <li className="px-2 py-1 text-xs muted">
+                            … und {gaps.relationshipGaps.counts[k] - gaps.relationshipGaps.items[k].length} weitere
                           </li>
                         )}
                       </ul>
@@ -210,6 +287,51 @@ export default async function ResearchPage() {
               )}
             </section>
           </div>
+
+          <section aria-labelledby="issues-h" className="space-y-3" data-testid="research-consistency">
+            <div>
+              <h2 id="issues-h" className="section-title">
+                Widersprüche
+              </h2>
+              <p className="text-sm muted">
+                Angaben, die sich für jede mögliche Lesart widersprechen — auch Lebensereignisse
+                gegen Geburt und Tod. Ungenaue Daten zählen mit ihrem ganzen Zeitraum.
+              </p>
+            </div>
+            {issueKinds.length === 0 ? (
+              <p className="alert-success">Keine Widersprüche gefunden.</p>
+            ) : (
+              <div className="grid gap-2 lg:grid-cols-2">
+                {issueKinds.map((k) => {
+                  const items = consistency.items.filter((i) => i.kind === k);
+                  return (
+                    <details key={k} className="card group" data-testid={`issue-${k}`}>
+                      <summary className="flex cursor-pointer list-none items-center gap-3 p-3">
+                        <span className="min-w-0 flex-1 font-medium">{CONSISTENCY_LABEL[k]}</span>
+                        <span className="badge-accent tabular-nums">{consistency.counts[k]}</span>
+                        <span aria-hidden className="text-xs muted transition group-open:rotate-90">▸</span>
+                      </summary>
+                      <ul className="space-y-1 border-t border-stone-200 p-2 dark:border-stone-800">
+                        {items.map((i, n) => (
+                          <li key={n} className="rounded-md px-2 py-1 text-sm">
+                            {i.persons[0] ? (
+                              <Link href={`/people/${i.persons[0].id}`} className="font-medium hover:underline">
+                                {fullName(i.persons[0])}
+                              </Link>
+                            ) : null}
+                            <span className="block text-xs muted">{i.message}</span>
+                          </li>
+                        ))}
+                        {consistency.counts[k] > items.length && (
+                          <li className="px-2 py-1 text-xs muted">… und {consistency.counts[k] - items.length} weitere</li>
+                        )}
+                      </ul>
+                    </details>
+                  );
+                })}
+              </div>
+            )}
+          </section>
         </>
       )}
     </div>

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { apiFetch, jsonBody } from "./api-client";
-import { DateInput } from "./DateInput";
+import { DateInput, dateInputError, datePayload } from "./DateInput";
 import { parseFuzzyDate } from "@/lib/dates";
 import { personDateIssues } from "@/lib/validation";
 
@@ -20,7 +20,17 @@ export type PersonFormValues = {
   birthPlace: string | null;
   deathDate: string | null;
   deathPlace: string | null;
+  deathCause: string | null;
+  nickname: string | null;
+  namePrefix: string | null;
+  nameSuffix: string | null;
   notes: string | null;
+  /** Unlesbarer Text im Datumsfeld wird als Wortlaut gespeichert. */
+  birthDateAsPhrase?: boolean;
+  deathDateAsPhrase?: boolean;
+  /** Gespeicherter Wortlaut neben einem Datum (nur Anzeige). */
+  birthDatePhrase?: string | null;
+  deathDatePhrase?: string | null;
 };
 
 const EMPTY: PersonFormValues = {
@@ -32,10 +42,20 @@ const EMPTY: PersonFormValues = {
   birthPlace: "",
   deathDate: "",
   deathPlace: "",
+  deathCause: "",
+  nickname: "",
+  namePrefix: "",
+  nameSuffix: "",
   notes: "",
 };
 
-type TextKey = Exclude<keyof PersonFormValues, "id" | "gender">;
+type TextKey = Exclude<
+  keyof PersonFormValues,
+  "id" | "gender" | "birthDateAsPhrase" | "deathDateAsPhrase" | "birthDatePhrase" | "deathDatePhrase"
+>;
+
+/** Felder unter „Weitere Angaben“ — aufgeklappt, sobald eines davon belegt ist. */
+const MORE_KEYS = ["nickname", "namePrefix", "nameSuffix", "deathCause"] as const;
 
 /**
  * Dieselben Datumsregeln wie im Server schon vor dem Absenden prüfen — der
@@ -44,10 +64,12 @@ type TextKey = Exclude<keyof PersonFormValues, "id" | "gender">;
 function localIssues(v: PersonFormValues): Record<string, string> {
   const issues: Record<string, string> = {};
   if (!v.givenName.trim()) issues.givenName = "Bitte einen Vornamen angeben.";
+  const birthError = dateInputError(v.birthDate ?? "", v.birthDateAsPhrase);
+  const deathError = dateInputError(v.deathDate ?? "", v.deathDateAsPhrase);
+  if (birthError) issues.birthDate = birthError;
+  if (deathError) issues.deathDate = deathError;
   const birth = parseFuzzyDate(v.birthDate);
   const death = parseFuzzyDate(v.deathDate);
-  if (!birth.ok) issues.birthDate = birth.error;
-  if (!death.ok) issues.deathDate = death.error;
   if (birth.ok && death.ok) {
     for (const issue of personDateIssues({ birthDate: birth.value, deathDate: death.value })) {
       issues[issue.path] ??= `${issue.message}.`;
@@ -100,11 +122,16 @@ export function PersonForm({
 
     // Leere Felder als null schicken, damit sie beim Bearbeiten wirklich
     // geleert werden.
-    const payload = Object.fromEntries(
-      Object.entries(values)
-        .filter(([k]) => k !== "id")
-        .map(([k, v]) => [k, typeof v === "string" && v.trim() === "" && k !== "givenName" ? null : v]),
-    );
+    const skip = new Set(["id", "birthDate", "deathDate", "birthDateAsPhrase", "deathDateAsPhrase", "birthDatePhrase", "deathDatePhrase"]);
+    const payload = {
+      ...Object.fromEntries(
+        Object.entries(values)
+          .filter(([k]) => !skip.has(k))
+          .map(([k, v]) => [k, typeof v === "string" && v.trim() === "" && k !== "givenName" ? null : v]),
+      ),
+      ...datePayload("birthDate", values.birthDate ?? "", values.birthDateAsPhrase),
+      ...datePayload("deathDate", values.deathDate ?? "", values.deathDateAsPhrase),
+    };
 
     const res = await apiFetch<{ id: string }>(
       isEdit ? `/api/persons/${initial!.id}` : "/api/persons",
@@ -128,8 +155,15 @@ export function PersonForm({
       id={`person-${key}`}
       label={label}
       value={values[key] ?? ""}
-      error={fields[key]}
+      error={fields[key] || fields[`${key}Phrase`]}
       onChange={(v) => set(key, v)}
+      allowPhrase
+      asPhrase={Boolean(values[`${key}AsPhrase`])}
+      onAsPhraseChange={(on) => {
+        set(`${key}AsPhrase`, on);
+        setFields((f) => ({ ...f, [key]: "" }));
+      }}
+      phrase={values[`${key}Phrase`]}
     />
   );
 
@@ -205,6 +239,23 @@ export function PersonForm({
           {text("deathPlace", "Sterbeort")}
         </div>
       </fieldset>
+
+      <details
+        className="group rounded-xl border border-stone-200 px-3 py-2 dark:border-stone-800"
+        open={MORE_KEYS.some((k) => Boolean(initial?.[k])) || MORE_KEYS.some((k) => Boolean(fields[k]))}
+        data-testid="person-more"
+      >
+        <summary className="cursor-pointer text-sm font-medium text-accent-700 dark:text-accent-300">
+          Weitere Angaben
+          <span className="ml-2 text-xs font-normal muted">Rufname, Namenszusätze, Todesursache</span>
+        </summary>
+        <div className="mt-3 grid gap-3 pb-1 sm:grid-cols-2">
+          {text("nickname", "Rufname / Spitzname")}
+          {text("namePrefix", "Namenszusatz vorn (z.B. Dr., Freiherr)")}
+          {text("nameSuffix", "Namenszusatz hinten (z.B. jun., III.)")}
+          {text("deathCause", "Todesursache")}
+        </div>
+      </details>
 
       {!isEdit && families.length > 0 && (
         <fieldset>

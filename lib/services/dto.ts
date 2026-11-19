@@ -24,17 +24,35 @@ export type LifeDatePrecision = {
   deathDateQualifier: DateQualifier;
 };
 
+/**
+ * Bereichsende und Wortlaut der Lebensdaten (siehe lib/dates.ts). Ende nur
+ * bei Bereichen (BETWEEN/PERIOD), sonst null.
+ */
+export type LifeDateExtras = {
+  birthDateTo: string | null;
+  birthDateToPrecision: DatePrecision;
+  birthDatePhrase: string | null;
+  deathDateTo: string | null;
+  deathDateToPrecision: DatePrecision;
+  deathDatePhrase: string | null;
+};
+
 /** Vollständige Angaben einer sichtbaren Person. */
-export type PersonSummary = LifeDatePrecision & {
+export type PersonSummary = LifeDatePrecision &
+  LifeDateExtras & {
   id: string;
   givenName: string;
   familyName: string | null;
   birthName: string | null;
+  nickname: string | null;
+  namePrefix: string | null;
+  nameSuffix: string | null;
   gender: Gender;
   birthDate: string | null;
   birthPlace: string | null;
   deathDate: string | null;
   deathPlace: string | null;
+  deathCause: string | null;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -54,6 +72,11 @@ export type PersonBrief = LifeDatePrecision & {
   birthDate: string | null;
   birthPlace: string | null;
   deathDate: string | null;
+  /** Nur bei Datumsbereichen gesetzt (Ende, siehe lib/dates.ts). */
+  birthDateTo?: string;
+  birthDateToPrecision?: DatePrecision;
+  deathDateTo?: string;
+  deathDateToPrecision?: DatePrecision;
   restricted: false;
 };
 
@@ -72,6 +95,14 @@ export type RelationshipDto = {
   endDate: string | null;
   endDatePrecision: DatePrecision;
   endDateQualifier: DateQualifier;
+  startDateTo: string | null;
+  startDateToPrecision: DatePrecision;
+  startDatePhrase: string | null;
+  startPlace: string | null;
+  endDateTo: string | null;
+  endDateToPrecision: DatePrecision;
+  endDatePhrase: string | null;
+  endPlace: string | null;
   notes: string | null;
   createdAt: string;
 };
@@ -99,12 +130,22 @@ export function toPersonSummary(
     givenName: p.givenName,
     familyName: p.familyName,
     birthName: p.birthName,
+    nickname: p.nickname,
+    namePrefix: p.namePrefix,
+    nameSuffix: p.nameSuffix,
     gender: p.gender,
     birthDate: iso(p.birthDate),
     birthPlace: p.birthPlace,
     deathDate: iso(p.deathDate),
     deathPlace: p.deathPlace,
+    deathCause: p.deathCause,
     ...lifeDatePrecision(p),
+    birthDateTo: iso(p.birthDateTo),
+    birthDateToPrecision: p.birthDateToPrecision,
+    birthDatePhrase: p.birthDatePhrase,
+    deathDateTo: iso(p.deathDateTo),
+    deathDateToPrecision: p.deathDateToPrecision,
+    deathDatePhrase: p.deathDatePhrase,
     notes: p.notes,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
@@ -124,10 +165,16 @@ export function toPersonBrief(
     birthDate: Date | string | null;
     birthPlace: string | null;
     deathDate: Date | string | null;
+    birthDateTo?: Date | string | null;
+    birthDateToPrecision?: DatePrecision;
+    deathDateTo?: Date | string | null;
+    deathDateToPrecision?: DatePrecision;
   } & Partial<LifeDatePrecision>,
 ): PersonBrief {
   const s = (d: Date | string | null) =>
     d === null ? null : typeof d === "string" ? d : d.toISOString();
+  const birthTo = p.birthDateTo ? s(p.birthDateTo)! : null;
+  const deathTo = p.deathDateTo ? s(p.deathDateTo)! : null;
   return {
     id: p.id,
     givenName: p.givenName,
@@ -138,6 +185,8 @@ export function toPersonBrief(
     birthPlace: p.birthPlace,
     deathDate: s(p.deathDate),
     ...lifeDatePrecision(p),
+    ...(birthTo ? { birthDateTo: birthTo, birthDateToPrecision: p.birthDateToPrecision ?? "DAY" } : {}),
+    ...(deathTo ? { deathDateTo: deathTo, deathDateToPrecision: p.deathDateToPrecision ?? "DAY" } : {}),
     restricted: false,
   };
 }
@@ -163,6 +212,14 @@ export function toRelationshipDto(r: Relationship): RelationshipDto {
     endDate: iso(r.endDate),
     endDatePrecision: r.endDatePrecision,
     endDateQualifier: r.endDateQualifier,
+    startDateTo: iso(r.startDateTo),
+    startDateToPrecision: r.startDateToPrecision,
+    startDatePhrase: r.startDatePhrase,
+    startPlace: r.startPlace,
+    endDateTo: iso(r.endDateTo),
+    endDateToPrecision: r.endDateToPrecision,
+    endDatePhrase: r.endDatePhrase,
+    endPlace: r.endPlace,
     notes: r.notes,
     createdAt: r.createdAt.toISOString(),
   };

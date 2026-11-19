@@ -121,17 +121,22 @@ const READ_TOOLS = [
   "get_source",
   "get_statistics",
   "get_timeline",
+  "list_events",
   "list_families",
   "search_persons",
   "search_sources",
 ];
 const WRITE_TOOLS = [
+  "add_event",
+  "add_name_variant",
   "cite_source",
   "create_person",
   "create_relationship",
   "create_source",
+  "delete_event",
   "delete_relationship",
   "set_person_families",
+  "update_event",
   "update_person",
   "update_relationship",
 ];
@@ -557,6 +562,178 @@ describe.skipIf(Boolean(skipReason))("MCP-Server (stdio, Mock-Datenbank)", () =>
       });
       expect(s.errors).toEqual([]);
       expect(s.stderr()).toContain("Schreibwerkzeuge AKTIV");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "Lebensereignisse, weitere Namen, Orte und Belege an Ereignissen",
+    async () => {
+      const s = await connect("editor@example.test", true);
+      const reader = await connect("viewer@example.test");
+
+      // Lesen: Ereignisse und Namen in get_person, list_events, Suche über Ort und Namensvariante.
+      const otto = await s.call("get_person", { person_id: L.genealogy.eventsPerson });
+      expect(otto.data.events.map((e: { type: string }) => e.type)).toEqual(expect.arrayContaining(["BAPTISM", "OCCUPATION", "BURIAL"]));
+      expect(otto.data.events.find((e: { id: string }) => e.id === L.genealogy.alternativeBirth)).toMatchObject({ type: "BIRTH", alternative: true });
+      const list = await reader.call("list_events", { person_id: L.genealogy.eventsPerson });
+      expect(list.isError, list.text).toBe(false);
+      expect(list.data.events.length).toBe(otto.data.events.length);
+      const range = await s.call("list_events", { person_id: (await prisma.event.findUnique({ where: { id: L.genealogy.rangeEvent } }))!.personId });
+      expect(range.data.events.find((e: { id: string }) => e.id === L.genealogy.rangeEvent)).toMatchObject({
+        dateQualifier: "BETWEEN",
+        dateTo: expect.any(String),
+        dateText: expect.stringMatching(/^zwischen \d{4} und \d{4}$/),
+      });
+      const relEvents = await s.call("list_events", { relationship_id: L.genealogy.marriageWithPlace });
+      expect(relEvents.data.events.map((e: { type: string }) => e.type)).toContain("ENGAGEMENT");
+      const both = await s.call("list_events", {});
+      expect(both.isError).toBe(true);
+      const admin = await connect("admin@example.test");
+      const variant = await admin.call("search_persons", { query: "Wagener" });
+      expect(variant.data.persons.map((p: { id: string }) => p.id)).toContain(L.genealogy.namesPerson);
+
+      const gaps = await s.call("find_data_gaps", { kinds: ["partnershipUnknownStatus"], limit: 5 });
+      expect(gaps.data.relationshipGaps.counts.partnershipUnknownStatus).toBeGreaterThanOrEqual(1);
+      expect(gaps.data.relationshipGaps.items.partnershipUnknownStatus[0]).toMatchObject({
+        relationshipId: expect.any(String),
+        persons: expect.any(Array),
+      });
+      expect(gaps.data.items).toEqual({});
+
+      // Schreiben: Person mit Taufe (Bereich), Beruf, Partnerschaft mit Ort, Verlobung, Name, Beleg.
+      const p = await s.call("create_person", { given_name: "MCP-Ereignis", family_name: "Vitest-MCP", birth_date: "1850" });
+      createdPersons.push(p.data.person.id);
+      const partner = await s.call("create_person", { given_name: "MCP-Partnerin", family_name: "Vitest-MCP" });
+      createdPersons.push(partner.data.person.id);
+      const pid = p.data.person.id as string;
+
+      const baptism = await s.call("add_event", {
+        person_id: pid,
+        type: "BAPTISM",
+        date: "zwischen 1850 und 1851",
+        place: "Celle",
+        agency: "St. Marien",
+      });
+      expect(baptism.isError, baptism.text).toBe(false);
+      expect(baptism.data.event).toMatchObject({
+        type: "BAPTISM",
+        title: "Taufe",
+        date: "1850",
+        dateQualifier: "BETWEEN",
+        dateTo: "1851",
+        dateText: "zwischen 1850 und 1851",
+        place: "Celle",
+        agency: "St. Marien",
+      });
+      const job = await s.call("add_event", { person_id: pid, type: "OCCUPATION", value: "Müller", date: "ab 1875" });
+      expect(job.data.event).toMatchObject({ value: "Müller", dateQualifier: "PERIOD", dateText: "ab 1875" });
+      const worded = await s.call("add_event", { person_id: pid, type: "CONFIRMATION", date_phrase: "Palmsonntag, Jahr unbekannt" });
+      expect(worded.data.event).toMatchObject({ dateText: "Palmsonntag, Jahr unbekannt" });
+      expect(worded.data.event.date).toBeUndefined();
+
+      // Hauptangaben nie als normales Ereignis, eigenes Ereignis braucht eine Bezeichnung.
+      const mainBirth = await s.call("add_event", { person_id: pid, type: "BIRTH", date: "1851" });
+      expect(mainBirth.isError).toBe(true);
+      expect(mainBirth.text).toContain("abweichende Zweitangabe");
+      const altBirth = await s.call("add_event", { person_id: pid, type: "BIRTH", date: "1851", is_alternative: true });
+      expect(altBirth.data.event).toMatchObject({ type: "BIRTH", alternative: true });
+      const noLabel = await s.call("add_event", { person_id: pid, type: "CUSTOM" });
+      expect(noLabel.isError).toBe(true);
+      const garbage = await s.call("add_event", { person_id: pid, type: "CENSUS", date: "irgendwann" });
+      expect(garbage.isError).toBe(true);
+      expect(garbage.text).toContain("kein erkennbares Datum");
+
+      const upd = await s.call("update_event", { event_id: job.data.event.id, value: "Müllermeister", place: "Celle" });
+      expect(upd.data.event).toMatchObject({ value: "Müllermeister", place: "Celle", dateText: "ab 1875" });
+      const nothing = await s.call("update_event", { event_id: job.data.event.id });
+      expect(nothing.isError).toBe(true);
+
+      const rel = await s.call("create_relationship", {
+        type: "PARTNER_OF",
+        subtype: "PARTNER_UNKNOWN",
+        from_person_id: pid,
+        to_person_id: partner.data.person.id,
+        start_date: "um 1874",
+        start_place: "Hannover",
+      });
+      expect(rel.data.relationship).toMatchObject({ subtype: "PARTNER_UNKNOWN", startPlace: "Hannover", startDateText: "um 1874" });
+      const married = await s.call("update_relationship", { relationship_id: rel.data.relationship.id, subtype: "MARRIED", start_place: "Celle" });
+      expect(married.data.relationship).toMatchObject({ subtype: "MARRIED", startPlace: "Celle" });
+      const engaged = await s.call("add_event", { relationship_id: rel.data.relationship.id, type: "ENGAGEMENT", date: "1873" });
+      expect(engaged.isError, engaged.text).toBe(false);
+      const wrongOwner = await s.call("add_event", { person_id: pid, type: "ENGAGEMENT" });
+      expect(wrongOwner.isError).toBe(true);
+
+      const name = await s.call("add_name_variant", { person_id: pid, type: "VARIANT", family_name: "Vitest-MKP", notes: "Kirchenbuch" });
+      expect(name.data.name).toMatchObject({ type: "VARIANT", name: "Vitest-MKP", typeLabel: "Schreibvariante" });
+      const named = await s.call("search_persons", { query: "Vitest-MKP" });
+      expect(named.data.persons.map((x: { id: string }) => x.id)).toEqual([pid]);
+      const byPlace = await s.call("search_persons", { query: "MCP-Ereignis", place: "St. Marien" });
+      expect(byPlace.data.total).toBe(0);
+      const byEventPlace = await s.call("search_persons", { query: "MCP-Ereignis", place: "celle" });
+      expect(byEventPlace.data.persons.map((x: { id: string }) => x.id)).toEqual([pid]);
+
+      // Beleg an der Taufe
+      const src = await s.call("create_source", { title: "MCP-Testquelle Taufbuch", kind: "CHURCH_BOOK" });
+      createdSources.push(src.data.source.id);
+      const cite = await s.call("cite_source", { source_id: src.data.source.id, event_id: baptism.data.event.id, detail: "Nr. 4" });
+      expect(cite.isError, cite.text).toBe(false);
+      expect(cite.data.citation).toMatchObject({ eventId: baptism.data.event.id, fact: "EVENT", personId: pid });
+      createdCitations.push(cite.data.citation.id);
+      const noFact = await s.call("cite_source", { source_id: src.data.source.id, person_id: pid });
+      expect(noFact.isError).toBe(true);
+
+      const full = await s.call("get_person", { person_id: pid });
+      expect(full.data.person).toMatchObject({ birthDate: "1850" });
+      expect(full.data.events.map((e: { type: string }) => e.type)).toEqual(
+        expect.arrayContaining(["BAPTISM", "OCCUPATION", "CONFIRMATION", "BIRTH"]),
+      );
+      expect(full.data.partners[0]).toMatchObject({ startPlace: "Celle", events: [expect.objectContaining({ type: "ENGAGEMENT" })] });
+      expect(full.data.otherNames).toEqual([expect.objectContaining({ name: "Vitest-MKP" })]);
+      expect(full.data.citations).toEqual([expect.objectContaining({ eventId: baptism.data.event.id, event: "Taufe" })]);
+      const source = await s.call("get_source", { source_id: src.data.source.id });
+      expect(source.data.citations[0]).toMatchObject({ fact: "EVENT", eventId: baptism.data.event.id, event: "Taufe" });
+
+      // Zeitleiste enthält die Ereignisse, abweichende Angaben nicht.
+      const tl = await s.call("get_timeline", { person_id: pid });
+      const kinds = tl.data.events.filter((e: { kind: string }) => e.kind === "event").map((e: { eventType: string }) => e.eventType);
+      expect(kinds).toEqual(expect.arrayContaining(["BAPTISM", "OCCUPATION"]));
+      expect(kinds).not.toContain("BIRTH");
+
+      // Ereignis vor der Geburt → Plausibilitätsprüfung
+      const early = await s.call("add_event", { person_id: pid, type: "CENSUS", date: "1840" });
+      const issues = await s.call("check_consistency", { person_id: pid, kinds: ["eventBeforeBirth"] });
+      expect(issues.data.items[0]).toMatchObject({ kind: "eventBeforeBirth", eventIds: [early.data.event.id] });
+
+      // Löschen: samt Beleg
+      const del = await s.call("delete_event", { event_id: baptism.data.event.id });
+      expect(del.data).toEqual({ deleted: true, eventId: baptism.data.event.id });
+      expect(await prisma.citation.count({ where: { id: cite.data.citation.id } })).toBe(0);
+      const again = await s.call("delete_event", { event_id: baptism.data.event.id });
+      expect(again.isError).toBe(true);
+
+      // Betrachter (Familie A, KI lesen): sieht die Ereignisse, kann nichts schreiben.
+      const seen = await reader.call("list_events", { person_id: pid });
+      expect(seen.data.events.every((e: { canEdit: boolean }) => e.canEdit === false)).toBe(true);
+      expect((await reader.client.listTools()).tools.map((t) => t.name)).not.toContain("add_event");
+
+      // Audit
+      const audit = await prisma.auditLog.findMany({ where: { entityType: "Event", entityId: { in: [baptism.data.event.id, job.data.event.id] } } });
+      expect(audit.map((a) => a.action).sort()).toEqual(["CREATE", "CREATE", "DELETE", "UPDATE"]);
+      for (const a of audit) expect(a).toMatchObject({ channel: "MCP", userId: "mock-user-editor" });
+
+      await prisma.source.deleteMany({ where: { id: { in: createdSources } } });
+      await prisma.person.deleteMany({ where: { id: { in: createdPersons } } });
+      const eventIds = [baptism, job, worded, altBirth, engaged, early].map((r) => r.data.event.id as string);
+      await prisma.auditLog.deleteMany({
+        where: {
+          entityId: {
+            in: [...createdPersons, ...createdSources, ...createdCitations, ...eventIds, name.data.name.id, rel.data.relationship.id],
+          },
+        },
+      });
+      expect(s.errors).toEqual([]);
     },
     TIMEOUT,
   );

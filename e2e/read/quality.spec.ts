@@ -6,7 +6,7 @@ import {
   expectNoHorizontalOverflow,
   waitForTree,
 } from "../support/fixtures";
-import { L } from "../support/mock";
+import { L, mock } from "../support/mock";
 
 /**
  * Querschnitt: Barrierefreiheit (axe), keine waagerechte Scrollleiste auf
@@ -22,6 +22,9 @@ const PAGES = [
   "/people",
   `/people/${L.founders.A}`,
   `/people/${L.founders.A}/edit`,
+  `/people/${L.genealogy.namesPerson}`,
+  `/people/${mock.events.find((e) => e.id === L.genealogy.rangeEvent)!.personId}`,
+  "/people?q=Wagener&place=Bremen",
   "/people/new",
   "/sources",
   `/sources/${L.sources.churchBookA}`,
@@ -56,6 +59,16 @@ test.describe("Barrierefreiheit (Desktop)", () => {
     await context.close();
   });
 
+  test("axe: offene Formulare für Ereignis, Namen und Beziehung", async ({ page }) => {
+    await settle(page, `/people/${L.founders.A}`);
+    await page.getByTestId("person-events").getByRole("button", { name: "Ereignis hinzufügen" }).click();
+    await page.getByTestId("event-form").getByLabel("Datum").fill("Palmsonntag");
+    await expect(page.getByTestId("date-as-phrase")).toBeVisible();
+    await page.getByTestId("person-names").getByRole("button", { name: "Namen hinzufügen" }).click();
+    await page.getByTestId("relation-row").filter({ hasText: "Partner" }).first().getByRole("button", { name: "ändern" }).click();
+    await expectNoA11yViolations(page);
+  });
+
   test("axe: Betrachter auf Personenseite mit Platzhaltern", async ({ loginAs }) => {
     const { page } = await loginAs("viewer");
     await settle(page, `/people/${L.crossMarriedIntoA}`);
@@ -75,6 +88,11 @@ test.describe("Telefon (390 px)", () => {
 
   test("axe: Personenseite und Baum auf dem Telefon", async ({ page }) => {
     await settle(page, `/people/${L.founders.A}`);
+    await expectNoA11yViolations(page);
+    // Offenes Ereignisformular passt auf den Bildschirm.
+    await page.getByTestId("person-events").getByRole("button", { name: "Ereignis hinzufügen" }).click();
+    await expect(page.getByTestId("event-form")).toBeVisible();
+    await expectNoHorizontalOverflow(page);
     await expectNoA11yViolations(page);
     await settle(page, "/tree");
     await expectNoA11yViolations(page);

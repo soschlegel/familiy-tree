@@ -12,7 +12,11 @@ type AuditInput = {
     | "Family"
     | "Source"
     | "Citation"
-    | "ApiToken";
+    | "ApiToken"
+    | "Event"
+    | "PersonName"
+    | "ImportBatch"
+    | "ImportRawRecord";
   entityId: string;
   diff?: unknown;
   /** Kanal der Änderung; ohne Angabe Web-App. */

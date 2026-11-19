@@ -1,0 +1,131 @@
+0 HEAD
+1 SOUR GRAMPS
+2 VERS 5.2.0
+2 NAME Gramps
+1 GEDC
+2 VERS 5.5.1
+2 FORM LINEAGE-LINKED
+1 CHAR UTF-8
+1 PLAC
+2 FORM Ort, Kreis, Land, Staat
+1 _HEADER_CUSTOM irgendwas
+  1 NOTE Kopfnotiz mit führenden Leerzeichen
+0 @I1@ INDI
+1 NAME Dr. Friedrich Wilhelm /von Probe/ jun.
+2 NPFX Dr.
+2 GIVN Friedrich Wilhelm
+2 SPFX von
+2 SURN Probe
+2 NSFX jun.
+2 NICK Fritz
+2 _RUFNAME Wilhelm
+2 TYPE birth
+2 SOUR @S1@
+3 PAGE S. 5
+2 _NAME_CUSTOM x
+1 NAME Fritz /Probe/
+2 TYPE aka
+1 NAME Frederick /Probe/
+2 TYPE immigrant
+2 ROMN Frederick Probe
+3 TYPE manuell
+1	SEX	M
+1 BIRT
+2 DATE @#DJULIAN@ 1 JAN 1700
+2 PLAC Probstadt, Probkreis, Probland, Deutschland
+3 MAP
+4 LATI N50.1234
+4 LONG E10.5
+3 _PLACE_CUSTOM y
+2 DATE_CUSTOM z
+1 CHR
+2 DATE 2 JAN 1700
+3 _DATE_CUSTOM q
+1 DEAT Y
+1 BURI
+2 DATE AFT 1750
+1 FAMS @F1@
+1 FAMS @F2@
+1 ASSO @I2@
+2 RELA Pate
+1 NOTE @N1@
+1 SOUR Inline-Quelle: Familienbibel
+2 TEXT Eintrag auf dem Vorsatzblatt
+2 QUAY 0
+1 _INDI_CUSTOM eins
+2 _NESTED zwei
+0 @I2@ INDI
+1 NAME Gustav /Gleich/
+1 SEX M
+1 FAMS @F1@
+1 BIRT
+2 DATE 1702
+0 @I3@ INDI
+1 NAME Grete /Einzeln/
+1 SEX F
+1 FAMS @F3@
+1 NOTE Eine Notiz
+die ohne CONT umgebrochen wurde
+1850 zog sie fort
+0 @I4@ INDI
+1 NAME Kind /Einzeln/
+1 SEX U
+1 FAMC @F3@
+1 FAMC @F4@ /* Kommentar eines Programms */
+2 PEDI step
+0 @I5@INDI
+1 NAME Zweitfrau /Probe/
+1 SEX F
+1 FAMS @F2@
+0 @I6@ INDI
+1 NAME Pflegekind /Probe/
+1 SEX M
+1 FAMC @F2@
+1 BIRT
+2 DATE 1690
+0 @I6@ INDI
+1 NAME Doppelt /Vergeben/
+0 @F1@ FAM
+1 HUSB @I1@
+1 HUSB @I2@
+1 MARR
+2 DATE 1730
+2 HUSB
+3 AGE 30
+1 _FAM_CUSTOM drei
+0 @F2@ FAM
+1 HUSB @I1@
+1 WIFE @I5@
+1 CHIL @I6@
+2 _FREL Foster
+2 _MREL Natural
+2 _CHIL_CUSTOM vier
+1 ENGA
+2 DATE BEF 1740
+0 @F3@ FAM
+1 WIFE @I3@
+1 CHIL @I4@
+0 @F4@ FAM
+1 HUSB @I99@
+1 CHIL @I4@
+0 @F5@ FAM
+1 NOTE leere Familie
+0 @N1@ NOTE Gemeinsame Notiz, die über mehrere Zeilen geht und mit CONC
+1 CONC  fortgesetzt wird — dazu ein @@-Zeichen.
+1 CONT Neue Zeile.
+1 CONT
+1 CONT Nach einer Leerzeile.
+0 @S1@ SOUR
+1 TITL Probstädter Kirchenbuch
+1 DATA
+2 EVEN BIRT, DEAT
+3 DATE FROM 1690 TO 1760
+3 PLAC Probstadt
+2 AGNC Pfarrei Probstadt
+0 @X1@ _CUSTOM_RECORD
+1 _FOO bar
+0 @M1@ OBJE
+1 FILE bilder/portrait.jpg
+2 FORM jpeg
+3 TYPE photo
+2 TITL Porträt

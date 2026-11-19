@@ -14,7 +14,16 @@ type ExchangeFile = {
   relationships: Record<string, unknown>[];
   media: { id: string; fileName: string }[];
   sources: { id: string; title: string; mediaId: string | null }[];
-  citations: { id: string; sourceId: string; personId: string | null; relationshipId: string | null; fact: string }[];
+  citations: {
+    id: string;
+    sourceId: string;
+    personId: string | null;
+    relationshipId: string | null;
+    eventId?: string | null;
+    fact: string;
+  }[];
+  events: Record<string, unknown>[];
+  personNames: Record<string, unknown>[];
 };
 
 async function download(page: Page, linkName: string) {
@@ -35,12 +44,26 @@ test.describe("als Admin", () => {
     expect(name).toMatch(/^stammbaum_\d{4}-\d{2}-\d{2}\.json$/);
     const data = JSON.parse(body.toString("utf8")) as ExchangeFile;
 
-    expect(data.version).toBe(2);
+    // Version 3: Lebensereignisse, weitere Namen, Orte an Beziehungen, Bereiche und Wortlaute.
+    expect(data.version).toBe(3);
     expect(data.persons).toHaveLength(mock.persons.length);
     expect(data.relationships).toHaveLength(mock.relationships.length);
     expect(data.sources).toHaveLength(mock.sources.length);
     expect(data.citations).toHaveLength(mock.citations.length);
     expect(data.media).toHaveLength(mock.images.length);
+    expect(data.events).toHaveLength(mock.events.length);
+    expect(data.personNames).toHaveLength(mock.personNames.length);
+
+    // Neue Felder: Ereignis mit Bereich, Wortlaut ohne Datum, abweichende Geburt,
+    // Ereignis an einer Beziehung, Heiratsort, Ehestand unbekannt, weitere Namen.
+    const G = L.genealogy;
+    expect(data.events.find((e) => e.id === G.rangeEvent)).toMatchObject({ dateQualifier: "BETWEEN", dateTo: expect.any(String) });
+    expect(data.events.find((e) => e.id === G.phraseEvent)).toMatchObject({ date: null, datePhrase: expect.any(String) });
+    expect(data.events.find((e) => e.id === G.alternativeBirth)).toMatchObject({ type: "BIRTH", isAlternative: true });
+    expect(data.events.find((e) => e.id === G.relationshipEvent)).toMatchObject({ relationshipId: G.marriageWithPlace, personId: null });
+    expect(data.relationships.find((r) => r.id === G.marriageWithPlace)!.startPlace).toBeTruthy();
+    for (const id of G.unknownStatus) expect(data.relationships.find((r) => r.id === id)).toMatchObject({ subtype: "PARTNER_UNKNOWN" });
+    expect(data.personNames.find((n) => n.personId === G.namesPerson)).toMatchObject({ type: "VARIANT" });
 
     // Genauigkeit und Zusatz je Datum.
     const about = data.persons.find((p) => p.id === L.impreciseDates.about)!;

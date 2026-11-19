@@ -143,7 +143,7 @@ test("Person löschen entfernt ihr Bild, der Import stellt beides wieder her", a
   adminPage.on("dialog", (d) => void d.accept());
   await adminPage.goto("/admin/data");
   await adminPage.getByLabel("Exportdatei (JSON oder ZIP)").setInputFiles({ name: "backup.zip", mimeType: "application/zip", buffer });
-  await adminPage.getByRole("button", { name: "Vorschau" }).click();
+  await adminPage.getByRole("button", { name: "Vorschau", exact: true }).click();
   const status = adminPage.getByRole("status").filter({ hasText: "Personen:" });
   // Bild ist wirklich neu — es war mit der Person gelöscht worden.
   await expect(status).toContainText("Personen: 1 neu, 0 aktualisiert");

@@ -23,7 +23,16 @@ export const MOCK_REFERENCE_YEAR = 2025;
 
 export type MockGender = "MALE" | "FEMALE" | "OTHER" | "UNKNOWN";
 export type MockPrecision = "DAY" | "MONTH" | "YEAR";
-export type MockQualifier = "EXACT" | "ABOUT" | "BEFORE" | "AFTER";
+export type MockQualifier =
+  | "EXACT"
+  | "ABOUT"
+  | "BEFORE"
+  | "AFTER"
+  | "ESTIMATED"
+  | "CALCULATED"
+  | "BETWEEN"
+  | "PERIOD"
+  | "UNTIL";
 export type FamilyKey = "A" | "B" | "C" | "D";
 
 export type MockFamily = {
@@ -48,6 +57,11 @@ export type MockPerson = {
   deathDatePrecision: MockPrecision;
   deathDateQualifier: MockQualifier;
   notes: string | null;
+  /** Namensteile und Todesursache — nur bei einzelnen Personen gesetzt. */
+  nickname?: string | null;
+  namePrefix?: string | null;
+  nameSuffix?: string | null;
+  deathCause?: string | null;
   /** Familienzuordnung (Rechte). Leer = nur für Admins sichtbar. */
   familyKeys: FamilyKey[];
   /** Generation 0 = Stammeltern (ca. 1860). */
@@ -64,7 +78,8 @@ export type MockRelationship = {
     | "FOSTER"
     | "MARRIED"
     | "UNMARRIED"
-    | "DIVORCED";
+    | "DIVORCED"
+    | "PARTNER_UNKNOWN";
   fromPersonId: string;
   toPersonId: string;
   startDate: Date | null;
@@ -73,7 +88,43 @@ export type MockRelationship = {
   startDateQualifier: MockQualifier;
   endDatePrecision: MockPrecision;
   endDateQualifier: MockQualifier;
+  /** Ort der Heirat bzw. Scheidung — nur bei einem Teil der Ehen. */
+  startPlace?: string | null;
+  endPlace?: string | null;
   notes: string | null;
+};
+
+/** Lebensereignis (siehe lib/events.ts). Datum wie bei Personen, Bereich über dateTo. */
+export type MockEvent = {
+  id: string;
+  personId: string | null;
+  relationshipId: string | null;
+  type: string;
+  label: string | null;
+  isAlternative: boolean;
+  date: Date | null;
+  datePrecision: MockPrecision;
+  dateQualifier: MockQualifier;
+  dateTo: Date | null;
+  dateToPrecision: MockPrecision;
+  datePhrase: string | null;
+  place: string | null;
+  value: string | null;
+  cause: string | null;
+  notes: string | null;
+  sortOrder: number;
+};
+
+export type MockPersonName = {
+  id: string;
+  personId: string;
+  type: "BIRTH" | "MARRIED" | "ALIAS" | "RELIGIOUS" | "IMMIGRANT" | "VARIANT" | "OTHER";
+  givenName: string | null;
+  familyName: string | null;
+  nickname: string | null;
+  label: string | null;
+  notes: string | null;
+  sortOrder: number;
 };
 
 export type MockSource = {
@@ -182,6 +233,27 @@ export type MockLandmarks = {
   };
   /** Ehe des Stammvaters A — mit Beleg (PARTNERSHIP). */
   citedMarriage: string;
+  /** Lebensereignisse und Namen (Erweiterung für GEDCOM-Daten). */
+  genealogy: {
+    /** Person mit Taufe, Beruf, Beerdigung (Stammvater A). */
+    eventsPerson: string;
+    /** Ereignis mit Datumsbereich (zwischen … und …). */
+    rangeEvent: string;
+    /** Ereignis nur mit Wortlaut, ohne Datum. */
+    phraseEvent: string;
+    /** Abweichende zweite Geburtsangabe (isAlternative). */
+    alternativeBirth: string;
+    /** Verlobung an der Ehe des Stammvaters A (Ereignis an einer Beziehung). */
+    relationshipEvent: string;
+    /** Ehe mit Heiratsort. */
+    marriageWithPlace: string;
+    /** Ehe ohne Heiratsort (Datenlücke). */
+    marriageWithoutPlace: string;
+    /** Partnerschaften mit unbekanntem Ehestand. */
+    unknownStatus: string[];
+    /** Person mit weiteren Namen (PersonName). */
+    namesPerson: string;
+  };
 };
 
 export type MockData = {
@@ -193,6 +265,8 @@ export type MockData = {
   images: MockImage[];
   sources: MockSource[];
   citations: MockCitation[];
+  events: MockEvent[];
+  personNames: MockPersonName[];
   landmarks: MockLandmarks;
 };
 
@@ -1166,6 +1240,185 @@ export function generateMockData(seed: number = MOCK_SEED): MockData {
     notes: "Noch nicht ausgewertet.",
   });
 
+  // --- Lebensereignisse, Orte, Namen ---------------------------------------
+  // Ohne Zufallszahlen und nach allem anderen: IDs, Daten und Zählungen von
+  // oben bleiben unverändert. Abgeleitet aus vorhandenen Daten, damit die
+  // Plausibilitätsprüfung nichts Neues meldet (Taufe nach Geburt, Beerdigung
+  // nach Tod, Wohnort zu Lebzeiten).
+  const events: MockEvent[] = [];
+  let eventCounter = 0;
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const event = (e: Partial<MockEvent> & Pick<MockEvent, "type">): string => {
+    const full: MockEvent = {
+      personId: null,
+      relationshipId: null,
+      label: null,
+      isAlternative: false,
+      date: null,
+      datePrecision: "DAY",
+      dateQualifier: "EXACT",
+      dateTo: null,
+      dateToPrecision: "DAY",
+      datePhrase: null,
+      place: null,
+      value: null,
+      cause: null,
+      notes: null,
+      sortOrder: 0,
+      ...e,
+      id: `mock-e-${String(++eventCounter).padStart(3, "0")}`,
+    };
+    events.push(full);
+    return full.id;
+  };
+  /** Datum „kurz danach“: tagesgenau + Tage, sonst dieselbe ungenaue Angabe. */
+  const after = (p: Internal, key: "birth" | "death", days: number) => {
+    const d = key === "birth" ? p.birthDate! : p.deathDate!;
+    const precision = key === "birth" ? p.birthDatePrecision : p.deathDatePrecision;
+    const qualifier = key === "birth" ? p.birthDateQualifier : p.deathDateQualifier;
+    return precision === "DAY" && qualifier === "EXACT"
+      ? { date: new Date(d.getTime() + days * DAY_MS), datePrecision: "DAY" as const, dateQualifier: "EXACT" as const }
+      : { date: d, datePrecision: precision, dateQualifier: qualifier };
+  };
+  const OCCUPATION: Record<FamilyKey, string> = { A: "Bäckermeister", B: "Tischler", C: "Winzer", D: "Fischer" };
+
+  const fA = byId.get(founders.A)!;
+  let eventsPerson = fA.id;
+  for (const key of ["A", "B", "C", "D"] as FamilyKey[]) {
+    const f = byId.get(founders[key])!;
+    if (f.birthDate) event({ personId: f.id, type: "BAPTISM", ...after(f, "birth", 7), place: f.birthPlace, sortOrder: 1 });
+    event({ personId: f.id, type: "OCCUPATION", value: OCCUPATION[key], place: f.birthPlace, sortOrder: 2 });
+    if (f.deathDate) event({ personId: f.id, type: "BURIAL", ...after(f, "death", 4), place: f.deathPlace, sortOrder: 9 });
+    if (key === "A") eventsPerson = f.id;
+  }
+  if (fA.deathDate) fA.deathCause = "Lungenentzündung";
+  fA.nickname = "Hein";
+
+  // Konfirmation nur als Wortlaut (ohne Datum).
+  const fB = byId.get(founders.B)!;
+  const phraseEvent = event({ personId: fB.id, type: "CONFIRMATION", datePhrase: "Palmsonntag, Jahr unbekannt", place: fB.birthPlace });
+  fB.namePrefix = "Dr.";
+
+  // Wohnort als Zeitraum „von … bis …“ und Militärdienst bzw. sonstiges Ereignis.
+  const fD = byId.get(founders.D)!;
+  fD.nameSuffix = "sen.";
+  const residenceFor = persons.find(
+    (p) =>
+      p.generation === 1 &&
+      p.familyKeys.includes("A") &&
+      p.birthDate &&
+      p.birthDatePrecision === "DAY" &&
+      p.birthDateQualifier === "EXACT" &&
+      (!p.deathDate || p.deathDate.getUTCFullYear() > p.birthDate.getUTCFullYear() + 35),
+  )!;
+  const ry = residenceFor.birthDate!.getUTCFullYear();
+  event({
+    personId: residenceFor.id,
+    type: "RESIDENCE",
+    date: utc(ry + 20, 1, 1),
+    datePrecision: "YEAR",
+    dateQualifier: "PERIOD",
+    dateTo: utc(ry + 29, 1, 1),
+    dateToPrecision: "YEAR",
+    place: "Hannover, Lister Meile 12",
+    value: "Lister Meile 12",
+  });
+  // Ein Ereignis mit „zwischen … und …“: Auswanderung/Rückkehr bzw. Kapitänspatent.
+  const rangeEvent = event({
+    personId: residenceFor.id,
+    type: "GRADUATION",
+    date: utc(ry + 17, 1, 1),
+    datePrecision: "YEAR",
+    dateQualifier: "BETWEEN",
+    dateTo: utc(ry + 19, 1, 1),
+    dateToPrecision: "YEAR",
+    place: "Celle",
+    value: "Gesellenprüfung",
+  });
+  if (fD.birthDate && (!fD.deathDate || fD.deathDate.getUTCFullYear() > fD.birthDate.getUTCFullYear() + 31)) {
+    event({
+      personId: fD.id,
+      type: "CUSTOM",
+      label: "Kapitänspatent",
+      date: utc(fD.birthDate.getUTCFullYear() + 30, 1, 1),
+      datePrecision: "YEAR",
+      dateQualifier: "ABOUT",
+      place: "Kiel",
+    });
+  }
+
+  // Abweichende zweite Geburtsangabe (wie zwei BIRT-Sätze in einer GEDCOM-Datei).
+  const aboutPerson = byId.get(impreciseDates.about)!;
+  const alternativeBirth = event({
+    personId: aboutPerson.id,
+    type: "BIRTH",
+    isAlternative: true,
+    date: utc(aboutPerson.birthDate!.getUTCFullYear() + 1, 1, 1),
+    datePrecision: "YEAR",
+    place: "Lüneburg",
+    notes: "Abweichende Angabe laut Ortsfamilienbuch.",
+  });
+
+  // Heiratsorte: Ehen mit Datum bekommen den Geburtsort der Braut, jede
+  // dritte bleibt ohne Ort (Datenlücke „Ehe ohne Ort“). Die Scheidung der
+  // ersten Ehe fand vor dem Amtsgericht statt.
+  const married = relationships.filter(
+    (r) => r.type === "PARTNER_OF" && (r.subtype === "MARRIED" || r.subtype === "DIVORCED") && r.startDate,
+  );
+  married.forEach((r, i) => {
+    if (i % 3 === 2) return;
+    const a = byId.get(r.fromPersonId)!;
+    const b = byId.get(r.toPersonId)!;
+    const bride = a.gender === "FEMALE" ? a : b;
+    r.startPlace = bride.birthPlace ?? a.birthPlace ?? b.birthPlace;
+  });
+  firstMarriage.endPlace = firstMarriage.endDate ? "Hannover (Amtsgericht)" : null;
+  const marriageWithPlace = married.find((r) => r.startPlace)!.id;
+  const marriageWithoutPlace = married.find((r) => !r.startPlace)!.id;
+
+  // Verlobung an der Ehe des Stammvaters A (im Jahr der Hochzeit).
+  const relationshipEvent = event({
+    relationshipId: founderAMarriage.id,
+    type: "ENGAGEMENT",
+    date: founderAMarriage.startDate ? utc(founderAMarriage.startDate.getUTCFullYear(), 1, 1) : null,
+    datePrecision: "YEAR",
+    place: founderAMarriage.startPlace ?? null,
+  });
+
+  // Ehestand unbekannt: zwei unverheiratete Partnerschaften aus jüngeren
+  // Generationen, die sonst nirgends als Sonderfall dienen.
+  const special = new Set([firstMarriage.id, founderAMarriage.id, crossMarriage.id]);
+  const unknownStatus = relationships
+    .filter((r) => r.type === "PARTNER_OF" && r.subtype === "UNMARRIED" && !special.has(r.id))
+    .slice(0, 2);
+  for (const r of unknownStatus) r.subtype = "PARTNER_UNKNOWN";
+
+  // Weitere Namen: Schreibvariante des Stammvaters C, Rufname der Eingeheirateten.
+  const personNames: MockPersonName[] = [
+    {
+      id: "mock-n-01",
+      personId: founders.C,
+      type: "VARIANT",
+      givenName: null,
+      familyName: "Wagener",
+      nickname: null,
+      label: null,
+      notes: "Schreibweise im Kirchenbuch",
+      sortOrder: 0,
+    },
+    {
+      id: "mock-n-02",
+      personId: crossIntoA.wife.id,
+      type: "ALIAS",
+      givenName: "Lotte",
+      familyName: null,
+      nickname: null,
+      label: null,
+      notes: null,
+      sortOrder: 0,
+    },
+  ];
+
   const landmarks: MockLandmarks = {
     founders,
     crossMarriedIntoA: crossIntoA.wife.id,
@@ -1191,6 +1444,17 @@ export function generateMockData(seed: number = MOCK_SEED): MockData {
     impreciseDates,
     sources: { churchBookA, crossFamily, onlyFamilyD: censusD, uncited },
     citedMarriage: founderAMarriage.id,
+    genealogy: {
+      eventsPerson,
+      rangeEvent,
+      phraseEvent,
+      alternativeBirth,
+      relationshipEvent,
+      marriageWithPlace,
+      marriageWithoutPlace,
+      unknownStatus: unknownStatus.map((r) => r.id),
+      namesPerson: founders.C,
+    },
   };
 
   return {
@@ -1205,6 +1469,8 @@ export function generateMockData(seed: number = MOCK_SEED): MockData {
     images,
     sources,
     citations,
+    events,
+    personNames,
     landmarks,
   };
 }

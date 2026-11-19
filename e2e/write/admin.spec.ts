@@ -142,3 +142,83 @@ test("Benutzer sperren: Sitzung endet, Anmeldung scheitert", async ({ page, logi
   await expect(page.getByText(`${email} entsperrt.`)).toBeVisible();
   await expect(row).toContainText("aktiv");
 });
+
+test("E-Mail-Adresse korrigieren, solange der Benutzer sich nie angemeldet hat", async ({ page, consoleGuard }) => {
+  consoleGuard.allow(httpError(409));
+  const typo = `e2e-tippfehler-${tag}@example.tset`;
+  const fixed = `e2e-korrigiert-${tag}@example.test`;
+  await page.goto("/admin/users");
+  await page.getByLabel("E-Mail-Adresse", { exact: true }).fill(typo);
+  await page.getByRole("button", { name: "Einladen" }).click();
+  await expect(page.getByText(`${typo} eingeladen.`)).toBeVisible();
+
+  const row = page.getByTestId("user-row").filter({ hasText: typo });
+  await row.getByRole("button", { name: `Adresse von ${typo} korrigieren` }).click();
+  const form = page.getByRole("form", { name: `Adresse von ${typo} korrigieren` });
+  // Großschreibung wird wie beim Einladen vereinheitlicht.
+  await form.getByLabel("Neue E-Mail-Adresse").fill(fixed.toUpperCase());
+  await form.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByText(`E-Mail-Adresse von ${typo} in ${fixed} geändert.`)).toBeVisible();
+  await expect(page.getByTestId("user-row").filter({ hasText: fixed })).toContainText("eingeladen");
+  await expect(page.getByTestId("user-row").filter({ hasText: typo })).toHaveCount(0);
+
+  // Doppelte Adresse: 409 mit Meldung, auch über die Oberfläche.
+  const fixedRow = page.getByTestId("user-row").filter({ hasText: fixed });
+  await fixedRow.getByRole("button", { name: `Adresse von ${fixed} korrigieren` }).click();
+  await page.getByRole("form", { name: `Adresse von ${fixed} korrigieren` }).getByLabel("Neue E-Mail-Adresse").fill("editor@example.test");
+  await page.getByRole("form", { name: `Adresse von ${fixed} korrigieren` }).getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "bereits eingeladen" })).toBeVisible();
+
+  // Wer sich schon angemeldet hat, behält seine Adresse — kein Knopf, und die API lehnt ab.
+  await expect(page.getByTestId("user-row").filter({ hasText: email }).getByRole("button", { name: /Adresse von .* korrigieren/ })).toHaveCount(0);
+  const api = await apiAs("admin");
+  const users = (await (await api.get("/api/users")).json()) as { id: string; email: string }[];
+  const signedIn = users.find((u) => u.email === email)!;
+  const refused = await api.patch(`/api/users/${signedIn.id}`, { data: { email: `e2e-anders-${tag}@example.test` } });
+  expect(refused.status()).toBe(409);
+  expect((await refused.json()).error).toContain("noch nie angemeldet");
+  const self = await api.patch("/api/users/mock-user-admin", { data: { email: `e2e-admin-${tag}@example.test` } });
+  expect(self.status()).toBe(409);
+  const invalid = await api.patch(`/api/users/${users.find((u) => u.email === fixed)!.id}`, { data: { email: "kein-at-zeichen" } });
+  expect(invalid.status()).toBe(400);
+  // Aufräumen.
+  expect((await api.delete(`/api/users/${users.find((u) => u.email === fixed)!.id}`)).status()).toBe(200);
+  await api.dispose();
+});
+
+test("Benutzer löschen: Rückfrage nennt die Folgen, nicht für den eigenen Zugang", async ({ page, loginAs }) => {
+  await page.goto("/admin/users");
+  // Eigener Zugang: Knopf gesperrt, Grund steht daneben.
+  const self = page.getByTestId("user-row").filter({ hasText: "admin@example.test" });
+  await expect(self.getByRole("button", { name: "admin@example.test löschen" })).toBeDisabled();
+  await expect(self.getByTestId("user-delete-why")).toHaveText("eigener Zugang");
+
+  // Der eingeladene und inzwischen angemeldete Testbenutzer: Sitzung läuft.
+  const { page: user } = await loginAs(null);
+  await devLogin(user, email);
+  await user.waitForURL(/\/tree/);
+
+  let question = "";
+  page.once("dialog", (d) => {
+    question = d.message();
+    void d.accept();
+  });
+  const row = page.getByTestId("user-row").filter({ hasText: email });
+  await row.getByRole("button", { name: `${email} löschen` }).click();
+  await expect(page.getByText(`${email} gelöscht.`)).toBeVisible();
+  expect(question).toContain(`${email} endgültig löschen?`);
+  expect(question).toContain("alle KI-Schlüssel");
+  expect(question).toContain("Protokolleinträge");
+  await expect(page.getByTestId("user-row").filter({ hasText: email })).toHaveCount(0);
+
+  // Sitzung ungültig, Anmeldung ohne neue Einladung nicht möglich.
+  await user.goto("/people");
+  await expect(user).toHaveURL(/\/login/);
+  await devLogin(user, email);
+  await expect(user.getByRole("alert").filter({ hasText: "Anmeldung fehlgeschlagen" })).toBeVisible();
+
+  // Die Protokolleinträge über den Benutzer bleiben (Aufräumen in afterAll findet ihn nicht mehr).
+  const api = await apiAs("admin");
+  expect((await api.delete("/api/users/mock-user-admin")).status()).toBe(409);
+  await api.dispose();
+});

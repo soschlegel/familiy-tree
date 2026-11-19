@@ -7,21 +7,31 @@ import { requireScope } from "@/lib/session";
 import { editableFamilyIds } from "@/lib/scope";
 import {
   canCreateSources,
+  compareEvents,
   getPersonDetail,
   listFamilies,
   listPickablePersons,
   listSourceOptions,
+  type EventDto,
   type PersonCitation,
   type PersonRef,
   type PersonRelation,
 } from "@/lib/services";
+import { ALTERNATIVE_ONLY_TYPES } from "@/lib/events";
+import {
+  partnerCardDescription,
+  partnerPlaces,
+  partnershipNoun,
+} from "@/lib/partner-labels";
+import { EventSection, type EventOwnerOption, type EventRow } from "@/components/EventSection";
+import { NameVariants } from "@/components/NameVariants";
 import { PERSON_FACTS, relationshipFacts } from "@/lib/validation";
 import {
   CitationSection,
   type CitationRow,
   type CitationTargetOption,
 } from "@/components/CitationSection";
-import { lifeSpan, formatDate } from "@/lib/tree-layout";
+import { lifeSpan, formatDateOf } from "@/lib/tree-layout";
 import { Avatar } from "@/components/Avatar";
 import { LockIcon } from "@/components/PersonNode";
 import { MediaGallery } from "@/components/MediaGallery";
@@ -86,36 +96,54 @@ function relationLabel(r: {
   other: PersonRef;
 }): string {
   const other = r.other.restricted ? "Nicht freigegeben" : name(r.other);
-  if (r.type === "PARTNER_OF") return r.subtype === "UNMARRIED" ? `Partnerschaft mit ${other}` : `Ehe mit ${other}`;
+  if (r.type === "PARTNER_OF") return `${partnershipNoun(r.subtype)} mit ${other}`;
   return r.role === "parent" ? `Abstammung von ${other}` : `Kind ${other}`;
 }
 
 function partnerDescription(r: PersonRelation): string {
-  const start = r.startDate ? formatDate(r.startDate, r.startDatePrecision, r.startDateQualifier) : null;
-  const end = r.endDate ? formatDate(r.endDate, r.endDatePrecision, r.endDateQualifier) : null;
-  switch (r.subtype) {
-    case "MARRIED":
-      return start ? `verheiratet seit ${start}` : "verheiratet";
-    case "DIVORCED":
-      return start && end
-        ? `geschieden · ${start} – ${end}`
-        : end
-          ? `geschieden ${end}`
-          : "geschieden";
-    default:
-      return start ? `Partnerschaft seit ${start}` : "Partnerschaft";
-  }
+  return partnerCardDescription(r.subtype, formatDateOf(r, "startDate") || null, formatDateOf(r, "endDate") || null);
+}
+
+/** Abweichende Hauptangabe (zweite Geburt, Heirat …) in einer Zeile: „1859 in Celle“. */
+function altText(e: EventDto): string {
+  return [e.dateText || "ohne Datum", e.place ? `in ${e.place}` : null].filter(Boolean).join(" ");
+}
+
+/** Hinweis auf abweichende Angaben neben der Hauptangabe, verlinkt zur Ereigniszeile. */
+function AltFacts({ events, prefix = "" }: { events: EventDto[]; prefix?: string }) {
+  if (events.length === 0) return null;
+  return (
+    <span className="mt-1 block space-y-0.5">
+      {events.map((e) => (
+        <a
+          key={e.id}
+          href={`#ereignis-${e.id}`}
+          className="flex flex-wrap items-baseline gap-1.5 text-xs text-brass-700 hover:underline dark:text-brass-300"
+          data-testid="alternative-fact"
+        >
+          <span className="badge-alt">abweichende Angabe</span>
+          <span>
+            {prefix}
+            {altText(e)}
+          </span>
+        </a>
+      ))}
+    </span>
+  );
 }
 
 function RelativeCard({
   person,
   portrait,
   note,
+  extra,
   children,
 }: {
   person: PersonRef;
   portrait: string | null;
   note?: string | null;
+  /** Weitere Zeilen unter der Notiz (Orte, abweichende Angaben). */
+  extra?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   if (person.restricted) {
@@ -156,6 +184,7 @@ function RelativeCard({
           )}
         </span>
       </Link>
+      {extra && <div className="px-3 pb-2 text-xs">{extra}</div>}
       {children}
     </li>
   );
@@ -231,11 +260,50 @@ export default async function PersonPage({
       ])
     : [[], [], []];
 
+  // Lebensereignisse: die der Person und die ihrer Beziehungen in einer
+  // Liste (eine Stelle zum Lesen und Bearbeiten), chronologisch.
+  const ownerLabelOf = new Map<string, string>(
+    detail.relations.map((r) => [
+      r.relationshipId,
+      r.type === "PARTNER_OF"
+        ? r.other.restricted
+          ? `${partnershipNoun(r.subtype)} (Partner nicht freigegeben)`
+          : `mit ${name(r.other)}`
+        : r.other.restricted
+          ? "Eltern-Kind-Beziehung"
+          : `${r.role === "parent" ? "Elternteil" : "Kind"} ${name(r.other)}`,
+    ]),
+  );
+  const allEvents: (EventDto & { ownerKey: string })[] = [
+    ...detail.events.map((e) => ({ ...e, ownerKey: "person" })),
+    ...detail.relations.flatMap((r) => r.events.map((e) => ({ ...e, ownerKey: r.relationshipId }))),
+  ].sort(compareEvents);
+  const eventLabelOf = new Map(allEvents.map((e) => [e.id, [e.title, e.dateText].filter(Boolean).join(" ")]));
+  const eventRows: EventRow[] = allEvents.map((e) => ({
+    ...e,
+    ownerLabel: e.ownerKey === "person" ? null : (ownerLabelOf.get(e.ownerKey) ?? null),
+    citations: detail.citations
+      .filter((c) => c.eventId === e.id)
+      .map((c) => ({ id: c.id, sourceId: c.source.id, sourceTitle: c.source.title, detail: c.detail })),
+  }));
+  const eventOwners: EventOwnerOption[] = [
+    { key: "person", label: name(person), owner: { kind: "person" } },
+    ...detail.partners
+      .filter((r) => canEdit && !r.other.restricted)
+      .map((r) => ({
+        key: r.relationshipId,
+        label: relationLabel(r),
+        owner: { kind: "relationship" as const, type: "PARTNER_OF" as const },
+      })),
+  ];
+  const altOf = (events: EventDto[], type: string) =>
+    events.filter((e) => e.isAlternative && e.type === type && ALTERNATIVE_ONLY_TYPES.includes(e.type));
+
   // Belege: je Beziehung gezählt (für die Beziehungsliste) und für den
   // Abschnitt „Quellen“ mit lesbarem Bezug.
   const citationCount = new Map<string, number>();
   for (const c of detail.citations) {
-    if (c.relationshipId) citationCount.set(c.relationshipId, (citationCount.get(c.relationshipId) ?? 0) + 1);
+    if (c.relationshipId && !c.eventId) citationCount.set(c.relationshipId, (citationCount.get(c.relationshipId) ?? 0) + 1);
   }
   const citationRows: CitationRow[] = detail.citations.map((c: PersonCitation) => ({
     id: c.id,
@@ -246,6 +314,8 @@ export default async function PersonPage({
     source: c.source,
     relationshipId: c.relationshipId,
     relationLabel: c.relationship ? relationLabel(c.relationship) : null,
+    eventId: c.eventId,
+    eventLabel: c.eventId ? eventLabelOf.get(c.eventId) ?? c.eventTitle ?? null : null,
   }));
   const citationTargets: CitationTargetOption[] = [
     { value: "person", label: name(person), facts: [...PERSON_FACTS] },
@@ -254,6 +324,9 @@ export default async function PersonPage({
       label: relationLabel(r),
       facts: [...relationshipFacts(r.type)],
     })),
+    ...allEvents
+      .filter((e) => e.canEdit)
+      .map((e) => ({ value: `event:${e.id}`, label: eventLabelOf.get(e.id)!, facts: ["EVENT" as const] })),
   ];
 
   const relations: RelationRow[] = detail.relations
@@ -267,6 +340,14 @@ export default async function PersonPage({
       startDateQualifier: r.startDateQualifier,
       endDatePrecision: r.endDatePrecision,
       endDateQualifier: r.endDateQualifier,
+      startDateTo: r.startDateTo,
+      startDateToPrecision: r.startDateToPrecision,
+      startDatePhrase: r.startDatePhrase,
+      startPlace: r.startPlace,
+      endDateTo: r.endDateTo,
+      endDateToPrecision: r.endDateToPrecision,
+      endDatePhrase: r.endDatePhrase,
+      endPlace: r.endPlace,
       citationCount: citationCount.get(r.relationshipId) ?? 0,
       otherId: r.other.id,
       otherName: r.other.restricted ? "Nicht freigegeben" : name(r.other),
@@ -274,18 +355,9 @@ export default async function PersonPage({
     }))
     .sort((a, b) => a.label.localeCompare(b.label));
 
-  const birth = [
-    formatDate(person.birthDate, person.birthDatePrecision, person.birthDateQualifier),
-    person.birthPlace,
-  ]
-    .filter(Boolean)
-    .join(" in ");
-  const death = [
-    formatDate(person.deathDate, person.deathDatePrecision, person.deathDateQualifier),
-    person.deathPlace,
-  ]
-    .filter(Boolean)
-    .join(" in ");
+  const birth = [formatDateOf(person, "birthDate"), person.birthPlace].filter(Boolean).join(" in ");
+  const death = [formatDateOf(person, "deathDate"), person.deathPlace].filter(Boolean).join(" in ");
+  const deceased = Boolean(person.deathDate || person.deathDatePhrase);
 
   return (
     <div className="space-y-8">
@@ -313,12 +385,25 @@ export default async function PersonPage({
               </p>
             )}
             <h1 className="font-serif text-3xl font-semibold tracking-tight sm:text-4xl">
+              {person.namePrefix && (
+                <span className="mr-2 text-xl font-normal text-stone-500 sm:text-2xl dark:text-stone-400">
+                  {person.namePrefix}
+                </span>
+              )}
+              {person.namePrefix && " "}
               {name(person)}
+              {person.nameSuffix && " "}
+              {person.nameSuffix && (
+                <span className="ml-2 text-xl font-normal text-stone-500 sm:text-2xl dark:text-stone-400">
+                  {person.nameSuffix}
+                </span>
+              )}
             </h1>
-            <p className="muted">
+            <p className="muted" data-testid="person-subtitle">
               {lifeSpan(person) || "Lebensdaten unbekannt"}
               {person.birthName && ` · geb. ${person.birthName}`}
-              {person.deathDate && " · verstorben"}
+              {person.nickname && ` · genannt „${person.nickname}“`}
+              {deceased && " · verstorben"}
             </p>
           </div>
           <div className="flex flex-wrap gap-2 sm:flex-col sm:items-stretch">
@@ -336,11 +421,22 @@ export default async function PersonPage({
         <dl className="relative mt-6 grid gap-4 border-t border-stone-200 pt-5 text-sm sm:grid-cols-3 dark:border-stone-800">
           <div>
             <dt className="eyebrow">Geboren</dt>
-            <dd className="mt-1" data-testid="person-birth">{birth || "—"}</dd>
+            <dd className="mt-1">
+              <span data-testid="person-birth">{birth || "—"}</span>
+              <AltFacts events={altOf(detail.events, "BIRTH")} />
+            </dd>
           </div>
           <div>
             <dt className="eyebrow">Gestorben</dt>
-            <dd className="mt-1" data-testid="person-death">{death || "—"}</dd>
+            <dd className="mt-1">
+              <span data-testid="person-death">{death || "—"}</span>
+              {person.deathCause && (
+                <span className="mt-0.5 block text-xs muted" data-testid="person-death-cause">
+                  Ursache: {person.deathCause}
+                </span>
+              )}
+              <AltFacts events={altOf(detail.events, "DEATH")} />
+            </dd>
           </div>
           <div>
             <dt className="eyebrow">Geschlecht</dt>
@@ -357,6 +453,10 @@ export default async function PersonPage({
           <p className="whitespace-pre-wrap leading-relaxed">{person.notes}</p>
         </section>
       )}
+
+      <EventSection personId={person.id} events={eventRows} owners={eventOwners} canEdit={canEdit} />
+
+      <NameVariants personId={person.id} names={detail.names} canEdit={canEdit} />
 
       <section aria-labelledby="family-h" className="space-y-5">
         <h2 id="family-h" className="section-title">
@@ -390,6 +490,20 @@ export default async function PersonPage({
                 person={r.other}
                 portrait={portraitOf(r.other)}
                 note={partnerDescription(r)}
+                extra={
+                  r.other.restricted ? undefined : (partnerPlaces(r.subtype, r.startPlace, r.endPlace) ||
+                    altOf(r.events, "MARRIAGE").length + altOf(r.events, "DIVORCE").length > 0) ? (
+                    <>
+                      {partnerPlaces(r.subtype, r.startPlace, r.endPlace) && (
+                        <span className="block muted" data-testid="partner-places">
+                          {partnerPlaces(r.subtype, r.startPlace, r.endPlace)}
+                        </span>
+                      )}
+                      <AltFacts events={altOf(r.events, "MARRIAGE")} prefix="Heirat " />
+                      <AltFacts events={altOf(r.events, "DIVORCE")} prefix="Scheidung " />
+                    </>
+                  ) : undefined
+                }
               >
                 {/* Hochzeitsbilder direkt an der Ehe. Aus dem Stammbaum
                     verlinkt (?rel=…) ist dieser Abschnitt gleich offen. */}
@@ -401,8 +515,8 @@ export default async function PersonPage({
                   >
                     <summary className="cursor-pointer text-xs font-medium text-accent-700 dark:text-accent-300">
                       {r.media.length > 0
-                        ? `${r.media.length} ${r.media.length === 1 ? "Bild" : "Bilder"} zur ${r.subtype === "UNMARRIED" ? "Partnerschaft" : "Ehe"}`
-                        : "Bilder zur Ehe hinzufügen"}
+                        ? `${r.media.length} ${r.media.length === 1 ? "Bild" : "Bilder"} zur ${partnershipNoun(r.subtype)}`
+                        : `Bilder zur ${partnershipNoun(r.subtype)} hinzufügen`}
                     </summary>
                     <div className="pt-2">
                       <MediaGallery
@@ -410,7 +524,7 @@ export default async function PersonPage({
                         items={r.media}
                         canUpload={canEdit}
                         canDelete={canEdit}
-                        title={r.subtype === "UNMARRIED" ? "Bilder zur Partnerschaft" : "Hochzeitsbilder"}
+                        title={r.subtype === "MARRIED" || r.subtype === "DIVORCED" ? "Hochzeitsbilder" : "Bilder zur Partnerschaft"}
                         compact
                       />
                     </div>

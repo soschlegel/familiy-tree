@@ -20,6 +20,10 @@ type Exchange = {
   media: Record<string, unknown>[];
   sources: Record<string, unknown>[];
   citations: Record<string, unknown>[];
+  events: Record<string, unknown>[];
+  personNames: Record<string, unknown>[];
+  externalIds?: Record<string, unknown>[];
+  rawRecords?: Record<string, unknown>[];
 };
 
 const tag = uniq();
@@ -29,6 +33,10 @@ const citationId = `e2e-import-c-${tag}`;
 const mediaId = `e2e-import-m-${tag}`;
 const v1Person = `e2e-import-p-${tag}`;
 const v1Relationship = `e2e-import-r-${tag}`;
+const eventId = `e2e-import-e-${tag}`;
+const phraseEventId = `e2e-import-e2-${tag}`;
+const eventCitationId = `e2e-import-ce-${tag}`;
+const nameId = `e2e-import-n-${tag}`;
 
 test.beforeAll(async () => {
   const api = await apiAs("admin");
@@ -64,6 +72,13 @@ async function exportFor(api: APIRequestContext): Promise<Exchange> {
   );
   const rels = new Set(data.relationships.map((r) => r.id as string));
   data.citations = data.citations.filter((c) => (c.personId ? keep.has(c.personId as string) : rels.has(c.relationshipId as string)));
+  data.events = data.events.filter((e) => (e.personId ? keep.has(e.personId as string) : rels.has(e.relationshipId as string)));
+  const events = new Set(data.events.map((e) => e.id as string));
+  data.citations = data.citations.filter((c) => !c.eventId || events.has(c.eventId as string));
+  data.personNames = data.personNames.filter((n) => keep.has(n.personId as string));
+  // Fremdkennungen und Rohdaten gehören zu Importläufen anderer Tests — nicht nötig.
+  data.externalIds = [];
+  data.rawRecords = [];
   data.sources = data.sources.filter((s) => (s.id as string).startsWith("mock-"));
   const sources = new Set(data.sources.map((s) => s.id as string));
   data.citations = data.citations.filter((c) => sources.has(c.sourceId as string));
@@ -80,7 +95,7 @@ async function chooseFile(page: Page, name: string, mimeType: string, buffer: Bu
   await page.goto("/admin/data");
   await page.getByLabel("Exportdatei (JSON oder ZIP)").setInputFiles({ name, mimeType, buffer });
   await expect(page.getByRole("button", { name: "Import ausführen" })).toBeDisabled();
-  await page.getByRole("button", { name: "Vorschau" }).click();
+  await page.getByRole("button", { name: "Vorschau", exact: true }).click();
   return page.getByRole("status").filter({ hasText: "Personen:" });
 }
 
@@ -89,7 +104,7 @@ test("geänderter JSON-Export: Vorschau, dann Import", async ({ page }) => {
   const api = await apiAs("admin");
   const data = await exportFor(api);
   await api.dispose();
-  expect(data.version).toBe(2);
+  expect(data.version).toBe(3);
   const persons = data.persons.length;
   const relationships = data.relationships.length;
   const sources = data.sources.length;
@@ -120,12 +135,74 @@ test("geänderter JSON-Export: Vorschau, dann Import", async ({ page }) => {
   });
   data.citations.push({ id: citationId, sourceId, personId: target.id, relationshipId: null, fact: "BIRTH", detail: "Nr. 4711", confidence: "MEDIUM" });
 
+  // Version 3: Lebensereignisse (Bereich, Wortlaut), Beleg am Ereignis,
+  // weiterer Name, Rufname und Todesursache.
+  p.nickname = "Imp";
+  p.deathCause = "Altersschwäche";
+  const eventBase = {
+    relationshipId: null,
+    label: null,
+    isAlternative: false,
+    dateTo: null,
+    dateToPrecision: "DAY",
+    datePhrase: null,
+    address: null,
+    value: null,
+    cause: null,
+    age: null,
+    agency: null,
+    notes: null,
+    sortOrder: 0,
+  };
+  data.events.push(
+    {
+      ...eventBase,
+      id: eventId,
+      personId: target.id,
+      type: "RESIDENCE",
+      value: "Hauptstraße 1",
+      place: "Celle",
+      date: "1920-01-01T00:00:00.000Z",
+      datePrecision: "YEAR",
+      dateQualifier: "PERIOD",
+      dateTo: "1925-01-01T00:00:00.000Z",
+      dateToPrecision: "YEAR",
+    },
+    {
+      ...eventBase,
+      id: phraseEventId,
+      personId: target.id,
+      type: "CUSTOM",
+      label: "Goldene Konfirmation",
+      place: null,
+      date: null,
+      datePrecision: "DAY",
+      dateQualifier: "EXACT",
+      datePhrase: "Pfingsten, Jahr unbekannt",
+    },
+  );
+  data.citations.push({ id: eventCitationId, sourceId, personId: target.id, relationshipId: null, eventId, fact: "EVENT", detail: "Adressbuch S. 3", confidence: null });
+  data.personNames.push({
+    id: nameId,
+    personId: target.id,
+    type: "MARRIED",
+    givenName: null,
+    familyName: `Importname${tag}`,
+    prefix: null,
+    suffix: null,
+    nickname: null,
+    label: null,
+    notes: null,
+    sortOrder: 0,
+  });
+
   const status = await chooseFile(page, "export.json", "application/json", Buffer.from(JSON.stringify(data)));
   await expect(status).toContainText("Vorschau — noch nichts geändert");
   await expect(status).toContainText(`Personen: 0 neu, ${persons} aktualisiert`);
   await expect(status).toContainText(`Beziehungen: 0 neu, ${relationships} aktualisiert`);
   await expect(status).toContainText(`Quellen: 1 neu, ${sources} aktualisiert`);
-  await expect(status).toContainText(`Belege: 1 neu, ${citations} aktualisiert`);
+  // Zwei neue Belege: Geburt und Wohnort-Ereignis. (Ereignisse und Namen zeigt die Vorschau bisher nicht an.)
+  await expect(status).toContainText(`Belege: 2 neu, ${citations} aktualisiert`);
   await expect(status).toContainText(`Bilder: 0 neu, ${data.media.length} bereits vorhanden`);
   // Noch nichts geändert.
   const before = await page.request.get(`/api/persons/${target.id}`);
@@ -138,6 +215,16 @@ test("geänderter JSON-Export: Vorschau, dann Import", async ({ page }) => {
   await page.goto(`/people/${target.id}`);
   await expect(page.getByRole("region", { name: "Notizen" })).toContainText(`Per Import geändert ${tag}`);
   await expect(page.getByTestId("person-birth")).toHaveText("um 1901");
+  await expect(page.getByTestId("person-subtitle")).toContainText("genannt „Imp“");
+  await expect(page.getByTestId("person-death-cause")).toHaveText("Ursache: Altersschwäche");
+  const residence = page.getByTestId("event-row").filter({ hasText: "Wohnort" });
+  await expect(residence.getByTestId("event-date")).toHaveText("von 1920 bis 1925");
+  await expect(residence).toContainText("Hauptstraße 1");
+  await expect(residence.getByTestId("event-citations")).toContainText(`E2E Importquelle ${tag}`);
+  await expect(page.getByTestId("event-row").filter({ hasText: "Goldene Konfirmation" }).getByTestId("event-date")).toHaveText(
+    "Pfingsten, Jahr unbekannt",
+  );
+  await expect(page.getByTestId("person-names")).toContainText(`Importname${tag}`);
   const birth = page.getByTestId("citations-birth");
   await expect(birth).toContainText(`E2E Importquelle ${tag}`);
   await expect(birth).toContainText("Nr. 4711");
@@ -146,9 +233,11 @@ test("geänderter JSON-Export: Vorschau, dann Import", async ({ page }) => {
   await expect(page.locator("dl")).toContainText("März 1901");
   await expect(page.locator("dl")).toContainText("Standesamt Import");
 
-  // Mock-Daten unverändert durchgereicht (Genauigkeit bleibt erhalten).
+  // Mock-Daten unverändert durchgereicht (Genauigkeit, Orte, Ereignisse bleiben erhalten).
   const otto = await (await page.request.get("/api/persons/mock-p-001")).json();
   expect(otto.person).toMatchObject({ birthDatePrecision: "YEAR", birthDateQualifier: "ABOUT" });
+  expect(otto.events.length).toBeGreaterThan(0);
+  expect(otto.partners.find((r: { startPlace: string | null }) => r.startPlace)).toBeTruthy();
 });
 
 test("ZIP-Export mit neuem Bild", async ({ page }) => {
@@ -254,7 +343,7 @@ test("kaputte Datei wird mit Meldung abgelehnt", async ({ page, consoleGuard }) 
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify({ version: 2, persons: [{ id: "x" }], relationships: [] })),
   });
-  await page.getByRole("button", { name: "Vorschau" }).click();
+  await page.getByRole("button", { name: "Vorschau", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "Datei entspricht nicht dem Austauschformat" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Import ausführen" })).toBeDisabled();
 });
