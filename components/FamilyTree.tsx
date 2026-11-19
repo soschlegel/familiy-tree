@@ -715,6 +715,8 @@ function TreeCanvas({
           date: ev.date,
           datePrecision: ev.datePrecision,
           dateQualifier: ev.dateQualifier,
+          dateTo: ev.dateTo ?? null,
+          dateToPrecision: ev.dateToPrecision,
           subtype: ev.subtype,
           primaryMediaId: ev.primaryMediaId,
           partnerNames: ev.partnerNames,
@@ -1440,13 +1442,19 @@ function Legend({
             <svg width="28" height="6" aria-hidden className="shrink-0">
               <line x1="1" y1="3" x2="27" y2="3" strokeWidth="2" className="stroke-rose-400" />
             </svg>
-            Ehe <span aria-hidden className="text-rose-400">♥</span>
+            Ehe / Partnerschaft <span aria-hidden className="text-rose-400">♥</span>
           </li>
           <li className="flex items-center gap-2">
             <svg width="28" height="6" aria-hidden className="shrink-0">
               <line x1="1" y1="3" x2="27" y2="3" strokeWidth="2" strokeDasharray="5 4" className="stroke-stone-400" />
             </svg>
             geschieden <span aria-hidden>⚯</span>
+          </li>
+          <li className="flex items-center gap-2" data-testid="legend-partner-unknown">
+            <svg width="28" height="6" aria-hidden className="shrink-0">
+              <line x1="1" y1="3" x2="27" y2="3" strokeWidth="2" strokeDasharray="1 4" strokeLinecap="round" stroke="#c9a3aa" />
+            </svg>
+            Ehestand unbekannt <span aria-hidden>?</span>
           </li>
           <li className="flex items-center gap-2">
             <span aria-hidden className="inline-flex w-7 justify-center"><LockIcon className="h-3.5 w-3.5" /></span>

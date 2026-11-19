@@ -3,11 +3,14 @@
 import { Handle, Position, type NodeProps } from "reactflow";
 
 import { formatDate, type MarriageEvent } from "@/lib/tree-layout";
+import { PARTNER_SYMBOL, partnerMarkerLabel } from "@/lib/partner-labels";
 
 export type MarriageNodeData = {
   date: string;
   datePrecision?: MarriageEvent["datePrecision"];
   dateQualifier?: MarriageEvent["dateQualifier"];
+  dateTo?: string | null;
+  dateToPrecision?: MarriageEvent["dateToPrecision"];
   subtype: string;
   primaryMediaId: string | null;
   partnerNames: string;
@@ -57,15 +60,16 @@ export function YearNode({ data }: NodeProps<{ year: number }>) {
  * dass hier ein Ereignis steht und keine Person.
  */
 export function MarriageNode({ data }: NodeProps<MarriageNodeData>) {
-  const divorced = data.subtype === "DIVORCED";
-  const label = divorced ? "Ehe geschieden" : "Hochzeit";
+  const label = partnerMarkerLabel(data.subtype);
+  const muted = data.subtype === "DIVORCED" || data.subtype === "PARTNER_UNKNOWN";
+  const when = formatDate(data.date, data.datePrecision, data.dateQualifier, data.dateTo, data.dateToPrecision);
 
   return (
     <div
       className={`flex flex-col items-center transition-opacity ${
         data.dimmed ? "opacity-25" : "opacity-100"
       }`}
-      title={`${label}: ${data.partnerNames} — ${formatDate(data.date, data.datePrecision, data.dateQualifier)}`}
+      title={`${label}: ${data.partnerNames} — ${when}`}
     >
       <Handle
         type="target"
@@ -81,13 +85,20 @@ export function MarriageNode({ data }: NodeProps<MarriageNodeData>) {
           className="h-14 w-14 rounded-full object-cover shadow-md ring-2 ring-rose-400"
         />
       ) : (
-        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-rose-50 text-lg shadow-sm ring-2 ring-rose-300 dark:bg-rose-950">
-          {divorced ? "⚯" : "♥"}
+        <div
+          data-subtype={data.subtype}
+          className={`flex h-11 w-11 items-center justify-center rounded-full text-lg shadow-sm ring-2 ${
+            muted
+              ? "bg-stone-50 text-stone-500 ring-stone-300 dark:bg-stone-900 dark:text-stone-400 dark:ring-stone-600"
+              : "bg-rose-50 ring-rose-300 dark:bg-rose-950"
+          }`}
+        >
+          {PARTNER_SYMBOL[data.subtype] ?? "♥"}
         </div>
       )}
 
       <div className="mt-1 whitespace-nowrap rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-medium tabular-nums text-stone-600 shadow-sm dark:bg-stone-900/90 dark:text-stone-300">
-        {formatDate(data.date, data.datePrecision, data.dateQualifier)}
+        {when}
       </div>
 
       <Handle

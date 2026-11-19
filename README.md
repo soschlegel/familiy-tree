@@ -254,7 +254,15 @@ Die ältesten Generationen haben ungenaue Daten (nur Jahr oder Monat, „um“,
 Angaben über mehrere Personen und Ehen; eine davon (Heiratsregister) ist in
 Familie A und für eine Person nur aus Familie B zitiert, eine nur in
 Familie D, eine ist noch unbelegt. Die meisten Personen haben keinen Beleg.
-Die IDs dieser Sonderfälle liefert `generateMockData().landmarks`.
+Dazu kommen Lebensereignisse (`mock-e-001` …: Taufe, Beruf, Beerdigung der
+Stammväter, ein Wohnort „von … bis …“, ein Abschluss „zwischen … und …“, eine
+Konfirmation nur mit Wortlaut, ein sonstiges Ereignis „Kapitänspatent“, eine
+Verlobung an einer Ehe, eine abweichende zweite Geburtsangabe), Heiratsorte
+bei zwei von drei datierten Ehen, ein Scheidungsort, zwei Partnerschaften
+mit unbekanntem Ehestand, Rufname, Titel, Namenszusatz, eine Todesursache und
+zwei weitere Namen (`mock-n-01`, `mock-n-02`).
+Die IDs dieser Sonderfälle liefert `generateMockData().landmarks`
+(`landmarks.genealogy` für die Ereignisse und Namen).
 
 **Benutzer** (Anmeldung per Dev-Login, nur E-Mail):
 
@@ -340,28 +348,45 @@ wird („Verstanden als: um 1850“), oder eine Fehlermeldung.
 | `um 1850`, `ca. 1850`, `circa 1850`, `~1850` | ungefähr (± 2 Jahre) | um 1850 |
 | `vor 1900` | spätestens Ende 1899 | vor 1900 |
 | `nach 1723` | frühestens 1724 | nach 1723 |
+| `geschätzt 1850`, `errechnet 1850` | wie „um“ (± 2 Jahre) | geschätzt 1850 |
+| `zwischen 1850 und 1855`, `1850–1855`, `1850-1855` | ein Zeitpunkt in diesem Zeitraum | zwischen 1850 und 1855 |
+| `von 1901 bis 1910` | Zeitraum (z.B. Wohnort) | von 1901 bis 1910 |
+| `ab 1901`, `seit 1901` | Zeitraum ohne Ende | ab 1901 |
+| `bis 1910` | Zeitraum bis einschließlich 1910 | bis 1910 |
 
 Zusätze lassen sich mit jeder Genauigkeit kombinieren („um 03.1850“, „vor
-12.03.1900“). Für KI-Eingaben werden auch die GEDCOM-Kürzel `ABT`, `BEF`,
-`AFT` verstanden, außerdem volle ISO-Zeitstempel (ältere API-Aufrufe).
+12.03.1900“, „zwischen 12.03.1850 und Mai 1851“). Für KI-Eingaben werden auch
+die GEDCOM-Formen `ABT`, `BEF`, `AFT`, `EST`, `CAL`, `BET … AND …`,
+`FROM … TO …` und englische Monatskürzel (`12 MAR 1850`) verstanden,
+außerdem volle ISO-Zeitstempel (ältere API-Aufrufe).
+
+**Wortlaut:** Was sich nicht strukturiert darstellen lässt („Weihnachten
+1850“, ein Datum im julianischen Kalender, eine GEDCOM-Datumsphrase), bleibt
+als Text erhalten (`…Phrase`) — allein oder neben dem Datum, angezeigt als
+„1850 („Weihnachten 1850“)“. Wird das Datum geändert, ohne einen neuen
+Wortlaut anzugeben, verfällt der alte; bleibt das Datum gleich, bleibt er.
 
 **Speicherung:** Die bisherige `DateTime`-Spalte bleibt der sortierbare
 Ankerpunkt (bei Monat der Monatserste, bei Jahr der 1. Januar). Daneben
 stehen je Datum Genauigkeit (`…Precision`: `DAY`, `MONTH`, `YEAR`) und
-Zusatz (`…Qualifier`: `EXACT`, `ABOUT`, `BEFORE`, `AFTER`). Die
-Standardwerte (Tag, genau) beschreiben alle früher erfassten Daten — es war
-keine Datenumstellung nötig. Eingelesen, angezeigt und verglichen wird an
+Zusatz (`…Qualifier`: `EXACT`, `ABOUT`, `BEFORE`, `AFTER`, `ESTIMATED`,
+`CALCULATED`, `BETWEEN`, `PERIOD`, `UNTIL`), bei Bereichen das Ende
+(`…To`, `…ToPrecision`) und ggf. der Wortlaut (`…Phrase`). Die
+Standardwerte (Tag, genau, kein Ende) beschreiben alle früher erfassten Daten
+— es war keine Datenumstellung nötig. Eingelesen, angezeigt und verglichen wird an
 einer Stelle: [lib/dates.ts](lib/dates.ts).
 
 **Prüfungen:** Validierung, Plausibilitätsprüfung, Datenlücken, Dubletten,
 Alter in Zeitleisten und die Statistik vergleichen den Zeitraum, den eine
 Angabe abdeckt. Gemeldet bzw. abgelehnt wird nur, was für *jede* mögliche
-Lesart widersprüchlich ist — „1900 gestorben“ und „1900 geboren“ ist kein
+Lesart widersprüchlich ist (ein Bereich zählt mit seinem ganzen Zeitraum) —
+„1900 gestorben“ und „1900 geboren“ ist kein
 Fehler, nur weil beides intern auf den 1. Januar fällt; „vor 1840 gestorben,
 1850 geboren“ schon. Ein ungefähres Geburtsdatum gilt nicht als fehlend; die
 Zeitleiste einer Person führt es aber als „genaues Geburtsdatum (bisher: um
-1850)“ unter den offenen Punkten. Suche und Sortierung nach Geburtsjahr
-nutzen den Ankerpunkt („vor 1900“ zählt als 1900).
+1850)“ unter den offenen Punkten. Suche und Sortierung nach Geburtsjahr,
+Jahresfilter der Familienzeitleiste und die Geburtsjahre der Statistik nutzen
+den Ankerpunkt („vor 1900“ zählt als 1900, „zwischen 1850 und 1855“ als 1850).
 
 ## Quellen und Belege
 
@@ -375,8 +400,11 @@ belegten Person oder Ehe).
 Ein **Beleg** verbindet eine Quelle mit genau einer Angabe: an einer Person
 `Name`, `Geburt`, `Tod` oder `Sonstiges`, an einer Beziehung `Heirat &
 Partnerschaft` bzw. `Abstammung` (oder `Sonstiges`). Dazu kommen
-Fundstelle (Seite, Eintragsnummer) und Verlässlichkeit (gesichert,
-wahrscheinlich, unsicher). Eine Quelle kann beliebig viele Angaben vieler
+Fundstelle (Seite, Eintragsnummer), Verlässlichkeit (gesichert,
+wahrscheinlich, unsicher) und optional eine Abschrift (`text`). Ein Beleg
+kann auch ein einzelnes Lebensereignis stützen (`eventId`, Angabe
+„Ereignis“); er hängt dann zugleich an dessen Person bzw. Beziehung, Rechte
+und Export gelten wie dort. Eine Quelle kann beliebig viele Angaben vieler
 Personen belegen.
 
 **Oberfläche:**
@@ -1058,6 +1086,7 @@ Das Schema liegt in `prisma/schema.prisma`, die Migrationen in
 | `0_init` | Ausgangsstand |
 | `20261116000000_ungenaue_daten_und_quellen` | Genauigkeit/Zusatz für alle Daten (Spalten mit Standardwert), Tabellen `Source` und `Citation` — rein ergänzend, keine Datenumstellung |
 | `20261117000000_ki_zugang` | KI-Zugang: `User.aiAccess` (Standard „kein Zugang“), Tabelle `ApiToken`, im `AuditLog` die Spalten `channel` und `apiTokenId` — rein ergänzend; nach dem Update hat niemand KI-Zugang, bis der Administrator ihn vergibt |
+| `20261119000000_genealogie_ereignisse_import` | Lebensereignisse (`Event`), weitere Namen (`PersonName`), Importläufe, Herkunft, Fremdkennungen und Rohdaten (`ImportBatch`, `ImportLink`, `ExternalId`, `ImportRawRecord`); neue Datumszusätze und je Datum Bereichsende und Wortlaut; Rufname, Titel, Namenszusatz, Todesursache; Heirats-/Scheidungsort; Beleg an einem Ereignis; Ehestand unbekannt (`PARTNER_UNKNOWN`) — rein ergänzend (neue Enum-Werte, Spalten mit Standardwert, neue Tabellen) |
 
 Schemaänderungen künftig mit `npm run db:migrate` (`prisma migrate dev`) als
 Migration anlegen und mit einchecken.
@@ -1108,6 +1137,7 @@ npx prisma migrate diff --from-url "$DATABASE_URL" \
 npx prisma migrate resolve --applied 0_init
 npx prisma migrate resolve --applied 20261116000000_ungenaue_daten_und_quellen
 npx prisma migrate resolve --applied 20261117000000_ki_zugang
+npx prisma migrate resolve --applied 20261119000000_genealogie_ereignisse_import
 ```
 
 Auf der NAS (SSH, Stack `familytree`) in einem Einmal-Container aus dem
@@ -1226,6 +1256,9 @@ Migrationen nach.
 - **ZIP** — dasselbe JSON plus die Bilddateien unter `media/`. Damit ist der
   Export ein vollständiges Backup und ein Umzug auf eine andere Instanz
   funktioniert wirklich.
+- **GEDCOM** (in Arbeit) — Bibliothek zum Lesen und Schreiben in
+  [lib/gedcom](lib/gedcom/README.md); eine Datei vorab prüfen mit
+  `npm run gedcom:check -- datei.ged`.
 
 Der Import zeigt zuerst eine Vorschau (wie viel neu, wie viel aktualisiert) und
 ändert erst nach ausdrücklicher Bestätigung etwas. Bestehende Einträge werden
@@ -1241,6 +1274,15 @@ alle; sonst zusätzlich die eigenen unbelegten). Ältere Exporte (Version 1)
 ohne diese Felder lassen sich unverändert importieren; ihre Daten gelten als
 tagesgenau.
 
+Formatversion 3 enthält zusätzlich Datumsbereiche und Wortlaut (`…To`,
+`…ToPrecision`, `…Phrase`), die neuen Zusätze, Rufname, Titel,
+Namenszusatz, Todesursache, Heirats- und Scheidungsort, `events`
+(Lebensereignisse), `personNames` (weitere Namen), Belege an Ereignissen,
+`externalIds` (Fremdkennungen) und `rawRecords` (nicht zugeordnete
+Importdaten) — jeweils nur für exportierte Personen, Beziehungen und Quellen.
+Importläufe und ihre Herkunftsangaben gehören zur Instanz und reisen nicht
+mit. Dateien der Versionen 1 und 2 lassen sich weiter unverändert importieren.
+
 ## Datenmodell
 
 Beziehungen liegen in einer eigenen Tabelle statt als `parentId` auf `Person`.
@@ -1251,7 +1293,10 @@ ohne das Schema zu ändern.
 ```
 Person ──< Relationship >── Person     type: PARENT_OF | PARTNER_OF
 Person ──< PersonMedia >── MediaAsset
-Source ──< Citation >── Person | Relationship   fact: NAME | BIRTH | DEATH | PARTNERSHIP | PARENTAGE | OTHER
+Source ──< Citation >── Person | Relationship (| Event)   fact: NAME | BIRTH | DEATH | PARTNERSHIP | PARENTAGE | OTHER | EVENT
+Person | Relationship ──< Event      Taufe, Beruf, Wohnort, Beerdigung, … (EventType, frei: CUSTOM + label)
+Person ──< PersonName                weitere Namen (Ehename, Schreibvariante, auch bekannt als …)
+ImportBatch ──< ImportLink | ExternalId | ImportRawRecord   Herkunft importierter Daten (nur Admin)
 User (= Allowlist) ──< AuditLog     über den KI-Zugang: channel = MCP, apiTokenId
 User ──< ApiToken                    KI-Schlüssel (nur der Hash), aiAccess am User
 ```
@@ -1260,7 +1305,9 @@ Regeln für Beziehungen (geprüft in [lib/validation.ts](lib/validation.ts) und
 [lib/services/relationships.ts](lib/services/relationships.ts)):
 
 - Die Art muss zum Typ passen — Eltern: leiblich, adoptiert, Stief, Pflege;
-  Partner: verheiratet, unverheiratet, geschieden.
+  Partner: verheiratet, unverheiratet, geschieden, Ehestand unbekannt
+  (`PARTNER_UNKNOWN`, z.B. aus einem Import ohne Heiratsangabe; zählt nicht
+  als Ehe, heißt in Verwandtschaftsbegriffen „Partner/Partnerin“).
 - Höchstens **zwei leibliche** Eltern; Adoptiv-, Stief- und Pflegeeltern
   kommen beliebig hinzu.
 - Keine Zyklen (niemand ist sein eigener Vorfahre), keine Partnerschaft
@@ -1269,6 +1316,43 @@ Regeln für Beziehungen (geprüft in [lib/validation.ts](lib/validation.ts) und
   Zukunft, Tod nicht vor der Geburt, Ende einer Beziehung nicht vor ihrem
   Beginn — bei ungenauen Daten nur, wenn es für jede Lesart gilt (siehe
   [Ungenaue Daten](#ungenaue-daten)).
+
+### Lebensereignisse, Namen und Import
+
+Jede Angabe steht an genau einer Stelle (Regeln in
+[lib/events.ts](lib/events.ts)):
+
+| Angabe | Ort |
+|---|---|
+| Geburt, Tod (Datum, Ort, Wortlaut, Todesursache) | Spalten an `Person` |
+| Heirat bzw. Beginn einer Partnerschaft, Scheidung bzw. Ende | `Relationship.startDate/startPlace`, `endDate/endPlace` |
+| Hauptname | `givenName`, `familyName` (heutiger, z.B. Ehename), `birthName`, `nickname`, `namePrefix`, `nameSuffix` |
+| weitere Namen | `PersonName` |
+| alles andere — Taufe, Konfirmation, Beruf, Wohnort, Auswanderung, Militärdienst, Beerdigung, Verlobung, Aufgebot, … | `Event` an der Person bzw. Beziehung |
+
+Eine zweite, abweichende Angabe zu Geburt, Tod, Heirat oder Scheidung (in
+GEDCOM-Dateien häufig) überschreibt nichts, sondern wird ein Ereignis mit
+`isAlternative`; die Arten BIRTH, DEATH, MARRIAGE und DIVORCE gibt es nur
+so. Alternativen erscheinen nicht in Zeitleisten und Plausibilitätsprüfung.
+Unbekannte Ereignisarten sind `CUSTOM` mit freier Bezeichnung. Ereignisse
+sind sichtbar und änderbar wie ihr Träger. Sie erscheinen in Personendetail,
+Zeitleisten, Personensuche nach Ort (jeder Ort einer Person, auch Heirats-
+und Ereignisorte) und Plausibilitätsprüfung (Beerdigung vor dem Tod,
+Ereignis vor der Geburt bzw. nach dem Tod); „Ehe ohne Ort“ und „Ehestand
+unbekannt“ sind Datenlücken an Beziehungen.
+
+**Import** (Dienste in [lib/services/imports.ts](lib/services/imports.ts) und
+[lib/services/import-apply.ts](lib/services/import-apply.ts), nur
+Administratoren): Jeder Lauf (`ImportBatch`) bewahrt die Originaldatei unter
+`MEDIA_DIR/imports/` auf (also in der normalen Bildersicherung). Jeder
+importierte Datensatz hat eine Herkunft (`ImportLink`: Lauf, Schlüssel in der
+Quelle, Fingerabdruck der importierten Werte, Änderungsstempel der Quelle) und
+optional Fremdkennungen (`ExternalId`, z.B. `_UID`). So erkennt ein
+erneuter Import desselben Baums seine Datensätze wieder und sieht, was seither
+in der App geändert wurde — das wird nicht still überschrieben. Was der Import
+nicht deuten kann, landet als JSON-Teilbaum im Rohdatenspeicher
+(`ImportRawRecord`), sichtbar wie die Person bzw. Beziehung. Gelöscht wird
+durch einen Import nie etwas.
 
 ## Berechtigungen
 

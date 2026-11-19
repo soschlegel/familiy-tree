@@ -13,6 +13,12 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { Scope } from "../lib/scope";
 import {
   createCitation,
+  createEvent,
+  createPersonName,
+  deleteEvent,
+  listPersonEvents,
+  listRelationshipEvents,
+  updateEvent,
   createPerson,
   createRelationship,
   createSource,
@@ -41,9 +47,12 @@ import {
   type AiLevel,
   type CitationTarget,
   type DataGapKind,
+  type PersonNameDto,
+  type RelationshipGapKind,
   type LineageResult,
   type PersonCitation,
   type SourceDto,
+  type EventDto,
   type PersonDetail,
   type PersonRelation,
   type RelationshipDto,
@@ -53,6 +62,7 @@ import { CONSISTENCY_KINDS, type ConsistencyKind } from "../lib/consistency";
 import { isPreciseDate, toFuzzyDate, toIsoPartial } from "../lib/dates";
 import { CITATION_FACT_LABEL, SOURCE_KIND_LABEL } from "../lib/source-labels";
 import { CITATION_CONFIDENCES, CITATION_FACTS, SOURCE_KINDS } from "../lib/validation";
+import { ALTERNATIVE_ONLY_TYPES, EVENT_TYPES, PERSON_NAME_TYPES } from "../lib/events";
 import { appendResearchNote, dateFields, isoDay, ref, type PersonLike } from "./format";
 
 export type ToolContext = {
@@ -138,8 +148,11 @@ const dateInput = z
   .max(60)
   .describe(
     "Date in its real precision: YYYY-MM-DD, YYYY-MM or YYYY (German forms 12.03.1850 / 03.1850 also work). " +
-      "Optional prefix for uncertain dates: 'um'/'ca.'/'ABT' = about, 'vor'/'BEF' = before, 'nach'/'AFT' = after " +
-      "(e.g. 'um 1850', 'vor 1900', 'nach 1723'). Do not invent day or month when only the year is known.",
+      "Optional prefix for uncertain dates: 'um'/'ca.'/'ABT' = about, 'vor'/'BEF' = before, 'nach'/'AFT' = after, " +
+      "'geschätzt'/'EST' = estimated, 'errechnet'/'CAL' = calculated (e.g. from an age) " +
+      "(e.g. 'um 1850', 'vor 1900', 'nach 1723', 'errechnet 1801'). Ranges: 'zwischen 1850 und 1855' (BET … AND …, " +
+      "the event happened once somewhere in that span), 'von 1901 bis 1910' (FROM … TO …, a state that lasted), " +
+      "'ab 1901', 'bis 1910'. Do not invent day or month when only the year is known.",
   );
 
 const refSchema = z
@@ -154,12 +167,57 @@ const refSchema = z
 const GENDER = ["MALE", "FEMALE", "OTHER", "UNKNOWN"] as const;
 
 /** Datum für kompakte Listen: ISO in Genauigkeit, bei ungenauen Daten mit Text. */
-function compactDate(prefix: string, iso: string | null, precision?: string, qualifier?: string) {
-  const f = toFuzzyDate(iso, precision, qualifier);
-  if (!f) return {};
-  return isPreciseDate(f)
+function compactDate(
+  prefix: string,
+  iso: string | null,
+  precision?: string,
+  qualifier?: string,
+  extra: { to?: string | null; toPrecision?: string | null; phrase?: string | null } = {},
+) {
+  const f = toFuzzyDate(iso, precision, qualifier, extra.to, extra.toPrecision);
+  if (!f) return extra.phrase ? { [`${prefix}Text`]: extra.phrase } : {};
+  return isPreciseDate(f) && !extra.phrase
     ? { [prefix]: toIsoPartial(f) }
-    : dateFields(prefix, iso, precision, qualifier);
+    : dateFields(prefix, iso, precision, qualifier, extra);
+}
+
+/** Lebensereignis kompakt. */
+function storedEventOut(e: EventDto) {
+  return {
+    id: e.id,
+    type: e.type,
+    title: e.title,
+    ...(e.label && e.type !== "CUSTOM" ? { label: e.label } : {}),
+    ...(e.isAlternative ? { alternative: true } : {}),
+    ...compactDate("date", e.date, e.datePrecision, e.dateQualifier, {
+      to: e.dateTo,
+      toPrecision: e.dateToPrecision,
+      phrase: e.datePhrase,
+    }),
+    ...(e.place ? { place: e.place } : {}),
+    ...(e.value ? { value: e.value } : {}),
+    ...(e.cause ? { cause: e.cause } : {}),
+    ...(e.age ? { age: e.age } : {}),
+    ...(e.agency ? { agency: e.agency } : {}),
+    ...(e.address ? { address: e.address } : {}),
+    ...(e.notes ? { notes: e.notes } : {}),
+  };
+}
+
+function nameOut(n: PersonNameDto) {
+  return {
+    id: n.id,
+    type: n.type,
+    typeLabel: n.typeLabel,
+    name: n.display,
+    ...(n.givenName ? { givenName: n.givenName } : {}),
+    ...(n.familyName ? { familyName: n.familyName } : {}),
+    ...(n.prefix ? { prefix: n.prefix } : {}),
+    ...(n.suffix ? { suffix: n.suffix } : {}),
+    ...(n.nickname ? { nickname: n.nickname } : {}),
+    ...(n.label ? { label: n.label } : {}),
+    ...(n.notes ? { notes: n.notes } : {}),
+  };
 }
 
 function relationOut(r: PersonRelation) {
@@ -167,10 +225,21 @@ function relationOut(r: PersonRelation) {
     ...ref(r.other),
     relationshipId: r.relationshipId,
     subtype: r.subtype,
-    ...compactDate("startDate", r.startDate, r.startDatePrecision, r.startDateQualifier),
-    ...compactDate("endDate", r.endDate, r.endDatePrecision, r.endDateQualifier),
+    ...compactDate("startDate", r.startDate, r.startDatePrecision, r.startDateQualifier, {
+      to: r.startDateTo,
+      toPrecision: r.startDateToPrecision,
+      phrase: r.startDatePhrase,
+    }),
+    ...(r.startPlace ? { startPlace: r.startPlace } : {}),
+    ...compactDate("endDate", r.endDate, r.endDatePrecision, r.endDateQualifier, {
+      to: r.endDateTo,
+      toPrecision: r.endDateToPrecision,
+      phrase: r.endDatePhrase,
+    }),
+    ...(r.endPlace ? { endPlace: r.endPlace } : {}),
     ...(r.notes ? { notes: r.notes } : {}),
     ...(r.media.length ? { mediaCount: r.media.length } : {}),
+    ...(r.events.length ? { events: r.events.map(storedEventOut) } : {}),
   };
 }
 
@@ -185,6 +254,7 @@ function personCitationOut(c: PersonCitation) {
     ...(c.detail ? { detail: c.detail } : {}),
     ...(c.confidence ? { confidence: c.confidence } : {}),
     ...(c.relationshipId ? { relationshipId: c.relationshipId } : {}),
+    ...(c.eventId ? { eventId: c.eventId, ...(c.eventTitle ? { event: c.eventTitle } : {}) } : {}),
     ...(c.relationship ? { relation: { role: c.relationship.role, subtype: c.relationship.subtype, with: ref(c.relationship.other) } } : {}),
   };
 }
@@ -197,11 +267,23 @@ function personDetailOut(d: PersonDetail): Data {
       givenName: p.givenName,
       familyName: p.familyName,
       birthName: p.birthName,
+      ...(p.nickname ? { nickname: p.nickname } : {}),
+      ...(p.namePrefix ? { namePrefix: p.namePrefix } : {}),
+      ...(p.nameSuffix ? { nameSuffix: p.nameSuffix } : {}),
       gender: p.gender,
-      ...dateFields("birthDate", p.birthDate, p.birthDatePrecision, p.birthDateQualifier),
+      ...dateFields("birthDate", p.birthDate, p.birthDatePrecision, p.birthDateQualifier, {
+        to: p.birthDateTo,
+        toPrecision: p.birthDateToPrecision,
+        phrase: p.birthDatePhrase,
+      }),
       birthPlace: p.birthPlace,
-      ...dateFields("deathDate", p.deathDate, p.deathDatePrecision, p.deathDateQualifier),
+      ...dateFields("deathDate", p.deathDate, p.deathDatePrecision, p.deathDateQualifier, {
+        to: p.deathDateTo,
+        toPrecision: p.deathDateToPrecision,
+        phrase: p.deathDatePhrase,
+      }),
       deathPlace: p.deathPlace,
+      ...(p.deathCause ? { deathCause: p.deathCause } : {}),
       notes: p.notes,
       updatedAt: isoDay(p.updatedAt),
     },
@@ -219,6 +301,10 @@ function personDetailOut(d: PersonDetail): Data {
       height: m.height,
     })),
     citations: d.citations.map(personCitationOut),
+    ...(d.events.length ? { events: d.events.map(storedEventOut) } : {}),
+    ...(d.names.length
+      ? { otherNames: d.names.map(nameOut) }
+      : {}),
   };
 }
 
@@ -229,8 +315,18 @@ function relationshipOut(r: RelationshipDto) {
     subtype: r.subtype,
     fromPersonId: r.fromPersonId,
     toPersonId: r.toPersonId,
-    ...dateFields("startDate", r.startDate, r.startDatePrecision, r.startDateQualifier),
-    ...dateFields("endDate", r.endDate, r.endDatePrecision, r.endDateQualifier),
+    ...dateFields("startDate", r.startDate, r.startDatePrecision, r.startDateQualifier, {
+      to: r.startDateTo,
+      toPrecision: r.startDateToPrecision,
+      phrase: r.startDatePhrase,
+    }),
+    ...(r.startPlace ? { startPlace: r.startPlace } : {}),
+    ...dateFields("endDate", r.endDate, r.endDatePrecision, r.endDateQualifier, {
+      to: r.endDateTo,
+      toPrecision: r.endDateToPrecision,
+      phrase: r.endDatePhrase,
+    }),
+    ...(r.endPlace ? { endPlace: r.endPlace } : {}),
     notes: r.notes,
   };
 }
@@ -296,7 +392,7 @@ function lineageOut(r: LineageResult, direction: "up" | "down", limit: number): 
 }
 
 function eventOut(e: TimelineEvent) {
-  const f = toFuzzyDate(e.date, e.datePrecision, e.dateQualifier);
+  const f = toFuzzyDate(e.date, e.datePrecision, e.dateQualifier, e.dateTo, e.dateToPrecision);
   return {
     date: f ? toIsoPartial(f) : isoDay(e.date),
     ...(f && !isPreciseDate(f)
@@ -307,6 +403,7 @@ function eventOut(e: TimelineEvent) {
     persons: e.persons.map(ref),
     ...(e.place ? { place: e.place } : {}),
     ...(e.relationshipId ? { relationshipId: e.relationshipId } : {}),
+    ...(e.eventId ? { eventId: e.eventId, eventType: e.eventType } : {}),
     ...(e.role ? { role: e.role } : {}),
     ...(e.age !== undefined && e.age !== null ? { age: e.age } : {}),
     ...(e.ageApproximate ? { ageApproximate: true } : {}),
@@ -332,6 +429,7 @@ const GAP_KINDS = [
   "withoutFamily",
   "unsourced",
 ] as const satisfies readonly DataGapKind[];
+const REL_GAP_KINDS = ["marriageWithoutPlace", "partnershipUnknownStatus"] as const satisfies readonly RelationshipGapKind[];
 
 export function registerReadTools(server: McpServer, ctx: ToolContext): void {
   server.registerTool(
@@ -340,7 +438,8 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
       title: "Personen suchen",
       description:
         "Search persons visible to the configured user. All filters are combined (AND). " +
-        "`query`: every word must occur in given, family or birth name (case-insensitive substring). " +
+        "`query`: every word must occur in given, family, birth name or nickname, or in one of the person's other names " +
+        "(married name, spelling variant, alias …; case-insensitive substring). " +
         "Use this first to find person IDs. Results are paginated (default 20, max 100); check `hasMore`.",
       inputSchema: {
         query: z.string().optional().describe("Name words, e.g. 'Anna Becker'."),
@@ -351,7 +450,13 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
           .optional()
           .describe("Birth year from (inclusive). Excludes persons without birth date. Uncertain dates count by their anchor year ('um 1850' = 1850, 'vor 1900' = 1900)."),
         born_to: z.number().int().optional().describe("Birth year to (inclusive)."),
-        place: z.string().optional().describe("Substring of birth or death place, e.g. 'Hannover'."),
+        place: z
+          .string()
+          .optional()
+          .describe(
+            "Substring of any place of the person: birth or death place, place of one of their life events (baptism, " +
+              "residence, burial …), or of one of their marriages/divorces and partnership events, e.g. 'Hannover'.",
+          ),
         gender: z.enum(GENDER).optional(),
         deceased: z.boolean().optional().describe("true = only with death date, false = only without."),
         sort: z.enum(["name", "birth_date", "birth_date_desc", "updated_at"]).optional().describe("Default: name."),
@@ -413,9 +518,14 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
         "parents, partners (with marriage/divorce dates), children and siblings (full/half), plus image metadata and " +
         "`citations` (sources backing the person's facts and relationships: fact NAME/BIRTH/DEATH/PARTNERSHIP/PARENTAGE/OTHER, " +
         "detail = page/entry, confidence HIGH/MEDIUM/LOW). Dates carry `…Precision` (DAY/MONTH/YEAR), `…Qualifier` " +
-        "(EXACT/ABOUT/BEFORE/AFTER) and a German `…Text`. " +
+        "(EXACT/ABOUT/BEFORE/AFTER/ESTIMATED/CALCULATED/BETWEEN/PERIOD/UNTIL), for ranges `…To`, a German `…Text`, and " +
+        "the verbatim wording in `…Text` when the source date could not be structured. " +
+        "`events`: stored life events (baptism, occupation, residence, burial …; `alternative: true` = a second, " +
+        "contradicting record, NOT the main fact); partners carry their own `events` (engagement, banns …) and " +
+        "`startPlace`/`endPlace` (marriage/divorce place). `otherNames`: married names, spelling variants, aliases. " +
+        "Use list_events for all fields of the events. " +
         "Relatives the user may not see appear as {restricted: true} placeholders. " +
-        "`subtype` on relatives: BIOLOGICAL/ADOPTIVE/STEP/FOSTER for parents/children, MARRIED/UNMARRIED/DIVORCED for partners.",
+        "`subtype` on relatives: BIOLOGICAL/ADOPTIVE/STEP/FOSTER for parents/children, MARRIED/UNMARRIED/DIVORCED/PARTNER_UNKNOWN (marital status unknown) for partners.",
       inputSchema: { person_id: personId },
       outputSchema: {
         person: refSchema,
@@ -427,6 +537,9 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
         siblings: z.array(refSchema),
         media: z.array(z.object({ mediaId: z.string() }).passthrough()),
         citations: z.array(z.object({ id: z.string(), sourceId: z.string(), fact: z.string() }).passthrough()),
+        // Lebensereignisse (Taufe, Beruf, Beerdigung …) und weitere Namen — nur, wenn vorhanden.
+        events: z.array(z.object({ id: z.string(), type: z.string(), title: z.string() }).passthrough()).optional(),
+        otherNames: z.array(z.object({ id: z.string(), type: z.string(), name: z.string() }).passthrough()).optional(),
       },
       annotations: { title: "Person abrufen", ...READ_ONLY },
     },
@@ -601,20 +714,34 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
         "missingParents, missingGender, probablyDeceasedWithoutDeathDate (born > 100 years ago), deathPlaceWithoutDeathDate, " +
         "implausibleParentAge (biological parent < 14 or > 70 by birth year), isolated (no relations), withoutFamily (admins only), " +
         "unsourced (birth or death recorded but no citation for that fact — good targets for cite_source). " +
+        "Partnership gaps (in `relationshipGaps`, items are pairs with relationshipId): marriageWithoutPlace (married/" +
+        "divorced without marriage place), partnershipUnknownStatus (partnership whose marital status is unknown — " +
+        "fix with update_relationship subtype MARRIED/UNMARRIED once known). " +
         "`counts` always covers all kinds; `items` lists up to `limit` persons per requested kind.",
       inputSchema: {
-        kinds: z.array(z.enum(GAP_KINDS)).optional().describe("Restrict to these kinds; default all."),
+        kinds: z
+          .array(z.enum([...GAP_KINDS, ...REL_GAP_KINDS]))
+          .optional()
+          .describe("Restrict to these kinds; default all."),
         limit: z.number().int().min(1).max(200).optional().describe("Persons per kind, default 15."),
       },
       outputSchema: {
         counts: z.record(z.number()),
         items: z.record(z.array(refSchema)),
+        relationshipGaps: z.object({
+          counts: z.record(z.number()),
+          items: z.record(
+            z.array(z.object({ relationshipId: z.string(), persons: z.array(refSchema) }).passthrough()),
+          ),
+        }),
       },
       annotations: { title: "Datenlücken", ...READ_ONLY },
     },
     run(ctx, async (scope, a) => {
       const gaps = await findDataGaps(scope, { limit: a.limit ?? 15 });
-      const kinds = a.kinds?.length ? a.kinds : GAP_KINDS;
+      const requested: readonly string[] = a.kinds?.length ? a.kinds : [...GAP_KINDS, ...REL_GAP_KINDS];
+      const kinds = GAP_KINDS.filter((k) => requested.includes(k));
+      const relKinds = REL_GAP_KINDS.filter((k) => requested.includes(k));
       return {
         counts: gaps.counts,
         items: Object.fromEntries(
@@ -623,6 +750,19 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
             gaps.items[k].map((i) => ({ ...ref(i.person), ...(i.detail ? { detail: i.detail } : {}) })),
           ]),
         ),
+        relationshipGaps: {
+          counts: gaps.relationshipGaps.counts,
+          items: Object.fromEntries(
+            relKinds.map((k) => [
+              k,
+              gaps.relationshipGaps.items[k].map((i) => ({
+                relationshipId: i.relationshipId,
+                persons: i.persons.map(ref),
+                ...(i.detail ? { detail: i.detail } : {}),
+              })),
+            ]),
+          ),
+        },
       };
     }),
   );
@@ -675,7 +815,9 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
         "Contradictions between recorded dates (complements find_data_gaps, which reports missing data): " +
         "deathBeforeBirth, parentTooYoung (< 12 at child's birth), parentTooOld (father > 70, mother > 50), " +
         "bornAfterParentDeath (mother died before birth, father > ~10 months before), lifespanOver110, " +
-        "partnershipTooYoung (< 14 at start), partnershipAfterDeath, overlappingMarriages. Errors first, then warnings. " +
+        "partnershipTooYoung (< 14 at start), partnershipAfterDeath, overlappingMarriages, burialBeforeDeath, " +
+        "eventBeforeBirth / eventAfterDeath (stored life events outside the lifetime; burial, cremation and probate may " +
+        "follow death; alternative records are ignored — affected events in `eventIds`). Errors first, then warnings. " +
         "Only biological parent links are checked for age limits. Uncertain dates (year only, 'um', 'vor', 'nach') are " +
         "compared by the whole range they cover; only contradictions that hold for every reading are reported.",
       inputSchema: {
@@ -707,6 +849,7 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
           message: i.message,
           persons: i.persons.map(ref),
           relationshipIds: i.relationshipIds,
+          ...(i.eventIds.length ? { eventIds: i.eventIds } : {}),
         })),
       };
     }),
@@ -717,7 +860,7 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
     {
       title: "Zeitleiste",
       description:
-        "Chronological events (birth, death, marriage, partnership, divorce, partnershipEnd, adoption, fostering, stepParent) " +
+        "Chronological events (birth, death, marriage, partnership, divorce, partnershipEnd, adoption, fostering, stepParent, event = stored life event such as baptism/burial/occupation) " +
         "for ONE person (own life events plus births/deaths of children, deaths of parents/partners/siblings, with `role` and " +
         "the person's `age`; `missing` lists dates needed for a complete timeline) or for ONE family (all visible members). " +
         "Give exactly one of person_id / family_id.",
@@ -781,6 +924,46 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
   );
 
   server.registerTool(
+    "list_events",
+    {
+      title: "Lebensereignisse",
+      description:
+        "All stored life events of ONE person (person_id) or ONE relationship (relationship_id, e.g. engagement or banns " +
+        "of a partnership) with every field: type, title (German), date (with …Precision/…Qualifier/…To/…Text; wording " +
+        "that could not be structured is in dateText only), place, address, value (occupation, religion …), cause, age, " +
+        "agency, notes, sortOrder, alternative (second, contradicting record — not the main fact) and canEdit. Chronological; " +
+        "undated events last. Birth, death, marriage and divorce themselves are NOT events — they are fields of the person " +
+        "/ relationship (get_person).",
+      inputSchema: {
+        person_id: z.string().optional(),
+        relationship_id: z.string().optional(),
+      },
+      outputSchema: {
+        events: z.array(z.object({ id: z.string(), type: z.string(), title: z.string() }).passthrough()),
+      },
+      annotations: { title: "Lebensereignisse", ...READ_ONLY },
+    },
+    run(ctx, async (scope, a) => {
+      if (Boolean(a.person_id) === Boolean(a.relationship_id)) {
+        throw validationError([{ path: "person_id", message: "Genau eines von person_id und relationship_id angeben" }]);
+      }
+      const list = a.person_id
+        ? await listPersonEvents(scope, a.person_id)
+        : await listRelationshipEvents(scope, a.relationship_id!);
+      if (!list) throw notFound(a.person_id ? "Person" : "Beziehung");
+      return {
+        events: list.map((e) => ({
+          ...storedEventOut(e),
+          ...(e.personId ? { personId: e.personId } : {}),
+          ...(e.relationshipId ? { relationshipId: e.relationshipId } : {}),
+          sortOrder: e.sortOrder,
+          canEdit: e.canEdit,
+        })),
+      };
+    }),
+  );
+
+  server.registerTool(
     "search_sources",
     {
       title: "Quellen suchen",
@@ -821,7 +1004,8 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
       title: "Quelle abrufen",
       description:
         "One source with all details (incl. transcription/notes) and every fact it is cited for: persons " +
-        "(fact NAME/BIRTH/DEATH/OTHER) and relationships (PARTNERSHIP, PARENTAGE). Citations attached to persons the user " +
+        "(fact NAME/BIRTH/DEATH/OTHER), relationships (PARTNERSHIP, PARENTAGE) and life events (fact EVENT with " +
+        "`eventId` and `event` title). Citations attached to persons the user " +
         "may not see are not listed — only counted in `hiddenCitationCount`.",
       inputSchema: { source_id: z.string().min(1).describe("Source ID (from search_sources or get_person citations).") },
       outputSchema: {
@@ -844,6 +1028,7 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
           factLabel: CITATION_FACT_LABEL[c.fact],
           ...(c.detail ? { detail: c.detail } : {}),
           ...(c.confidence ? { confidence: c.confidence } : {}),
+          ...(c.eventId ? { eventId: c.eventId, ...(c.eventTitle ? { event: c.eventTitle } : {}) } : {}),
           ...citationTargetOut(c.target),
         })),
         hiddenCitationCount: d.hiddenCitationCount,
@@ -866,6 +1051,10 @@ const personFieldsInput = {
   birth_place: z.string().max(200).nullable().optional(),
   death_date: dateInput.nullable().optional(),
   death_place: z.string().max(200).nullable().optional(),
+  death_cause: z.string().max(2000).nullable().optional(),
+  nickname: z.string().max(200).nullable().optional().describe("Call name / nickname (Rufname)."),
+  name_prefix: z.string().max(200).nullable().optional().describe("Title or prefix before the name, e.g. 'Dr.', 'Freiherr'."),
+  name_suffix: z.string().max(200).nullable().optional().describe("Suffix after the name, e.g. 'jun.', 'III.'."),
 };
 
 /** snake_case-Eingabe -> Felder der Dienstschicht (undefined = unverändert). */
@@ -878,8 +1067,16 @@ function personFields(a: {
   birth_place?: string | null;
   death_date?: string | null;
   death_place?: string | null;
+  death_cause?: string | null;
+  nickname?: string | null;
+  name_prefix?: string | null;
+  name_suffix?: string | null;
 }) {
   const fields: Record<string, unknown> = {
+    deathCause: a.death_cause,
+    nickname: a.nickname,
+    namePrefix: a.name_prefix,
+    nameSuffix: a.name_suffix,
     givenName: a.given_name,
     familyName: a.family_name,
     birthName: a.birth_name,
@@ -898,10 +1095,22 @@ const summaryOut = (p: PersonLike & Record<string, unknown>) => ({
   familyName: p.familyName,
   birthName: p.birthName ?? null,
   gender: p.gender,
-  ...dateFields("birthDate", p.birthDate, p.birthDatePrecision, p.birthDateQualifier),
+  ...dateFields("birthDate", p.birthDate, p.birthDatePrecision, p.birthDateQualifier, {
+    to: p.birthDateTo as string | null | undefined,
+    toPrecision: p.birthDateToPrecision as string | null | undefined,
+    phrase: p.birthDatePhrase as string | null | undefined,
+  }),
   birthPlace: p.birthPlace ?? null,
-  ...dateFields("deathDate", p.deathDate, p.deathDatePrecision, p.deathDateQualifier),
+  ...dateFields("deathDate", p.deathDate, p.deathDatePrecision, p.deathDateQualifier, {
+    to: p.deathDateTo as string | null | undefined,
+    toPrecision: p.deathDateToPrecision as string | null | undefined,
+    phrase: p.deathDatePhrase as string | null | undefined,
+  }),
   deathPlace: p.deathPlace ?? null,
+  ...(p.deathCause ? { deathCause: p.deathCause } : {}),
+  ...(p.nickname ? { nickname: p.nickname } : {}),
+  ...(p.namePrefix ? { namePrefix: p.namePrefix } : {}),
+  ...(p.nameSuffix ? { nameSuffix: p.nameSuffix } : {}),
   notes: p.notes ?? null,
   familyIds: p.familyIds,
 });
@@ -997,15 +1206,19 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
       description:
         "Link two persons. PARENT_OF: from_person_id is the PARENT, to_person_id the CHILD; subtype BIOLOGICAL (default), " +
         "ADOPTIVE, STEP or FOSTER (max. 2 biological parents). PARTNER_OF: undirected; subtype MARRIED (default), UNMARRIED " +
-        "or DIVORCED; start_date = wedding/start, end_date = divorce/end. Cycles and duplicates are rejected. " +
+        "DIVORCED or PARTNER_UNKNOWN (partners, marital status not known); start_date/start_place = wedding (or start), " +
+        "end_date/end_place = divorce (or end). Engagement, banns etc. are events of the relationship (add_event). " +
+        "Cycles and duplicates are rejected. " +
         WRITE_NOTE,
       inputSchema: {
         type: z.enum(["PARENT_OF", "PARTNER_OF"]),
         from_person_id: z.string().min(1),
         to_person_id: z.string().min(1),
-        subtype: z.enum(["BIOLOGICAL", "ADOPTIVE", "STEP", "FOSTER", "MARRIED", "UNMARRIED", "DIVORCED"]).optional(),
+        subtype: z.enum(["BIOLOGICAL", "ADOPTIVE", "STEP", "FOSTER", "MARRIED", "UNMARRIED", "DIVORCED", "PARTNER_UNKNOWN"]).optional(),
         start_date: dateInput.optional(),
+        start_place: z.string().max(2000).optional().describe("Marriage place (partners)."),
         end_date: dateInput.optional(),
+        end_place: z.string().max(2000).optional().describe("Divorce place (partners)."),
         notes: z.string().max(2000).optional().describe("Free-text remark. Back the link with cite_source (fact PARTNERSHIP / PARENTAGE)."),
       },
       outputSchema: { relationship: z.object({ id: z.string() }).passthrough() },
@@ -1024,7 +1237,9 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         fromPersonId: a.from_person_id,
         toPersonId: a.to_person_id,
         startDate: a.start_date,
+        startPlace: a.start_place,
         endDate: a.end_date,
+        endPlace: a.end_place,
         notes: a.notes,
       });
       return { relationship: relationshipOut(r) };
@@ -1036,14 +1251,18 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
     {
       title: "Beziehung ändern",
       description:
-        "Correct subtype, dates or notes of a relationship (relationshipId from get_person). The linked persons cannot be " +
+        "Correct subtype, dates, places (start_place = marriage place, end_place = divorce place) or notes of a " +
+        "relationship (relationshipId from get_person). PARTNER_UNKNOWN = partners whose marital status is unknown; set " +
+        "MARRIED/UNMARRIED once a source settles it. The linked persons cannot be " +
         "changed — to fix a wrong link, delete it (delete_relationship) and create the correct one. null clears a field; " +
         `notes replace the relationship's notes. ${WRITE_NOTE}`,
       inputSchema: {
         relationship_id: z.string().min(1),
-        subtype: z.enum(["BIOLOGICAL", "ADOPTIVE", "STEP", "FOSTER", "MARRIED", "UNMARRIED", "DIVORCED"]).optional(),
+        subtype: z.enum(["BIOLOGICAL", "ADOPTIVE", "STEP", "FOSTER", "MARRIED", "UNMARRIED", "DIVORCED", "PARTNER_UNKNOWN"]).optional(),
         start_date: dateInput.nullable().optional(),
+        start_place: z.string().max(2000).nullable().optional(),
         end_date: dateInput.nullable().optional(),
+        end_place: z.string().max(2000).nullable().optional(),
         notes: z.string().max(2000).nullable().optional(),
       },
       outputSchema: { relationship: z.object({ id: z.string() }).passthrough() },
@@ -1060,7 +1279,9 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         Object.entries({
           subtype: a.subtype,
           startDate: a.start_date,
+          startPlace: a.start_place,
           endDate: a.end_date,
+          endPlace: a.end_place,
           notes: a.notes,
         }).filter(([, v]) => v !== undefined),
       );
@@ -1172,14 +1393,16 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
       title: "Quelle zitieren",
       description:
         "Attach a source to ONE fact of ONE person (person_id; fact NAME, BIRTH, DEATH or OTHER) or of ONE relationship " +
-        "(relationship_id from get_person; fact PARTNERSHIP for partners, PARENTAGE for parent–child, or OTHER). " +
+        "(relationship_id from get_person; fact PARTNERSHIP for partners, PARENTAGE for parent–child, or OTHER) or of ONE " +
+        "life event (event_id from get_person/list_events; fact EVENT, may be omitted). Give exactly one of the three IDs. " +
         "`detail` = exact place in the source (page, entry number). confidence: HIGH (original record), MEDIUM (derived/" +
         `index), LOW (hearsay, unclear reading). Requires edit rights on the person/relationship. ${WRITE_NOTE}`,
       inputSchema: {
         source_id: z.string().min(1),
         person_id: z.string().min(1).optional(),
         relationship_id: z.string().min(1).optional(),
-        fact: z.enum(CITATION_FACTS),
+        event_id: z.string().min(1).optional().describe("Cite a life event (baptism, burial, occupation …)."),
+        fact: z.enum(CITATION_FACTS).optional().describe("Required for persons/relationships; EVENT for events."),
         detail: z.string().max(2000).optional().describe("E.g. 'Taufen 1858, Nr. 12, S. 34'."),
         confidence: z.enum(CITATION_CONFIDENCES).optional(),
       },
@@ -1195,11 +1418,15 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
       },
     },
     runWrite(ctx, async (scope, a) => {
+      if (!a.fact && !a.event_id) {
+        throw validationError([{ path: "fact", message: "Bitte angeben, welche Angabe belegt wird (fact)" }]);
+      }
       const c = await createCitation(scope, {
         sourceId: a.source_id,
         personId: a.person_id,
         relationshipId: a.relationship_id,
-        fact: a.fact,
+        eventId: a.event_id,
+        fact: a.fact ?? (a.event_id ? "EVENT" : undefined),
         detail: a.detail,
         confidence: a.confidence,
       });
@@ -1209,11 +1436,220 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
           sourceId: c.sourceId,
           ...(c.personId ? { personId: c.personId } : {}),
           ...(c.relationshipId ? { relationshipId: c.relationshipId } : {}),
+          ...(c.eventId ? { eventId: c.eventId } : {}),
           fact: c.fact,
           ...(c.detail ? { detail: c.detail } : {}),
           ...(c.confidence ? { confidence: c.confidence } : {}),
         },
       };
+    }),
+  );
+
+  const eventFieldsInput = {
+    label: z
+      .string()
+      .max(200)
+      .nullable()
+      .optional()
+      .describe("Required for type CUSTOM (own event name, e.g. 'Goldene Hochzeit'); otherwise an optional precision."),
+    date: dateInput.nullable().optional(),
+    date_phrase: z
+      .string()
+      .max(500)
+      .nullable()
+      .optional()
+      .describe(
+        "Verbatim date wording from the source when it cannot be expressed as a date (e.g. 'Palmsonntag 1864'); may " +
+          "accompany a date. Never put a parseable date here instead of `date`.",
+      ),
+    place: z.string().max(2000).nullable().optional(),
+    address: z.string().max(2000).nullable().optional(),
+    value: z
+      .string()
+      .max(2000)
+      .nullable()
+      .optional()
+      .describe("The fact itself for value events: occupation (OCCUPATION), religion, title, education, residence description …"),
+    cause: z.string().max(2000).nullable().optional().describe("Cause as stated, e.g. cause of death in a burial record, reason for emigration."),
+    age: z.string().max(60).nullable().optional().describe("Age as stated in the source, e.g. '23' or '23 J. 4 M.'."),
+    agency: z.string().max(2000).nullable().optional().describe("Responsible parish, office, regiment, school …"),
+    notes: z.string().max(20000).nullable().optional(),
+  };
+  const eventFields = (a: {
+    label?: string | null;
+    date?: string | null;
+    date_phrase?: string | null;
+    place?: string | null;
+    address?: string | null;
+    value?: string | null;
+    cause?: string | null;
+    age?: string | null;
+    agency?: string | null;
+    notes?: string | null;
+  }) =>
+    Object.fromEntries(
+      Object.entries({
+        label: a.label,
+        date: a.date,
+        datePhrase: a.date_phrase,
+        place: a.place,
+        address: a.address,
+        value: a.value,
+        cause: a.cause,
+        age: a.age,
+        agency: a.agency,
+        notes: a.notes,
+      }).filter(([, v]) => v !== undefined),
+    );
+  const ALT_ONLY = ALTERNATIVE_ONLY_TYPES.join(", ");
+
+  server.registerTool(
+    "add_event",
+    {
+      title: "Ereignis hinzufügen",
+      description:
+        "Record a life event as structured data instead of writing it into notes: baptism (BAPTISM), confirmation, " +
+        "occupation (OCCUPATION, value = job), residence (RESIDENCE), education, military service, emigration/immigration, " +
+        "census, burial (BURIAL), probate … on a person (person_id), or engagement (ENGAGEMENT), banns (MARRIAGE_BANNS), " +
+        "marriage contract … on a partnership (relationship_id). CUSTOM needs a `label`. " +
+        `Birth, death, marriage and divorce are NOT events — set them on the person (update_person) or relationship ` +
+        `(update_relationship). Types ${ALT_ONLY} are allowed ONLY with is_alternative=true, for a second record that ` +
+        "contradicts the main fact (e.g. another birth year in a different source); never use them for the main fact. " +
+        "Store dates exactly as precise as the evidence (see date). Then cite the source with cite_source(event_id). " +
+        WRITE_NOTE,
+      inputSchema: {
+        person_id: z.string().min(1).optional(),
+        relationship_id: z.string().min(1).optional(),
+        type: z.enum(EVENT_TYPES),
+        is_alternative: z
+          .boolean()
+          .optional()
+          .describe("true = second, contradicting record of a fact (default false)."),
+        ...eventFieldsInput,
+      },
+      outputSchema: { event: z.object({ id: z.string(), type: z.string(), title: z.string() }).passthrough() },
+      annotations: {
+        title: "Ereignis hinzufügen",
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    runWrite(ctx, async (scope, a) => {
+      const e = await createEvent(scope, {
+        personId: a.person_id ?? null,
+        relationshipId: a.relationship_id ?? null,
+        type: a.type,
+        isAlternative: a.is_alternative ?? false,
+        ...eventFields(a),
+      });
+      return { event: { ...storedEventOut(e), personId: e.personId, relationshipId: e.relationshipId } };
+    }),
+  );
+
+  server.registerTool(
+    "update_event",
+    {
+      title: "Ereignis ändern",
+      description:
+        "Correct a stored life event (event_id from get_person or list_events). Omitted fields stay unchanged; null " +
+        "clears a field. Changing the date without date_phrase drops an old wording that described the previous date. " +
+        `The owner (person/relationship) cannot be changed. ${WRITE_NOTE}`,
+      inputSchema: {
+        event_id: z.string().min(1),
+        type: z.enum(EVENT_TYPES).optional(),
+        is_alternative: z.boolean().optional(),
+        ...eventFieldsInput,
+      },
+      outputSchema: { event: z.object({ id: z.string(), type: z.string(), title: z.string() }).passthrough() },
+      annotations: {
+        title: "Ereignis ändern",
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    runWrite(ctx, async (scope, a) => {
+      const patch: Record<string, unknown> = {
+        ...eventFields(a),
+        ...(a.type !== undefined ? { type: a.type } : {}),
+        ...(a.is_alternative !== undefined ? { isAlternative: a.is_alternative } : {}),
+      };
+      if (Object.keys(patch).length === 0) {
+        throw validationError([{ path: "event_id", message: "Keine Änderung angegeben" }]);
+      }
+      const e = await updateEvent(scope, a.event_id, patch);
+      return { event: { ...storedEventOut(e), personId: e.personId, relationshipId: e.relationshipId } };
+    }),
+  );
+
+  server.registerTool(
+    "delete_event",
+    {
+      title: "Ereignis löschen",
+      description:
+        "Remove ONE wrongly recorded life event together with its citations (the sources themselves stay). Only for " +
+        `correcting clear mistakes; the deleted event is kept in the audit log. ${WRITE_NOTE}`,
+      inputSchema: { event_id: z.string().min(1) },
+      outputSchema: { deleted: z.boolean(), eventId: z.string() },
+      annotations: {
+        title: "Ereignis löschen",
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    runWrite(ctx, async (scope, a) => {
+      await deleteEvent(scope, a.event_id);
+      return { deleted: true, eventId: a.event_id };
+    }),
+  );
+
+  server.registerTool(
+    "add_name_variant",
+    {
+      title: "Weiteren Namen hinzufügen",
+      description:
+        "Add another name of a person: BIRTH (birth name record), MARRIED (married name), ALIAS (also known as), " +
+        "RELIGIOUS (religious/baptismal name), IMMIGRANT (name after immigration), VARIANT (spelling variant found in a " +
+        "source), OTHER (with label). At least one of given_name, family_name, nickname. The main name stays on the " +
+        `person (update_person). ${WRITE_NOTE}`,
+      inputSchema: {
+        person_id: personId,
+        type: z.enum(PERSON_NAME_TYPES),
+        given_name: z.string().max(200).optional(),
+        family_name: z.string().max(200).optional(),
+        prefix: z.string().max(200).optional(),
+        suffix: z.string().max(200).optional(),
+        nickname: z.string().max(200).optional(),
+        label: z.string().max(200).optional().describe("Own label for type OTHER."),
+        notes: z.string().max(2000).optional().describe("E.g. where this spelling occurs."),
+      },
+      outputSchema: { name: z.object({ id: z.string(), type: z.string(), name: z.string() }).passthrough() },
+      annotations: {
+        title: "Weiteren Namen hinzufügen",
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    runWrite(ctx, async (scope, a) => {
+      const n = await createPersonName(scope, {
+        personId: a.person_id,
+        type: a.type,
+        givenName: a.given_name,
+        familyName: a.family_name,
+        prefix: a.prefix,
+        suffix: a.suffix,
+        nickname: a.nickname,
+        label: a.label,
+        notes: a.notes,
+      });
+      return { name: nameOut(n) };
     }),
   );
 }

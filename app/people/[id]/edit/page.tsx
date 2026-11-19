@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireScope } from "@/lib/session";
 import { canEditPerson, canViewPerson } from "@/lib/scope";
 import { PersonForm } from "@/components/PersonForm";
+import { dateFieldFrom } from "@/lib/date-fields";
 import { fuzzyField, toDateInput } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +29,12 @@ export default async function EditPersonPage({
   if (!canViewPerson(scope, familyIds)) notFound();
   if (!canEditPerson(scope, familyIds)) redirect(`/people/${id}`);
 
+  // Als Eingabetext in der gespeicherten Genauigkeit, z.B. „um 1850“ —
+  // unverändert abgeschickt ergibt er wieder genau dasselbe Datum. Ein
+  // Wortlaut ohne Datum (z.B. aus einem Import) steht als Text im Feld.
+  const birth = dateFieldFrom(toDateInput(fuzzyField(person, "birthDate")), person.birthDatePhrase);
+  const death = dateFieldFrom(toDateInput(fuzzyField(person, "deathDate")), person.deathDatePhrase);
+
   return (
     <div className="space-y-5">
       <Link href={`/people/${person.id}`} className="btn-link text-sm">
@@ -46,12 +53,18 @@ export default async function EditPersonPage({
           familyName: person.familyName,
           birthName: person.birthName,
           gender: person.gender,
-          // Als Eingabetext in der gespeicherten Genauigkeit, z.B. „um 1850“ —
-          // unverändert abgeschickt ergibt er wieder genau dasselbe Datum.
-          birthDate: toDateInput(fuzzyField(person, "birthDate")),
+          birthDate: birth.text,
+          birthDateAsPhrase: birth.asPhrase,
+          birthDatePhrase: person.birthDatePhrase,
           birthPlace: person.birthPlace,
-          deathDate: toDateInput(fuzzyField(person, "deathDate")),
+          deathDate: death.text,
+          deathDateAsPhrase: death.asPhrase,
+          deathDatePhrase: person.deathDatePhrase,
           deathPlace: person.deathPlace,
+          deathCause: person.deathCause,
+          nickname: person.nickname,
+          namePrefix: person.namePrefix,
+          nameSuffix: person.nameSuffix,
           notes: person.notes,
         }}
       />

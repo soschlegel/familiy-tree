@@ -1,0 +1,36 @@
+0 HEAD
+1 GEDC
+2 VERS 7.0
+1 SCHMA
+2 TAG _SKYPEID http://xmlns.com/foaf/0.1/skypeID
+1 SOUR TESTPROG7
+2 VERS 2.0
+1 LANG de
+0 @I1@ INDI
+1 NAME Lena /Sieben/
+2 TYPE BIRTH
+1 SEX F
+1 BIRT
+2 DATE JULIAN 1 MAR 1699
+2 PLAC Siebenstadt, Deutschland
+1 FAMC @F1@
+2 PEDI ADOPTED
+3 PHRASE Adoptiert von der Tante
+1 EXID 9876
+2 TYPE https://example.invalid/ids
+1 UID 0f3c0000-0000-4000-8000-000000000001
+1 SNOTE @N1@
+1 RESN CONFIDENTIAL, LOCKED
+1 _SKYPEID lena.sieben
+0 @I2@ INDI
+1 NAME Paula /Sieben/
+1 SEX X
+1 FAMS @F1@
+0 @F1@ FAM
+1 WIFE @I2@
+1 CHIL @I1@
+1 HUSB @VOID@
+0 @N1@ SNOTE Eine geteilte Notiz
+1 CONT mit zweiter Zeile und @@ am Anfang? Nein: @nur hier.
+1 MIME text/plain
+0 TRLR

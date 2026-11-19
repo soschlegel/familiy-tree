@@ -4,6 +4,7 @@ import Link from "next/link";
 import { EdgeLabelRenderer, type EdgeProps } from "reactflow";
 
 import { formatDate, type MarriageInfo } from "@/lib/tree-layout";
+import { PARTNER_SYMBOL, partnerLineStyle, partnerMarkerLabel, shortYear } from "@/lib/partner-labels";
 
 export type MarriageEdgeData = MarriageInfo & { dimmed: boolean };
 
@@ -41,8 +42,12 @@ export function MarriageEdge({
     `L ${targetX} ${targetY}`,
   ].join(" ");
 
-  const divorced = data?.subtype === "DIVORCED";
-  const year = data?.date ? new Date(data.date).getFullYear() : null;
+  const subtype = data?.subtype ?? "MARRIED";
+  const muted = subtype === "DIVORCED" || subtype === "PARTNER_UNKNOWN";
+  const line = partnerLineStyle(subtype);
+  const year = data?.date
+    ? shortYear(data.date, data.datePrecision, data.dateQualifier, data.dateTo, data.dateToPrecision)
+    : null;
   const midX = (sourceX + targetX) / 2;
 
   return (
@@ -52,8 +57,10 @@ export function MarriageEdge({
         d={path}
         fill="none"
         strokeWidth={1.5}
-        stroke={divorced ? "#a8a29e" : "#fb7185"}
-        strokeDasharray={divorced ? "5 4" : undefined}
+        stroke={line.stroke}
+        strokeDasharray={line.dash}
+        strokeLinecap={line.lineCap}
+        data-subtype={subtype}
         opacity={data?.dimmed ? 0.15 : 1}
       />
 
@@ -70,14 +77,14 @@ export function MarriageEdge({
             transform: `translate(-50%, -50%) translate(${midX}px, ${bottom}px)`,
           }}
           className={`pointer-events-auto absolute flex items-center gap-1.5 rounded-full bg-white/95 px-2 py-1 shadow-sm ring-1 backdrop-blur transition hover:shadow-md dark:bg-stone-900/95 ${
-            divorced
+            muted
               ? "ring-stone-200 hover:ring-stone-300"
               : "ring-rose-200 hover:ring-rose-300"
           } ${data?.dimmed ? "opacity-15" : "opacity-100"}`}
           title={
             data?.date
-              ? `${divorced ? "Ehe geschieden" : "Hochzeit"} am ${formatDate(data.date, data.datePrecision, data.dateQualifier)} — Details ansehen`
-              : "Ehe-Details ansehen"
+              ? `${partnerMarkerLabel(subtype)}: ${formatDate(data.date, data.datePrecision, data.dateQualifier, data.dateTo, data.dateToPrecision)} — Details ansehen`
+              : `${partnerMarkerLabel(subtype)} — Details ansehen`
           }
         >
           {data?.primaryMediaId ? (
@@ -90,10 +97,10 @@ export function MarriageEdge({
           ) : (
             <span
               className={`text-sm leading-none ${
-                divorced ? "text-stone-400" : "text-rose-400"
+                muted ? "text-stone-400" : "text-rose-400"
               }`}
             >
-              {divorced ? "⚯" : "♥"}
+              {PARTNER_SYMBOL[subtype] ?? "♥"}
             </span>
           )}
           {year && (

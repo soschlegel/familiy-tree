@@ -431,7 +431,21 @@ export interface GedcomPerson {
   extensions: GedcomExtension[];
 }
 
-export type GedcomPartnerStatus = "MARRIED" | "UNMARRIED" | "DIVORCED";
+/**
+ * Familienstand eines Paares — geschlossen, 1:1 auf die App abbildbar:
+ * - MARRIED: Heiratsereignis (MARR, außer MARR.TYPE „nicht verheiratet“)
+ *   oder ausdrückliche Angabe des Programms (z.B. _STAT Married).
+ * - DIVORCED: Scheidung oder Annullierung (DIV/ANUL).
+ * - UNMARRIED: nur, wenn die Datei es ausdrücklich sagt (7.0 `NO MARR`,
+ *   5.5.5 MARR.TYPE „not married“/„partners“, _STAT/_MSTAT/_UST/TYPE mit
+ *   entsprechendem Wert).
+ * - UNKNOWN: alles andere — insbesondere ein Paar ohne MARR. Verlobung,
+ *   Aufgebot, Ehevertrag und Heiratslizenz (ENGA, MARB, MARC, MARL, MARS)
+ *   allein ändern daran nichts; die Ereignisse bleiben erhalten.
+ */
+export type GedcomPartnerStatus = "MARRIED" | "DIVORCED" | "UNMARRIED" | "UNKNOWN";
+
+export const GEDCOM_PARTNER_STATUSES: readonly GedcomPartnerStatus[] = ["MARRIED", "DIVORCED", "UNMARRIED", "UNKNOWN"];
 
 /** Art der Eltern-Kind-Beziehung je Elternteil (entspricht den App-Untertypen). */
 export type GedcomChildKind = "BIOLOGICAL" | "ADOPTIVE" | "FOSTER" | "STEP" | "OTHER";
@@ -463,12 +477,19 @@ export interface GedcomFamily {
   partners: string[];
   /** Rolle je Partner wie in der Datei ("HUSB"/"WIFE"). */
   partnerRoles: ("HUSB" | "WIFE")[];
-  /**
-   * Nur bei zwei Partnern: verheiratet (MARR), geschieden (DIV/ANUL) oder
-   * unverheiratet (keine Heirat erfasst — `statusEvidence` sagt, woher).
-   */
+  /** Nur bei zwei Partnern gesetzt; siehe GedcomPartnerStatus. */
   status?: GedcomPartnerStatus;
-  statusEvidence?: "MARRIAGE_EVENT" | "DIVORCE_EVENT" | "NO_MARRIAGE_EVENT" | "EXPLICIT";
+  /**
+   * Woher der Status kommt: Heirats-/Scheidungsereignis, ausdrückliche
+   * Angabe (`statusMarker` bzw. MARR.TYPE) oder — Grund für UNKNOWN — kein
+   * Heiratsereignis.
+   */
+  statusEvidence?: "MARRIAGE_EVENT" | "DIVORCE_EVENT" | "EXPLICIT" | "NO_MARRIAGE_EVENT";
+  /**
+   * Ausdrückliche Statusangabe wie gelesen, z.B. {tag: "_STAT", value:
+   * "Never Married"} oder {tag: "NO", value: "MARR"} (GEDCOM 7).
+   */
+  statusMarker?: { tag: string; value: string };
   children: GedcomFamilyChild[];
   events: GedcomEvent[];
   notes: GedcomNoteRef[];

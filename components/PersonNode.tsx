@@ -12,6 +12,13 @@ import {
   type MarriageInfo,
   type TreePerson,
 } from "@/lib/tree-layout";
+import {
+  PARTNER_SUBTYPE_LABEL,
+  PARTNER_SYMBOL,
+  partnerLineStyle,
+  partnerMarkerLabel,
+  shortYear,
+} from "@/lib/partner-labels";
 
 /** Was jenseits des Ausschnitts liegt (nur Fokus-Ansicht). */
 export type HiddenKin = { parents: number; children: number };
@@ -322,17 +329,22 @@ function MarriageLink({
 }: {
   marriage: NonNullable<PersonNodeData["marriage"]>;
 }) {
-  const divorced = marriage.subtype === "DIVORCED";
-  const year = marriage.date ? new Date(marriage.date).getFullYear() : null;
+  const subtype = marriage.subtype;
+  const muted = subtype === "DIVORCED" || subtype === "PARTNER_UNKNOWN";
+  const label = partnerMarkerLabel(subtype);
+  const when = marriage.date
+    ? formatDate(marriage.date, marriage.datePrecision, marriage.dateQualifier, marriage.dateTo, marriage.dateToPrecision)
+    : null;
+  const year = marriage.date
+    ? shortYear(marriage.date, marriage.datePrecision, marriage.dateQualifier, marriage.dateTo, marriage.dateToPrecision)
+    : null;
+  const line = partnerLineStyle(subtype);
 
   return (
     <Link
       href={`/people/${marriage.personId}?rel=${marriage.relationshipId}`}
-      title={
-        marriage.date
-          ? `${divorced ? "Ehe geschieden" : "Hochzeit"} am ${formatDate(marriage.date, marriage.datePrecision, marriage.dateQualifier)} — Details ansehen`
-          : "Ehe-Details ansehen"
-      }
+      title={when ? `${label}: ${when} — Details ansehen` : `${label} — Details ansehen`}
+      data-subtype={subtype}
       className="group/marriage flex w-14 shrink-0 flex-col items-center justify-center rounded-lg py-1 transition hover:bg-rose-50 dark:hover:bg-rose-950/40"
     >
       {marriage.primaryMediaId ? (
@@ -340,28 +352,20 @@ function MarriageLink({
         <img
           src={`/api/media/${marriage.primaryMediaId}?variant=thumb`}
           alt=""
-          title={
-            marriage.date
-              ? `Hochzeit am ${formatDate(marriage.date, marriage.datePrecision, marriage.dateQualifier)}`
-              : "Hochzeitsbild"
-          }
+          title={when ? `${label}: ${when}` : `Bild zur ${subtype === "MARRIED" || subtype === "DIVORCED" ? "Ehe" : "Partnerschaft"}`}
           className="h-8 w-8 rounded-full object-cover ring-2 ring-rose-300"
         />
       ) : (
         <span
-          className={`text-sm ${divorced ? "text-stone-400" : "text-rose-400"}`}
-          title={divorced ? "geschieden" : "verheiratet"}
+          className={`text-sm ${muted ? "text-stone-400" : "text-rose-400"}`}
+          title={PARTNER_SUBTYPE_LABEL[subtype] ?? label}
         >
-          {divorced ? "⚯" : "♥"}
+          {PARTNER_SYMBOL[subtype] ?? "♥"}
         </span>
       )}
-      <div
-        className={`mt-0.5 w-full border-t ${
-          divorced
-            ? "border-dashed border-stone-400"
-            : "border-solid border-rose-300"
-        }`}
-      />
+      <svg aria-hidden className="mt-0.5 block h-1 w-full" preserveAspectRatio="none">
+        <line x1="0" y1="1" x2="100%" y2="1" strokeWidth="1.5" stroke={line.stroke} strokeDasharray={line.dash} strokeLinecap={line.lineCap} />
+      </svg>
       {year && (
         <span className="mt-0.5 text-[10px] tabular-nums text-stone-500 group-hover/marriage:text-stone-700 dark:text-stone-400 dark:group-hover/marriage:text-stone-300">
           {year}

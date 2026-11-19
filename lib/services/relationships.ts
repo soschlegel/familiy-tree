@@ -16,6 +16,7 @@ import {
 } from "./errors";
 import { toRelationshipDto, type RelationshipDto } from "./dto";
 import { removeOrphanedMedia } from "./media";
+import { phraseColumns } from "./persons";
 import { fuzzyColumns, fuzzyField, type FuzzyDate } from "../dates";
 
 /** Validierte Eingabe -> Prisma-Spalten (Anker, Genauigkeit, Zusatz). */
@@ -114,7 +115,7 @@ export async function createRelationship(
   input: unknown,
 ): Promise<RelationshipDto> {
   const parsed = parseOrThrow(relationshipInput.safeParse(input));
-  const { type, subtype, startDate, endDate, notes } = parsed;
+  const { type, subtype, startDate, endDate, notes, startPlace, endPlace, startDatePhrase, endDatePhrase } = parsed;
   let { fromPersonId, toPersonId } = parsed;
 
   const found = await prisma.person.count({
@@ -177,6 +178,10 @@ export async function createRelationship(
       fromPersonId,
       toPersonId,
       notes,
+      startPlace,
+      endPlace,
+      startDatePhrase,
+      endDatePhrase,
       ...relationshipColumns({ startDate, endDate }),
     },
   });
@@ -230,7 +235,11 @@ export async function updateRelationship(
     await assertBiologicalParentLimit(existing.toPersonId, existing.id);
   }
 
-  const columns = relationshipColumns(data);
+  const { startDatePhrase: _sp, endDatePhrase: _ep, ...withoutPhrases } = data;
+  const columns = {
+    ...relationshipColumns(withoutPhrases),
+    ...phraseColumns(existing, data, ["startDate", "endDate"]),
+  };
   const relationship = await prisma.relationship.update({
     where: { id },
     data: columns,

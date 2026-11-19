@@ -2,7 +2,12 @@ import { prisma } from "../prisma";
 import { maskPerson, type Scope } from "../scope";
 import { fullName, toPersonBrief, type PersonBrief, type PersonRef } from "./dto";
 import { loadGraph, type GraphPerson, type GraphRelationship, type LoadedGraph } from "./graph-data";
+import type { Event as EventRow } from "@prisma/client";
+
+import { eventTitle, type EventTypeName } from "../events";
+import { loadEventsFor } from "./events";
 import {
+  formatDateWithPhrase,
   formatFuzzyDate,
   fuzzyField,
   isPreciseDate,
@@ -20,7 +25,9 @@ import {
  * Sichtbarkeit: Geburt und Tod erscheinen nur für sichtbare Personen.
  * Beziehungsereignisse (Heirat, Scheidung, Adoption) erscheinen, sobald eine
  * Seite sichtbar ist — wie in der Baumansicht; die andere Seite steht dann
- * als Platzhalter darin.
+ * als Platzhalter darin. Lebensereignisse (Event, Art "event") folgen ihrem
+ * Träger; abweichende Zweitangaben (isAlternative) und undatierte Ereignisse
+ * erscheinen nicht.
  */
 
 export type TimelineEventKind =
@@ -32,15 +39,19 @@ export type TimelineEventKind =
   | "partnershipEnd"
   | "adoption"
   | "fostering"
-  | "stepParent";
+  | "stepParent"
+  | "event";
 
 export type TimelineEvent = {
   /** Ankerpunkt (ISO) — zum Sortieren; angezeigt wird `dateText`. */
   date: string;
   datePrecision: DatePrecision;
   dateQualifier: DateQualifier;
-  /** Deutsche Anzeige: „12.03.1850“, „um 1850“, „vor 1900“. */
+  /** Deutsche Anzeige: „12.03.1850“, „um 1850“, „vor 1900“, „zwischen 1850 und 1855“. */
   dateText: string;
+  /** Nur bei Bereichen: Ende (ISO-Anker) und seine Genauigkeit. */
+  dateTo?: string;
+  dateToPrecision?: DatePrecision;
   kind: TimelineEventKind;
   /** Deutsche Kurzbeschreibung, z.B. "Heirat von Anna Becker und Karl Müller". */
   label: string;
@@ -48,6 +59,10 @@ export type TimelineEvent = {
   persons: PersonRef[];
   place: string | null;
   relationshipId: string | null;
+  /** Nur bei kind "event": das Ereignis (Event.id), seine Art und ggf. Wert. */
+  eventId?: string;
+  eventType?: EventTypeName;
+  value?: string | null;
   /** Nur in der Personen-Zeitleiste: Rolle gegenüber der Person. */
   role?: "self" | "parent" | "child" | "partner" | "sibling";
   /** Nur in der Personen-Zeitleiste: Alter der Person beim Ereignis. */
@@ -57,16 +72,62 @@ export type TimelineEvent = {
 };
 
 /** Datumsfelder eines Ereignisses aus einem ungenauen Datum. */
-function when(f: FuzzyDate): Pick<TimelineEvent, "date" | "datePrecision" | "dateQualifier" | "dateText"> {
+function when(
+  f: FuzzyDate,
+  phrase?: string | null,
+): Pick<TimelineEvent, "date" | "datePrecision" | "dateQualifier" | "dateText" | "dateTo" | "dateToPrecision"> {
   return {
     date: f.date.toISOString(),
     datePrecision: f.precision,
     dateQualifier: f.qualifier,
-    dateText: formatFuzzyDate(f),
+    dateText: phrase ? formatDateWithPhrase(f, phrase) : formatFuzzyDate(f),
+    ...(f.to ? { dateTo: f.to.date.toISOString(), dateToPrecision: f.to.precision } : {}),
   };
 }
 
-const eventDate = (e: TimelineEvent) => toFuzzyDate(e.date, e.datePrecision, e.dateQualifier)!;
+const eventDate = (e: TimelineEvent) =>
+  toFuzzyDate(e.date, e.datePrecision, e.dateQualifier, e.dateTo, e.dateToPrecision)!;
+
+/** Lebensereignis (Event) als Zeitleisteneintrag; null ohne Datum oder bei Alternativen. */
+function storedEvent(
+  e: EventRow,
+  persons: PersonRef[],
+  who: string,
+): TimelineEvent | null {
+  if (e.isAlternative) return null;
+  const f = fuzzyField(e, "date");
+  if (!f) return null;
+  const title = eventTitle(e);
+  const value = e.value ? `: ${e.value}` : "";
+  return {
+    ...when(f, e.datePhrase),
+    kind: "event",
+    label: `${title} ${who}${value}`,
+    persons,
+    place: e.place,
+    relationshipId: e.relationshipId,
+    eventId: e.id,
+    eventType: e.type,
+    value: e.value,
+  };
+}
+
+function personStoredEvents(p: GraphPerson, rows: EventRow[]): TimelineEvent[] {
+  return rows
+    .filter((e) => e.personId === p.id)
+    .map((e) => storedEvent(e, [toPersonBrief(p)], `von ${fullName(p)}`))
+    .filter((e): e is TimelineEvent => e !== null);
+}
+
+function relationshipStoredEvents(graph: LoadedGraph, r: GraphRelationship, rows: EventRow[]): TimelineEvent[] {
+  const anyVisible =
+    (graph.persons.get(r.from)?.visible ?? false) || (graph.persons.get(r.to)?.visible ?? false);
+  if (!anyVisible) return [];
+  return rows
+    .filter((e) => e.relationshipId === r.id)
+    .map((e) => storedEvent(e, [ref(graph, r.from), ref(graph, r.to)], `von ${label(graph, r.from)} und ${label(graph, r.to)}`))
+    .filter((e): e is TimelineEvent => e !== null);
+}
 
 const ref = (graph: LoadedGraph, id: string): PersonRef => {
   const p = graph.persons.get(id);
@@ -112,7 +173,7 @@ function relationshipEvents(graph: LoadedGraph, r: GraphRelationship): TimelineE
   const persons = [ref(graph, r.from), ref(graph, r.to)];
   const both = `${label(graph, r.from)} und ${label(graph, r.to)}`;
   const events: TimelineEvent[] = [];
-  const base = { persons, place: null, relationshipId: r.id };
+  const base = { persons, relationshipId: r.id };
 
   const start = fuzzyField(r, "startDate");
   const end = fuzzyField(r, "endDate");
@@ -122,6 +183,7 @@ function relationshipEvents(graph: LoadedGraph, r: GraphRelationship): TimelineE
       events.push({
         ...base,
         ...when(start),
+        place: r.startPlace,
         kind: married ? "marriage" : "partnership",
         label: married ? `Heirat von ${both}` : `Beginn der Partnerschaft von ${both}`,
       });
@@ -131,6 +193,7 @@ function relationshipEvents(graph: LoadedGraph, r: GraphRelationship): TimelineE
       events.push({
         ...base,
         ...when(end),
+        place: r.endPlace,
         kind: divorced ? "divorce" : "partnershipEnd",
         label: divorced ? `Scheidung von ${both}` : `Ende der Partnerschaft von ${both}`,
       });
@@ -144,7 +207,7 @@ function relationshipEvents(graph: LoadedGraph, r: GraphRelationship): TimelineE
         : kind === "fostering"
           ? `${label(graph, r.to)} kommt als Pflegekind zu ${label(graph, r.from)}`
           : `${label(graph, r.from)} wird Stiefelternteil von ${label(graph, r.to)}`;
-    events.push({ ...base, ...when(start), kind, label: text });
+    events.push({ ...base, ...when(start), place: r.startPlace, kind, label: text });
   }
   return events;
 }
@@ -178,7 +241,12 @@ export async function getPersonTimeline(
   const withRole = (list: TimelineEvent[], role: TimelineEvent["role"]) =>
     list.map((e) => ({ ...e, role }));
 
+  // Gespeicherte Lebensereignisse: eigene und die der eigenen Partnerschaften.
+  const partnerRelIds = (graph.index.partnersOf.get(personId) ?? []).map((e) => e.id);
+  const stored = await loadEventsFor({ personIds: [personId], relationshipIds: partnerRelIds }, { includeAlternatives: false });
+
   events.push(...withRole(lifeEvents(self), "self"));
+  events.push(...withRole(personStoredEvents(self, stored), "self"));
   const selfBirth = fuzzyField(self, "birthDate");
   const selfDeath = fuzzyField(self, "deathDate");
   if (!selfBirth) missing.push("Geburtsdatum");
@@ -192,11 +260,13 @@ export async function getPersonTimeline(
     const r = relById.get(e.id)!;
     const otherId = r.from === personId ? r.to : r.from;
     events.push(...withRole(relationshipEvents(graph, r), "partner"));
+    events.push(...withRole(relationshipStoredEvents(graph, r, stored), "partner"));
     if (!r.startDate) {
       missing.push(
-        `${r.subtype === "UNMARRIED" ? "Beginn der Partnerschaft" : "Heiratsdatum"} mit ${label(graph, otherId)}`,
+        `${r.subtype === "MARRIED" || r.subtype === "DIVORCED" ? "Heiratsdatum" : "Beginn der Partnerschaft"} mit ${label(graph, otherId)}`,
       );
     }
+    if (r.subtype === "PARTNER_UNKNOWN") missing.push(`Ehestand (verheiratet oder nicht) mit ${label(graph, otherId)}`);
     if (r.subtype === "DIVORCED" && !r.endDate) missing.push(`Scheidungsdatum (${label(graph, otherId)})`);
     const other = graph.persons.get(otherId);
     if (other?.visible) {
@@ -241,7 +311,7 @@ export async function getPersonTimeline(
   // Datenfehlern schon).
   const seen = new Set<string>();
   const unique = events.filter((e) => {
-    const key = `${e.kind}|${e.date}|${e.relationshipId ?? e.persons[0]?.id}`;
+    const key = e.eventId ?? `${e.kind}|${e.date}|${e.relationshipId ?? e.persons[0]?.id}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -306,10 +376,16 @@ export async function getFamilyTimeline(
   );
   const memberIds = new Set(members.map((p) => p.id));
 
+  const rels = graph.relationships.filter((r) => memberIds.has(r.from) || memberIds.has(r.to));
+  const stored = await loadEventsFor(
+    { personIds: [...memberIds], relationshipIds: rels.map((r) => r.id) },
+    { includeAlternatives: false },
+  );
   const events: TimelineEvent[] = members.flatMap(lifeEvents);
-  for (const r of graph.relationships) {
-    if (!memberIds.has(r.from) && !memberIds.has(r.to)) continue;
+  for (const m of members) events.push(...personStoredEvents(m, stored));
+  for (const r of rels) {
     events.push(...relationshipEvents(graph, r));
+    events.push(...relationshipStoredEvents(graph, r, stored));
   }
 
   const from = options.fromYear;

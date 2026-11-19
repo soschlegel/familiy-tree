@@ -25,4 +25,8 @@ export * from "./timeline";
 export * from "./consistency";
 export * from "./sources";
 export * from "./ai-access";
+export * from "./events";
+export * from "./names";
+export * from "./imports";
+export * from "./import-apply";
 export { loadGraph, type GraphPerson, type GraphRelationship, type LoadedGraph } from "./graph-data";

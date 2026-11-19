@@ -94,6 +94,7 @@ export const relationshipSchema = z.object({
       "MARRIED",
       "UNMARRIED",
       "DIVORCED",
+      "PARTNER_UNKNOWN",
     ])
     .default("BIOLOGICAL"),
   fromPersonId: z.string(),

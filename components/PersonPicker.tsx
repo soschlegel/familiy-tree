@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 
 import { useDismiss } from "./useDismiss";
 
-import { formatDate, lifeSpan } from "@/lib/tree-layout";
+import { formatDateOf, lifeSpan } from "@/lib/tree-layout";
 import { apiFetch, jsonBody } from "./api-client";
 
 export type PickerPerson = {
@@ -17,6 +17,10 @@ export type PickerPerson = {
   birthDateQualifier?: string;
   deathDatePrecision?: string;
   deathDateQualifier?: string;
+  birthDateTo?: string | null;
+  birthDateToPrecision?: string;
+  deathDateTo?: string | null;
+  deathDateToPrecision?: string;
 };
 
 function label(p: PickerPerson): string {
@@ -31,7 +35,7 @@ function dates(p: PickerPerson): string {
 }
 
 function fullDate(p: PickerPerson): string {
-  return formatDate(p.birthDate, p.birthDatePrecision, p.birthDateQualifier);
+  return formatDateOf(p, "birthDate");
 }
 
 /**

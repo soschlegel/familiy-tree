@@ -16,7 +16,7 @@ import {
   minYearDistance,
   yearsBetween,
 } from "../dates";
-import { loadGraph, type GraphPerson, type LoadedGraph } from "./graph-data";
+import { loadGraph, type GraphPerson, type GraphRelationship, type LoadedGraph } from "./graph-data";
 
 /**
  * Recherche-Werkzeuge über den Stammbaum: Vorfahren, Nachfahren,
@@ -318,10 +318,36 @@ export type DataGapKind =
   | "withoutFamily"
   | "unsourced";
 
+/**
+ * Lücken an Beziehungen statt an Personen. Bewusst ein eigener Abschnitt:
+ * DataGapKind ist Schlüssel fester Tabellen (Recherche-Seite, MCP) und bleibt
+ * unverändert.
+ */
+export type RelationshipGapKind = "marriageWithoutPlace" | "partnershipUnknownStatus";
+
+export const RELATIONSHIP_GAP_KINDS: RelationshipGapKind[] = ["marriageWithoutPlace", "partnershipUnknownStatus"];
+
+export const RELATIONSHIP_GAP_LABEL: Record<RelationshipGapKind, string> = {
+  marriageWithoutPlace: "Ehe ohne Ort",
+  partnershipUnknownStatus: "Partnerschaft mit unbekanntem Ehestand",
+};
+
+export type RelationshipGapItem = {
+  relationshipId: string;
+  /** Beide Partner; nicht sichtbare als Platzhalter. */
+  persons: PersonRef[];
+  detail?: string;
+};
+
 export type DataGaps = {
   counts: Record<DataGapKind, number>;
   /** Je Art höchstens `limit` Personen (Standard 50), nach Name sortiert. */
   items: Record<DataGapKind, { person: PersonBrief; detail?: string }[]>;
+  /** Lücken an Beziehungen (z.B. Ehe ohne Heiratsort). */
+  relationshipGaps: {
+    counts: Record<RelationshipGapKind, number>;
+    items: Record<RelationshipGapKind, RelationshipGapItem[]>;
+  };
 };
 
 const GAP_KINDS: DataGapKind[] = [
@@ -442,7 +468,50 @@ export async function findDataGaps(
     GAP_KINDS.map((k) => [k, found[k].slice(0, limit)]),
   ) as DataGaps["items"];
 
-  return { counts, items };
+  // Ehen (auch geschiedene) ohne Heiratsort — sichtbar, sobald eine Seite
+  // sichtbar ist (wie im Baum). Sortiert nach Heiratsdatum, ohne Datum zuletzt.
+  const byStart = (a: GraphRelationship, b: GraphRelationship) =>
+    (a.startDate?.getTime() ?? Infinity) - (b.startDate?.getTime() ?? Infinity) || a.id.localeCompare(b.id);
+  const visiblePartnerships = graph.relationships.filter(
+    (r) =>
+      r.type === "PARTNER_OF" &&
+      ((graph.persons.get(r.from)?.visible ?? false) || (graph.persons.get(r.to)?.visible ?? false)),
+  );
+  const marriages = visiblePartnerships
+    .filter((r) => (r.subtype === "MARRIED" || r.subtype === "DIVORCED") && !r.startPlace)
+    .sort(byStart);
+  // Ehestand unbekannt (z.B. Import ohne Heiratsangabe): verheiratet oder nicht?
+  const unknownStatus: RelationshipGapItem[] = visiblePartnerships
+    .filter((r) => r.subtype === "PARTNER_UNKNOWN")
+    .sort(byStart)
+    .map((r) => {
+      const start = fuzzyField(r, "startDate");
+      return {
+        relationshipId: r.id,
+        persons: [refOf(graph, r.from), refOf(graph, r.to)],
+        detail: start ? `Partnerschaft ab ${formatFuzzyDate(start)}, Ehestand unbekannt` : "Ehestand unbekannt",
+      };
+    });
+  const marriageItems: RelationshipGapItem[] = marriages.map((r) => {
+    const start = fuzzyField(r, "startDate");
+    return {
+      relationshipId: r.id,
+      persons: [refOf(graph, r.from), refOf(graph, r.to)],
+      ...(start ? { detail: `Heirat ${formatFuzzyDate(start)}, Ort fehlt` } : { detail: "Heiratsort und -datum fehlen" }),
+    };
+  });
+
+  return {
+    counts,
+    items,
+    relationshipGaps: {
+      counts: { marriageWithoutPlace: marriageItems.length, partnershipUnknownStatus: unknownStatus.length },
+      items: {
+        marriageWithoutPlace: marriageItems.slice(0, limit),
+        partnershipUnknownStatus: unknownStatus.slice(0, limit),
+      },
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
