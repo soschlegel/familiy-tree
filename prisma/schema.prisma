@@ -42,11 +42,12 @@ model User {
   accounts Account[]
   sessions Session[]
 
-  uploadedMedia  MediaAsset[] @relation("MediaUploader")
+  uploadedMedia  MediaAsset[]  @relation("MediaUploader")
   auditLogs      AuditLog[]
   families       UserFamily[]
-  createdSources Source[]     @relation("SourceCreator")
+  createdSources Source[]      @relation("SourceCreator")
   apiTokens      ApiToken[]
+  importBatches  ImportBatch[] @relation("ImportUser")
 }
 
 // ---------------------------------------------------------------------------
@@ -201,40 +202,99 @@ enum DatePrecision {
   YEAR
 }
 
+// Bereiche (BETWEEN, PERIOD) haben zusätzlich ein Ende in den Spalten
+// `…To`/`…ToPrecision`; der Anker ist dann der Anfang. Der Wortlaut einer
+// Angabe, die sich nicht (oder nicht verlustfrei) strukturiert darstellen
+// lässt — „Weihnachten 1850“, julianischer Kalender, GEDCOM-Datumsphrase —,
+// steht unverändert in `…Phrase`. Siehe lib/dates.ts.
 enum DateQualifier {
   EXACT
-  ABOUT // um, ca.
-  BEFORE // vor
-  AFTER // nach
+  ABOUT // um, ca. (GEDCOM ABT)
+  BEFORE // vor (BEF)
+  AFTER // nach (AFT)
+  ESTIMATED // geschätzt (EST)
+  CALCULATED // errechnet, z.B. aus einer Altersangabe (CAL)
+  BETWEEN // zwischen Anfang und Ende, ein Zeitpunkt darin (BET … AND …)
+  PERIOD // Zeitraum von … bis …; ohne Ende: ab/seit (FROM … [TO …])
+  UNTIL // Zeitraum bis … (TO …)
 }
 
 model Person {
-  id                 String        @id @default(cuid())
-  givenName          String
-  familyName         String?
-  birthName          String?
-  gender             Gender        @default(UNKNOWN)
-  birthDate          DateTime?
-  birthDatePrecision DatePrecision @default(DAY)
-  birthDateQualifier DateQualifier @default(EXACT)
-  birthPlace         String?
-  deathDate          DateTime?
-  deathDatePrecision DatePrecision @default(DAY)
-  deathDateQualifier DateQualifier @default(EXACT)
-  deathPlace         String?
-  notes              String?
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  id                   String        @id @default(cuid())
+  givenName            String
+  familyName           String?
+  birthName            String?
+  // Teile des Hauptnamens (GEDCOM NICK, NPFX, NSFX). Weitere Namen: PersonName.
+  nickname             String?
+  namePrefix           String? // Titel/Vorsatz: „Dr.“, „Graf“
+  nameSuffix           String? // Zusatz: „jun.“, „III.“
+  gender               Gender        @default(UNKNOWN)
+  birthDate            DateTime?
+  birthDatePrecision   DatePrecision @default(DAY)
+  birthDateQualifier   DateQualifier @default(EXACT)
+  birthDateTo          DateTime?
+  birthDateToPrecision DatePrecision @default(DAY)
+  birthDatePhrase      String?
+  birthPlace           String?
+  deathDate            DateTime?
+  deathDatePrecision   DatePrecision @default(DAY)
+  deathDateQualifier   DateQualifier @default(EXACT)
+  deathDateTo          DateTime?
+  deathDateToPrecision DatePrecision @default(DAY)
+  deathDatePhrase      String?
+  deathPlace           String?
+  deathCause           String?
+  notes                String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
 
   // Beziehungen, in denen diese Person die Quelle bzw. das Ziel ist.
   relationsFrom Relationship[] @relation("RelationFrom")
   relationsTo   Relationship[] @relation("RelationTo")
 
-  media     PersonMedia[]
-  families  PersonFamily[]
-  citations Citation[]
+  media       PersonMedia[]
+  families    PersonFamily[]
+  citations   Citation[]
+  events      Event[]
+  names       PersonName[]
+  externalIds ExternalId[]
+  rawRecords  ImportRawRecord[]
+  importLink  ImportLink?
 
   @@index([familyName, givenName])
+}
+
+// Weitere Namen einer Person — der Hauptname bleibt in Person
+// (givenName/familyName/birthName + nickname/namePrefix/nameSuffix).
+enum PersonNameType {
+  BIRTH // abweichend erfasster Geburtsname
+  MARRIED // (früherer) Ehename (MyHeritage _MARNM bei mehreren Ehen)
+  ALIAS // auch bekannt als (GEDCOM aka)
+  RELIGIOUS // Ordens-/Taufname
+  IMMIGRANT // Name nach Einwanderung
+  VARIANT // andere Schreibweise
+  OTHER
+}
+
+model PersonName {
+  id         String         @id @default(cuid())
+  personId   String
+  type       PersonNameType @default(OTHER)
+  givenName  String?
+  familyName String?
+  prefix     String?
+  suffix     String?
+  nickname   String?
+  // Freie Bezeichnung, z.B. GEDCOM NAME.TYPE bei OTHER.
+  label      String?
+  notes      String?
+  sortOrder  Int            @default(0)
+  createdAt  DateTime       @default(now())
+
+  person     Person      @relation(fields: [personId], references: [id], onDelete: Cascade)
+  importLink ImportLink?
+
+  @@index([personId])
 }
 
 enum RelationType {
@@ -256,28 +316,143 @@ enum RelationSubtype {
 // Person: nur so sind Adoption, Stiefverhältnisse, Mehrfachehen und
 // Beziehungszeiträume abbildbar, ohne das Schema zu ändern.
 model Relationship {
-  id                 String          @id @default(cuid())
-  type               RelationType
-  subtype            RelationSubtype @default(BIOLOGICAL)
-  fromPersonId       String
-  toPersonId         String
-  startDate          DateTime?
-  startDatePrecision DatePrecision   @default(DAY)
-  startDateQualifier DateQualifier   @default(EXACT)
-  endDate            DateTime?
-  endDatePrecision   DatePrecision   @default(DAY)
-  endDateQualifier   DateQualifier   @default(EXACT)
-  notes              String?
-  createdAt          DateTime        @default(now())
+  id                   String          @id @default(cuid())
+  type                 RelationType
+  subtype              RelationSubtype @default(BIOLOGICAL)
+  fromPersonId         String
+  toPersonId           String
+  startDate            DateTime?
+  startDatePrecision   DatePrecision   @default(DAY)
+  startDateQualifier   DateQualifier   @default(EXACT)
+  startDateTo          DateTime?
+  startDateToPrecision DatePrecision   @default(DAY)
+  startDatePhrase      String?
+  // Ort der Heirat bzw. des Beginns (PARTNER_OF).
+  startPlace           String?
+  endDate              DateTime?
+  endDatePrecision     DatePrecision   @default(DAY)
+  endDateQualifier     DateQualifier   @default(EXACT)
+  endDateTo            DateTime?
+  endDateToPrecision   DatePrecision   @default(DAY)
+  endDatePhrase        String?
+  // Ort der Scheidung bzw. des Endes.
+  endPlace             String?
+  notes                String?
+  createdAt            DateTime        @default(now())
 
-  fromPerson Person              @relation("RelationFrom", fields: [fromPersonId], references: [id], onDelete: Cascade)
-  toPerson   Person              @relation("RelationTo", fields: [toPersonId], references: [id], onDelete: Cascade)
-  media      RelationshipMedia[]
-  citations  Citation[]
+  fromPerson  Person              @relation("RelationFrom", fields: [fromPersonId], references: [id], onDelete: Cascade)
+  toPerson    Person              @relation("RelationTo", fields: [toPersonId], references: [id], onDelete: Cascade)
+  media       RelationshipMedia[]
+  citations   Citation[]
+  events      Event[]
+  externalIds ExternalId[]
+  rawRecords  ImportRawRecord[]
+  importLink  ImportLink?
 
   @@unique([type, fromPersonId, toPersonId])
   @@index([fromPersonId])
   @@index([toPersonId])
+}
+
+// ---------------------------------------------------------------------------
+// Lebensereignisse
+// ---------------------------------------------------------------------------
+
+// Ereignisarten nach GEDCOM 5.5.1 (Tag in Klammern). Geburt und Tod einer
+// Person sowie Heirat und Scheidung einer Partnerschaft stehen weiterhin in
+// Person bzw. Relationship — BIRTH, DEATH, MARRIAGE und DIVORCE gibt es hier
+// nur als abweichende Zweitangabe (isAlternative). Regeln: lib/events.ts.
+enum EventType {
+  // Person
+  BIRTH // nur Alternative (BIRT)
+  DEATH // nur Alternative (DEAT)
+  BAPTISM // Taufe (BAPM)
+  CHRISTENING // Kindstaufe (CHR)
+  ADULT_CHRISTENING // Erwachsenentaufe (CHRA)
+  BURIAL // Beerdigung (BURI)
+  CREMATION // Einäscherung (CREM)
+  ADOPTION // Adoption (ADOP)
+  CONFIRMATION // Konfirmation/Firmung (CONF)
+  FIRST_COMMUNION // Erstkommunion (FCOM)
+  BAR_MITZVAH // (BARM)
+  BAS_MITZVAH // (BASM)
+  BLESSING // Segnung (BLES)
+  ORDINATION // Ordination/Weihe (ORDN)
+  GRADUATION // Abschluss (GRAD)
+  EDUCATION // Ausbildung (EDUC)
+  OCCUPATION // Beruf (OCCU)
+  RETIREMENT // Ruhestand (RETI)
+  RESIDENCE // Wohnort (RESI)
+  CENSUS // Volkszählung (CENS)
+  EMIGRATION // Auswanderung (EMIG)
+  IMMIGRATION // Einwanderung (IMMI)
+  NATURALIZATION // Einbürgerung (NATU)
+  MILITARY_SERVICE // Militärdienst (_MILT, EVEN TYPE Military)
+  RELIGION // Religion (RELI)
+  NATIONALITY // Staatsangehörigkeit (NATI)
+  TITLE // Adels-/Ehrentitel (TITL)
+  PROPERTY // Besitz (PROP)
+  PHYSICAL_DESCRIPTION // Beschreibung (DSCR)
+  ID_NUMBER // Kennnummer (IDNO, SSN)
+  CASTE // Stand/Kaste (CAST)
+  CHILDREN_COUNT // Kinderzahl (NCHI)
+  MARRIAGE_COUNT // Zahl der Ehen (NMR)
+  WILL // Testament (WILL)
+  PROBATE // Testamentseröffnung (PROB)
+  // Partnerschaft (PARTNER_OF)
+  MARRIAGE // nur Alternative (MARR)
+  DIVORCE // nur Alternative (DIV)
+  ENGAGEMENT // Verlobung (ENGA)
+  MARRIAGE_BANNS // Aufgebot (MARB)
+  MARRIAGE_CONTRACT // Ehevertrag (MARC)
+  MARRIAGE_LICENSE // Heiratserlaubnis (MARL)
+  MARRIAGE_SETTLEMENT // Ehevereinbarung (MARS)
+  DIVORCE_FILED // Scheidungsantrag (DIVF)
+  ANNULMENT // Annullierung (ANUL)
+  // Frei (EVEN/FACT mit TYPE): Bezeichnung in `label`
+  CUSTOM
+}
+
+// Ein Ereignis gehört zu GENAU EINER Person oder Beziehung (geprüft im
+// Dienst). Sichtbarkeit und Bearbeitbarkeit folgen dem Träger.
+model Event {
+  id              String        @id @default(cuid())
+  personId        String?
+  relationshipId  String?
+  type            EventType
+  // Bei CUSTOM Pflicht („Militärdienst“), sonst optionale Präzisierung
+  // (GEDCOM TYPE, z.B. „Seebestattung“).
+  label           String?
+  // Abweichende Zweitangabe zu einer Tatsache, die schon anderswo steht
+  // (zweite Geburtsangabe einer Datei) — überschreibt nichts.
+  isAlternative   Boolean       @default(false)
+  date            DateTime?
+  datePrecision   DatePrecision @default(DAY)
+  dateQualifier   DateQualifier @default(EXACT)
+  dateTo          DateTime?
+  dateToPrecision DatePrecision @default(DAY)
+  datePhrase      String?
+  place           String?
+  address         String? // Anschrift (ADDR), Zeilen mit \n
+  value           String? // Wert/Beschreibung: der Beruf, die Religion, der Titel …
+  cause           String? // Ursache (CAUS)
+  age             String? // Altersangabe der Quelle, wörtlich (AGE), z.B. „72y“
+  agency          String? // Zuständige Stelle (AGNC): Pfarramt, Arbeitgeber
+  notes           String?
+  // Reihenfolge undatierter Ereignisse (und Gleichstand bei gleichem Datum).
+  sortOrder       Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  person       Person?       @relation(fields: [personId], references: [id], onDelete: Cascade)
+  relationship Relationship? @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+  citations    Citation[]
+  externalIds  ExternalId[]
+  importLink   ImportLink?
+
+  @@index([personId])
+  @@index([relationshipId])
+  @@index([type])
 }
 
 // ---------------------------------------------------------------------------
@@ -303,6 +478,8 @@ model MediaAsset {
   persons       PersonMedia[]
   relationships RelationshipMedia[]
   sources       Source[]
+  externalIds   ExternalId[]
+  importLink    ImportLink?
 }
 
 // Bilder zu einem Ereignis statt zu einer Person — vor allem Hochzeitsfotos.
@@ -351,25 +528,33 @@ enum SourceKind {
 // belegen. Sichtbar ist sie, sobald der Benutzer etwas sieht, wofür sie
 // zitiert wird — Rechte hängen also an den Belegen (lib/services/sources.ts).
 model Source {
-  id            String        @id @default(cuid())
-  title         String
-  kind          SourceKind    @default(OTHER)
-  author        String? // Verfasser bzw. Herkunft
-  repository    String? // Archiv, Pfarramt, Standesamt
-  callNumber    String? // Signatur
-  url           String?
-  date          DateTime?
-  datePrecision DatePrecision @default(DAY)
-  dateQualifier DateQualifier @default(EXACT)
-  notes         String? // Abschrift, Notizen
-  mediaId       String? // Scan: ein bereits hochgeladenes Bild
-  createdById   String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id              String        @id @default(cuid())
+  title           String
+  kind            SourceKind    @default(OTHER)
+  // Freie Art, wenn die Quelle eine eigene Kategorie mitbringt (z.B. „Adressbuch“).
+  kindLabel       String?
+  author          String? // Verfasser bzw. Herkunft
+  repository      String? // Archiv, Pfarramt, Standesamt
+  callNumber      String? // Signatur
+  url             String?
+  date            DateTime?
+  datePrecision   DatePrecision @default(DAY)
+  dateQualifier   DateQualifier @default(EXACT)
+  dateTo          DateTime?
+  dateToPrecision DatePrecision @default(DAY)
+  datePhrase      String?
+  notes           String? // Abschrift, Notizen
+  mediaId         String? // Scan: ein bereits hochgeladenes Bild
+  createdById     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
-  media     MediaAsset? @relation(fields: [mediaId], references: [id], onDelete: SetNull)
-  createdBy User?       @relation("SourceCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  citations Citation[]
+  media       MediaAsset?       @relation(fields: [mediaId], references: [id], onDelete: SetNull)
+  createdBy   User?             @relation("SourceCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  citations   Citation[]
+  externalIds ExternalId[]
+  rawRecords  ImportRawRecord[]
+  importLink  ImportLink?
 
   @@index([title])
 }
@@ -381,6 +566,7 @@ enum CitationFact {
   PARTNERSHIP // Heirat bzw. Partnerschaft (nur an PARTNER_OF)
   PARENTAGE // Abstammung (nur an PARENT_OF)
   OTHER
+  EVENT // ein Ereignis (Citation.eventId gesetzt)
 }
 
 enum CitationConfidence {
@@ -390,24 +576,198 @@ enum CitationConfidence {
 }
 
 // Beleg: eine Quelle stützt eine Angabe zu GENAU EINER Person oder Beziehung
-// (geprüft im Dienst — Prisma kennt keine Check-Constraints).
+// (geprüft im Dienst — Prisma kennt keine Check-Constraints). Ein Beleg für
+// ein Ereignis trägt zusätzlich eventId (fact = EVENT); personId bzw.
+// relationshipId ist dann der Träger des Ereignisses — so gelten Rechte,
+// Export und Löschen unverändert.
 model Citation {
   id             String              @id @default(cuid())
   sourceId       String
   personId       String?
   relationshipId String?
+  eventId        String?
   fact           CitationFact        @default(OTHER)
-  detail         String? // Seite, Eintragsnummer, Fundstelle
+  detail         String? // Seite, Eintragsnummer, Fundstelle (GEDCOM PAGE)
   confidence     CitationConfidence?
+  text           String? // Abschrift bzw. Notiz zum Beleg (GEDCOM DATA.TEXT, NOTE)
   createdAt      DateTime            @default(now())
 
   source       Source        @relation(fields: [sourceId], references: [id], onDelete: Cascade)
   person       Person?       @relation(fields: [personId], references: [id], onDelete: Cascade)
   relationship Relationship? @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+  event        Event?        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  importLink   ImportLink?
 
   @@index([sourceId])
   @@index([personId])
   @@index([relationshipId])
+  @@index([eventId])
+}
+
+// ---------------------------------------------------------------------------
+// Import (GEDCOM u.a.): Herkunft, Fremdkennungen, nicht zugeordnete Daten
+// ---------------------------------------------------------------------------
+
+enum ImportStatus {
+  PENDING // angelegt, Datei gespeichert
+  COMPLETED
+  FAILED
+}
+
+// Ein Importlauf. Nur für Administratoren (lib/services/imports.ts). Die
+// Originaldatei liegt unverändert unter MEDIA_DIR/imports/ (storageKey).
+model ImportBatch {
+  id               String       @id @default(cuid())
+  userId           String?
+  format           String // "GEDCOM" | "JSON" | …
+  fileName         String
+  fileSizeBytes    Int
+  fileSha256       String
+  storageKey       String?      @unique
+  // Kennung des Stammbaums in der Quelle (z.B. die Projekt-/Baum-ID aus dem
+  // Dateikopf, sonst vom Import bestimmt). Läufe mit derselben Kennung sind
+  // Stände desselben Baums — nur innerhalb davon wird abgeglichen.
+  sourceTreeId     String?
+  // Kopf der Datei: erzeugendes Programm (HEAD.SOUR), dessen Name/Version,
+  // GEDCOM-Version, Zeichensatz.
+  sourceSystem     String?
+  sourceSystemName String?
+  sourceVersion    String?
+  gedcomVersion    String?
+  charset          String?
+  header           Json?
+  counts           Json?
+  warnings         Json?
+  status           ImportStatus @default(PENDING)
+  notes            String?
+  createdAt        DateTime     @default(now())
+  finishedAt       DateTime?
+
+  user          User?             @relation("ImportUser", fields: [userId], references: [id], onDelete: SetNull)
+  externalIds   ExternalId[]
+  rawRecords    ImportRawRecord[]
+  firstImported ImportLink[]      @relation("ImportLinkFirst")
+  lastImported  ImportLink[]      @relation("ImportLinkLast")
+
+  @@index([fileSha256])
+  @@index([sourceTreeId, createdAt])
+  @@index([createdAt])
+}
+
+// Herkunft eines importierten Datensatzes — genau eine Zeile je Datensatz,
+// angelegt bzw. fortgeschrieben von jedem Import, der ihn anlegt oder
+// aktualisiert. Manuell angelegte Datensätze haben keine.
+//
+// Wiederholter Import: Der Import erkennt den Datensatz über externalKey
+// (innerhalb derselben sourceTreeId) bzw. ExternalId wieder. importHash ist
+// der Fingerabdruck der Werte, wie der letzte Import sie geschrieben hat
+// (lib/import-fingerprint.ts); stimmt er mit dem Fingerabdruck des heutigen
+// Stands überein, wurde der Datensatz seither in der App nicht geändert und
+// darf aktualisiert werden — sonst ist es eine Entscheidung für die Vorschau.
+// Fehlt ein Datensatz in einem neueren Stand der Quelle, wird nichts
+// gelöscht: missingSinceBatchId hält fest, dass er dort fehlte.
+model ImportLink {
+  id                  String   @id @default(cuid())
+  // PERSON | RELATIONSHIP | EVENT | PERSON_NAME | CITATION | SOURCE | MEDIA
+  entityType          String
+  personId            String?  @unique
+  relationshipId      String?  @unique
+  eventId             String?  @unique
+  personNameId        String?  @unique
+  citationId          String?  @unique
+  sourceId            String?  @unique
+  mediaId             String?  @unique
+  sourceTreeId        String?
+  // Schlüssel in der Quelle, frei vom Import gewählt, z.B. "UID:4F2A…",
+  // "XREF:@I12@", "XREF:@I12@/BIRT#2".
+  externalKey         String?
+  firstBatchId        String?
+  lastBatchId         String?
+  importedAt          DateTime @default(now())
+  importHash          String
+  // Änderungsstempel der Quelle, wörtlich (z.B. _UPD, CHAN.DATE).
+  sourceStamp         String?
+  missingSinceBatchId String?
+  createdAt           DateTime @default(now())
+
+  firstBatch   ImportBatch?  @relation("ImportLinkFirst", fields: [firstBatchId], references: [id], onDelete: SetNull)
+  lastBatch    ImportBatch?  @relation("ImportLinkLast", fields: [lastBatchId], references: [id], onDelete: SetNull)
+  person       Person?       @relation(fields: [personId], references: [id], onDelete: Cascade)
+  relationship Relationship? @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+  event        Event?        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  personName   PersonName?   @relation(fields: [personNameId], references: [id], onDelete: Cascade)
+  citation     Citation?     @relation(fields: [citationId], references: [id], onDelete: Cascade)
+  source       Source?       @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  media        MediaAsset?   @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@index([sourceTreeId, externalKey])
+  @@index([firstBatchId])
+  @@index([lastBatchId])
+}
+
+// Fremdkennung eines Datensatzes, damit ein erneuter Import ihn wiedererkennt:
+// system z.B. "GEDCOM_XREF" (value "@I12@", nur zusammen mit batchId
+// eindeutig), "UID" (_UID), "RIN", "REFN", "AFN". Gehört zu genau einem
+// Datensatz (geprüft im Dienst).
+model ExternalId {
+  id             String   @id @default(cuid())
+  system         String
+  value          String
+  batchId        String?
+  personId       String?
+  relationshipId String?
+  eventId        String?
+  sourceId       String?
+  mediaId        String?
+  createdAt      DateTime @default(now())
+
+  batch        ImportBatch?  @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  person       Person?       @relation(fields: [personId], references: [id], onDelete: Cascade)
+  relationship Relationship? @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+  event        Event?        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  source       Source?       @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  media        MediaAsset?   @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@index([system, value])
+  @@index([batchId])
+  @@index([personId])
+  @@index([relationshipId])
+  @@index([eventId])
+  @@index([sourceId])
+  @@index([mediaId])
+}
+
+// Daten, die der Import nicht deuten konnte — als JSON-Teilbaum, damit nichts
+// still verloren geht und eine spätere Version sie auswerten kann. Sichtbar
+// wie der Träger (Person, Beziehung, Quelle); ohne Träger nur für Admins.
+model ImportRawRecord {
+  id             String    @id @default(cuid())
+  batchId        String?
+  personId       String?
+  relationshipId String?
+  sourceId       String?
+  // Satzart bzw. Tag-Pfad: "INDI", "FAM", "SOUR", "NOTE", "INDI.BIRT.AGE", "_MYTAG" …
+  recordType     String
+  xref           String?
+  content        Json
+  // Warum nicht übernommen (für Menschen).
+  reason         String?
+  sizeBytes      Int
+  // Gesetzt, wenn ein späterer Import für denselben Träger neue Rohdaten
+  // abgelegt hat. Ältere Stände bleiben, bis ein Admin sie entfernt
+  // (pruneRawRecords).
+  supersededAt   DateTime?
+  createdAt      DateTime  @default(now())
+
+  batch        ImportBatch?  @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  person       Person?       @relation(fields: [personId], references: [id], onDelete: Cascade)
+  relationship Relationship? @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+  source       Source?       @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+  @@index([personId])
+  @@index([relationshipId])
+  @@index([sourceId])
 }
 
 // ---------------------------------------------------------------------------
