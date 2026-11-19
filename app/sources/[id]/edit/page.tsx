@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { requireScope } from "@/lib/session";
 import { getSource, listScanCandidates } from "@/lib/services";
 import { toDateInput, toFuzzyDate } from "@/lib/dates";
+import { dateFieldFrom } from "@/lib/date-fields";
 import { SourceForm } from "@/components/SourceForm";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +38,14 @@ export default async function EditSourcePage({ params }: { params: Promise<{ id:
           repository: s.repository ?? "",
           callNumber: s.callNumber ?? "",
           url: s.url ?? "",
-          date: toDateInput(toFuzzyDate(s.date, s.datePrecision, s.dateQualifier)),
+          // Mit Bereichsende; ein Wortlaut ohne Datum steht als Text im Feld.
+          ...(() => {
+            const f = dateFieldFrom(
+              toDateInput(toFuzzyDate(s.date, s.datePrecision, s.dateQualifier, s.dateTo, s.dateToPrecision)),
+              s.datePhrase,
+            );
+            return { date: f.text, dateAsPhrase: f.asPhrase, datePhrase: s.datePhrase };
+          })(),
           notes: s.notes ?? "",
           mediaId: s.mediaId ?? "",
         }}

@@ -420,7 +420,7 @@ async function dryRun(scope: Scope, input: unknown): Promise<GenealogyImportResu
   try {
     await prisma.$transaction(
       async (tx) => {
-        result = await applyGenealogyImport(scope, input, { tx, onInvalid: "skip" });
+        result = await applyGenealogyImport(scope, input, { tx, onInvalid: "skip", dryRun: true });
         throw ROLLBACK;
       },
       { timeout: 10 * 60_000, maxWait: 10_000 },

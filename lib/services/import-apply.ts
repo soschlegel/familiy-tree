@@ -354,11 +354,11 @@ type Pending<T> = { item: T; id: string; row: Record<string, unknown>; hash: str
 export async function applyGenealogyImport(
   scope: Scope,
   input: unknown,
-  options: { tx?: Db; onInvalid?: "throw" | "skip"; now?: Date } = {},
+  options: { tx?: Db; onInvalid?: "throw" | "skip"; now?: Date; dryRun?: boolean } = {},
 ): Promise<GenealogyImportResult> {
   if (!scope.isAdmin) throw forbiddenError("Daten zu importieren");
   const data = parseOrThrow(genealogyImportSchema.safeParse(input));
-  const run = (db: Db) => applyInTx(scope, data, db, options.onInvalid ?? "throw", options.now ?? new Date());
+  const run = (db: Db) => applyInTx(scope, data, db, options.onInvalid ?? "throw", options.now ?? new Date(), options.dryRun ?? false);
   if (options.tx) return run(options.tx);
   return prisma.$transaction(run, { timeout: 5 * 60_000, maxWait: 10_000 });
 }
@@ -369,7 +369,10 @@ async function applyInTx(
   db: Db,
   onInvalid: "throw" | "skip",
   now: Date,
+  dryRun = false,
 ): Promise<GenealogyImportResult> {
+  // Probelauf (Vorschau): alle Prüfungen und Ergebnisse, aber kein Schreiben.
+  const write = !dryRun;
   const invalid: GenealogyImportResult["invalid"] = [];
   const sections: Section[] = ["persons", "names", "relationships", "events", "sources", "citations"];
   const ids = Object.fromEntries(sections.map((s) => [s, {}])) as GenealogyImportResult["ids"];
@@ -753,18 +756,18 @@ async function applyInTx(
   const familyOf = new Map(data.persons.map((p) => [p.ref, p.familyIds ?? data.familyIds]));
 
   // Personen
-  await db.person.createMany({ data: personCreates.map((c) => ({ id: c.id, ...c.row })) as Prisma.PersonCreateManyInput[] });
-  await db.personFamily.createMany({
+  if (write) await db.person.createMany({ data: personCreates.map((c) => ({ id: c.id, ...c.row })) as Prisma.PersonCreateManyInput[] });
+  if (write) await db.personFamily.createMany({
     data: personCreates.flatMap((c) => (familyOf.get(c.item.ref) ?? []).map((familyId) => ({ personId: c.id, familyId }))),
     skipDuplicates: true,
   });
-  await db.source.createMany({
+  if (write) await db.source.createMany({
     data: sourceCreates.map((c) => ({ id: c.id, ...c.row, createdById: scope.userId })) as Prisma.SourceCreateManyInput[],
   });
-  await db.relationship.createMany({ data: relCreates.map((c) => ({ id: c.id, ...c.row })) as Prisma.RelationshipCreateManyInput[] });
-  await db.personName.createMany({ data: nameCreates.map((c) => ({ id: c.id, ...c.row })) as Prisma.PersonNameCreateManyInput[] });
-  await db.event.createMany({ data: eventCreates.map((c) => ({ id: c.id, ...c.row })) as Prisma.EventCreateManyInput[] });
-  await db.citation.createMany({ data: citationCreates.map((c) => ({ id: c.id, ...c.row })) as Prisma.CitationCreateManyInput[] });
+  if (write) await db.relationship.createMany({ data: relCreates.map((c) => ({ id: c.id, ...c.row })) as Prisma.RelationshipCreateManyInput[] });
+  if (write) await db.personName.createMany({ data: nameCreates.map((c) => ({ id: c.id, ...c.row })) as Prisma.PersonNameCreateManyInput[] });
+  if (write) await db.event.createMany({ data: eventCreates.map((c) => ({ id: c.id, ...c.row })) as Prisma.EventCreateManyInput[] });
+  if (write) await db.citation.createMany({ data: citationCreates.map((c) => ({ id: c.id, ...c.row })) as Prisma.CitationCreateManyInput[] });
 
   for (const [section, creates] of [
     ["persons", personCreates],
@@ -791,7 +794,7 @@ async function applyInTx(
       });
     }
   }
-  await db.importLink.createMany({ data: linkCreates });
+  if (write) await db.importLink.createMany({ data: linkCreates });
 
   // Aktualisierungen (einzeln — bei einem erneuten Import meist wenige).
   // Herkunft unveränderter Datensätze wird gesammelt fortgeschrieben.
@@ -828,7 +831,7 @@ async function applyInTx(
         outcomes[section][u.item.ref] = changed ? "skippedEdited" : "unchanged";
         counts[section][changed ? "skippedEdited" : "unchanged"]++;
       } else {
-        if (changed) await updateRow(db, entity, u.id, u.row);
+        if (changed && write) await updateRow(db, entity, u.id, u.row);
         outcomes[section][u.item.ref] = changed ? "updated" : "unchanged";
         counts[section][changed ? "updated" : "unchanged"]++;
       }
@@ -851,6 +854,7 @@ async function applyInTx(
         sourceStamp: u.item.sourceStamp ?? link?.sourceStamp ?? null,
         missingSinceBatchId: null,
       };
+      if (!write) continue;
       if (link) await db.importLink.update({ where: { id: link.id }, data: linkData });
       else
         await db.importLink.create({
@@ -859,7 +863,7 @@ async function applyInTx(
     }
   }
   for (let i = 0; i < refreshOnly.length; i += 5000) {
-    await db.importLink.updateMany({
+    if (write) await db.importLink.updateMany({
       where: { id: { in: refreshOnly.slice(i, i + 5000) } },
       data: { lastBatchId: data.batchId ?? undefined, importedAt: now, missingSinceBatchId: null },
     });
@@ -885,7 +889,7 @@ async function applyInTx(
     }
     extRows.push({ system: x.system, value: x.value, batchId: data.batchId ?? null, ...t });
   }
-  await db.externalId.createMany({ data: extRows });
+  if (write) await db.externalId.createMany({ data: extRows });
 
   // --- Rohdaten ---------------------------------------------------------------
   const rawRows: Prisma.ImportRawRecordCreateManyInput[] = [];
@@ -925,9 +929,9 @@ async function applyInTx(
   if (replaceTargets.relationshipId.size) or.push({ relationshipId: { in: [...replaceTargets.relationshipId] } });
   if (replaceTargets.sourceId.size) or.push({ sourceId: { in: [...replaceTargets.sourceId] } });
   if (or.length) {
-    superseded = (await db.importRawRecord.updateMany({ where: { OR: or, supersededAt: null }, data: { supersededAt: now } })).count;
+    if (write) superseded = (await db.importRawRecord.updateMany({ where: { OR: or, supersededAt: null }, data: { supersededAt: now } })).count;
   }
-  await db.importRawRecord.createMany({ data: rawRows });
+  if (write) await db.importRawRecord.createMany({ data: rawRows });
 
   if (invalid.length > 0 && onInvalid === "throw") {
     throw validationError(invalid.map((i) => ({ path: [i.section, i.ref, i.path], message: i.message })));
@@ -946,7 +950,7 @@ async function applyInTx(
   }
 
   // Ein Audit-Eintrag je Aufruf — in derselben Transaktion.
-  await db.auditLog.create({
+  if (write) await db.auditLog.create({
     data: {
       userId: scope.userId,
       action: "CREATE",

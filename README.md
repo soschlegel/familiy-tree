@@ -487,15 +487,16 @@ vorbei direkt zur Datenbank gibt es nicht.
 
 | Werkzeug | Zweck |
 |---|---|
-| `search_persons` | Suche nach Namenswörtern, Familie, Geburtsjahr (von/bis), Ort, Geschlecht, verstorben; seitenweise (Standard 20) |
-| `get_person` | Vollständiger Datensatz mit Notizen, Familien, Eltern, Partnern (mit Heirats-/Scheidungsdaten), Kindern, Geschwistern (voll/halb), Bild-Metadaten und Belegen |
+| `search_persons` | Suche nach Namenswörtern (auch Rufname und weitere Namen), Familie, Geburtsjahr (von/bis), Ort (Geburt, Tod, Ereignisse, Heirat/Scheidung), Geschlecht, verstorben; seitenweise (Standard 20) |
+| `get_person` | Vollständiger Datensatz mit Notizen, Familien, Eltern, Partnern (mit Heirats-/Scheidungsdaten und -orten, Ereignissen der Partnerschaft), Kindern, Geschwistern (voll/halb), Lebensereignissen (`events`, abweichende Angaben als `alternative`), weiteren Namen (`otherNames`), Bild-Metadaten und Belegen |
+| `list_events` | Alle Lebensereignisse einer Person oder Beziehung mit sämtlichen Feldern |
 | `get_ancestors` / `get_descendants` | Vorfahren bzw. Nachfahren nach Generationen (Standard 4, höchstens 12) |
 | `get_kinship` | Verwandtschaft zweier Personen mit deutscher Bezeichnung („Großmutter väterlicherseits“, „Cousin 1. Grades“, „Schwager“), gemeinsamen Vorfahren und Verbindungsweg |
 | `list_families` | Sichtbare Familien mit Personenzahl und eigener Rolle |
 | `get_statistics` | Überblick: Personen, Beziehungen, Familien, fehlende Angaben, Geburtsjahre |
-| `find_data_gaps` | Fehlende Angaben (Geburtsdatum, Eltern, Geschlecht, vermutlich verstorben ohne Sterbedatum, …) und `unsourced` (Geburt/Tod ohne Beleg) |
+| `find_data_gaps` | Fehlende Angaben (Geburtsdatum, Eltern, Geschlecht, vermutlich verstorben ohne Sterbedatum, …), `unsourced` (Geburt/Tod ohne Beleg) und in `relationshipGaps` Ehen ohne Ort und Partnerschaften mit unbekanntem Ehestand |
 | `find_possible_duplicates` | Vermutlich doppelt erfasste Personen mit Begründung und Wert 0–1 |
-| `check_consistency` | Widersprüche: Tod vor Geburt, Elternteil jünger als 12 bzw. älter als 70 (Mutter 50), Geburt nach dem Tod eines Elternteils, Lebensdauer über 110, Heirat vor 14 oder nach dem Tod, überschneidende Ehen |
+| `check_consistency` | Widersprüche: Tod vor Geburt, Elternteil jünger als 12 bzw. älter als 70 (Mutter 50), Geburt nach dem Tod eines Elternteils, Lebensdauer über 110, Heirat vor 14 oder nach dem Tod, überschneidende Ehen, Beerdigung vor dem Tod, Ereignis vor der Geburt bzw. nach dem Tod |
 | `get_timeline` | Zeitleiste einer Person (mit Alter und fehlenden Daten) oder einer Familie |
 | `search_sources` | Quellen suchen (Titel, Verfasser, Archiv, Signatur; Art) mit Zahl der sichtbaren Belege |
 | `get_source` | Quelle mit Abschrift und allem, wofür sie zitiert wird (verborgene Belege nur gezählt) |
@@ -507,8 +508,10 @@ Nur mit der Stufe „lesen und schreiben“ (siehe unten) kommen hinzu:
 | `create_person` | Person anlegen, optional mit datierter Recherchenotiz |
 | `update_person` | Felder ergänzen/korrigieren; Notizen werden nie überschrieben, `append_note` hängt eine datierte Notiz (`[JJJJ-MM-TT, KI-Recherche] … (Quelle: …)`) an — der Quellenhinweis dort ist nur Freitext |
 | `create_source` | Quelle anlegen (Titel, Art, Verfasser, Archiv, Signatur, URL, Datum, Abschrift) |
-| `cite_source` | Quelle für eine Angabe einer Person (NAME/BIRTH/DEATH/OTHER) oder Beziehung (PARTNERSHIP/PARENTAGE/OTHER) zitieren, mit Fundstelle und Verlässlichkeit |
-| `create_relationship` / `update_relationship` | Eltern-Kind- oder Partnerbeziehung anlegen bzw. Art, Zeitraum, Notiz korrigieren |
+| `cite_source` | Quelle für eine Angabe einer Person (NAME/BIRTH/DEATH/OTHER), einer Beziehung (PARTNERSHIP/PARENTAGE/OTHER) oder ein Lebensereignis (`event_id`) zitieren, mit Fundstelle und Verlässlichkeit |
+| `create_relationship` / `update_relationship` | Eltern-Kind- oder Partnerbeziehung anlegen bzw. Art (auch „Ehestand unbekannt“), Zeitraum, Heirats-/Scheidungsort, Notiz korrigieren |
+| `add_event` / `update_event` / `delete_event` | Lebensereignis (Taufe, Beruf, Wohnort, Beerdigung, Verlobung …) erfassen, korrigieren, entfernen; Geburt/Tod/Heirat/Scheidung nur als abweichende Zweitangabe (`is_alternative`) |
+| `add_name_variant` | Weiteren Namen erfassen (Ehename, Schreibvariante, „auch bekannt als“ …) |
 | `delete_relationship` | eine falsche Verknüpfung entfernen (die verknüpften Personen lassen sich nicht umhängen, nur löschen und neu anlegen) |
 | `set_person_families` | Familienzuordnung setzen |
 
@@ -518,7 +521,8 @@ Ressource `familytree://person/{id}`. Die Ergebnisse sind kompaktes JSON;
 Daten stehen in ihrer echten Genauigkeit (`1850`, `um 1850`, `vor 1900` —
 siehe [Ungenaue Daten](#ungenaue-daten)), und Eingaben akzeptieren dieselben
 Formen wie die Oberfläche. Die Anweisungen an das Modell verlangen, Erkenntnisse
-als Beleg (`create_source` + `cite_source`) festzuhalten statt nur als Notiz.
+als Beleg (`create_source` + `cite_source`) festzuhalten statt nur als Notiz,
+und Taufe, Beruf, Wohnort usw. als Ereignis (`add_event`) statt im Notizfeld.
 
 ### Wer darf was
 
@@ -1340,6 +1344,22 @@ Zeitleisten, Personensuche nach Ort (jeder Ort einer Person, auch Heirats-
 und Ereignisorte) und Plausibilitätsprüfung (Beerdigung vor dem Tod,
 Ereignis vor der Geburt bzw. nach dem Tod); „Ehe ohne Ort“ und „Ehestand
 unbekannt“ sind Datenlücken an Beziehungen.
+
+**In der Oberfläche:** Die Personenseite hat den Abschnitt
+„Lebensereignisse“ — Ereignisse der Person und ihrer Partnerschaften
+(Verlobung, Aufgebot …, mit „mit <Partner>“ gekennzeichnet) in einer
+chronologischen Liste, undatierte am Ende; Bearbeiter legen dort an, ändern,
+löschen und hängen über „Beleg“ eine Quelle an ein Ereignis. Abweichende
+Hauptangaben stehen als „abweichende Angabe“ neben Geburt bzw. Tod im Kopf
+und neben der Heirat auf der Partnerkarte, bearbeitet werden sie in der
+Ereignisliste (eigene Gruppe). Rufname, Namenszusätze und Todesursache
+stehen im Kopf und im Personenformular unter „Weitere Angaben“, weitere
+Namen in einer eigenen Karte. Heirats-/Scheidungsorte und „Ehestand
+unbekannt“ (im Baum gepunktete Linie mit „?“) pflegt der Beziehungseditor.
+Datumsfelder verstehen Bereiche; ein Text, der kein Datum ist, lässt sich
+per Häkchen bewusst als Wortlaut speichern und bleibt im Feld bearbeitbar.
+Die Personenliste sucht zusätzlich nach Ort und nennt bei Treffern über
+Rufname, weiteren Namen oder Ereignisort den Grund.
 
 **Import** (Dienste in [lib/services/imports.ts](lib/services/imports.ts) und
 [lib/services/import-apply.ts](lib/services/import-apply.ts), nur

@@ -1039,3 +1039,43 @@ export function recentWithoutDeath(meta: PersonMeta[], now = new Date(), years =
   const limit = now.getUTCFullYear() - years;
   return meta.filter((m) => !m.hasDeath && m.birthYear !== null && m.birthYear >= limit).length;
 }
+
+// ---------------------------------------------------------------------------
+// Für den Export: Originaldatensatz nach denselben Schlüsseln erschließen
+// ---------------------------------------------------------------------------
+
+export type OriginalIndex = {
+  /** Ereignisse nach Schlüssel (wie ImportLink.externalKey der Event-Zeilen). */
+  events: Map<string, GedcomEvent>;
+  /** Belege nach Schlüssel (wie ImportLink.externalKey der Citation-Zeilen). */
+  citations: Map<string, GedcomCitation>;
+  /** Hauptangaben (Geburt/Tod bzw. Heirat/Scheidung). */
+  main: Partial<Record<"BIRTH" | "DEATH" | "MARRIAGE" | "DIVORCE", GedcomEvent>>;
+};
+
+function indexEvents(events: GedcomEvent[], ownerKey: string, idx: OriginalIndex) {
+  const keys = eventKeys(events, ownerKey);
+  events.forEach((e, i) => {
+    idx.events.set(keys[i], e);
+    e.citations.forEach((c, j) => idx.citations.set(`${keys[i]}/SOUR#${j + 1}`, c));
+  });
+}
+
+export function indexOriginalPerson(p: GedcomPerson, key: string): OriginalIndex {
+  const idx: OriginalIndex = { events: new Map(), citations: new Map(), main: {} };
+  indexEvents(p.events, key, idx);
+  idx.main.BIRTH = pickMain(p.events, "BIRTH");
+  idx.main.DEATH = pickMain(p.events, "DEATH");
+  p.names.forEach((n, i) => n.citations.forEach((c, j) => idx.citations.set(`${key}/NAME#${i + 1}/SOUR#${j + 1}`, c)));
+  p.citations.forEach((c, j) => idx.citations.set(`${key}/SOUR#${j + 1}`, c));
+  return idx;
+}
+
+export function indexOriginalFamily(f: GedcomFamily, key: string): OriginalIndex {
+  const idx: OriginalIndex = { events: new Map(), citations: new Map(), main: {} };
+  indexEvents(f.events, key, idx);
+  idx.main.MARRIAGE = pickMain(f.events, "MARRIAGE");
+  idx.main.DIVORCE = pickMain(f.events, "DIVORCE");
+  f.citations.forEach((c, j) => idx.citations.set(`${key}/SOUR#${j + 1}`, c));
+  return idx;
+}
