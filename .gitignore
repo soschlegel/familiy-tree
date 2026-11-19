@@ -6,12 +6,24 @@ build/
 .env
 .env.local
 .env*.local
+# Echte Werte für den Produktivstack (Vorlage: stack.env.example)
+stack.env
 
 # Persistente Container-Daten (lokal). Auf der NAS liegt DATA_ROOT ohnehin
 # außerhalb des Repos.
-data/
+/data/
 
 *.tsbuildinfo
 next-env.d.ts
 .DS_Store
 dev.log
+
+# Zweiter Build-Ordner für den Mock-Server (npm run dev:mock)
+.next-mock/
+
+# Playwright (npm run test:e2e): Berichte, Spuren, Anmeldezustände
+/playwright-report/
+/test-results/
+/blob-report/
+/playwright/.cache/
+/e2e/.auth/

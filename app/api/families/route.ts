@@ -4,7 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { route, badRequest } from "@/lib/api";
 import { audit } from "@/lib/audit";
-import { viewableFamilyIds } from "@/lib/scope";
+import { listFamilies } from "@/lib/services";
 
 const familyInput = z.object({
   name: z.string().trim().min(1, "Name fehlt").max(120),
@@ -16,24 +16,7 @@ const familyInput = z.object({
  * schon die Namen fremder Familien sind eine Information über andere.
  */
 export const GET = route(null, async (ctx) => {
-  const families = await prisma.family.findMany({
-    where: ctx.scope.isAdmin
-      ? undefined
-      : { id: { in: viewableFamilyIds(ctx.scope) } },
-    orderBy: { name: "asc" },
-    include: { _count: { select: { persons: true, members: true } } },
-  });
-
-  return NextResponse.json(
-    families.map((f) => ({
-      id: f.id,
-      name: f.name,
-      description: f.description,
-      personCount: f._count.persons,
-      memberCount: f._count.members,
-      myRole: ctx.scope.families.get(f.id) ?? (ctx.scope.isAdmin ? "ADMIN" : null),
-    })),
-  );
+  return NextResponse.json(await listFamilies(ctx.scope));
 });
 
 export const POST = route("family:manage", async (ctx, req) => {

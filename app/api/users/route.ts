@@ -5,7 +5,12 @@ import { route, badRequest } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import { userInput } from "@/lib/validation";
 
+/**
+ * Alle Benutzer — samt KI-Recht (aiAccess) und Zahl der aktiven
+ * KI-Schlüssel (activeTokens: nicht widerrufen, nicht abgelaufen).
+ */
 export const GET = route("user:read", async () => {
+  const now = new Date();
   const users = await prisma.user.findMany({
     orderBy: [{ role: "asc" }, { email: "asc" }],
     select: {
@@ -16,9 +21,19 @@ export const GET = route("user:read", async () => {
       status: true,
       createdAt: true,
       lastLoginAt: true,
+      aiAccess: true,
+      _count: {
+        select: {
+          apiTokens: {
+            where: { revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+          },
+        },
+      },
     },
   });
-  return NextResponse.json(users);
+  return NextResponse.json(
+    users.map(({ _count, ...u }) => ({ ...u, activeTokens: _count.apiTokens })),
+  );
 });
 
 /**

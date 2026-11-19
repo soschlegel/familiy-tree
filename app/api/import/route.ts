@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
 import JSZip from "jszip";
-import sharp from "sharp";
-import { randomUUID } from "node:crypto";
 
 import { prisma } from "@/lib/prisma";
 import { route } from "@/lib/api";
 import { audit } from "@/lib/audit";
-import { putObject } from "@/lib/storage";
-import { exchangeSchema, type ExchangeFile } from "@/lib/exchange";
+import { processAndStoreImage } from "@/lib/media-processing";
+import { PERSON_FACTS, relationshipFacts, subtypeMatchesType } from "@/lib/validation";
+import {
+  exchangeSchema,
+  type ExchangeCitation,
+  type ExchangeFile,
+  type ExchangeRelationship,
+} from "@/lib/exchange";
 
 export const runtime = "nodejs";
 
@@ -15,6 +19,8 @@ type Plan = {
   persons: { create: number; update: number };
   relationships: { create: number; update: number };
   media: { create: number; skip: number; withoutFile: number };
+  sources: { create: number; update: number };
+  citations: { create: number; update: number };
   warnings: string[];
 };
 
@@ -70,6 +76,39 @@ async function readUpload(file: File): Promise<{
 }
 
 /**
+ * Beziehungen, die das Datenmodell nicht zulässt, werden nicht importiert —
+ * sonst gelangten über den Import Daten hinein, die die API ablehnen würde.
+ */
+function invalidRelationship(r: ExchangeRelationship): string | null {
+  if (r.fromPersonId === r.toPersonId) return "Beziehung einer Person zu sich selbst.";
+  if (!subtypeMatchesType(r.type, r.subtype)) {
+    return `Art ${r.subtype} passt nicht zu ${r.type}.`;
+  }
+  return null;
+}
+
+/**
+ * Ein Beleg braucht genau einen Bezug, und die Angabe muss dazu passen
+ * (Geburt an einer Person, Heirat an einer Partnerschaft …) — wie in der API.
+ */
+function invalidCitation(
+  c: ExchangeCitation,
+  relationshipType: (id: string) => "PARENT_OF" | "PARTNER_OF" | undefined,
+): string | null {
+  if (Boolean(c.personId) === Boolean(c.relationshipId)) {
+    return "braucht genau eine Person oder eine Beziehung.";
+  }
+  if (c.personId && !PERSON_FACTS.includes(c.fact)) return `Angabe ${c.fact} passt nicht zu einer Person.`;
+  if (c.relationshipId) {
+    const type = relationshipType(c.relationshipId);
+    if (type && !relationshipFacts(type).includes(c.fact)) {
+      return `Angabe ${c.fact} passt nicht zur Beziehung.`;
+    }
+  }
+  return null;
+}
+
+/**
  * Ermittelt, was der Import täte — ohne etwas zu ändern. Dieselbe Funktion
  * liefert die Vorschau und die Grundlage für den eigentlichen Lauf, damit
  * Vorschau und Ausführung nicht auseinanderlaufen können.
@@ -78,11 +117,13 @@ async function makePlan(
   data: ExchangeFile,
   files: Map<string, Buffer>,
 ): Promise<Plan> {
-  const [existingPersons, existingRelationships, existingMedia] =
+  const [existingPersons, existingRelationships, existingMedia, existingSources, existingCitations] =
     await Promise.all([
       prisma.person.findMany({ select: { id: true } }),
-      prisma.relationship.findMany({ select: { id: true } }),
+      prisma.relationship.findMany({ select: { id: true, type: true } }),
       prisma.mediaAsset.findMany({ select: { id: true } }),
+      prisma.source.findMany({ select: { id: true } }),
+      prisma.citation.findMany({ select: { id: true } }),
     ]);
 
   const personIds = new Set(existingPersons.map((p) => p.id));
@@ -94,6 +135,8 @@ async function makePlan(
     persons: { create: 0, update: 0 },
     relationships: { create: 0, update: 0 },
     media: { create: 0, skip: 0, withoutFile: 0 },
+    sources: { create: 0, update: 0 },
+    citations: { create: 0, update: 0 },
     warnings,
   };
 
@@ -113,6 +156,11 @@ async function makePlan(
       );
       continue;
     }
+    const invalid = invalidRelationship(r);
+    if (invalid) {
+      warnings.push(`Beziehung ${r.id} wird übersprungen: ${invalid}`);
+      continue;
+    }
     if (relationshipIds.has(r.id)) plan.relationships.update++;
     else plan.relationships.create++;
   }
@@ -127,6 +175,35 @@ async function makePlan(
       continue;
     }
     plan.media.create++;
+  }
+
+  const sourceIds = new Set(existingSources.map((x) => x.id));
+  const citationIds = new Set(existingCitations.map((x) => x.id));
+  for (const src of data.sources) {
+    if (sourceIds.has(src.id)) plan.sources.update++;
+    else plan.sources.create++;
+  }
+  const knownSources = new Set([...sourceIds, ...data.sources.map((x) => x.id)]);
+  const relType = new Map<string, "PARENT_OF" | "PARTNER_OF">([
+    ...existingRelationships.map((r) => [r.id, r.type] as const),
+    ...data.relationships.map((r) => [r.id, r.type] as const),
+  ]);
+  for (const c of data.citations) {
+    const invalid = invalidCitation(c, (id) => relType.get(id));
+    if (invalid) {
+      warnings.push(`Beleg ${c.id} wird übersprungen: ${invalid}`);
+      continue;
+    }
+    if (
+      !knownSources.has(c.sourceId) ||
+      (c.personId && !knownPersons.has(c.personId)) ||
+      (c.relationshipId && !relType.has(c.relationshipId))
+    ) {
+      warnings.push(`Beleg ${c.id} verweist auf eine unbekannte Quelle, Person oder Beziehung und wird übersprungen.`);
+      continue;
+    }
+    if (citationIds.has(c.id)) plan.citations.update++;
+    else plan.citations.create++;
   }
 
   if (plan.media.withoutFile > 0) {
@@ -167,6 +244,13 @@ export const POST = route("data:import", async (ctx, req) => {
 
   // --- Ausführung -----------------------------------------------------------
   const iso = (s: string | null | undefined) => (s ? new Date(s) : null);
+  // Alte Exporte (Version 1) kennen keine Genauigkeit: dann tagesgenau.
+  const precisionOf = (date: string | null | undefined, p: "DAY" | "MONTH" | "YEAR" | undefined) =>
+    date ? (p ?? "DAY") : "DAY";
+  const qualifierOf = (
+    date: string | null | undefined,
+    q: "EXACT" | "ABOUT" | "BEFORE" | "AFTER" | undefined,
+  ) => (date ? (q ?? "EXACT") : "EXACT");
 
   // Personen zuerst: Beziehungen und Bildzuordnungen setzen sie voraus.
   for (const p of data.persons) {
@@ -176,8 +260,12 @@ export const POST = route("data:import", async (ctx, req) => {
       birthName: p.birthName ?? null,
       gender: p.gender,
       birthDate: iso(p.birthDate),
+      birthDatePrecision: precisionOf(p.birthDate, p.birthDatePrecision),
+      birthDateQualifier: qualifierOf(p.birthDate, p.birthDateQualifier),
       birthPlace: p.birthPlace ?? null,
       deathDate: iso(p.deathDate),
+      deathDatePrecision: precisionOf(p.deathDate, p.deathDatePrecision),
+      deathDateQualifier: qualifierOf(p.deathDate, p.deathDateQualifier),
       deathPlace: p.deathPlace ?? null,
       notes: p.notes ?? null,
     };
@@ -196,29 +284,49 @@ export const POST = route("data:import", async (ctx, req) => {
     if (!knownPersons.has(r.fromPersonId) || !knownPersons.has(r.toPersonId)) {
       continue;
     }
+    if (invalidRelationship(r)) continue;
+    // Partnerschaften kanonisch (fromId < toId) speichern wie die API — sonst
+    // umginge eine umgekehrt gespeicherte Ehe die Eindeutigkeitsprüfung.
+    const [fromPersonId, toPersonId] =
+      r.type === "PARTNER_OF" && r.fromPersonId > r.toPersonId
+        ? [r.toPersonId, r.fromPersonId]
+        : [r.fromPersonId, r.toPersonId];
     const fields = {
       type: r.type,
       subtype: r.subtype,
-      fromPersonId: r.fromPersonId,
-      toPersonId: r.toPersonId,
+      fromPersonId,
+      toPersonId,
       startDate: iso(r.startDate),
+      startDatePrecision: precisionOf(r.startDate, r.startDatePrecision),
+      startDateQualifier: qualifierOf(r.startDate, r.startDateQualifier),
       endDate: iso(r.endDate),
+      endDatePrecision: precisionOf(r.endDate, r.endDatePrecision),
+      endDateQualifier: qualifierOf(r.endDate, r.endDateQualifier),
       notes: r.notes ?? null,
     };
     try {
       await prisma.relationship.upsert({
         where: { id: r.id },
-        update: { subtype: fields.subtype, startDate: fields.startDate, endDate: fields.endDate, notes: fields.notes },
+        update: {
+          subtype: fields.subtype,
+          startDate: fields.startDate,
+          startDatePrecision: fields.startDatePrecision,
+          startDateQualifier: fields.startDateQualifier,
+          endDate: fields.endDate,
+          endDatePrecision: fields.endDatePrecision,
+          endDateQualifier: fields.endDateQualifier,
+          notes: fields.notes,
+        },
         create: { id: r.id, ...fields },
       });
-    } catch (err) {
+    } catch {
       // Verstößt gegen die Eindeutigkeit (Beziehung existiert bereits unter
       // anderer ID) — überspringen statt den ganzen Import abzubrechen.
       plan.warnings.push(`Beziehung ${r.id} übersprungen: bereits vorhanden.`);
     }
   }
 
-  // Bilder: Datei in den Objektspeicher legen, Vorschau neu erzeugen.
+  // Bilder: Datei in den Medienordner legen, Vorschau neu erzeugen.
   const importedMedia = new Set<string>();
 
   for (const m of data.media) {
@@ -232,41 +340,19 @@ export const POST = route("data:import", async (ctx, req) => {
     if (!content) continue;
 
     try {
-      const uuid = randomUUID();
-      const originalKey = `originals/${uuid}.webp`;
-      const thumbnailKey = `thumbs/${uuid}.webp`;
-
-      const pipeline = sharp(content).rotate();
-      const [original, thumbnail] = await Promise.all([
-        pipeline
-          .clone()
-          .resize(2000, 2000, { fit: "inside", withoutEnlargement: true })
-          .webp({ quality: 88 })
-          .toBuffer({ resolveWithObject: true }),
-        pipeline.clone().resize(320, 320, { fit: "cover" }).webp({ quality: 75 }).toBuffer(),
-      ]);
-
-      await Promise.all([
-        putObject(originalKey, original.data, "image/webp"),
-        putObject(thumbnailKey, thumbnail, "image/webp"),
-      ]);
+      const stored = await processAndStoreImage(content, { checkFormat: false });
 
       await prisma.mediaAsset.create({
         data: {
           id: m.id,
-          storageKey: originalKey,
-          thumbnailKey,
+          ...stored,
           fileName: m.fileName,
-          mimeType: "image/webp",
-          sizeBytes: original.data.byteLength,
-          width: original.info.width,
-          height: original.info.height,
           caption: m.caption ?? null,
           uploadedById: ctx.userId,
         },
       });
       importedMedia.add(m.id);
-    } catch (err) {
+    } catch {
       plan.warnings.push(`Bild ${m.fileName} übersprungen: nicht lesbar.`);
     }
   }
@@ -307,6 +393,60 @@ export const POST = route("data:import", async (ctx, req) => {
         },
       });
     }
+  }
+
+  // Quellen und Belege zuletzt: sie verweisen auf Personen, Beziehungen und
+  // (als Scan) auf Bilder.
+  const existingMediaIds = new Set(
+    (await prisma.mediaAsset.findMany({ select: { id: true } })).map((m) => m.id),
+  );
+  for (const src of data.sources) {
+    const fields = {
+      title: src.title,
+      kind: src.kind,
+      author: src.author ?? null,
+      repository: src.repository ?? null,
+      callNumber: src.callNumber ?? null,
+      url: src.url ?? null,
+      date: iso(src.date),
+      datePrecision: precisionOf(src.date, src.datePrecision),
+      dateQualifier: qualifierOf(src.date, src.dateQualifier),
+      notes: src.notes ?? null,
+      mediaId: src.mediaId && existingMediaIds.has(src.mediaId) ? src.mediaId : null,
+    };
+    await prisma.source.upsert({
+      where: { id: src.id },
+      update: fields,
+      create: { id: src.id, ...fields, createdById: ctx.userId },
+    });
+  }
+
+  const [personsNow, relationshipsNow, sourcesNow] = await Promise.all([
+    prisma.person.findMany({ select: { id: true } }),
+    prisma.relationship.findMany({ select: { id: true, type: true } }),
+    prisma.source.findMany({ select: { id: true } }),
+  ]);
+  const personSet = new Set(personsNow.map((x) => x.id));
+  const relTypeNow = new Map(relationshipsNow.map((r) => [r.id, r.type]));
+  const sourceSet = new Set(sourcesNow.map((x) => x.id));
+  for (const c of data.citations) {
+    if (invalidCitation(c, (id) => relTypeNow.get(id))) continue;
+    if (!sourceSet.has(c.sourceId)) continue;
+    if (c.personId && !personSet.has(c.personId)) continue;
+    if (c.relationshipId && !relTypeNow.has(c.relationshipId)) continue;
+    const fields = {
+      sourceId: c.sourceId,
+      personId: c.personId ?? null,
+      relationshipId: c.relationshipId ?? null,
+      fact: c.fact,
+      detail: c.detail ?? null,
+      confidence: c.confidence ?? null,
+    };
+    await prisma.citation.upsert({
+      where: { id: c.id },
+      update: { fact: fields.fact, detail: fields.detail, confidence: fields.confidence },
+      create: { id: c.id, ...fields },
+    });
   }
 
   await audit({

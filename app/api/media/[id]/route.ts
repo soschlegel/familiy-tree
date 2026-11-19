@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
-import { route, notFound } from "@/lib/api";
+import { route, notFound, forbidden } from "@/lib/api";
 import { audit } from "@/lib/audit";
-import { getObjectStream, deleteObject } from "@/lib/storage";
+import { openObject, deleteObject } from "@/lib/storage";
 import { canViewMedia, canDeleteMedia } from "@/lib/media-scope";
 
 type Params = { id: string };
@@ -11,7 +11,7 @@ type Params = { id: string };
 export const runtime = "nodejs";
 
 /**
- * Bilder werden durch die App ausgeliefert, nicht per öffentlicher Bucket-URL.
+ * Bilder werden durch die App ausgeliefert, nie direkt aus dem Medienordner.
  * Dadurch gilt die Anmeldepflicht auch für Fotos — bei einem privaten
  * Familienarchiv ist das der Punkt.
  */
@@ -26,30 +26,57 @@ export const GET = route<Params>(null, async (ctx, req, { id }) => {
     new URL(req.url).searchParams.get("variant") === "thumb";
   const key = wantsThumb ? (asset.thumbnailKey ?? asset.storageKey) : asset.storageKey;
 
-  const body = await getObjectStream(key);
-  if (!body) {
+  // Fehlt die Datei (z.B. nach einem unvollständigen Restore), ist das ein
+  // 404 — kein Serverfehler mit Stacktrace.
+  const file = await openObject(key);
+  if (!file) {
+    console.warn("[media] Datei fehlt im Medienordner:", key);
     return NextResponse.json({ error: "Datei fehlt im Speicher" }, { status: 404 });
   }
 
-  return new Response(body, {
+  const headers = {
+    ETag: file.etag,
+    // private: Zwischenspeicher nur im Browser des angemeldeten Nutzers.
+    "Cache-Control": "private, max-age=31536000, immutable",
+  };
+
+  // Bedingte Anfrage: hat der Browser die Datei schon, reicht ein 304.
+  if (etagMatches(req.headers.get("if-none-match"), file.etag)) {
+    await file.close();
+    return new Response(null, { status: 304, headers });
+  }
+
+  return new Response(file.stream(), {
     headers: {
+      ...headers,
       "Content-Type": asset.mimeType,
-      // private: Zwischenspeicher nur im Browser des angemeldeten Nutzers.
-      "Cache-Control": "private, max-age=31536000, immutable",
+      "Content-Length": String(file.size),
     },
   });
 });
+
+/** If-None-Match mit schwachem Vergleich (RFC 9110, 13.1.2). */
+function etagMatches(header: string | null, etag: string): boolean {
+  if (!header) return false;
+  if (header.trim() === "*") return true;
+  const strip = (t: string) => t.trim().replace(/^W\//, "");
+  const wanted = strip(etag);
+  return header.split(",").some((t) => strip(t) === wanted);
+}
 
 export const DELETE = route<Params>(
   null,
   async (ctx, _req, { id }) => {
     const asset = await prisma.mediaAsset.findUnique({ where: { id } });
     if (!asset) return notFound();
-    if (!(await canDeleteMedia(ctx.scope, id))) return notFound();
+    if (!(await canViewMedia(ctx.scope, id))) return notFound();
+    if (!(await canDeleteMedia(ctx.scope, id))) {
+      return forbidden("dieses Bild zu löschen");
+    }
 
     await prisma.mediaAsset.delete({ where: { id } });
 
-    // Objektspeicher nach der DB aufräumen: schlägt das fehl, bleibt eine
+    // Dateien nach der DB aufräumen: schlägt das fehl, bleibt eine
     // verwaiste Datei zurück — das ist harmloser als ein DB-Eintrag ohne Bild.
     await Promise.all(
       [asset.storageKey, asset.thumbnailKey]

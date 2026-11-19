@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "familytree-mock": {
+      "type": "http",
+      "url": "http://localhost:3100/api/mcp",
+      "headers": {
+        "Authorization": "Bearer ${FAMILYTREE_MCP_KEY}"
+      }
+    }
+  }
+}

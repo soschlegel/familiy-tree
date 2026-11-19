@@ -76,7 +76,7 @@ export function MarriageEdge({
           } ${data?.dimmed ? "opacity-15" : "opacity-100"}`}
           title={
             data?.date
-              ? `${divorced ? "Ehe geschieden" : "Hochzeit"} am ${formatDate(data.date)} — Details ansehen`
+              ? `${divorced ? "Ehe geschieden" : "Hochzeit"} am ${formatDate(data.date, data.datePrecision, data.dateQualifier)} — Details ansehen`
               : "Ehe-Details ansehen"
           }
         >

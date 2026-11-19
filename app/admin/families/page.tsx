@@ -3,6 +3,7 @@ import { requirePage } from "@/lib/session";
 import { FamilyAdmin } from "@/components/FamilyAdmin";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Familien" };
 
 export default async function FamiliesPage() {
   await requirePage("family:manage");
@@ -22,8 +23,9 @@ export default async function FamiliesPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold">Familien und Zugriffe</h1>
-        <p className="text-sm text-stone-500">
+        <p className="eyebrow">Verwaltung</p>
+        <h1 className="page-title">Familien und Zugriffe</h1>
+        <p className="mt-1 text-sm muted">
           Personen gehören zu Familien; über die Familie entscheidet sich, wer
           sie sehen und bearbeiten darf.
         </p>

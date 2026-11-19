@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { apiFetch } from "./api-client";
+
 type Family = {
   id: string;
   name: string;
@@ -19,8 +21,7 @@ type UserRow = {
   roles: Record<string, "EDITOR" | "VIEWER">;
 };
 
-const field =
-  "rounded-lg border border-stone-300 px-2 py-1.5 text-sm dark:border-stone-700 dark:bg-stone-900";
+const field = "field";
 
 export function FamilyAdmin({
   families,
@@ -36,16 +37,20 @@ export function FamilyAdmin({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function call(url: string, init: RequestInit) {
+  const [notice, setNotice] = useState<string | null>(null);
+
+  async function call(url: string, init: RequestInit, success: string) {
+    if (busy) return false;
     setBusy(true);
     setError(null);
-    const res = await fetch(url, init);
+    setNotice(null);
+    const res = await apiFetch(url, init);
     setBusy(false);
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? `Fehler ${res.status}`);
+      setError(res.message);
       return false;
     }
+    setNotice(success);
     router.refresh();
     return true;
   }
@@ -56,7 +61,7 @@ export function FamilyAdmin({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
-    });
+    }, `Familie „${name}“ angelegt.`);
     if (ok) setName("");
   }
 
@@ -68,7 +73,7 @@ export function FamilyAdmin({
           `Personen, die danach zu keiner Familie mehr gehören, sind nur noch für Administratoren sichtbar.\n\nTrotzdem löschen?`
         : `Familie „${f.name}" löschen?`;
     if (!confirm(warning)) return;
-    await call(`/api/families/${f.id}?force=true`, { method: "DELETE" });
+    await call(`/api/families/${f.id}?force=true`, { method: "DELETE" }, `Familie „${f.name}“ gelöscht.`);
   }
 
   function setRole(
@@ -80,34 +85,48 @@ export function FamilyAdmin({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, role }),
-    });
+    }, "Zugriff gespeichert.");
   }
 
   return (
     <div className="space-y-8">
+      <div aria-live="polite" className="empty:hidden">
+        {error && (
+          <p role="alert" className="alert-error">
+            {error}
+          </p>
+        )}
+        {notice && !error && <p className="alert-success">{notice}</p>}
+      </div>
+
       {unassignedPersons > 0 && (
-        <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+        <p className="alert-warning">
           {unassignedPersons} Person(en) sind keiner Familie zugeordnet und
           damit nur für Administratoren sichtbar. Die Zuordnung erfolgt auf der
-          jeweiligen Personenseite.
+          jeweiligen Personenseite —{" "}
+          <a href="/research" className="underline">
+            Liste unter Recherche → Ohne Familie
+          </a>
+          .
         </p>
       )}
 
       <section className="space-y-3">
-        <h2 className="font-medium">Familien</h2>
+        <h2 className="section-title">Familien</h2>
 
-        <form onSubmit={createFamily} className="flex gap-2">
+        <form onSubmit={createFamily} className="flex flex-wrap items-end gap-2" aria-label="Familie anlegen">
+          <label htmlFor="new-family" className="sr-only">
+            Name der neuen Familie
+          </label>
           <input
+            id="new-family"
             required
             placeholder="Name der Familie"
-            className={`${field} w-64`}
+            className={`${field} w-full sm:w-64`}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
-          <button
-            disabled={busy}
-            className="rounded-lg bg-stone-900 px-3 py-1.5 text-sm text-white transition hover:bg-stone-700 disabled:opacity-50"
-          >
+          <button disabled={busy} className="btn-primary">
             Anlegen
           </button>
         </form>
@@ -117,20 +136,22 @@ export function FamilyAdmin({
             Noch keine Familien angelegt.
           </p>
         ) : (
-          <ul className="divide-y divide-stone-200 rounded-lg border border-stone-200 dark:divide-stone-800 dark:border-stone-800">
+          <ul className="card divide-y divide-stone-200 overflow-hidden dark:divide-stone-800">
             {families.map((f) => (
               <li
                 key={f.id}
                 className="flex items-center gap-3 px-3 py-2 text-sm"
               >
                 <span className="font-medium">{f.name}</span>
-                <span className="text-xs text-stone-500">
+                <span className="text-xs muted">
                   {f.personCount} Personen · {f.memberCount} Benutzer
                 </span>
                 <button
-                  onClick={() => removeFamily(f)}
+                  type="button"
+                  onClick={() => void removeFamily(f)}
                   disabled={busy}
-                  className="ml-auto text-xs text-red-600 hover:underline"
+                  aria-label={`Familie ${f.name} löschen`}
+                  className="btn-link-danger ml-auto"
                 >
                   löschen
                 </button>
@@ -143,20 +164,21 @@ export function FamilyAdmin({
       {families.length > 0 && (
         <section className="space-y-3">
           <div>
-            <h2 className="font-medium">Zugriffe</h2>
-            <p className="text-sm text-stone-500">
+            <h2 className="section-title">Zugriffe</h2>
+            <p className="text-sm muted">
               Je Benutzer und Familie: kein Zugriff, nur lesen, oder bearbeiten.
               Administratoren sehen und ändern grundsätzlich alles.
             </p>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="card overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="border-b border-stone-200 text-left text-stone-500 dark:border-stone-800">
+              <caption className="sr-only">Zugriffsrechte je Benutzer und Familie</caption>
+              <thead className="border-b border-stone-200 text-left text-stone-600 dark:border-stone-800 dark:text-stone-400">
                 <tr>
-                  <th className="py-2 pr-4 font-normal">Benutzer</th>
+                  <th scope="col" className="px-3 py-2 font-medium">Benutzer</th>
                   {families.map((f) => (
-                    <th key={f.id} className="px-2 py-2 font-normal">
+                    <th scope="col" key={f.id} className="whitespace-nowrap px-2 py-2 font-medium">
                       {f.name}
                     </th>
                   ))}
@@ -165,25 +187,26 @@ export function FamilyAdmin({
               <tbody className="divide-y divide-stone-200 dark:divide-stone-800">
                 {users.map((u) => (
                   <tr key={u.id}>
-                    <td className="py-2 pr-4">
+                    <th scope="row" className="whitespace-nowrap px-3 py-2 text-left font-normal">
                       {u.name ?? u.email}
                       {u.isAdmin && (
                         <span className="ml-2 rounded bg-stone-200 px-1.5 py-0.5 text-[10px] dark:bg-stone-700">
                           Admin
                         </span>
                       )}
-                    </td>
+                    </th>
                     {families.map((f) => (
                       <td key={f.id} className="px-2 py-2">
                         <select
                           className={field}
+                          aria-label={`Zugriff von ${u.name ?? u.email} auf ${f.name}`}
                           disabled={busy || u.isAdmin}
                           title={
                             u.isAdmin
                               ? "Administratoren haben ohnehin vollen Zugriff"
                               : undefined
                           }
-                          value={u.roles[f.id] ?? ""}
+                          value={u.isAdmin ? "ADMIN" : (u.roles[f.id] ?? "")}
                           onChange={(e) =>
                             setRole(
                               u.id,
@@ -194,6 +217,7 @@ export function FamilyAdmin({
                             )
                           }
                         >
+                          {u.isAdmin && <option value="ADMIN">alles (Admin)</option>}
                           <option value="">kein Zugriff</option>
                           <option value="VIEWER">lesen</option>
                           <option value="EDITOR">bearbeiten</option>
@@ -208,11 +232,6 @@ export function FamilyAdmin({
         </section>
       )}
 
-      {error && (
-        <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
-          {error}
-        </p>
-      )}
     </div>
   );
 }

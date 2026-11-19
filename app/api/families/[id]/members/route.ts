@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
-import { route, badRequest } from "@/lib/api";
+import { route, badRequest, notFound } from "@/lib/api";
 import { audit } from "@/lib/audit";
 
 type Params = { id: string };
@@ -21,6 +21,12 @@ export const POST = route<Params>(
     if (!parsed.success) return badRequest(parsed.error.issues);
 
     const { userId, role } = parsed.data;
+
+    const [family, user] = await Promise.all([
+      prisma.family.findUnique({ where: { id: familyId }, select: { id: true } }),
+      prisma.user.findUnique({ where: { id: userId }, select: { id: true } }),
+    ]);
+    if (!family || !user) return notFound();
 
     if (role === null) {
       await prisma.userFamily.deleteMany({ where: { userId, familyId } });

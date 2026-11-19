@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useId, useState } from "react";
 
 import { PersonPicker, type PickerPerson } from "./PersonPicker";
-import { MediaGallery } from "./MediaGallery";
+import { apiFetch, jsonBody } from "./api-client";
+import { DateInput } from "./DateInput";
 import { formatDate } from "@/lib/tree-layout";
+import { parseFuzzyDate, toDateInput, toFuzzyDate } from "@/lib/dates";
 
 export type RelationRow = {
   id: string;
@@ -14,9 +16,16 @@ export type RelationRow = {
   subtype: string;
   startDate: string | null;
   endDate: string | null;
+  startDatePrecision?: string;
+  startDateQualifier?: string;
+  endDatePrecision?: string;
+  endDateQualifier?: string;
   otherId: string;
   otherName: string;
-  media: { mediaId: string; caption: string | null; isPrimary: boolean }[];
+  /** Andere Seite ist für den Benutzer nicht sichtbar — kein Verweis. */
+  otherRestricted?: boolean;
+  /** Zahl der Belege an dieser Beziehung. */
+  citationCount?: number;
 };
 
 const SUBTYPE_LABEL: Record<string, string> = {
@@ -41,20 +50,18 @@ const DATE_FIELDS: Record<string, { start: string | null; end: string | null }> 
     STEP: { start: null, end: null },
   };
 
-const field =
-  "rounded border border-stone-300 px-2 py-1.5 text-sm dark:border-stone-700 dark:bg-stone-900";
+const fmt = (d: string | null, precision?: string, qualifier?: string) =>
+  d ? formatDate(d, precision, qualifier) : null;
 
-const fmt = (d: string | null) => (d ? formatDate(d) : null);
-
-/** "verheiratet seit 01.08.1984" bzw. "geschieden, 1984–2001" */
+/** "verheiratet seit 01.08.1984" bzw. "geschieden, um 1984 – 2001" */
 function describe(r: RelationRow): string {
   const base = SUBTYPE_LABEL[r.subtype] ?? r.subtype;
-  const start = fmt(r.startDate);
-  const end = fmt(r.endDate);
+  const start = fmt(r.startDate, r.startDatePrecision, r.startDateQualifier);
+  const end = fmt(r.endDate, r.endDatePrecision, r.endDateQualifier);
 
   if (start && end) return `${base}, ${start} – ${end}`;
   if (start) return `${base} seit ${start}`;
-  if (end) return `${base} seit ${end}`;
+  if (end) return `${base} bis ${end}`;
   return base;
 }
 
@@ -64,19 +71,50 @@ type PatchData = {
   endDate: string | null;
 };
 
+function Field({
+  label,
+  error,
+  children,
+}: {
+  label: string;
+  error?: string;
+  children: (id: string) => React.ReactNode;
+}) {
+  const id = useId();
+  return (
+    <div>
+      <label htmlFor={id} className="field-label">
+        {label}
+      </label>
+      {children(id)}
+      {error && <span className="field-error">{error}</span>}
+    </div>
+  );
+}
+
 /** Nachträgliche Korrektur von Art und Zeitraum einer bestehenden Beziehung. */
 function RelationDateEditor({
   relation,
   busy,
+  fields,
   onSave,
+  onCancel,
 }: {
   relation: RelationRow;
   busy: boolean;
+  fields: Record<string, string>;
   onSave: (data: PatchData) => void;
+  onCancel: () => void;
 }) {
   const [subtype, setSubtype] = useState(relation.subtype);
-  const [start, setStart] = useState(relation.startDate?.slice(0, 10) ?? "");
-  const [end, setEnd] = useState(relation.endDate?.slice(0, 10) ?? "");
+  // Eingabetext in der gespeicherten Genauigkeit („um 1950“, „03.1950“).
+  const [start, setStart] = useState(
+    toDateInput(toFuzzyDate(relation.startDate, relation.startDatePrecision, relation.startDateQualifier)),
+  );
+  const [end, setEnd] = useState(
+    toDateInput(toFuzzyDate(relation.endDate, relation.endDatePrecision, relation.endDateQualifier)),
+  );
+  const invalid = !parseFuzzyDate(start).ok || !parseFuzzyDate(end).ok;
 
   const labels = DATE_FIELDS[subtype] ?? { start: null, end: null };
   const isPartner = relation.label === "Partner";
@@ -85,82 +123,63 @@ function RelationDateEditor({
     : ["BIOLOGICAL", "ADOPTIVE", "STEP", "FOSTER"];
 
   return (
-    <div className="mt-2 flex flex-wrap items-end gap-2 border-t border-stone-200 pt-2 dark:border-stone-800">
-      <label className="block">
-        <span className="mb-1 block text-xs text-stone-500">Näheres</span>
-        <select
-          className={field}
-          value={subtype}
-          onChange={(e) => setSubtype(e.target.value)}
-        >
-          {choices.map((s) => (
-            <option key={s} value={s}>
-              {SUBTYPE_LABEL[s]}
-            </option>
-          ))}
-        </select>
-      </label>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (invalid) return;
+        onSave({
+          subtype,
+          startDate: labels.start && start ? start : null,
+          endDate: labels.end && end ? end : null,
+        });
+      }}
+      className="mt-2 flex flex-wrap items-end gap-2 border-t border-stone-200 pt-3 dark:border-stone-800"
+    >
+      <Field label="Näheres" error={fields.subtype}>
+        {(id) => (
+          <select id={id} className="field" value={subtype} onChange={(e) => setSubtype(e.target.value)}>
+            {choices.map((s) => (
+              <option key={s} value={s}>
+                {SUBTYPE_LABEL[s]}
+              </option>
+            ))}
+          </select>
+        )}
+      </Field>
 
       {labels.start && (
-        <label className="block">
-          <span className="mb-1 block text-xs text-stone-500">
-            {labels.start}
-          </span>
-          <input
-            type="date"
-            className={field}
-            value={start}
-            onChange={(e) => setStart(e.target.value)}
-          />
-        </label>
+        <DateInput compact className="w-48" label={labels.start} error={fields.startDate} value={start} onChange={setStart} />
       )}
 
       {labels.end && (
-        <label className="block">
-          <span className="mb-1 block text-xs text-stone-500">
-            {labels.end}
-          </span>
-          <input
-            type="date"
-            className={field}
-            value={end}
-            onChange={(e) => setEnd(e.target.value)}
-          />
-        </label>
+        <DateInput compact className="w-48" label={labels.end} error={fields.endDate} value={end} onChange={setEnd} />
       )}
 
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() =>
-          onSave({
-            subtype,
-            startDate: labels.start && start ? start : null,
-            endDate: labels.end && end ? end : null,
-          })
-        }
-        className="rounded bg-stone-900 px-3 py-1.5 text-sm text-white hover:bg-stone-700 disabled:opacity-50"
-      >
-        Speichern
+      <button type="submit" disabled={busy || invalid} className="btn-primary">
+        {busy ? "Speichert…" : "Speichern"}
       </button>
-    </div>
+      <button type="button" disabled={busy} onClick={onCancel} className="btn-secondary">
+        Abbrechen
+      </button>
+    </form>
   );
 }
 
+/**
+ * Beziehungen einer Person bearbeiten: vorhandene ändern oder entfernen,
+ * neue hinzufügen. Die Ansicht der Verwandten selbst steht als Karten auf der
+ * Personenseite — hier geht es nur ums Bearbeiten.
+ */
 export function RelationshipEditor({
   personId,
   relations,
   people,
   canEdit,
-  canUploadMedia,
-  canDeleteMedia,
 }: {
   personId: string;
   relations: RelationRow[];
   people: PickerPerson[];
   canEdit: boolean;
-  canUploadMedia: boolean;
-  canDeleteMedia: boolean;
 }) {
   const router = useRouter();
   const [kind, setKind] = useState<"PARENT" | "CHILD" | "PARTNER">("CHILD");
@@ -169,21 +188,11 @@ export function RelationshipEditor({
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
-
-  // Aus dem Stammbaum verlinkt: ?rel=<id> öffnet direkt die Galerie dieser
-  // Ehe, damit der Klick auf den Ehe-Marker dort landet, wo er hinzeigt.
-  const searchParams = useSearchParams();
-  const linkedRelation = searchParams.get("rel");
-  const [gallery, setGallery] = useState<string | null>(linkedRelation);
-  const sectionRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    if (!linkedRelation) return;
-    setGallery(linkedRelation);
-    sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [linkedRelation]);
+  const pickerLabel = useId();
 
   // Neu angelegte Personen sofort auswählbar machen, ohne die Seite neu zu
   // laden — sonst ginge die halbfertige Zuordnung verloren.
@@ -191,6 +200,13 @@ export function RelationshipEditor({
   const options = [...people, ...extraPeople];
 
   const dateLabels = DATE_FIELDS[subtype] ?? { start: null, end: null };
+
+  function begin() {
+    setBusy(true);
+    setError(null);
+    setFields({});
+    setNotice(null);
+  }
 
   function resetForm() {
     setOtherId("");
@@ -200,12 +216,16 @@ export function RelationshipEditor({
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
+    if (busy) return;
     if (!otherId) {
       setError("Bitte zuerst eine Person auswählen.");
       return;
     }
-    setBusy(true);
-    setError(null);
+    if (!parseFuzzyDate(startDate).ok || !parseFuzzyDate(endDate).ok) {
+      setError("Bitte das Datum prüfen.");
+      return;
+    }
+    begin();
 
     // Richtung auflösen: PARENT_OF zeigt immer vom Elternteil zum Kind.
     const body =
@@ -215,56 +235,59 @@ export function RelationshipEditor({
           ? { type: "PARENT_OF", fromPersonId: personId, toPersonId: otherId }
           : { type: "PARTNER_OF", fromPersonId: personId, toPersonId: otherId };
 
-    const res = await fetch("/api/relationships", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    const res = await apiFetch(
+      "/api/relationships",
+      jsonBody("POST", {
         ...body,
         subtype,
         startDate: dateLabels.start && startDate ? startDate : null,
         endDate: dateLabels.end && endDate ? endDate : null,
       }),
-    });
-
+    );
     setBusy(false);
 
     if (!res.ok) {
-      const payload = await res.json().catch(() => ({}));
-      setError(payload.error ?? `Fehler ${res.status}`);
+      setError(res.message);
+      setFields(res.fields);
       return;
     }
 
+    const other = options.find((p) => p.id === otherId);
+    setNotice(
+      `Beziehung zu ${other ? [other.givenName, other.familyName].filter(Boolean).join(" ") : "der Person"} hinzugefügt.`,
+    );
     resetForm();
     router.refresh();
   }
 
   async function save(id: string, data: PatchData) {
-    setBusy(true);
-    setError(null);
-
-    const res = await fetch(`/api/relationships/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-
+    if (busy) return;
+    begin();
+    const res = await apiFetch(`/api/relationships/${id}`, jsonBody("PATCH", data));
     setBusy(false);
 
     if (!res.ok) {
-      const payload = await res.json().catch(() => ({}));
-      setError(payload.error ?? `Fehler ${res.status}`);
+      setError(res.message);
+      setFields(res.fields);
       return;
     }
-
     setEditing(null);
+    setNotice("Änderung gespeichert.");
     router.refresh();
   }
 
-  async function remove(id: string) {
-    setBusy(true);
-    const res = await fetch(`/api/relationships/${id}`, { method: "DELETE" });
-    if (!res.ok) setError(`Löschen fehlgeschlagen (${res.status})`);
+  async function remove(r: RelationRow) {
+    if (busy) return;
+    const who = r.otherRestricted ? "einer nicht freigegebenen Person" : `„${r.otherName}"`;
+    if (!confirm(`Beziehung zu ${who} (${r.label}) wirklich entfernen?`)) return;
+    begin();
+    const res = await apiFetch(`/api/relationships/${r.id}`, { method: "DELETE" });
     setBusy(false);
+    if (!res.ok) {
+      setError(res.message);
+      return;
+    }
+    setNotice("Beziehung entfernt.");
     router.refresh();
   }
 
@@ -274,57 +297,55 @@ export function RelationshipEditor({
       : ["BIOLOGICAL", "ADOPTIVE", "STEP", "FOSTER"];
 
   return (
-    <section ref={sectionRef} className="space-y-3">
-      <h2 className="font-medium">Beziehungen</h2>
+    <section aria-labelledby="rel-editor-h" className="space-y-3" data-testid="relationship-editor">
+      <h3 id="rel-editor-h" className="font-serif text-base font-semibold">
+        Beziehungen
+      </h3>
 
       {relations.length === 0 ? (
-        <p className="text-sm text-stone-500">Keine Beziehungen erfasst.</p>
+        <p className="text-sm muted">Keine Beziehungen erfasst.</p>
       ) : (
-        <ul className="divide-y divide-stone-200 rounded border border-stone-200 dark:divide-stone-800 dark:border-stone-800">
+        <ul className="divide-y divide-stone-200 overflow-hidden rounded-xl border border-stone-200 bg-surface dark:divide-stone-800 dark:border-stone-800">
           {relations.map((r) => (
-            <li
-              key={r.id}
-              className={`px-3 py-2 text-sm transition-colors ${
-                r.id === linkedRelation
-                  ? "bg-amber-50 dark:bg-amber-950/30"
-                  : ""
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <span className="w-24 shrink-0 text-stone-500">{r.label}</span>
-                <Link
-                  href={`/people/${r.otherId}`}
-                  className="font-medium hover:underline"
-                >
-                  {r.otherName}
-                </Link>
-                <span className="text-xs text-stone-500">{describe(r)}</span>
-                {/* Nur Partnerschaften sind ein Ereignis mit eigenem Bild —
-                    ein Eltern-Kind-Verhältnis hat kein Datum im selben Sinn. */}
-                {r.label === "Partner" && (
-                  <button
-                    onClick={() => setGallery(gallery === r.id ? null : r.id)}
-                    className="text-xs text-stone-500 hover:underline"
-                  >
-                    {r.media.length > 0
-                      ? `${r.media.length} Bild(er)`
-                      : "Bilder"}
-                  </button>
+            <li key={r.id} className="px-3 py-2 text-sm" data-testid="relation-row">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="w-20 shrink-0 text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                  {r.label}
+                </span>
+                {r.otherRestricted ? (
+                  <span className="italic text-stone-500 dark:text-stone-400">{r.otherName}</span>
+                ) : (
+                  <Link href={`/people/${r.otherId}`} className="font-medium hover:underline">
+                    {r.otherName}
+                  </Link>
                 )}
+                <span className="text-xs muted">{describe(r)}</span>
 
                 {canEdit && (
                   <span className="ml-auto flex shrink-0 gap-3">
+                    {/* Belege zu dieser Beziehung stehen im Abschnitt „Quellen“;
+                        der Verweis öffnet dort das Formular für genau sie. */}
+                    <a href={`#beleg-${r.id}`} className="btn-link" data-testid="relation-citations-link">
+                      Belege{r.citationCount ? ` (${r.citationCount})` : ""}
+                    </a>
                     <button
-                      onClick={() => setEditing(editing === r.id ? null : r.id)}
+                      type="button"
+                      onClick={() => {
+                        setEditing(editing === r.id ? null : r.id);
+                        setFields({});
+                      }}
                       disabled={busy}
-                      className="text-xs hover:underline"
+                      aria-expanded={editing === r.id}
+                      className="btn-link"
                     >
-                      {editing === r.id ? "abbrechen" : "ändern"}
+                      ändern
                     </button>
                     <button
-                      onClick={() => remove(r.id)}
+                      type="button"
+                      onClick={() => void remove(r)}
                       disabled={busy}
-                      className="text-xs text-red-600 hover:underline"
+                      className="btn-link-danger"
+                      aria-label={`Beziehung zu ${r.otherName} entfernen`}
                     >
                       entfernen
                     </button>
@@ -336,25 +357,10 @@ export function RelationshipEditor({
                 <RelationDateEditor
                   relation={r}
                   busy={busy}
+                  fields={fields}
                   onSave={(data) => void save(r.id, data)}
+                  onCancel={() => setEditing(null)}
                 />
-              )}
-
-              {gallery === r.id && (
-                <div className="mt-2 border-t border-stone-200 pt-2 dark:border-stone-800">
-                  <MediaGallery
-                    owner={{ kind: "relationship", id: r.id }}
-                    items={r.media}
-                    canUpload={canUploadMedia}
-                    canDelete={canDeleteMedia}
-                    title={
-                      r.subtype === "MARRIED" || r.subtype === "DIVORCED"
-                        ? "Hochzeitsbilder"
-                        : "Bilder zur Beziehung"
-                    }
-                    compact
-                  />
-                </div>
               )}
             </li>
           ))}
@@ -364,94 +370,91 @@ export function RelationshipEditor({
       {canEdit && (
         <form
           onSubmit={add}
-          className="flex flex-wrap items-end gap-2 rounded border border-stone-200 p-3 dark:border-stone-800"
+          aria-label="Beziehung hinzufügen"
+          className="flex flex-wrap items-end gap-2 rounded-xl border border-dashed border-stone-300 p-3 dark:border-stone-700"
         >
-          <label className="block">
-            <span className="mb-1 block text-xs text-stone-500">Art</span>
-            <select
-              className={field}
-              value={kind}
-              onChange={(e) => {
-                const next = e.target.value as typeof kind;
-                setKind(next);
-                setSubtype(next === "PARTNER" ? "MARRIED" : "BIOLOGICAL");
-                resetForm();
-              }}
-            >
-              <option value="CHILD">Kind</option>
-              <option value="PARENT">Elternteil</option>
-              <option value="PARTNER">Partner</option>
-            </select>
-          </label>
+          <Field label="Art">
+            {(id) => (
+              <select
+                id={id}
+                className="field"
+                value={kind}
+                onChange={(e) => {
+                  const next = e.target.value as typeof kind;
+                  setKind(next);
+                  setSubtype(next === "PARTNER" ? "MARRIED" : "BIOLOGICAL");
+                  resetForm();
+                }}
+              >
+                <option value="CHILD">Kind</option>
+                <option value="PARENT">Elternteil</option>
+                <option value="PARTNER">Partner</option>
+              </select>
+            )}
+          </Field>
 
-          <label className="block">
-            <span className="mb-1 block text-xs text-stone-500">Person</span>
+          <div>
+            <span id={pickerLabel} className="field-label">
+              Person
+            </span>
             <PersonPicker
               people={options.filter((p) => p.id !== personId)}
               value={otherId}
               onChange={setOtherId}
               onCreated={(p) => setExtraPeople((prev) => [...prev, p])}
               placeholder="Suchen oder neu anlegen…"
+              labelledBy={pickerLabel}
             />
-          </label>
+          </div>
 
-          <label className="block">
-            <span className="mb-1 block text-xs text-stone-500">Näheres</span>
-            <select
-              className={field}
-              value={subtype}
-              onChange={(e) => setSubtype(e.target.value)}
-            >
-              {subtypeOptions.map((s) => (
-                <option key={s} value={s}>
-                  {SUBTYPE_LABEL[s]}
-                </option>
-              ))}
-            </select>
-          </label>
+          <Field label="Näheres" error={fields.subtype}>
+            {(id) => (
+              <select id={id} className="field" value={subtype} onChange={(e) => setSubtype(e.target.value)}>
+                {subtypeOptions.map((s) => (
+                  <option key={s} value={s}>
+                    {SUBTYPE_LABEL[s]}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
 
           {dateLabels.start && (
-            <label className="block">
-              <span className="mb-1 block text-xs text-stone-500">
-                {dateLabels.start}
-              </span>
-              <input
-                type="date"
-                className={field}
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-            </label>
+            <DateInput
+              compact
+              className="w-48"
+              label={dateLabels.start}
+              error={fields.startDate}
+              value={startDate}
+              onChange={setStartDate}
+            />
           )}
 
           {dateLabels.end && (
-            <label className="block">
-              <span className="mb-1 block text-xs text-stone-500">
-                {dateLabels.end}
-              </span>
-              <input
-                type="date"
-                className={field}
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-            </label>
+            <DateInput
+              compact
+              className="w-48"
+              label={dateLabels.end}
+              error={fields.endDate}
+              value={endDate}
+              onChange={setEndDate}
+            />
           )}
 
-          <button
-            disabled={busy}
-            className="rounded bg-stone-900 px-3 py-1.5 text-sm text-white hover:bg-stone-700 disabled:opacity-50"
-          >
-            Hinzufügen
+          <button type="submit" disabled={busy} className="btn-primary">
+            {busy ? "Speichert…" : "Hinzufügen"}
           </button>
         </form>
       )}
 
-      {error && (
-        <p className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
-          {error}
-        </p>
-      )}
+      <div aria-live="polite">
+        {error && (
+          <p role="alert" className="alert-error">
+            {error}
+          </p>
+        )}
+        {notice && !error && <p className="alert-success">{notice}</p>}
+      </div>
     </section>
   );
 }

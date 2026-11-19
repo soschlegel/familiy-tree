@@ -1,31 +1,39 @@
 #!/bin/sh
-# Sichert Datenbank und Bilder in ${DATA_ROOT}/backups.
+# Löst die Datenbanksicherung im laufenden Produktivstack aus: Dump nach
+# ${DATA_ROOT}/backups (siehe README, "Sicherung").
 #
-# Auf der NAS als geplante Aufgabe eintragen, z.B. täglich um 03:00:
-#   /volume1/docker/familytree/repo/scripts/backup.sh
+#   ./scripts/backup.sh [Stackname]      (Standard: familytree)
 #
-# Die Bilddateien liegen bereits unter ${DATA_ROOT}/minio und werden vom
-# NAS-Backup miterfasst — der mc-Mirror hier erzeugt zusätzlich eine
-# konsistente, unmittelbar lesbare Kopie ohne MinIO-interne Struktur.
+# Die eigentliche Arbeit macht der Stack-Dienst backup-db; dieses Skript
+# startet nur dessen (bereits vorhandenen) Container erneut. Es braucht
+# deshalb weder eine Repo-Kopie noch docker compose auf der NAS — im
+# Synology-Aufgabenplaner genügt derselbe Einzeiler:
+#
+#   docker start -a familytree-backup-db-1
+#
+# Die Bilder (${DATA_ROOT}/media) sind gewöhnliche Dateien und brauchen
+# keinen eigenen Schritt — sie gehören direkt in die NAS-Sicherung.
 set -eu
 
-DATA_ROOT="${DATA_ROOT:-./data}"
-STAMP="$(date +%Y-%m-%d_%H%M)"
-DEST="${DATA_ROOT}/backups"
-KEEP_DAYS="${BACKUP_KEEP_DAYS:-30}"
+PROJECT="${1:-${STACK_NAME:-familytree}}"
+SERVICE=backup-db
 
-mkdir -p "$DEST"
+id="$(docker ps -aq \
+  --filter "label=com.docker.compose.project=${PROJECT}" \
+  --filter "label=com.docker.compose.service=${SERVICE}" | head -n 1)"
 
-echo "[backup] Datenbank -> ${DEST}/db_${STAMP}.sql.gz"
-docker compose exec -T db pg_dump \
-  -U "${POSTGRES_USER:-familytree}" \
-  -d "${POSTGRES_DB:-familytree}" \
-  | gzip > "${DEST}/db_${STAMP}.sql.gz"
+if [ -z "$id" ]; then
+  echo "[backup] Kein Container für ${SERVICE} im Stack '${PROJECT}' gefunden." >&2
+  echo "[backup] Stackname prüfen (Portainer: Stacks) oder Stack einmal deployen." >&2
+  exit 1
+fi
 
-echo "[backup] Bilder -> ${DEST}/media"
-docker compose run --rm backup
-
-echo "[backup] Alte Sicherungen (> ${KEEP_DAYS} Tage) entfernen"
-find "$DEST" -name 'db_*.sql.gz' -mtime "+${KEEP_DAYS}" -delete
+echo "[backup] ${SERVICE} …"
+docker start -a "$id"
+code="$(docker inspect -f '{{.State.ExitCode}}' "$id")"
+if [ "$code" != "0" ]; then
+  echo "[backup] ${SERVICE} ist mit Code ${code} fehlgeschlagen." >&2
+  exit 1
+fi
 
 echo "[backup] Fertig."

@@ -1,136 +1,223 @@
-# Produktivstack — auch für Portainer auf der NAS geeignet.
+# Produktivstack — gedacht für Portainer auf der NAS (Git-Stack).
 #
-# Alle persistenten Daten liegen als Bind-Mounts unter einem einzigen Pfad
-# (${DATA_ROOT}). Dadurch sichert die NAS-Backupaufgabe genau ein Verzeichnis
-# und hat Datenbank, Bilder und Backups vollständig beisammen.
+# Die Images baut GitHub Actions (.github/workflows/images.yml) und legt sie
+# in der GitHub Container Registry (ghcr.io) ab; die NAS lädt sie nur noch.
+# Diese Datei bindet deshalb keine Dateien aus dem Repository ein — Portainer
+# klont das Repo in sein eigenes Datenvolume, relative Pfade wären auf dem
+# Docker-Host nicht auffindbar.
 #
-#   Lokal:     DATA_ROOT=./data
-#   NAS:       DATA_ROOT=/volume1/docker/familytree
+# Alle persistenten Daten liegen als Bind-Mounts unter EINEM Pfad
+# (${DATA_ROOT}), damit die NAS-Sicherung genau ein Verzeichnis erfasst —
+# auch die Bilder: gewöhnliche Dateien in ${DATA_ROOT}/media.
 #
-# In Portainer: Stacks -> Add stack -> Repository, und die Variablen unten
-# im Abschnitt "Environment variables" setzen.
+# Variablen: siehe stack.env.example (in Portainer unter "Environment
+# variables" eintragen). Ablauf beim Start:
+#
+#   db ─> backup-db (Sicherung) ─> migrate (Schema, Admin) ─┐
+#   media-init (Bilderordner, Rechte) ─────────────────────┴─> app
+#
+# Lokal testen ohne fertige Images: siehe docker-compose.build.yml.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
 
 services:
   db:
     image: postgres:17-alpine
     restart: unless-stopped
+    logging: *logging
+    stop_grace_period: 1m
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-familytree}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt (erzeugen mit openssl rand -hex 32)}
       POSTGRES_DB: ${POSTGRES_DB:-familytree}
       # Feste Locale, damit Sortierung nach Nachnamen reproduzierbar bleibt.
       POSTGRES_INITDB_ARGS: "--locale=C.UTF-8 --encoding=UTF8"
     volumes:
-      - ${DATA_ROOT:-./data}/postgres:/var/lib/postgresql/data
+      - ${DATA_ROOT:?DATA_ROOT fehlt (absoluter Pfad auf der NAS, z.B. /volume1/docker/familytree)}/postgres:/var/lib/postgresql/data
+    # Kein Port nach außen. KI-Assistenten (MCP) arbeiten über die App
+    # (/api/mcp mit persönlichem Schlüssel), nie direkt mit der Datenbank.
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-familytree}"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 30s
 
-  storage:
-    image: minio/minio:latest
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY:?S3_ACCESS_KEY fehlt}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?S3_SECRET_KEY fehlt}
-    volumes:
-      - ${DATA_ROOT:-./data}/minio:/data
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-  # Einmal-Job: legt den Bucket an, falls er fehlt, und beendet sich.
-  storage-init:
-    image: minio/mc:latest
-    depends_on:
-      storage:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://storage:9000 '${S3_ACCESS_KEY}' '${S3_SECRET_KEY}' &&
-      mc mb --ignore-existing local/${S3_BUCKET:-familytree} &&
-      echo 'Bucket bereit.'
-      "
+  # Einmal-Job: bereitet den Bilderordner ${DATA_ROOT}/media vor und beendet
+  # sich. Die App läuft als uid 1001 (nextjs) und legt darin originals/ und
+  # thumbs/ an. Fehlt der Ordner auf der NAS, erzeugt Docker ihn beim Mount
+  # als root — die App könnte dann nicht schreiben. Deshalb hier als root:
+  #   1. Ordner anlegen und alles, was nicht uid 1001 gehört, übereignen.
+  #      Beim ersten Start ist das der Ordner selbst, nach einer
+  #      Wiederherstellung (cp als root) die zurückkopierten Dateien, sonst
+  #      nichts — der Lauf kostet bei jedem Start praktisch nichts.
+  #      chown -h: Symlinks selbst ändern, nie ihr Ziel.
+  #   2. Schreibtest genau mit der Identität der App (1001:65533 — die
+  #      Primärgruppe von nextjs im Image ist nogroup). Scheitert er trotz
+  #      chown, liegt es an ACLs des gemeinsamen Ordners (Synology) oder an
+  #      einem Netzlaufwerk ohne chown — dann bricht der Job mit Hinweis ab,
+  #      und die App startet nicht (README, "Fehlersuche").
+  # Warum ein eigener Dienst statt chown beim App-Start: die App läuft
+  # bewusst nicht als root. postgres:17-alpine wird für db/backup-db ohnehin
+  # geladen und bringt chown, find und gosu mit — kein zusätzliches Image.
+  media-init:
+    image: postgres:17-alpine
     restart: "no"
-
-  # Nur auf Abruf (profile), nicht im normalen Stack-Start enthalten.
-  # Aufruf:  docker compose run --rm backup
-  backup:
-    image: minio/mc:latest
-    profiles: ["tools"]
+    logging: *logging
+    user: "0:0"
     volumes:
-      - ${DATA_ROOT:-./data}/backups/media:/backup/media
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://storage:9000 '${S3_ACCESS_KEY}' '${S3_SECRET_KEY}' &&
-      mc mirror --overwrite --remove local/${S3_BUCKET:-familytree} /backup/media &&
-      echo 'Medien gespiegelt.'
-      "
+      - ${DATA_ROOT}/media:/data/media
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        dir=/data/media
+        mkdir -p "$$dir"
+        find "$$dir" ! -user 1001 -exec chown -h 1001:1001 {} +
+        probe="$$dir/.schreibtest"
+        if gosu 1001:65533 sh -c 'touch "$$1" && rm -f "$$1"' sh "$$probe"; then
+          echo "[media-init] Bilderordner bereit (für uid 1001 beschreibbar)."
+        else
+          echo "[media-init] FEHLER: Die App (uid 1001) kann nicht in DATA_ROOT/media schreiben," >&2
+          echo "[media-init] obwohl der Ordner ihr gehört — vermutlich ACLs des gemeinsamen" >&2
+          echo "[media-init] Ordners. Abhilfe: README, Abschnitt Fehlersuche (Bilderordner)." >&2
+          ls -lnd "$$dir" >&2 || true
+          exit 1
+        fi
 
-  # Wendet das Schema an und legt den Admin an. Läuft einmal und beendet sich;
-  # die App startet erst danach.
-  migrate:
-    build:
-      context: .
-      target: migrator
-    image: familytree-migrate:latest
+  # Sicherung der Datenbank nach ${DATA_ROOT}/backups. Läuft bei jedem
+  # Stack-Start VOR der Migration (Sicherung vor Schemaänderung) und lässt
+  # sich jederzeit erneut auslösen:
+  #   docker start -a <stackname>-backup-db-1
+  # Die Bilder brauchen keinen eigenen Sicherungsdienst: sie liegen als
+  # Dateien in ${DATA_ROOT}/media und gehören direkt in die NAS-Sicherung.
+  backup-db:
+    image: postgres:17-alpine
     restart: "no"
+    logging: *logging
     depends_on:
       db:
         condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-familytree}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-familytree}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-30}
+    volumes:
+      - ${DATA_ROOT}/backups:/backups
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -eu -o pipefail
+        FILE="/backups/db_$$(date +%Y-%m-%d_%H%M%S).sql.gz"
+        echo "[backup] Datenbank -> $$FILE"
+        pg_dump --clean --if-exists --no-owner | gzip > "$$FILE.tmp"
+        mv "$$FILE.tmp" "$$FILE"
+        echo "[backup] Sicherungen älter als $$BACKUP_KEEP_DAYS Tage entfernen"
+        find /backups -maxdepth 1 -name 'db_*.sql.gz' -mtime "+$$BACKUP_KEEP_DAYS" -print -delete
+        echo "[backup] Datenbank gesichert."
+
+  # Wendet das Schema an und legt den Admin an. Läuft bei jedem Stack-Start
+  # einmal und beendet sich; die App startet erst danach.
+  migrate:
+    image: ${IMAGE_REPO:-ghcr.io/soschlegel/familiy-tree}-migrate:${IMAGE_TAG:-latest}
+    restart: "no"
+    logging: *logging
+    depends_on:
+      db:
+        condition: service_healthy
+      backup-db:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-familytree}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-familytree}
       INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-}
+      # Nur für Altinstallationen ohne Migrationshistorie, siehe README.
+      MIGRATE_ALLOW_DATA_LOSS: ${MIGRATE_ALLOW_DATA_LOSS:-false}
 
   app:
-    build:
-      context: .
-      target: runner
-    image: familytree:latest
+    image: ${IMAGE_REPO:-ghcr.io/soschlegel/familiy-tree}:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    logging: *logging
+    init: true
     depends_on:
       db:
         condition: service_healthy
-      storage:
-        condition: service_healthy
+      media-init:
+        condition: service_completed_successfully
       migrate:
         condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-familytree}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-familytree}
-      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET fehlt}
-      AUTH_URL: ${PUBLIC_URL:?PUBLIC_URL fehlt}
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET fehlt (erzeugen mit openssl rand -base64 32)}
+      # Genau die Adresse, die im Browser eingegeben wird — daraus entstehen
+      # die OAuth-Callback-URLs und die Cookie-Einstellungen (https → Secure).
+      AUTH_URL: ${PUBLIC_URL:?PUBLIC_URL fehlt (genau die Adresse im Browser, z.B. https://stammbaum.example.de)}
       AUTH_TRUST_HOST: "true"
       AUTH_GITHUB_ID: ${AUTH_GITHUB_ID:-}
       AUTH_GITHUB_SECRET: ${AUTH_GITHUB_SECRET:-}
       AUTH_GOOGLE_ID: ${AUTH_GOOGLE_ID:-}
       AUTH_GOOGLE_SECRET: ${AUTH_GOOGLE_SECRET:-}
       INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-}
-      S3_ENDPOINT: http://storage:9000
-      S3_BUCKET: ${S3_BUCKET:-familytree}
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
-      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      # Der Dev-Login bleibt in Produktion aus (greift dort ohnehin nicht).
+      ENABLE_DEV_LOGIN: "false"
+      # Bilder als gewöhnliche Dateien (originals/, thumbs/), benannt nach den
+      # Schlüsseln in der Datenbank — Dump + Kopie dieses Ordners ergeben
+      # zusammen eine vollständige Sicherung. /api/health meldet 503, wenn
+      # der Ordner nicht beschreibbar ist.
+      MEDIA_DIR: /data/media
       MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-15728640}
-    expose:
-      - "3000"
-
-  proxy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    depends_on:
-      - app
-    ports:
-      - "${HTTP_PORT:-80}:80"
-      - "${HTTPS_PORT:-443}:443"
-    environment:
-      # Caddy holt für diese Domain automatisch ein Let's-Encrypt-Zertifikat.
-      # Für rein lokalen Betrieb: DOMAIN=localhost -> Caddy nutzt ein
-      # selbstsigniertes Zertifikat, kein Internet nötig.
-      DOMAIN: ${DOMAIN:-localhost}
     volumes:
-      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
-      - ${DATA_ROOT:-./data}/caddy/data:/data
-      - ${DATA_ROOT:-./data}/caddy/config:/config
+      - ${DATA_ROOT}/media:/data/media
+    # Ein Port für den Reverse-Proxy der NAS. Standard: nur 127.0.0.1 — der
+    # Proxy auf der NAS selbst (Synology) erreicht ihn, sonst niemand.
+    # Läuft der Proxy in einem Container (Nginx Proxy Manager), APP_BIND auf
+    # die LAN-IP der NAS setzen.
+    ports:
+      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-3080}:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-T", "5", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 6s
+      retries: 3
+      start_period: 30s
+
+  # --- Optional: eigener Reverse-Proxy (Caddy) ------------------------------
+  # Nur für Installationen OHNE vorhandenen Proxy. Aktivieren mit der
+  # Stack-Variable COMPOSE_PROFILES=caddy. Konfiguration steht unten inline
+  # (keine Datei aus dem Repo nötig). Standard: HTTPS mit Caddys eigener
+  # Zertifizierungsstelle ("tls internal") — für das LAN geeignet, der Browser
+  # warnt, bis man Caddys Stammzertifikat importiert.
+  proxy:
+    image: caddy:2.11-alpine
+    profiles: ["caddy"]
+    restart: unless-stopped
+    logging: *logging
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "${CADDY_BIND:-0.0.0.0}:${CADDY_HTTP_PORT:-8080}:80"
+      - "${CADDY_BIND:-0.0.0.0}:${CADDY_HTTPS_PORT:-8443}:443"
+    environment:
+      CADDYFILE: |
+        ${CADDY_SITE:-localhost} {
+          tls ${CADDY_TLS:-internal}
+          encode zstd gzip
+          request_body {
+            max_size ${CADDY_MAX_BODY:-1GB}
+          }
+          reverse_proxy app:3000
+        }
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - printf '%s\n' "$$CADDYFILE" > /etc/caddy/Caddyfile && exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+    volumes:
+      - ${DATA_ROOT}/caddy/data:/data
+      - ${DATA_ROOT}/caddy/config:/config
