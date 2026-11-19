@@ -260,7 +260,7 @@ describe.skipIf(Boolean(skipReason))("GEDCOM-Import (Testdatenbank)", () => {
     const { plan, result } = await importFile({ ...v, withLena: false });
     expect(persons(plan).missing).toBe(1);
     expect(result.markedMissing).toBeGreaterThanOrEqual(1);
-    const link = await prisma.importLink.findUnique({ where: { personId: lena.id } });
+    const link = await prisma.importLink.findFirst({ where: { personId: lena.id } });
     expect(link?.missingSinceBatchId).toBe(plan.batchId);
     // Beziehungen der fehlenden Person werden nicht einzeln gelistet
     expect(plan.counts.relationships.missing).toBe(0);
@@ -417,7 +417,7 @@ describe.skipIf(Boolean(skipReason))("GEDCOM-Import (Testdatenbank)", () => {
     expect(item.suggestions?.[0].personId).toBe(manual.id);
     const r = await applyGedcomImport(admin, plan.batchId, { suggestions: { [item.ref]: { personId: manual.id, mode: "link" } } });
     expect(r.counts.persons.created).toBe(3);
-    const link = await prisma.importLink.findUnique({ where: { personId: manual.id } });
+    const link = await prisma.importLink.findFirst({ where: { personId: manual.id } });
     expect(link?.sourceTreeId).toBe(plan.sourceTreeId);
     // App-Werte behalten (Geburtsort war leer, Datei hat einen)
     expect((await prisma.person.findUnique({ where: { id: manual.id } }))!.birthPlace).toBeNull();

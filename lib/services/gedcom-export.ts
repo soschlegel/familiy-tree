@@ -265,8 +265,8 @@ export async function buildGedcomExport(scope: Scope, options: { mediaPrefix?: s
     citations: (Row & { id: string; sourceId: string; personId: string | null; relationshipId: string | null; eventId: string | null; fact: string })[];
     events: (Row & { id: string; personId: string | null; relationshipId: string | null; type: EventTypeName; isAlternative: boolean })[];
     personNames: (Row & { id: string; personId: string; type: string })[];
-    externalIds: { system: string; value: string; personId: string | null; relationshipId: string | null; eventId: string | null; sourceId: string | null; mediaId: string | null }[];
-    rawRecords: { personId: string | null; relationshipId: string | null; sourceId: string | null; recordType: string; xref: string | null; content: unknown; superseded: boolean }[];
+    externalIds: { id: string; system: string; value: string; personId: string | null; relationshipId: string | null; eventId: string | null; sourceId: string | null; mediaId: string | null }[];
+    rawRecords: { id: string; personId: string | null; relationshipId: string | null; sourceId: string | null; recordType: string; xref: string | null; content: unknown; superseded: boolean }[];
   };
   const prefix = options.mediaPrefix ?? "media/";
 
@@ -281,13 +281,45 @@ export async function buildGedcomExport(scope: Scope, options: { mediaPrefix?: s
         { citationId: { in: ids(d.citations) } },
       ],
     },
-    select: { personId: true, relationshipId: true, eventId: true, citationId: true, externalKey: true },
+    select: { personId: true, relationshipId: true, eventId: true, citationId: true, externalKey: true, sourceTreeId: true, mergedFromId: true },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
+  // Zusammengeführte Datensätze haben mehrere Links (README, „Dubletten
+  // zusammenführen“). Maßgeblich für Schlüssel, Originaldatensatz und _UID ist
+  // der ursprüngliche Link des Datensatzes (ohne mergedFromId), sonst der
+  // älteste. Die Kennungen der anderen Bäume bleiben in der App (Herkunft,
+  // Fremdkennungen, Rohdaten) und im JSON-Export erhalten.
   const keyOf = new Map<string, string>();
+  const primaryTree = new Map<string, string | null>();
+  const treesOf = new Map<string, Set<string | null>>();
+  const primaryRank = new Map<string, number>();
   for (const l of links) {
     const id = l.personId ?? l.relationshipId ?? l.eventId ?? l.citationId;
-    if (id && l.externalKey) keyOf.set(id, l.externalKey);
+    if (!id) continue;
+    treesOf.set(id, new Set([...(treesOf.get(id) ?? []), l.sourceTreeId]));
+    const rank = l.mergedFromId ? 1 : 0;
+    if (primaryRank.has(id) && primaryRank.get(id)! <= rank) continue;
+    primaryRank.set(id, rank);
+    primaryTree.set(id, l.sourceTreeId);
+    if (l.externalKey) keyOf.set(id, l.externalKey);
+    else keyOf.delete(id);
   }
+  /** Nur bei Datensätzen aus mehreren Bäumen: Lauf → Baum (für Rohdaten und _UID). */
+  const multiTree = new Set([...treesOf].filter(([, t]) => t.size > 1).map(([id]) => id));
+  const batchTree = new Map<string, string | null>();
+  if (multiTree.size) {
+    const rawIds = d.rawRecords.filter((r) => multiTree.has(r.personId ?? r.relationshipId ?? "")).map((r) => r.id);
+    const extIds = d.externalIds.filter((x) => multiTree.has(x.personId ?? x.relationshipId ?? x.eventId ?? "")).map((x) => x.id);
+    for (const r of await prisma.importRawRecord.findMany({ where: { id: { in: rawIds } }, select: { id: true, batch: { select: { sourceTreeId: true } } } })) {
+      batchTree.set(r.id, r.batch?.sourceTreeId ?? null);
+    }
+    for (const x of await prisma.externalId.findMany({ where: { id: { in: extIds } }, select: { id: true, batch: { select: { sourceTreeId: true } } } })) {
+      batchTree.set(x.id, x.batch?.sourceTreeId ?? null);
+    }
+  }
+  /** Gehört ein Rohdatensatz bzw. eine Kennung zu einem anderen als dem maßgeblichen Baum? */
+  const fromOtherTree = (carrier: string, rowId: string | undefined) =>
+    multiTree.has(carrier) && rowId !== undefined && batchTree.has(rowId) && batchTree.get(rowId) !== primaryTree.get(carrier);
 
   // Originaldatensätze (gültiger Stand) je Träger
   const rawBy = new Map<string, RawContent>();
@@ -303,6 +335,7 @@ export async function buildGedcomExport(scope: Scope, options: { mediaPrefix?: s
       (r.recordType === RAW_TYPES.person && r.personId) ||
       (r.recordType === RAW_TYPES.family && r.relationshipId) ||
       (r.recordType === RAW_TYPES.source && r.sourceId);
+    if (primaryKind && fromOtherTree(carrier, r.id)) continue;
     if (primaryKind) rawBy.set(`${r.recordType}|${carrier}`, c);
     if (r.xref && primaryKind) {
       if (xrefMap.has(r.xref) && xrefMap.get(r.xref) !== carrier) xrefAmbiguous.add(r.xref);
@@ -315,6 +348,7 @@ export async function buildGedcomExport(scope: Scope, options: { mediaPrefix?: s
   for (const x of d.externalIds) {
     const t = x.personId ?? x.relationshipId ?? x.eventId ?? x.sourceId;
     if (!t || x.mediaId) continue;
+    if (fromOtherTree(t, x.id)) continue;
     const list = extIdsOf.get(t) ?? [];
     list.push({ type: x.system, value: x.value });
     extIdsOf.set(t, list);

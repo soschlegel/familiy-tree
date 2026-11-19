@@ -39,6 +39,10 @@ Bildarchiv und rollenbasierter Benutzerverwaltung.
   Wiedererkennen bei erneutem Import, Schutz von in der App Geändertem und
   verlustfreier Aufbewahrung des Originals; Export als GEDCOM 5.5.1, auch mit
   Bildern ([GEDCOM](#gedcom-import-und-export))
+- **Dubletten zusammenführen** — doppelt erfasste Personen finden (auch
+  Ehe- gegen Geburtsname und aus verschiedenen Importen), mit einem Klick
+  zusammenführen, ohne dass etwas verloren geht; „sichere“ Paare auch
+  mehrere auf einmal ([Dubletten zusammenführen](#dubletten-zusammenführen))
 - **Benutzerverwaltung** — einladen, Rolle ändern, sperren, löschen; die
   E-Mail-Adresse eines noch nie angemeldeten Benutzers korrigieren
   ([Benutzerverwaltung](#benutzerverwaltung))
@@ -1194,6 +1198,7 @@ Das Schema liegt in `prisma/schema.prisma`, die Migrationen in
 | `0_init` | Ausgangsstand |
 | `20261116000000_ungenaue_daten_und_quellen` | Genauigkeit/Zusatz für alle Daten (Spalten mit Standardwert), Tabellen `Source` und `Citation` — rein ergänzend, keine Datenumstellung |
 | `20261117000000_ki_zugang` | KI-Zugang: `User.aiAccess` (Standard „kein Zugang“), Tabelle `ApiToken`, im `AuditLog` die Spalten `channel` und `apiTokenId` — rein ergänzend; nach dem Update hat niemand KI-Zugang, bis der Administrator ihn vergibt |
+| `20261120000000_dubletten_zusammenfuehren` | Mehrere Herkunftsangaben je Datensatz: die Unique-Indizes auf den sieben Träger-Spalten von `ImportLink` werden gewöhnliche Indizes; neue Spalten `ImportLink.mergedFromId`/`mergedAt`; Tabelle `DuplicateDismissal` — **nicht rein ergänzend** (`schema-diff-check` meldet die sieben `DROP INDEX`), aber ohne Datenänderung: aus „höchstens ein Link je Datensatz“ wird „beliebig viele“, jede bestehende Zeile erfüllt die gelockerte Regel |
 | `20261119000000_genealogie_ereignisse_import` | Lebensereignisse (`Event`), weitere Namen (`PersonName`), Importläufe, Herkunft, Fremdkennungen und Rohdaten (`ImportBatch`, `ImportLink`, `ExternalId`, `ImportRawRecord`); neue Datumszusätze und je Datum Bereichsende und Wortlaut; Rufname, Titel, Namenszusatz, Todesursache; Heirats-/Scheidungsort; Beleg an einem Ereignis; Ehestand unbekannt (`PARTNER_UNKNOWN`) — rein ergänzend (neue Enum-Werte, Spalten mit Standardwert, neue Tabellen) |
 
 Schemaänderungen künftig mit `npm run db:migrate` (`prisma migrate dev`) als
@@ -1239,6 +1244,7 @@ npx prisma migrate resolve --applied 0_init
 npx prisma migrate resolve --applied 20261116000000_ungenaue_daten_und_quellen
 npx prisma migrate resolve --applied 20261117000000_ki_zugang
 npx prisma migrate resolve --applied 20261119000000_genealogie_ereignisse_import
+npx prisma migrate resolve --applied 20261120000000_dubletten_zusammenfuehren
 ```
 
 Auf der NAS (SSH, Stack `familytree`) geht Schritt 2 mit dem App-Image
@@ -1574,8 +1580,9 @@ Ob MyHeritage, Ancestry, Gramps & Co. den Export vollständig übernehmen, ist
   Baum wird nicht zusammengeführt).
 - Eine abgelehnte Eltern-Kind-Verbindung schreibt der Export nicht zurück
   (siehe oben).
-- Personen nachträglich zusammenführen gibt es (noch) nicht; Vorschläge
-  ordnen nur beim Import zu.
+- Doppelte Personen lassen sich nachträglich zusammenführen
+  ([Dubletten zusammenführen](#dubletten-zusammenführen)); Vorschläge beim
+  Import betreffen bisher nur von Hand angelegte Personen.
 
 Dienste: [lib/services/gedcom-import.ts](lib/services/gedcom-import.ts)
 (Vorschau; Ausführen im Hintergrund über
@@ -1585,6 +1592,121 @@ Dienste: [lib/services/gedcom-import.ts](lib/services/gedcom-import.ts)
 [lib/services/gedcom-export.ts](lib/services/gedcom-export.ts), Fotos:
 [lib/services/gedcom-photos.ts](lib/services/gedcom-photos.ts) mit
 [lib/safe-fetch.ts](lib/safe-fetch.ts).
+
+## Dubletten zusammenführen
+
+Steht dieselbe Person zweimal im Archiv — von Hand doppelt erfasst, einmal
+unter dem Ehe- und einmal unter dem Geburtsnamen, oder aus zwei Importen —,
+werden beide Einträge zu einem. Die App ist dabei die eine Wahrheit; ein
+Import ist eine Quelle, aus der sie sich bedient. Bearbeiter (Recht an
+**beiden** Personen nötig) finden das unter **Recherche → Mögliche
+Dubletten** (alle Paare: `/research/duplicates`) und auf jeder Personenseite
+unter „Verwaltung“ → **Mit anderer Person zusammenführen …**.
+
+### Mögliche Dubletten
+
+Verglichen werden sichtbare Personen mit gleichem erstem Vornamen (darin nur
+gleiche oder ähnlich geschriebene Nachnamen — einige tausend Personen in
+Sekundenbruchteilen); bewertet nach Vor- und Nachname (auch Geburtsname und
+weitere Namen — „Anna Müller geb. Schmidt“ und „Anna Schmidt“ passen),
+Geburts- und Sterbedatum (auch ungenaue: „um 1760“ passt zu „12.03.1760“),
+Geburtsort und Verwandten (dieselben oder gleichnamige Eltern bzw. Partner).
+Direkt verbundene Personen (Vater und Sohn gleichen Namens) und Personen
+verschiedenen Geschlechts kommen nie in Frage. Drei Klassen:
+
+| Klasse | Bedeutung |
+|---|---|
+| **sicher** | gleicher ganzer Name, gleiches tagesgenaues Geburtsdatum, gleiches tagesgenaues Sterbedatum (oder beide ohne Tod, aber dieselben bzw. gleichnamigen Eltern/Partner) und kein Widerspruch |
+| **wahrscheinlich** | viele Übereinstimmungen, kein Widerspruch |
+| **unklar — bitte prüfen** | einzelne Übereinstimmungen oder ein Widerspruch (verschiedene Sterbedaten, verschiedene Eltern, nur der erste Vorname gleich) |
+
+**Kein Duplikat** blendet ein Paar dauerhaft aus (für alle, Tabelle
+`DuplicateDismissal`); zusammengeführte Paare verschwinden ohnehin — die
+Liste wird kürzer, je weiter man kommt. Paare der Klasse „sicher“ lassen sich
+auswählen und nach einer gemeinsamen Vorschau **in einem Rutsch**
+zusammenführen: Eltern vor Kindern, jedes Paar in einer eigenen Transaktion,
+die Klasse wird dabei neu geprüft; bleibend ist der Eintrag mit mehr Angaben.
+
+### Vergleich und Zusammenführen
+
+Der schnelle Weg: Vergleich öffnen, lesen, was geschieht, **Zusammenführen**.
+Die Vorgaben reichern an, statt zu streiten: Leeres wird aus dem anderen
+Eintrag ergänzt, von zwei vereinbaren Daten gewinnt das genauere, bei
+„Geburtsname als Nachname“ gegen „Ehename geb. …“ entsteht eine Person mit
+Ehename und Geburtsname, Notizen werden aneinandergehängt; bei echtem
+Widerspruch gilt der Wert des bleibenden Eintrags, und der andere bleibt
+erhalten — eine abweichende Geburts- oder Todesangabe als Zweitangabe
+(Ereignis mit `isAlternative`), ein anderer Name als Namensvariante, sofern
+er nicht schon im Ergebnis steckt. Nur ein abweichendes Geschlecht lässt sich
+nicht aufbewahren; das steht dann ausdrücklich in der Zusammenfassung. Wer
+will, klappt **„Angaben einzeln ansehen und wählen“** auf (beide Einträge
+nebeneinander, Abweichungen markiert, je Angabe wählbar); „Seiten tauschen“
+bestimmt, welcher Eintrag bleibt.
+
+Danach zieht alles um: Lebensereignisse, Namensvarianten, Belege, Bilder
+(ein Hauptbild, kein doppelter Verweis), Familien (Vereinigung — wer eine
+der Familien sehen darf, sieht die Person danach; die Vorschau sagt das),
+Fremdkennungen, Rohdaten und die Herkunft aus Importen. Gleiches fällt
+zusammen (gleiche Ereignisse, Belege, Namen); Beziehungen werden umgehängt,
+und zwei gleiche Beziehungen (beide Einträge mit demselben Elternteil bzw.
+Partner) werden eine — mit der genaueren Art (verheiratet vor „Ehestand
+unbekannt“, Adoption vor leiblich; wählbar), ergänzten Daten und Orten,
+abweichender Heirat/Scheidung als Zweitangabe und den Belegen und Ereignissen
+beider.
+
+**Blockiert** — mit Erklärung, schon in der Vorschau — wird, was die Regeln
+der App verletzen würde: die beiden sind miteinander verbunden; zusammen
+hätten sie mehr als zwei leibliche Eltern (dann sind meist die Eltern selbst
+doppelt — der Vergleich verlinkt das Elternpaar: erst die Eltern, dann das
+Kind); ein Zyklus (Großvater und Enkel gleichen Namens); eine Person wäre
+zugleich Partner und Elternteil; Tod vor Geburt durch die Wahl.
+
+Ausgeführt wird in **einer Transaktion**; geänderte Daten seit der Vorschau
+ergeben einen Hinweis statt einer Überraschung, doppeltes Absenden das
+gespeicherte Ergebnis. Der `AuditLog`-Eintrag (`action` „MERGE“, Person =
+bleibende) enthält beide IDs, die Wahl je Feld, die vorherigen Werte der
+bleibenden Person und die vollständigen Spalten der aufgegangenen samt IDs
+ihrer Namen, Ereignisse, Belege, Beziehungen, Rohdaten und Herkunftsangaben.
+Rückgängig per Knopf gibt es nicht; **von Hand** hieße das: die Person aus
+`diff.merged.person` neu anlegen (gleiche ID), die vorherigen Werte aus
+`diff.keepBefore` zurückschreiben, Herkunftsangaben mit `mergedFromId` =
+aufgegangene ID, ihre Rohdaten (`rawRecordIds`) und Fremdkennungen
+zurückhängen und Beziehungen, Ereignisse, Namen und Belege anhand der IDs im
+Eintrag wieder zuordnen — einfacher ist meist die Sicherung vom Vortag.
+
+### Herkunft und spätere Importe
+
+Jeder Datensatz kann mehrere Herkunftsangaben (`ImportLink`) haben — eine je
+Datensatz einer Importdatei. Beim Zusammenführen ziehen die der aufgegangenen
+Person (und ihrer Untereinträge) mit um (`mergedFromId`, `mergedAt`). So
+erkennt ein späterer Import **jeder** beteiligten Datei die Person wieder:
+nichts wird neu angelegt, nichts als „fehlt in der Datei“ gemeldet. Steht
+eine Person in **einer** Datei doppelt, trägt sie danach zwei Links dieser
+Datei; der zweite Eintrag wird ihr zugeordnet, überschreibt sie aber nie.
+
+Weicht der App-Stand eines zusammengeführten Eintrags vom letzten Stand
+einer Datei ab, weil beim Zusammenführen der andere Wert gewählt wurde, und
+bringt die Datei seitdem nichts Neues, meldet die Importvorschau ihn still
+als **unverändert** (der App-Stand bleibt) statt als „in der App geändert“.
+Hat die Datei dagegen seither etwas geändert, erscheint er wie gewohnt zur
+Entscheidung.
+
+**GEDCOM-Export einer zusammengeführten Person:** eine Person, eine `_UID` —
+die des ursprünglichen Datensatzes der bleibenden Person (Herkunftsangabe
+ohne `mergedFromId`, sonst die älteste) samt dessen Zusatz-Tags. Die
+Kennungen der anderen Importe bleiben in der App und im JSON-Export.
+
+Kein KI-Werkzeug: Zusammenführen geht nur in der Web-App;
+`find_possible_duplicates` zeigt Klasse, Gründe und Widersprüche.
+
+Dienste: [lib/services/merge.ts](lib/services/merge.ts) (Vorschau,
+Zusammenführen), [lib/merge-rules.ts](lib/merge-rules.ts) (Regeln),
+[lib/services/merge-bulk.ts](lib/services/merge-bulk.ts) (sichere Paare in
+einem Rutsch), [lib/duplicates.ts](lib/duplicates.ts) und
+[lib/services/duplicates.ts](lib/services/duplicates.ts) (Erkennung, „kein
+Duplikat“). API: `POST /api/persons/merge/preview`, `POST /api/persons/merge`,
+`POST /api/persons/merge/bulk` (mit `dryRun`), `GET /api/duplicates`,
+`POST`/`DELETE /api/duplicates/dismiss`.
 
 ## Datenmodell
 
