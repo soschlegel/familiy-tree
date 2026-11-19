@@ -1,5 +1,9 @@
 # syntax=docker/dockerfile:1
 
+# Ein einziges Image: Anwendung plus das, was sie beim Start für die
+# Datenbank braucht (Migrationen, Admin). Ablauf beim Containerstart:
+# docker/entrypoint.sh.
+
 FROM node:22-alpine AS deps
 WORKDIR /app
 RUN apk add --no-cache libc6-compat
@@ -18,34 +22,47 @@ ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholde
 RUN npx prisma generate && npm run build
 
 # ---------------------------------------------------------------------------
-# Migrator — läuft einmal beim Stack-Start und beendet sich wieder.
+# Prisma-CLI für `prisma migrate deploy` — nur das Paket `prisma` und seine
+# Abhängigkeiten (gut 30 Ordner statt der kompletten node_modules), in genau
+# den Versionen aus package-lock.json, wie `npm ci` sie in der deps-Stufe
+# installiert hat. Die Schema-Engine (Rust-Binärdatei, von `migrate deploy`
+# gebraucht) hat der postinstall von @prisma/engines dort schon für
+# linux-musl geladen.
 #
-# Bewusst ein eigenes Image mit vollständigen node_modules: der Prisma-CLI hat
-# transitive Abhängigkeiten, die sich nicht verlässlich in das schlanke
-# Runner-Image herauspicken lassen. Das Laufzeit-Image bleibt so klein.
+# Entfernt wird, was `migrate deploy`/`migrate resolve`/`db execute` nicht
+# brauchen (zusammen ~85 MB):
+#   - Query-Engine (2 Kopien): das CLI bekommt über PRISMA_QUERY_ENGINE_LIBRARY
+#     die aus dem Next-Standalone-Bundle (docker/prisma.sh). Ohne diese Variable
+#     würde das CLI versuchen, die fehlende Engine herunterzuladen.
+#   - prisma-client (Vorlage für `prisma generate`), WebAssembly-Query-Engines
+#     und -Compiler (Studio, Driver-Adapter), Quelltexte und Typdateien
+#     von effect.
+# Nach einem Prisma-Update die Prüfschritte aus der README ("Schema und
+# Migrationen") wiederholen.
 # ---------------------------------------------------------------------------
-FROM node:22-alpine AS migrator
-WORKDIR /app
-ENV NODE_ENV=production
-# Kein "Update available"-Kasten im Log; Prisma-Updates laufen über package.json.
-ENV PRISMA_HIDE_UPDATE_MESSAGE=1
-RUN apk add --no-cache libc6-compat
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/package.json ./package.json
-COPY docker/seed-admin.mjs docker/db-state.mjs docker/schema-diff-check.mjs ./docker/
-COPY docker/migrate.sh /migrate.sh
-# sed: falls das Skript unter Windows mit CRLF ausgecheckt wurde.
-RUN sed -i 's/\r$//' /migrate.sh && chmod +x /migrate.sh
-CMD ["/migrate.sh"]
+FROM node:22-alpine AS prisma-cli
+WORKDIR /src
+COPY --from=deps /app/node_modules ./node_modules
+COPY package-lock.json docker/prisma-cli-closure.mjs ./
+RUN for dir in $(node prisma-cli-closure.mjs package-lock.json); do \
+      mkdir -p "$(dirname "/opt/prisma-cli/$dir")" && cp -a "$dir" "/opt/prisma-cli/$dir"; \
+    done \
+ && cd /opt/prisma-cli/node_modules \
+ && test -x @prisma/engines/schema-engine-linux-musl-openssl-3.0.x \
+ && rm -rf @prisma/engines/libquery_engine-* prisma/libquery_engine-* \
+           prisma/prisma-client prisma/build/query_engine_bg.* prisma/build/query_compiler_bg.* \
+           effect/src \
+ && find . \( -name '*.d.ts' -o -name '*.d.ts.map' -o -name '*.d.mts' -o -name '*.d.cts' \) -delete
 
 # ---------------------------------------------------------------------------
-# Runner — nur die Anwendung, kein Migrationswerkzeug.
+# Laufzeit-Image
 # ---------------------------------------------------------------------------
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+# Prisma-CLI: kein "Update available"-Kasten, keine Telemetrie-Anfrage.
+ENV PRISMA_HIDE_UPDATE_MESSAGE=1 CHECKPOINT_DISABLE=1
 
 RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
 
@@ -64,8 +81,22 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# Schema und Migrationen (gehören root, für die App nur lesbar), Prisma-CLI,
+# Startskript. Kein `prisma generate` zur Laufzeit: der Client liegt fertig
+# im Standalone-Bundle.
+COPY prisma/schema.prisma ./prisma/schema.prisma
+COPY prisma/migrations ./prisma/migrations
+COPY --from=prisma-cli /opt/prisma-cli /opt/prisma-cli
+COPY docker/seed-admin.mjs ./docker/seed-admin.mjs
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY docker/prisma.sh /usr/local/bin/prisma
+# sed: falls die Skripte unter Windows mit CRLF ausgecheckt wurden.
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh /usr/local/bin/prisma \
+ && chmod 755 /usr/local/bin/entrypoint.sh /usr/local/bin/prisma
+
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
 
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["node", "server.js"]

@@ -48,7 +48,7 @@ Bildarchiv und rollenbasierter Benutzerverwaltung.
 | Bilder | Dateien im Medienordner (`MEDIA_DIR`), sharp |
 | Visualisierung | React Flow (Layout selbst geschrieben, `lib/layout-generations.ts`) |
 | KI-Schnittstelle | MCP (`@modelcontextprotocol/sdk`), Streamable HTTP unter `/api/mcp`, Anmeldung mit persönlichem Schlüssel |
-| Betrieb | Docker Compose (Portainer), Images aus GitHub Actions über ghcr.io |
+| Betrieb | Docker Compose (Portainer), ein App-Image aus GitHub Actions über ghcr.io |
 
 ## Lokal starten
 
@@ -740,16 +740,18 @@ bzw. über VPN**, hinter dem Reverse-Proxy, der auf der NAS ohnehin läuft
 git push (main)
    └─ GitHub Actions (.github/workflows/images.yml)
         ├─ prüft: Typen, Lint, Unit-Tests
-        ├─ baut und lädt nach ghcr.io:
-        │    ghcr.io/soschlegel/familiy-tree          (App)
-        │    ghcr.io/soschlegel/familiy-tree-migrate  (Schema + Admin)
+        ├─ baut EIN Image und lädt es nach ghcr.io (öffentliches Paket):
+        │    ghcr.io/soschlegel/familiy-tree   (App samt Migrationen)
         └─ setzt Branch "deploy" auf diesen Commit
-Portainer (beobachtet "deploy") ─ lädt die Images ─ startet den Stack neu
+Portainer (beobachtet "deploy") ─ lädt das Image ─ startet den Stack neu
 ```
 
 Auf der NAS wird nichts gebaut, und der Stack braucht keine Dateien aus dem
-Repository außer `docker-compose.yml` selbst. Die übrigen Images
-(`postgres:17-alpine`, optional `caddy`) kommen unverändert von Docker Hub.
+Repository außer `docker-compose.yml` selbst. Das App-Image wendet beim
+Start selbst die Migrationen an und stellt den Administrator sicher
+([docker/entrypoint.sh](docker/entrypoint.sh)), erst danach startet der
+Server. Die übrigen Images (`postgres:17-alpine`, optional `caddy`) kommen
+unverändert von Docker Hub.
 
 **Dienste** ([docker-compose.yml](docker-compose.yml)):
 
@@ -757,9 +759,8 @@ Repository außer `docker-compose.yml` selbst. Die übrigen Images
 |---|---|
 | `db` | PostgreSQL 17, kein Port nach außen |
 | `media-init` | legt den Bilderordner `media/` an, übergibt ihn der App (uid 1001) und prüft, dass sie schreiben kann; beendet sich |
-| `backup-db` | Datenbank-Dump nach `backups/` — bei jedem Start **vor** der Migration, und auf Abruf |
-| `migrate` | wendet Migrationen an, legt `INITIAL_ADMIN_EMAIL` als Admin an, beendet sich |
-| `app` | die Anwendung; startet erst nach erfolgreichem `media-init` und `migrate`; Bilder in `media/`; Port `127.0.0.1:3080` für den Proxy |
+| `backup-db` | Datenbank-Dump nach `backups/` — bei jedem Stack-Start **vor** dem App-Container (und damit vor der Migration), und auf Abruf |
+| `app` | startet erst nach erfolgreichem `media-init` und `backup-db`; wendet dann die Migrationen an (`prisma migrate deploy`), legt `INITIAL_ADMIN_EMAIL` als Admin an und startet den Server — schlägt das fehl, beendet sie sich, statt auf halbem Schema zu laufen. Bilder in `media/`; Port `127.0.0.1:3080` für den Proxy |
 | `proxy` | *optional* (Profil `caddy`): eigener Reverse-Proxy, falls keiner vorhanden ist |
 
 Der KI-Zugang braucht keinen eigenen Dienst und keinen zusätzlichen Port: er
@@ -814,19 +815,32 @@ Voraussetzungen: Portainer CE 2.19 oder neuer (Git-Stacks mit
 Umgebungsvariablen und Docker Compose v2), ausgehender Internetzugang der NAS
 (Images laden, OAuth-Anmeldung).
 
-1. **Images bauen lassen.** Auf `main` pushen (oder unter *Actions → Images →
+1. **Image bauen lassen.** Auf `main` pushen (oder unter *Actions → Images →
    Run workflow* von Hand starten) und warten, bis der Lauf grün ist (ca.
-   5–10 min). Danach gibt es den Branch `deploy`.
-2. **Pakete freigeben.** Neue Pakete auf ghcr.io sind privat, auch bei einem
-   öffentlichen Repository. Für beide Pakete (`familiy-tree` und
-   `familiy-tree-migrate`): GitHub → Profil →
-   *Packages* → Paket → *Package settings* → *Danger Zone* → *Change
-   visibility* → *Public* → Namen bestätigen. (Lässt sich nicht rückgängig
-   machen; die Images enthalten keine Geheimnisse.)
-   *Alternative ohne Veröffentlichung:* GitHub → Settings → Developer
-   settings → *Personal access tokens (classic)* → Token nur mit
-   `read:packages`; in Portainer *Registries → Add registry → Custom
-   registry*, URL `ghcr.io`, Benutzername `soschlegel`, Token als Passwort.
+   5–10 min). Danach gibt es den Branch `deploy` und das Paket
+   `familiy-tree` (GitHub → Profil → *Packages*).
+2. **Paket öffentlich machen (einmalig).** Neue Pakete auf ghcr.io sind
+   privat, auch bei öffentlichem Repository. GitHub → Profil → *Packages* →
+   `familiy-tree` → *Package settings* → *Danger Zone* → *Change
+   visibility* → *Public* → Paketnamen bestätigen. Das lässt sich **nicht
+   rückgängig machen** — GitHub erlaubt nicht, ein öffentliches Paket wieder
+   privat zu stellen. Unbedenklich, weil das Image nichts enthält, was nicht
+   ohnehin im öffentlichen Repository steht: gebauter Code, Schema,
+   Migrationen, Prisma-CLI; keine `.env`, keine Schlüssel (Geheimnisse
+   kommen erst zur Laufzeit über die Stack-Variablen). Danach lädt Portainer
+   das Image ohne Anmeldung; eine Registry muss dort nicht eingetragen
+   werden.
+
+   *Alternative: Paket privat halten.* Dann braucht Portainer ein Token
+   (classic) mit nur `read:packages` — *fine-grained* Tokens unterstützt die
+   Container-Registry laut GitHub-Doku nicht (geprüft November 2026) — und
+   unter *Registries → Add registry → Custom registry* einen Eintrag mit
+   *Registry URL* `ghcr.io`, *Authentication* an, GitHub-Benutzername und
+   Token als Passwort; Portainer nutzt ihn für alle `ghcr.io/…`-Images
+   (nicht auf der NAS ausprobiert). Das Token läuft ab: laufende Container
+   bleiben davon unberührt, aber jedes folgende Update scheitert am Laden
+   (`denied`/`unauthorized`) und der Stack bleibt still auf dem alten
+   Stand — Ablaufdatum in den Kalender, rechtzeitig erneuern.
 3. **Adresse festlegen.** Unter welcher Adresse die Familie den Stammbaum
    aufruft, z.B. `https://stammbaum.example.de` — das wird `PUBLIC_URL`.
    Der Name muss im Heimnetz (und im VPN) auf die NAS zeigen: lokaler
@@ -855,9 +869,12 @@ Umgebungsvariablen und Docker Compose v2), ausgehender Internetzugang der NAS
      `openssl rand -base64 32`.
      `ENABLE_DEV_LOGIN` **nicht** setzen (der Stack schaltet ihn ohnehin ab).
    - *Deploy the stack.*
-6. **Start prüfen.** *Stacks → familytree*: `media-init` und `migrate` sind
-   „exited“ mit Code 0 (Logs: `[media-init] Bilderordner bereit …` bzw.
-   `[migrate] Fertig.`); `app` steht auf „healthy“. Auf der NAS:
+6. **Start prüfen.** *Stacks → familytree*: `media-init` und `backup-db`
+   sind „exited“ mit Code 0 (Log: `[media-init] Bilderordner bereit …`);
+   `app` steht nach einigen Sekunden auf „healthy“. Im Log von `app` stehen
+   beim ersten Start „Applying migration“ für `0_init` und die beiden
+   weiteren Migrationen, `[seed-admin] … ist Administrator.` und
+   `[start] Datenbank bereit, starte die App.` Auf der NAS:
    `curl http://127.0.0.1:3080/api/health` → `{"status":"ok"}` — das prüft
    Datenbank **und** Schreibrecht auf `media/` samt `originals/` und
    `thumbs/`. `ls -lnd
@@ -989,17 +1006,17 @@ erscheint kein `proxy`-Container, liegt es daran.
 Mit den Einstellungen aus Schritt 5 läuft ein Update ohne Handgriff:
 Push auf `main` → Actions baut und prüft (ca. 5–10 min) → Branch `deploy`
 rückt nach → Portainer bemerkt das beim nächsten Abruf (≤ 5 min), lädt die
-Images neu (*Re-pull image*) und startet den Stack: `backup-db` →
-`migrate` → `app`.
+Image neu (*Re-pull image*) und startet den Stack: `backup-db` → `app`
+(Migrationen, dann Server).
 
 **Warum `deploy` statt `main`:** Würde Portainer `main` beobachten, sähe es
 den neuen Commit sofort, der Image-Build läuft dann aber noch. Portainer
 würde das alte `latest` erneut laden — und erst beim *nächsten* Commit
 nachziehen. Schlimmer: eine neue `docker-compose.yml` könnte auf Images
 treffen, die es noch nicht gibt. Der Workflow setzt `deploy` erst, wenn alle
-Images fertig sind; Compose-Datei und Images passen so immer zusammen.
+Image fertig ist; Compose-Datei und Image passen so immer zusammen.
 *Force redeployment* bleibt aus: es würde den Stack bei jedem Abruf neu
-starten — und damit jedes Mal Sicherung und Migration laufen lassen.
+starten — und damit jedes Mal eine Sicherung anlegen.
 Webhooks scheiden aus, weil GitHub die NAS nicht erreicht.
 
 **Version festhalten / zurückrollen:** Stack-Variable `IMAGE_TAG` setzen und
@@ -1020,28 +1037,39 @@ wieder auf `latest` setzen.
 **Von Hand aktualisieren:** *Stacks → familytree → Pull and redeploy*.
 
 **Was ein Neustart des Stacks tut** (lokal nachgeprüft): Hat sich das
-App-Image geändert, hält Compose die alte App **zuerst** an und startet die
-neue erst nach `media-init`, `backup-db` und `migrate` — eine Migration läuft
-also nie neben der alten App. Ohne neues Image (*Update the stack* ohne
-Änderung) laufen die drei Einmal-Jobs erneut, die App läuft dabei weiter;
-das ist harmlos, weil `migrate deploy` dann nichts einzuspielen hat (gleiches
-Migrator-Image, gleiche Migrationen). Nur wer eine **nicht
-abwärtskompatible** Migration ohne passendes neues App-Image einspielt
-(z.B. `IMAGE_TAG` nur teilweise umgestellt), sollte vorher
-`docker stop familytree-app-1` ausführen.
+App-Image geändert, hält Compose die alte App **zuerst** an, lässt dann
+`media-init` und `backup-db` laufen und startet erst danach den neuen
+App-Container, der migriert — eine Migration läuft also nie neben der alten
+App und nie ohne frische Sicherung. Ohne neues Image (*Update the stack*
+ohne Änderung) laufen die beiden Einmal-Jobs erneut, die App läuft dabei
+einfach weiter; migriert wird nichts. Startet nur der App-Container neu
+(Absturz, Neustart der NAS), prüft er die Migrationen erneut — mit
+demselben Image gibt es dann nichts einzuspielen („No pending migrations to
+apply.“, kostet 2–3 s).
+
+**Umstieg vom Zwei-Image-Stack** (Stand mit eigenem `migrate`-Dienst): Die
+Datenbank hat bereits ihre Migrationshistorie; die neue App meldet beim
+ersten Start „No pending migrations to apply.“ (lokal nachgeprüft). Der alte,
+beendete Container `familytree-migrate-1` bleibt „verwaist“ liegen (Compose
+warnt „Found orphan containers“), stört nicht und kann in Portainer unter
+*Containers* gelöscht werden.
 
 ### Fehlersuche
 
 Logs: Portainer → *Stacks → familytree* → Container → *Logs*, oder auf der
-NAS `docker logs familytree-migrate-1` (bzw. `-app-1`, `-backup-db-1`, …).
+NAS `docker logs familytree-app-1` (bzw. `-backup-db-1`, `-media-init-1`, …).
+Die Ausgabe der Migrationen steht im Log von **`app`**, vor dem Serverstart
+(Zeilen mit `[start]` und die Meldungen von Prisma).
 
 | Symptom | Ursache / Abhilfe |
 |---|---|
 | Deploy bricht ab mit „… fehlt“ | Pflichtvariable nicht gesetzt (Meldung nennt sie) |
-| „pull access denied“ / „denied“ für `ghcr.io/…` | Paket noch privat (Schritt 2) oder Workflow noch nicht gelaufen |
+| „pull access denied“ / „denied“ / „unauthorized“ für `ghcr.io/…` | Paket noch privat ([Erste Installation](#erste-installation), Schritt 2) bzw. bei privatem Paket Token falsch oder abgelaufen, oder der Workflow ist noch nie gelaufen |
 | Portainer findet `refs/heads/deploy` nicht | Workflow auf `main` noch nie erfolgreich durchgelaufen |
-| `app` startet nicht, `migrate` Exit ≠ 0 | Log von `migrate` lesen; „ABBRUCH: Die Schemaänderung ist nicht rein ergänzend“ → [Schema und Migrationen](#schema-und-migrationen) |
-| `migrate` startet nicht, `backup-db` Exit ≠ 0 | Sicherung fehlgeschlagen (Platz, Rechte auf `backups/`) — die Migration läuft absichtlich nicht ohne Sicherung |
+| `app` „restarting“, Log `[start] FEHLER: Eine Migration ist fehlgeschlagen …` | → [Fehlgeschlagene Migration](#fehlgeschlagene-migration) |
+| `app` „restarting“, Log `[start] FEHLER: Die Datenbank enthält bereits Tabellen, aber keine Migrationshistorie` | Datenbank stammt aus einer `db push`-Installation → [Schema und Migrationen](#schema-und-migrationen), Baselining |
+| `app` „restarting“, Log `[start] FEHLER: Datenbank nach 60s nicht erreichbar` | `db` läuft nicht, oder die Zugangsdaten passen nicht zur Datenbank (`POSTGRES_PASSWORD` nach der Ersteinrichtung geändert — Postgres übernimmt es nur beim allerersten Start) |
+| `app` startet nicht, `backup-db` Exit ≠ 0 | Sicherung fehlgeschlagen (Platz, Rechte auf `backups/`) — App und Migration starten absichtlich nicht ohne Sicherung |
 | `db` startet nicht: „invalid permissions“ / „Operation not permitted“ | Rechte von `postgres/` verändert (File Station/ACL). Bei Neuinstallation den leeren Ordner löschen und neu deployen; sonst per SSH `chown -R 70:70` und `chmod 700` darauf |
 | `app` startet nicht, `media-init` Exit ≠ 0, Log „FEHLER: Die App (uid 1001) kann nicht … schreiben“ | ACLs des gemeinsamen Ordners verhindern das Schreiben trotz Besitzer 1001 → [Bilderordner nicht beschreibbar](#bilderordner-nicht-beschreibbar) |
 | `app` „unhealthy“, `/api/health` → `{"status":"error"}` (503) | Datenbank nicht erreichbar **oder** `media/`, `media/originals/` bzw. `media/thumbs/` nicht beschreibbar (z.B. Rechte nachträglich in der File Station geändert, oder nach einer Wiederherstellung gehören die Unterordner root). Welches, steht in `docker logs familytree-app-1` (`[health] Medienordner: … /data/media/originals nicht beschreibbar (EACCES)`). Für `media/`: Stack neu starten (`media-init` repariert Besitzer), sonst [Bilderordner nicht beschreibbar](#bilderordner-nicht-beschreibbar) |
@@ -1052,6 +1080,52 @@ NAS `docker logs familytree-migrate-1` (bzw. `-app-1`, `-backup-db-1`, …).
 | „Anmeldung fehlgeschlagen … nicht freigeschaltet“ | E-Mail des Kontos steht nicht in der Benutzerliste (oder gesperrt); bei falscher OAuth-Konfiguration erscheint dieselbe Meldung — dann das Log von `app` lesen |
 | Upload bricht ab, 413 | Upload-Limit des Proxys (siehe Tabelle oben) |
 | Port 3080 belegt | `APP_PORT` ändern und im Proxy anpassen |
+
+#### Fehlgeschlagene Migration
+
+Scheitert `prisma migrate deploy`, beendet sich der App-Container mit
+Code 1, **bevor** der Server startet; das Log zeigt Prismas Meldung (z.B.
+`Error: P3018 … Migration name: …`, darunter der Datenbankfehler) und einen
+Block `[start] FEHLER: …`. Docker startet den Container wegen
+`restart: unless-stopped` neu, mit wachsender Pause bis etwa einer Minute
+(lokal: nach zwei Minuten 11 Versuche, danach einer pro Minute). Das ist
+gewollt billig und ungefährlich: Prisma vermerkt die Migration als
+fehlgeschlagen und spielt bei den weiteren Versuchen **nichts** mehr ein
+(`Error: P3009`), bis sie freigegeben wird. Die App ist so lange nicht
+erreichbar (der Proxy meldet 502). Wer die Schleife anhalten will:
+`docker stop familytree-app-1`.
+
+Prisma führt eine Migration in PostgreSQL als Ganzes aus; scheitert eine
+Anweisung, wird der Rest der Datei zurückgenommen (lokal nachgeprüft: eine
+im selben Skript angelegte Tabelle war danach nicht vorhanden). Vorgehen:
+
+1. App anhalten: `docker stop familytree-app-1`, Ursache im Log verstehen.
+2. Nur falls die Migration doch etwas verändert hat: die Sicherung vom
+   Stack-Start einspielen ([Wiederherstellung](#wiederherstellung), Schritte
+   1–2; sie ist der neueste Dump in `backups/`).
+3. Die Migration als zurückgenommen markieren (Name aus dem Log):
+   ```sh
+   docker run --rm --network familytree_default -e RUN_MIGRATIONS=false \
+     -e DATABASE_URL='postgresql://familytree:<POSTGRES_PASSWORD>@db:5432/familytree' \
+     ghcr.io/soschlegel/familiy-tree:latest \
+     prisma migrate resolve --rolled-back <Migrationsname>
+   ```
+4. Ein Image mit korrigierter Migration bereitstellen (Push auf `main`) —
+   oder per `IMAGE_TAG` auf das vorige Image zurückgehen — und
+   *Pull and redeploy*.
+
+#### Start ohne Migrationen (RUN_MIGRATIONS=false)
+
+Nur zur Fehlersuche: Stack-Variable `RUN_MIGRATIONS=false` setzen und den
+Stack aktualisieren. Der App-Container überspringt dann das Warten auf die
+Datenbank, `migrate deploy` und den Admin-Abgleich (Log: `[start]
+RUN_MIGRATIONS=false — … übersprungen.`) und startet sofort den Server — auf
+eigene Gefahr, wenn das Schema nicht zum Image passt. Variable danach wieder
+entfernen. Für einzelne Prisma-Befehle braucht es den Schalter im Stack
+nicht: ein Einmal-Container wie oben (`docker run … -e RUN_MIGRATIONS=false
+<image> prisma …`) führt nur den angegebenen Befehl aus, und
+`docker exec familytree-app-1 prisma migrate status` zeigt im laufenden
+Container den Stand.
 
 #### Bilderordner nicht beschreibbar
 
@@ -1093,42 +1167,35 @@ Das Schema liegt in `prisma/schema.prisma`, die Migrationen in
 | `20261119000000_genealogie_ereignisse_import` | Lebensereignisse (`Event`), weitere Namen (`PersonName`), Importläufe, Herkunft, Fremdkennungen und Rohdaten (`ImportBatch`, `ImportLink`, `ExternalId`, `ImportRawRecord`); neue Datumszusätze und je Datum Bereichsende und Wortlaut; Rufname, Titel, Namenszusatz, Todesursache; Heirats-/Scheidungsort; Beleg an einem Ereignis; Ehestand unbekannt (`PARTNER_UNKNOWN`) — rein ergänzend (neue Enum-Werte, Spalten mit Standardwert, neue Tabellen) |
 
 Schemaänderungen künftig mit `npm run db:migrate` (`prisma migrate dev`) als
-Migration anlegen und mit einchecken.
+Migration anlegen und mit einchecken. Vor dem Commit prüfen, ob sie rein
+ergänzend ist (neue Tabellen, Spalten, Indizes, Fremdschlüssel, Enum-Werte,
+Standardwerte) — alles andere kann beim Update Daten löschen oder umwandeln
+und gehört bewusst entschieden:
 
-Der `migrate`-Container ([docker/migrate.sh](docker/migrate.sh)) entscheidet
-beim Start anhand der Datenbank:
+```bash
+node docker/schema-diff-check.mjs < prisma/migrations/<name>/migration.sql
+# Exit 0: rein ergänzend; sonst Liste der kritischen Anweisungen, Exit 3
+```
 
-| Zustand | Vorgehen |
+**Im Betrieb** wendet der App-Container beim Start `prisma migrate deploy`
+an ([docker/entrypoint.sh](docker/entrypoint.sh)) — der einzige Weg, auf dem
+sich das Produktivschema ändert:
+
+| Zustand der Datenbank | Ergebnis |
 |---|---|
-| leere Datenbank (Neuinstallation) | `prisma migrate deploy` |
-| Datenbank mit Migrationshistorie | `prisma migrate deploy` |
-| bestehende Installation ohne Historie (früher per `db push` angelegt) | `prisma db push`, aber **nur bei rein ergänzenden Änderungen** — sonst Abbruch |
+| leer (Neuinstallation) | alle Migrationen werden angewendet |
+| mit Migrationshistorie | fehlende Migrationen werden angewendet, sonst „No pending migrations to apply.“ |
+| Tabellen, aber keine Historie (früher per `db push` angelegt) | **Abbruch**, nichts wird verändert, die App startet nicht; Log: `[start] FEHLER: Die Datenbank enthält bereits Tabellen, aber keine Migrationshistorie …` (Prisma-Fehler P3005) |
 
-Für den letzten Fall prüft der Container vorher den Unterschied zwischen
-Datenbank und Schema (`prisma migrate diff`, Prüfung in
-[docker/schema-diff-check.mjs](docker/schema-diff-check.mjs)). Rein
-ergänzend sind neue Tabellen, Spalten, Indizes, Fremdschlüssel,
-Enum-Werte und Standardwerte. Alles andere — Tabelle/Spalte/Typ löschen,
-Spaltentyp ändern, Umbenennen, `NOT NULL` erzwingen — bricht mit
-„ABBRUCH: Die Schemaänderung ist nicht rein ergänzend“ und der Liste der
-betroffenen SQL-Anweisungen ab; die Datenbank bleibt unverändert, die App
-startet nicht. Dann entweder auf Migrationen umstellen (Baselining, unten)
-oder — wenn der Verlust wirklich gewollt ist — einmalig die Stack-Variable
-`MIGRATE_ALLOW_DATA_LOSS=true` setzen, neu deployen und die Variable wieder
-entfernen. Die Sicherung, die `backup-db` vor jeder Migration anlegt, liegt
-dann in `${DATA_ROOT}/backups`.
+Mehrere App-Container gleichzeitig (z.B. versehentlich zwei Stacks auf
+derselben Datenbank) sind beim Migrieren unkritisch: Prisma nimmt für
+`migrate deploy` eine Sperre in PostgreSQL (Advisory Lock), der zweite wartet
+und findet danach nichts mehr einzuspielen.
 
-**Update auf ungenaue Daten und Quellen bzw. KI-Zugang:** Es ist nichts von
-Hand zu tun. Eine per `db push` angelegte Installation bekommt die neuen
-Spalten (mit Standardwerten, die den bisherigen Daten entsprechen) und die
-neuen Tabellen beim nächsten Start des `migrate`-Containers über `db push` (rein
-ergänzend, läuft also ohne Rückfrage durch); eine
-Installation mit Migrationshistorie über `migrate deploy`. Vorhandene Daten
-bleiben unverändert. Lokal genügt `npm run db:push` (bzw. `npm run
-db:migrate` bei Migrationshistorie) und ein Neustart von `npm run dev`.
-Sicherung vorher schadet trotzdem nie.
-
-Umstellen auf Migrationen (Baselining) geht einmalig so — **vorher sichern**:
+Eine Installation aus der Zeit vor den Migrationen (Datenbank per `db push`)
+gibt es im Betrieb nicht; wer trotzdem eine solche Datenbank anschließt,
+stellt sie einmalig auf Migrationen um (Baselining) — **vorher sichern**.
+Lokal mit Repo-Kopie und `DATABASE_URL`:
 
 ```bash
 # 1. Prüfen, dass die Datenbank exakt dem Schema entspricht
@@ -1144,19 +1211,20 @@ npx prisma migrate resolve --applied 20261117000000_ki_zugang
 npx prisma migrate resolve --applied 20261119000000_genealogie_ereignisse_import
 ```
 
-Auf der NAS (SSH, Stack `familytree`) in einem Einmal-Container aus dem
-Migrator-Image, darin die Befehle oben ausführen:
+Auf der NAS (SSH, Stack `familytree`) geht Schritt 2 mit dem App-Image
+(Schritt 1 braucht das volle Prisma-CLI mit Repo-Kopie und ist dort nicht
+vorgesehen):
 
 ```sh
-docker run --rm -it --network familytree_default \
+docker run --rm --network familytree_default -e RUN_MIGRATIONS=false \
   -e DATABASE_URL='postgresql://familytree:<POSTGRES_PASSWORD>@db:5432/familytree' \
-  ghcr.io/soschlegel/familiy-tree-migrate:latest sh
+  ghcr.io/soschlegel/familiy-tree:latest prisma migrate resolve --applied 0_init
+# … ebenso für die beiden anderen Migrationen
 ```
 
-Ab dann läuft dort beim Start `migrate deploy`.
-
-Lokal (`docker-compose.dev.yml`) gilt dasselbe: `npm run db:push` bleibt
-möglich; wer auf Migrationen umstellen will, baselinet wie oben.
+Danach startet die App normal. Lokal (`docker-compose.dev.yml`) bleibt
+`npm run db:push` möglich; eine so angelegte Datenbank lässt sich aber nicht
+mit dem Produktiv-Image betreiben, ohne sie wie oben zu baselinen.
 
 ## Sicherung
 
@@ -1172,7 +1240,8 @@ Eine vollständige Sicherung besteht aus genau zwei Teilen:
    läge auf demselben Datenträger und würde die NAS-Sicherung nur
    vergrößern). Gesichert wird `media/` von der NAS-Sicherung.
 
-`backup-db` läuft **bei jedem Stack-Start vor der Migration**, damit es zu
+`backup-db` läuft **bei jedem Stack-Start vor dem App-Container** (und damit
+vor dessen Migration), damit es zu
 jedem Update eine Sicherung vom Stand davor gibt (mehrere Updates am Tag
 ergeben mehrere Dumps), und zusätzlich täglich per Aufgabenplaner.
 
@@ -1240,16 +1309,15 @@ cp -a /volume1/restore/familytree/media/. /volume1/docker/familytree/media/
 
 # 4. Wieder starten — Portainer: Stacks → familytree → "Update the stack".
 #    Das lässt media-init laufen (übereignet die zurückkopierten Dateien an
-#    die App), sichert den eingespielten Stand, wendet ggf. neuere
-#    Migrationen an und startet die App. Ohne Portainer, bei gleichem
-#    Programmstand:
+#    die App), sichert den eingespielten Stand und startet die App, die ggf.
+#    neuere Migrationen anwendet. Ohne Portainer:
 #    docker start -a familytree-media-init-1 && docker start familytree-app-1
 ```
 
 Danach `curl http://127.0.0.1:3080/api/health` → `{"status":"ok"}` und
 einige Personen mit Bildern ansehen. Ist der Dump älter als der aktuelle
-Programmstand, holt `migrate` beim nächsten Stack-Start die fehlenden
-Migrationen nach.
+Programmstand, holt die App beim Start die fehlenden Migrationen nach
+(Log von `app`).
 
 ## Austauschformat
 
