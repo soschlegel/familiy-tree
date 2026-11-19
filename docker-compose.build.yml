@@ -1,6 +1,6 @@
-# Ergänzung zu docker-compose.yml: baut die Images lokal statt sie aus der
+# Ergänzung zu docker-compose.yml: baut das App-Image lokal statt es aus der
 # GitHub Container Registry zu laden. Zum Ausprobieren des Produktivstacks auf
-# dem eigenen Rechner, bevor (oder ohne dass) es Images auf ghcr.io gibt.
+# dem eigenen Rechner, bevor (oder ohne dass) es ein Image auf ghcr.io gibt.
 #
 #   docker compose -f docker-compose.yml -f docker-compose.build.yml \
 #     --env-file stack.env -p familytree-test up -d --build
@@ -8,12 +8,6 @@
 # Nicht für Portainer gedacht — dort baut die NAS nichts selbst.
 
 services:
-  migrate:
-    image: familytree-local/migrate:dev
-    build:
-      context: .
-      target: migrator
-
   app:
     image: familytree-local/app:dev
     build:

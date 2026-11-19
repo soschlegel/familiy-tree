@@ -1,7 +1,8 @@
 # Produktivstack — gedacht für Portainer auf der NAS (Git-Stack).
 #
-# Die Images baut GitHub Actions (.github/workflows/images.yml) und legt sie
-# in der GitHub Container Registry (ghcr.io) ab; die NAS lädt sie nur noch.
+# Das App-Image baut GitHub Actions (.github/workflows/images.yml) und legt es
+# als öffentliches Paket in der GitHub Container Registry (ghcr.io) ab; die NAS
+# lädt es nur noch (ohne Anmeldung; privat halten: README, Erste Installation).
 # Diese Datei bindet deshalb keine Dateien aus dem Repository ein — Portainer
 # klont das Repo in sein eigenes Datenvolume, relative Pfade wären auf dem
 # Docker-Host nicht auffindbar.
@@ -13,8 +14,11 @@
 # Variablen: siehe stack.env.example (in Portainer unter "Environment
 # variables" eintragen). Ablauf beim Start:
 #
-#   db ─> backup-db (Sicherung) ─> migrate (Schema, Admin) ─┐
-#   media-init (Bilderordner, Rechte) ─────────────────────┴─> app
+#   db ─> backup-db (Sicherung) ──────────┐
+#   media-init (Bilderordner, Rechte) ────┴─> app (Migrationen, Admin, Server)
+#
+# Die App wendet beim Start selbst die Migrationen an (docker/entrypoint.sh)
+# und startet erst danach den Server; schlägt das fehl, beendet sie sich.
 #
 # Lokal testen ohne fertige Images: siehe docker-compose.build.yml.
 
@@ -91,7 +95,8 @@ services:
         fi
 
   # Sicherung der Datenbank nach ${DATA_ROOT}/backups. Läuft bei jedem
-  # Stack-Start VOR der Migration (Sicherung vor Schemaänderung) und lässt
+  # Stack-Start, bevor der App-Container (und damit die Migration) startet —
+  # Sicherung vor Schemaänderung. Lässt
   # sich jederzeit erneut auslösen:
   #   docker start -a <stackname>-backup-db-1
   # Die Bilder brauchen keinen eigenen Sicherungsdienst: sie liegen als
@@ -124,23 +129,6 @@ services:
         find /backups -maxdepth 1 -name 'db_*.sql.gz' -mtime "+$$BACKUP_KEEP_DAYS" -print -delete
         echo "[backup] Datenbank gesichert."
 
-  # Wendet das Schema an und legt den Admin an. Läuft bei jedem Stack-Start
-  # einmal und beendet sich; die App startet erst danach.
-  migrate:
-    image: ${IMAGE_REPO:-ghcr.io/soschlegel/familiy-tree}-migrate:${IMAGE_TAG:-latest}
-    restart: "no"
-    logging: *logging
-    depends_on:
-      db:
-        condition: service_healthy
-      backup-db:
-        condition: service_completed_successfully
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-familytree}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-familytree}
-      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-}
-      # Nur für Altinstallationen ohne Migrationshistorie, siehe README.
-      MIGRATE_ALLOW_DATA_LOSS: ${MIGRATE_ALLOW_DATA_LOSS:-false}
-
   app:
     image: ${IMAGE_REPO:-ghcr.io/soschlegel/familiy-tree}:${IMAGE_TAG:-latest}
     restart: unless-stopped
@@ -151,7 +139,11 @@ services:
         condition: service_healthy
       media-init:
         condition: service_completed_successfully
-      migrate:
+      # Sicherung VOR dem Start des App-Containers, der die Migrationen
+      # anwendet. Bei einem Image-Update stoppt Compose den alten
+      # App-Container erst, nachdem die Sicherung durch ist; der neue
+      # migriert also nie neben einem noch laufenden alten.
+      backup-db:
         condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-familytree}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-familytree}
@@ -173,6 +165,9 @@ services:
       # der Ordner nicht beschreibbar ist.
       MEDIA_DIR: /data/media
       MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-15728640}
+      # Nur zur Fehlersuche: false überspringt Migrationen und Admin beim
+      # Start (README, "Fehlersuche").
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
     volumes:
       - ${DATA_ROOT}/media:/data/media
     # Ein Port für den Reverse-Proxy der NAS. Standard: nur 127.0.0.1 — der
@@ -186,7 +181,10 @@ services:
       interval: 30s
       timeout: 6s
       retries: 3
-      start_period: 30s
+      # Großzügig: Migrationen laufen vor dem Serverstart im selben
+      # Container und können auf der NAS dauern. Kostet nichts — gesund ist
+      # der Container trotzdem ab der ersten erfolgreichen Prüfung.
+      start_period: 5m
 
   # --- Optional: eigener Reverse-Proxy (Caddy) ------------------------------
   # Nur für Installationen OHNE vorhandenen Proxy. Aktivieren mit der
