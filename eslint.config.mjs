@@ -14,8 +14,11 @@ const config = [
   {
     ignores: [
       "node_modules/**",
+      // Alle Build-Ordner (.next, .next-mock, .next-buildcheck, …): ein
+      // NEXT_DIST_DIR-Testbau soll den Lint-Lauf nicht rot machen.
       ".next/**",
-      ".next-mock/**",
+      ".next-*/**",
+      "tests/.scratch/**",
       "out/**",
       "build/**",
       "data/**",

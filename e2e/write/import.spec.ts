@@ -95,7 +95,7 @@ async function chooseFile(page: Page, name: string, mimeType: string, buffer: Bu
   await page.goto("/admin/data");
   await page.getByLabel("Exportdatei (JSON oder ZIP)").setInputFiles({ name, mimeType, buffer });
   await expect(page.getByRole("button", { name: "Import ausführen" })).toBeDisabled();
-  await page.getByRole("button", { name: "Vorschau" }).click();
+  await page.getByRole("button", { name: "Vorschau", exact: true }).click();
   return page.getByRole("status").filter({ hasText: "Personen:" });
 }
 
@@ -343,7 +343,7 @@ test("kaputte Datei wird mit Meldung abgelehnt", async ({ page, consoleGuard }) 
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify({ version: 2, persons: [{ id: "x" }], relationships: [] })),
   });
-  await page.getByRole("button", { name: "Vorschau" }).click();
+  await page.getByRole("button", { name: "Vorschau", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "Datei entspricht nicht dem Austauschformat" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Import ausführen" })).toBeDisabled();
 });
