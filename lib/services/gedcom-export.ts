@@ -689,7 +689,14 @@ export async function buildGedcomZip(scope: Scope): Promise<{ buffer: Buffer; fi
     if (buf) folder.file(name, buf);
     else missing++;
   }
-  if (missing) zip.file("HINWEIS.txt", `${missing} Bilddatei(en) konnten nicht gelesen werden und fehlen in diesem Archiv.\n`);
+  if (missing) {
+    zip.file(
+      "HINWEIS.txt",
+      missing === 1
+        ? "1 Bilddatei konnte nicht gelesen werden und fehlt in diesem Archiv.\n"
+        : `${missing} Bilddateien konnten nicht gelesen werden und fehlen in diesem Archiv.\n`,
+    );
+  }
   const buffer = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions: { level: 1 } });
   return { buffer, fileName: g.fileName.replace(/\.ged$/, ".zip"), missing };
 }

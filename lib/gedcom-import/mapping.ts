@@ -956,7 +956,7 @@ export function mapGedcomDocument(doc: GedcomDocument, options: MapOptions = {})
   for (const famId of derived.singleParentFamilies) {
     const f = famById.get(famId)!;
     const parentRef = refById.get(f.partners[0]);
-    if (f.events.length) note("SINGLE_PARENT_FAMILY_EVENTS", `Familie @${f.id}@ mit einem Elternteil: ${f.events.length} Familienereignis(se) nur in den Rohdaten`, parentRef);
+    if (f.events.length) note("SINGLE_PARENT_FAMILY_EVENTS", `Familie @${f.id}@ mit einem Elternteil: ${f.events.length === 1 ? "1 Familienereignis" : `${f.events.length} Familienereignisse`} nur in den Rohdaten`, parentRef);
     out.rawRecords.push(familyRaw(f, parentRef ? { personRef: parentRef } : {}));
   }
   for (const f of doc.families) {
@@ -1028,7 +1028,7 @@ export function mapGedcomDocument(doc: GedcomDocument, options: MapOptions = {})
     if (m.id && !usedMedia.has(m.id)) out.rawRecords.push({ recordType: RAW_TYPES.media, xref: m.id, content: jsonClean({ format: RAW_FORMAT, record: m }), reason: "Medium ohne Verweis", replace: false });
   }
   if (out.counts.localMediaPaths) {
-    note("LOCAL_MEDIA_PATH", `${out.counts.localMediaPaths} Medienverweis(e) auf lokale Dateipfade — werden nie gelesen, bleiben in den Rohdaten`);
+    note("LOCAL_MEDIA_PATH", out.counts.localMediaPaths === 1 ? "1 Medienverweis auf einen lokalen Dateipfad — wird nie gelesen, bleibt in den Rohdaten" : `${out.counts.localMediaPaths} Medienverweise auf lokale Dateipfade — werden nie gelesen, bleiben in den Rohdaten`);
   }
 
   return out;

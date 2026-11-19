@@ -335,6 +335,11 @@ export const userInput = z.object({
 export const userPatch = z.object({
   role: z.enum(["ADMIN", "EDITOR", "VIEWER"]).optional(),
   status: z.enum(["INVITED", "ACTIVE", "BLOCKED"]).optional(),
+  /**
+   * Vertippte Adresse korrigieren — nur, solange sich der Benutzer noch nie
+   * angemeldet hat (prüft die Route). Kleingeschrieben wie beim Einladen.
+   */
+  email: z.string().trim().toLowerCase().email("Bitte eine gültige E-Mail-Adresse angeben").optional(),
 });
 
 // ---------------------------------------------------------------------------

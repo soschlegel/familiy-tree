@@ -1260,8 +1260,9 @@ Migrationen nach.
 - **ZIP** — dasselbe JSON plus die Bilddateien unter `media/`. Damit ist der
   Export ein vollständiges Backup und ein Umzug auf eine andere Instanz
   funktioniert wirklich.
-- **GEDCOM** (in Arbeit) — Bibliothek zum Lesen und Schreiben in
-  [lib/gedcom](lib/gedcom/README.md); eine Datei vorab prüfen mit
+- **GEDCOM** — Export als GEDCOM 5.5.1 (UTF-8), auf Wunsch als ZIP mit den
+  Bildern; Import mit Vorschau und Abgleich, siehe [GEDCOM-Import](#gedcom-import).
+  Bibliothek: [lib/gedcom](lib/gedcom/README.md); eine Datei vorab prüfen mit
   `npm run gedcom:check -- datei.ged`.
 
 Der Import zeigt zuerst eine Vorschau (wie viel neu, wie viel aktualisiert) und
@@ -1286,6 +1287,59 @@ Namenszusatz, Todesursache, Heirats- und Scheidungsort, `events`
 Importdaten) — jeweils nur für exportierte Personen, Beziehungen und Quellen.
 Importläufe und ihre Herkunftsangaben gehören zur Instanz und reisen nicht
 mit. Dateien der Versionen 1 und 2 lassen sich weiter unverändert importieren.
+
+### GEDCOM-Import
+
+Nur für Administratoren, auf `/admin/data`. Ablauf: Datei (`.ged` oder
+`.zip` mit einer `.ged`) hochladen → Vorschau → bestätigen → Ergebnis. Die
+Vorschau ändert nichts außer dem Importlauf selbst (Originaldatei wird
+aufbewahrt); sie lässt den echten Massenimport probeweise laufen, zeigt also
+genau, was passieren würde. Ein erneuter Import desselben Baums ist der
+Normalfall:
+
+- **Welcher Baum?** Aus dem Dateikopf (MyHeritage `_PROJECT_GUID`, sonst
+  Site-ID), sonst über übereinstimmende `_UID`; der Administrator kann
+  „Aktualisierung von …“ oder „neuer, unabhängiger Baum“ wählen. Abgeglichen
+  wird nur innerhalb dieses Baums.
+- **Wiedererkennen**: Herkunft (`ImportLink`: `_UID`, sonst RIN, sonst Xref;
+  Ereignisse über eigene `_UID` bzw. Art und Nummer), dann Fremdkennung
+  `_UID` (nur, wenn der Datensatz keinem anderen Baum gehört), Beziehungen
+  über das Personenpaar, Quellen ohne Kennung über Xref + Titel bzw. Titel +
+  Verfasser (umnummerierte Quellen). Ähnliche, von Hand angelegte Personen
+  sind nur **Vorschläge** — zugeordnet wird erst nach Bestätigung.
+- **Gruppen** je Art: neu · in der Datei geändert (mit Feldern) · in der App
+  geändert (Standard: App-Version behalten, einzeln oder für alle umstellbar)
+  · fehlt in der Datei (Standard: behalten und markieren; löschen nur
+  ausdrücklich, über die normalen Dienste) · nicht übernehmbar (mit Grund,
+  z.B. dritter leiblicher Elternteil) · schon vorhanden · unverändert.
+- **Familienzuordnung** neuer Personen in der Vorschau wählen (keine, vorhandene
+  Familien, neue Familie); als privat markierte Personen bleiben auf Wunsch
+  ohne Familie. Vorhandene Personen behalten ihre Zuordnung.
+- **Namen**: `familyName` ist der heutige Name — bei MyHeritage `_MARNM`,
+  sonst ein NAME mit TYPE married —, `birthName` der Geburtsname. Paare ohne
+  Heirat: „Ehestand unbekannt“. Unplausible Daten (vor 1000, Zukunft, Tod vor
+  Geburt) kommen nur als Wortlaut, damit die Person nicht ausfällt.
+- **Nichts geht verloren**: Jeder Personen-, Familien- und Quellendatensatz
+  wird zusätzlich unverändert als Rohdaten am Träger abgelegt; der
+  GEDCOM-Export schreibt daraus zurück, was die App nicht abbildet (fremde
+  Tags, Koordinaten, Fotoverweise …). Ein zweiter Import desselben Stands
+  schreibt keine neuen Rohdaten.
+- **Fotos** (Verweise auf Anbieter-Server) nur auf ausdrücklichen Wunsch
+  herunterladen — https, nur öffentliche Adressen (auch nach
+  Weiterleitungen), Verbindung genau zur geprüften Adresse, Größen-, Art- und
+  Zeitgrenzen, Prüfung durch sharp; jede Adresse steht im Lauf. Lokale
+  Dateipfade werden nie gelesen.
+- Große Dateien: Das Ausführen läuft im Hintergrund (Stand wird abgefragt) —
+  5 000 Personen brauchen etwa 25 s, eine Datei mit 500 Personen wenige
+  Sekunden.
+- **Importe** (Verlauf): Läufe mit Ergebnis, Originaldatei zum Herunterladen,
+  überholte Rohdaten entfernen.
+
+Dienste: [lib/services/gedcom-import.ts](lib/services/gedcom-import.ts),
+Abbildung: [lib/gedcom-import/mapping.ts](lib/gedcom-import/mapping.ts),
+Export: [lib/services/gedcom-export.ts](lib/services/gedcom-export.ts).
+Dass MyHeritage, Gramps oder Ancestry den Export vollständig übernehmen, ist
+nicht ausprobiert.
 
 ## Datenmodell
 

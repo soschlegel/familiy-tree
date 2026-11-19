@@ -6,7 +6,7 @@ import { z } from "zod";
 import { prisma } from "../prisma";
 import type { Scope } from "../scope";
 import { audit, auditActor } from "../audit";
-import { getObjectBuffer, putObject } from "../storage";
+import { deleteObject, getObjectBuffer, putObject } from "../storage";
 import { EVENT_TYPE_LABEL, PERSON_NAME_TYPE_LABEL, type EventTypeName, type PersonNameTypeName } from "../events";
 import { diagnoseGedcom, parseGedcom, verifyLossless, type GedcomHeader, type ParseResultWithTrace } from "../gedcom";
 import {
@@ -26,6 +26,7 @@ import { deletePersonName } from "./names";
 import { deletePerson } from "./persons";
 import { deleteRelationship } from "./relationships";
 import { downloadImportPhotos, type PhotoDownloadReport } from "./gedcom-photos";
+import type { SafeFetchOptions } from "../safe-fetch";
 
 /**
  * GEDCOM-Import mit Vorschau und Abgleich bei erneutem Import. Nur
@@ -798,6 +799,8 @@ export async function startGedcomImport(
     },
     file.bytes,
   );
+  // Ältere, nie ausgeführte Vorschau derselben Datei und alte Vorschauen verwerfen
+  await discardStalePreviews(scope, { fileSha256: batch.fileSha256, exceptId: batch.id });
   try {
     const plan = await computePlan(scope, batch, bytes, choice);
     await savePlan(plan);
@@ -877,7 +880,13 @@ export type GedcomApplyResult = {
   photos: PhotoDownloadReport | null;
 };
 
-export async function applyGedcomImport(scope: Scope, batchId: string, decisionsInput: unknown): Promise<GedcomApplyResult> {
+export async function applyGedcomImport(
+  scope: Scope,
+  batchId: string,
+  decisionsInput: unknown,
+  /** Nur für Tests: Namensauflösung/Verbindung der Foto-Abrufe ersetzen. */
+  internal: { photoFetch?: SafeFetchOptions } = {},
+): Promise<GedcomApplyResult> {
   assertAdmin(scope);
   const started = performance.now();
   const decisions = parseOrThrow(applyDecisionsSchema.safeParse(decisionsInput ?? {}));
@@ -1010,7 +1019,7 @@ export async function applyGedcomImport(scope: Scope, batchId: string, decisions
       const id = r.ids.persons[p.personRef];
       if (id) personIds.set(p.personRef, id);
     }
-    photos = await downloadImportPhotos(scope, { batchId, sourceTreeId, photos: mapped.photos, personIds });
+    photos = await downloadImportPhotos(scope, { batchId, sourceTreeId, photos: mapped.photos, personIds, fetchOptions: internal.photoFetch });
   }
 
   const result: GedcomApplyResult = {
@@ -1131,6 +1140,7 @@ export type ImportHistoryEntry = {
 
 export async function listImportHistory(scope: Scope, limit = 50): Promise<ImportHistoryEntry[]> {
   assertAdmin(scope);
+  await discardStalePreviews(scope, {});
   const rows = await prisma.importBatch.findMany({
     orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     take: Math.max(1, Math.min(200, limit)),
@@ -1173,3 +1183,64 @@ export async function listImportHistory(scope: Scope, limit = 50): Promise<Impor
   });
 }
 
+
+// ---------------------------------------------------------------------------
+// Nicht ausgeführte Vorschauen
+// ---------------------------------------------------------------------------
+
+/** Unausgeführte GEDCOM-Vorschauen werden nach so vielen Tagen verworfen. */
+export const PREVIEW_MAX_AGE_DAYS = 7;
+
+const jobRunning = (batchId: string) =>
+  (globalThis as unknown as { __gedcomJobs?: Map<string, { state: string }> }).__gedcomJobs?.get(batchId)?.state === "running";
+
+/**
+ * Eine nie ausgeführte Vorschau verwerfen: Lauf, Plan und die aufbewahrte
+ * Kopie der Datei (sie enthält personenbezogene Daten). Ausgeführte Läufe
+ * (und ihre Originaldatei) werden nie angefasst.
+ */
+export async function discardGedcomPreview(scope: Scope, batchId: string): Promise<{ ok: true }> {
+  assertAdmin(scope);
+  const b = await prisma.importBatch.findUnique({ where: { id: batchId } });
+  if (!b || b.format !== "GEDCOM") throw notFoundError("Importlauf");
+  if (b.status === "COMPLETED") throw conflictError("Ein ausgeführter Import lässt sich nicht verwerfen");
+  if (jobRunning(batchId)) throw conflictError("Der Import läuft gerade");
+  await removePreview(b.id, b.storageKey);
+  await audit({ ...auditActor(scope), action: "DELETE", entityType: "ImportBatch", entityId: batchId, diff: { discardedPreview: true } });
+  return { ok: true };
+}
+
+async function removePreview(id: string, storageKey: string | null) {
+  // Nur Läufe ohne jede Spur in den Daten (eine Vorschau schreibt keine)
+  const used =
+    (await prisma.importLink.count({ where: { OR: [{ firstBatchId: id }, { lastBatchId: id }] } })) +
+    (await prisma.importRawRecord.count({ where: { batchId: id } })) +
+    (await prisma.externalId.count({ where: { batchId: id } }));
+  if (used > 0) return;
+  const r = await prisma.importBatch.deleteMany({ where: { id, status: { not: "COMPLETED" } } });
+  if (r.count === 0) return;
+  await deleteObject(planKey(id)).catch(() => {});
+  if (storageKey) await deleteObject(storageKey).catch(() => {});
+}
+
+/** Vorschauen derselben Datei (außer der neuen) und alle älter als PREVIEW_MAX_AGE_DAYS verwerfen. */
+export async function discardStalePreviews(scope: Scope, opts: { fileSha256?: string; exceptId?: string; now?: Date }): Promise<number> {
+  assertAdmin(scope);
+  const cutoff = new Date((opts.now ?? new Date()).getTime() - PREVIEW_MAX_AGE_DAYS * 86_400_000);
+  const rows = await prisma.importBatch.findMany({
+    where: {
+      format: "GEDCOM",
+      status: { not: "COMPLETED" },
+      ...(opts.exceptId ? { id: { not: opts.exceptId } } : {}),
+      OR: [{ createdAt: { lt: cutoff } }, ...(opts.fileSha256 ? [{ fileSha256: opts.fileSha256 }] : [])],
+    },
+    select: { id: true, storageKey: true },
+  });
+  let n = 0;
+  for (const b of rows) {
+    if (jobRunning(b.id)) continue;
+    await removePreview(b.id, b.storageKey);
+    n++;
+  }
+  return n;
+}

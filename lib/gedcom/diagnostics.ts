@@ -271,7 +271,7 @@ export function diagnoseGedcom(doc: GedcomDocument): GedcomDiagnostic[] {
     out.push({
       code: "PERSON_WITHOUT_NAME",
       severity: "info",
-      message: `${nameless.length} Person(en) ohne Namen.`,
+      message: `${nameless.length} ${nameless.length === 1 ? "Person" : "Personen"} ohne Namen.`,
       personIds: nameless.map((p) => p.id),
     });
   }
@@ -280,7 +280,7 @@ export function diagnoseGedcom(doc: GedcomDocument): GedcomDiagnostic[] {
     out.push({
       code: "PRIVACY_MARKED",
       severity: "info",
-      message: `${priv.length} Person(en) mit Privatsphäre-Markierung (RESN, Platzhaltername o.ä.) — beim Import entscheiden, wie damit umgegangen wird.`,
+      message: `${priv.length} ${priv.length === 1 ? "Person" : "Personen"} mit Privatsphäre-Markierung (RESN, Platzhaltername o.ä.) — beim Import entscheiden, wie damit umgegangen wird.`,
       personIds: priv.map((p) => p.id),
     });
   }
