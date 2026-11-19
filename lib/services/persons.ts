@@ -4,6 +4,7 @@ import { prisma } from "../prisma";
 import { audit, auditActor } from "../audit";
 import {
   canEditPerson,
+  canEditRelationshipBetween,
   canViewPerson,
   editableFamilyIds,
   familyIdsOfPerson,
@@ -17,7 +18,16 @@ import {
   personPatch,
 } from "../validation";
 import { buildGraphIndex, siblingsOf } from "../graph";
-import { fuzzyColumns, fuzzyField, type DatePrecision, type DateQualifier, type FuzzyDate } from "../dates";
+import {
+  fuzzyColumns,
+  fuzzyField,
+  phraseAfterUpdate,
+  type DatePrecision,
+  type DateQualifier,
+  type FuzzyDate,
+} from "../dates";
+import { loadEventsFor, toEventDto, type EventDto } from "./events";
+import { toPersonNameDto, type PersonNameDto } from "./names";
 import {
   forbiddenError,
   notFoundError,
@@ -42,7 +52,10 @@ import {
 export type PersonSort = "name" | "birthDate" | "birthDateDesc" | "updatedAt";
 
 export type SearchPersonsOptions = {
-  /** Freitext; jedes Wort muss in Vor-, Nach- oder Geburtsname vorkommen. */
+  /**
+   * Freitext; jedes Wort muss in Vor-, Nach-, Geburts- oder Rufname bzw. in
+   * einem weiteren Namen (PersonName) vorkommen.
+   */
   q?: string;
   /** Nur Personen dieser Familie (fremde Familien liefern eine leere Liste). */
   familyId?: string;
@@ -54,7 +67,11 @@ export type SearchPersonsOptions = {
   bornFrom?: number;
   /** Geburtsjahr bis (einschließlich). */
   bornTo?: number;
-  /** Teilstring von Geburts- oder Sterbeort (ohne Groß-/Kleinschreibung). */
+  /**
+   * Teilstring eines Orts der Person (ohne Groß-/Kleinschreibung): Geburts-
+   * oder Sterbeort, Ort eines ihrer Ereignisse, Ort einer ihrer Heiraten bzw.
+   * Scheidungen oder eines Ereignisses ihrer Beziehungen.
+   */
   place?: string;
   gender?: "MALE" | "FEMALE" | "OTHER" | "UNKNOWN";
   /** true: nur mit Sterbedatum, false: nur ohne. */
@@ -86,6 +103,18 @@ function searchWhere(
         { givenName: { contains: word, mode: "insensitive" } },
         { familyName: { contains: word, mode: "insensitive" } },
         { birthName: { contains: word, mode: "insensitive" } },
+        { nickname: { contains: word, mode: "insensitive" } },
+        {
+          names: {
+            some: {
+              OR: [
+                { givenName: { contains: word, mode: "insensitive" } },
+                { familyName: { contains: word, mode: "insensitive" } },
+                { nickname: { contains: word, mode: "insensitive" } },
+              ],
+            },
+          },
+        },
       ],
     });
   }
@@ -113,10 +142,17 @@ function searchWhere(
 
   const placeText = place?.trim();
   if (placeText) {
+    const like = { contains: placeText, mode: "insensitive" as const };
+    const relationPlace: Prisma.RelationshipWhereInput = {
+      OR: [{ startPlace: like }, { endPlace: like }, { events: { some: { place: like } } }],
+    };
     and.push({
       OR: [
-        { birthPlace: { contains: placeText, mode: "insensitive" } },
-        { deathPlace: { contains: placeText, mode: "insensitive" } },
+        { birthPlace: like },
+        { deathPlace: like },
+        { events: { some: { place: like } } },
+        { relationsFrom: { some: relationPlace } },
+        { relationsTo: { some: relationPlace } },
       ],
     });
   }
@@ -202,10 +238,20 @@ export type PersonRelation = {
   endDate: string | null;
   endDatePrecision: DatePrecision;
   endDateQualifier: DateQualifier;
+  startDateTo: string | null;
+  startDateToPrecision: DatePrecision;
+  startDatePhrase: string | null;
+  startPlace: string | null;
+  endDateTo: string | null;
+  endDateToPrecision: DatePrecision;
+  endDatePhrase: string | null;
+  endPlace: string | null;
   notes: string | null;
   other: PersonRef;
   /** Bilder zu dieser Beziehung (z.B. Hochzeitsfotos). */
   media: RelationMedia[];
+  /** Ereignisse der Beziehung (Verlobung, Aufgebot, abweichende Heiratsangabe …). */
+  events: EventDto[];
 };
 
 export type PersonSibling = {
@@ -235,6 +281,10 @@ export type PersonDetail = {
   siblings: PersonSibling[];
   /** Belege zur Person und zu ihren Beziehungen (siehe sources.ts). */
   citations: PersonCitation[];
+  /** Lebensereignisse der Person (ohne die ihrer Beziehungen), sortiert. */
+  events: EventDto[];
+  /** Weitere Namen. */
+  names: PersonNameDto[];
 };
 
 /**
@@ -260,6 +310,10 @@ export async function getPersonDetail(
     birthDateQualifier: true,
     deathDatePrecision: true,
     deathDateQualifier: true,
+    birthDateTo: true,
+    birthDateToPrecision: true,
+    deathDateTo: true,
+    deathDateToPrecision: true,
     families: { select: { familyId: true } },
   } as const;
   const relMedia = {
@@ -319,9 +373,18 @@ export async function getPersonDetail(
       endDate: iso(r.endDate),
       endDatePrecision: r.endDatePrecision,
       endDateQualifier: r.endDateQualifier,
+      startDateTo: iso(r.startDateTo),
+      startDateToPrecision: r.startDateToPrecision,
+      startDatePhrase: r.startDatePhrase,
+      startPlace: r.startPlace,
+      endDateTo: iso(r.endDateTo),
+      endDateToPrecision: r.endDateToPrecision,
+      endDatePhrase: r.endDatePhrase,
+      endPlace: r.endPlace,
       notes: r.notes,
       other: ref(r.toPerson),
       media: mediaOf(r.media),
+      events: [] as EventDto[],
     })),
     ...person.relationsTo.map((r) => ({
       relationshipId: r.id,
@@ -334,9 +397,18 @@ export async function getPersonDetail(
       endDate: iso(r.endDate),
       endDatePrecision: r.endDatePrecision,
       endDateQualifier: r.endDateQualifier,
+      startDateTo: iso(r.startDateTo),
+      startDateToPrecision: r.startDateToPrecision,
+      startDatePhrase: r.startDatePhrase,
+      startPlace: r.startPlace,
+      endDateTo: iso(r.endDateTo),
+      endDateToPrecision: r.endDateToPrecision,
+      endDatePhrase: r.endDatePhrase,
+      endPlace: r.endPlace,
       notes: r.notes,
       other: ref(r.fromPerson),
       media: mediaOf(r.media),
+      events: [] as EventDto[],
     })),
   ];
 
@@ -407,7 +479,27 @@ export async function getPersonDetail(
     );
 
   const primary = person.media.find((m) => m.isPrimary);
-  const citations = await listPersonCitations(scope, id);
+  const [citations, eventRows, nameRows] = await Promise.all([
+    listPersonCitations(scope, id),
+    loadEventsFor({ personIds: [id], relationshipIds: relations.map((r) => r.relationshipId) }),
+    prisma.personName.findMany({ where: { personId: id }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
+  ]);
+  // Ereignisse an Beziehungen: änderbar wie die Beziehung (eine Seite
+  // bearbeitbar, beide sichtbar); die Person selbst ist sichtbar.
+  const personEditable = canEditPerson(scope, familyIds);
+  const relEditable = new Map<string, boolean>();
+  for (const r of person.relationsFrom) {
+    relEditable.set(r.id, canEditRelationshipBetween(scope, familyIds, r.toPerson.families.map((f) => f.familyId)));
+  }
+  for (const r of person.relationsTo) {
+    relEditable.set(r.id, canEditRelationshipBetween(scope, r.fromPerson.families.map((f) => f.familyId), familyIds));
+  }
+  for (const rel of relations) {
+    rel.events = eventRows
+      .filter((e) => e.relationshipId === rel.relationshipId)
+      .map((e) => toEventDto(e, relEditable.get(rel.relationshipId) ?? false));
+  }
+  const events = eventRows.filter((e) => e.personId === id).map((e) => toEventDto(e, personEditable));
 
   return {
     person: toPersonSummary(scope, person, {
@@ -441,6 +533,8 @@ export async function getPersonDetail(
       ),
     siblings,
     citations,
+    events,
+    names: nameRows.map(toPersonNameDto),
   };
 }
 
@@ -463,6 +557,10 @@ export async function listPickablePersons(
     birthDateQualifier: DateQualifier;
     deathDatePrecision: DatePrecision;
     deathDateQualifier: DateQualifier;
+    birthDateTo: string | null;
+    birthDateToPrecision: DatePrecision;
+    deathDateTo: string | null;
+    deathDateToPrecision: DatePrecision;
   }[]
 > {
   const rows = await prisma.person.findMany({
@@ -483,12 +581,18 @@ export async function listPickablePersons(
       birthDateQualifier: true,
       deathDatePrecision: true,
       deathDateQualifier: true,
+      birthDateTo: true,
+      birthDateToPrecision: true,
+      deathDateTo: true,
+      deathDateToPrecision: true,
     },
   });
   return rows.map((p) => ({
     ...p,
     birthDate: iso(p.birthDate),
     deathDate: iso(p.deathDate),
+    birthDateTo: iso(p.birthDateTo),
+    deathDateTo: iso(p.deathDateTo),
   }));
 }
 
@@ -507,6 +611,30 @@ function personColumns<T extends { birthDate?: FuzzyDate | null; deathDate?: Fuz
     ...(birthDate !== undefined ? fuzzyColumns("birthDate", birthDate) : {}),
     ...(deathDate !== undefined ? fuzzyColumns("deathDate", deathDate) : {}),
   };
+}
+
+/**
+ * Wortlaut bei einem Teil-Update: ändert sich das Datum ohne neuen Wortlaut,
+ * wird der alte gelöscht (er beschriebe sonst ein anderes Datum). Bleibt das
+ * Datum gleich (Formular schickt es unverändert mit), bleibt er stehen.
+ */
+export function phraseColumns(
+  existing: object,
+  data: Record<string, unknown>,
+  keys: readonly ("birthDate" | "deathDate" | "startDate" | "endDate" | "date")[],
+): Record<string, string | null> {
+  const row = existing as Record<string, unknown>;
+  const out: Record<string, string | null> = {};
+  for (const key of keys) {
+    const next = phraseAfterUpdate(
+      fuzzyField(existing, key),
+      data[key] as FuzzyDate | null | undefined,
+      (row[key + "Phrase"] as string | null | undefined) ?? null,
+      data[key + "Phrase"] as string | null | undefined,
+    );
+    if (next !== undefined) out[key + "Phrase"] = next;
+  }
+  return out;
 }
 
 async function summaryById(scope: Scope, id: string): Promise<PersonSummary> {
@@ -606,7 +734,11 @@ export async function updatePerson(
   const issues = personDateIssues(merged);
   if (issues.length > 0) throw validationError(issues);
 
-  const columns = personColumns(data);
+  const { birthDatePhrase: _bp, deathDatePhrase: _dp, ...withoutPhrases } = data;
+  const columns = {
+    ...personColumns(withoutPhrases),
+    ...phraseColumns(existing, data, ["birthDate", "deathDate"]),
+  };
   await prisma.person.update({ where: { id }, data: columns });
 
   await audit({

@@ -112,6 +112,11 @@ h3 {
     @apply badge border-accent-200 bg-accent-50 text-accent-800 dark:border-accent-800 dark:bg-accent-900/50 dark:text-accent-200;
   }
 
+  /* Abweichende Angabe (zweite, widersprüchliche Überlieferung) — ruhig, aber deutlich. */
+  .badge-alt {
+    @apply badge border-brass-300 bg-brass-100 px-2 py-0 text-[11px] text-brass-700 dark:border-brass-700 dark:bg-brass-700/20 dark:text-brass-300;
+  }
+
   .alert {
     @apply rounded-lg border px-3 py-2 text-sm;
   }

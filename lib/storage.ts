@@ -75,6 +75,39 @@ export function resolveKey(key: string): string {
   return full;
 }
 
+/**
+ * Fehlercodes, mit denen Windows ein rename ablehnt, solange eine andere
+ * Operation dieselbe Zieldatei gerade ersetzt oder geöffnet hat (zwei
+ * parallele putObject auf denselben Schlüssel, ein Virenscanner, ein Leser).
+ * Unter Linux (Produktion) ersetzt rename atomar und kennt das nicht.
+ */
+const TRANSIENT_RENAME_CODES = new Set(["EPERM", "EBUSY", "EACCES"]);
+/** Wartezeiten zwischen den Versuchen (ms), zusammen gut eine Sekunde. */
+const RENAME_RETRY_DELAYS = [10, 20, 40, 80, 160, 320, 500];
+
+/**
+ * rename mit begrenzter Wiederholung bei den vorübergehenden Windows-Fehlern
+ * oben. Jeder andere Fehler — und derselbe Fehler nach dem letzten Versuch —
+ * geht unverändert an den Aufrufer.
+ */
+export async function renameWithRetry(
+  from: string,
+  to: string,
+  doRename: (from: string, to: string) => Promise<void> = rename,
+): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await doRename(from, to);
+      return;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException | undefined)?.code;
+      const delay = RENAME_RETRY_DELAYS[attempt];
+      if (!code || !TRANSIENT_RENAME_CODES.has(code) || delay === undefined) throw err;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+
 function isNotFound(err: unknown): boolean {
   const code = (err as NodeJS.ErrnoException | undefined)?.code;
   return code === "ENOENT" || code === "ENOTDIR";
@@ -84,7 +117,9 @@ function isNotFound(err: unknown): boolean {
  * Schreibt eine Datei atomar: erst in eine temporäre Datei im selben Ordner,
  * dann per rename an ihren Platz. Ein Leser sieht also nie eine halbe Datei,
  * und ein Absturz mitten im Schreiben hinterlässt höchstens eine .tmp-Datei.
- * Ordner werden bei Bedarf angelegt.
+ * Ordner werden bei Bedarf angelegt. Unter Windows kann das rename bei
+ * gleichzeitigen Schreibvorgängen auf denselben Schlüssel kurz mit
+ * EPERM/EBUSY scheitern; es wird dann begrenzt wiederholt (renameWithRetry).
  */
 export async function putObject(key: string, body: Buffer | Uint8Array): Promise<void> {
   const target = resolveKey(key);
@@ -100,7 +135,7 @@ export async function putObject(key: string, body: Buffer | Uint8Array): Promise
     } finally {
       await fh.close();
     }
-    await rename(tmp, target);
+    await renameWithRetry(tmp, target);
   } catch (err) {
     await rm(tmp, { force: true }).catch(() => {});
     throw err;

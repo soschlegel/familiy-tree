@@ -26,6 +26,7 @@ export const CITATION_FACT_LABEL: Record<CitationFactName, string> = {
   PARTNERSHIP: "Heirat & Partnerschaft",
   PARENTAGE: "Abstammung",
   OTHER: "Sonstiges",
+  EVENT: "Ereignis",
 };
 
 export const CONFIDENCE_LABEL: Record<CitationConfidenceName, string> = {

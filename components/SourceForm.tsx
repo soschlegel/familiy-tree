@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { apiFetch, jsonBody } from "./api-client";
-import { DateInput, dateInputError } from "./DateInput";
+import { DateInput, dateInputError, datePayload } from "./DateInput";
 import { SOURCE_KIND_LABEL } from "@/lib/source-labels";
 import { SOURCE_KINDS, type SourceKindName } from "@/lib/validation";
 
@@ -19,6 +19,10 @@ export type SourceFormValues = {
   url: string;
   /** Eingabetext, z.B. „1858“ oder „um 1900“ (lib/dates.ts). */
   date: string;
+  /** Unlesbarer Text im Datumsfeld wird als Wortlaut gespeichert. */
+  dateAsPhrase?: boolean;
+  /** Gespeicherter Wortlaut neben einem Datum (nur Anzeige). */
+  datePhrase?: string | null;
   notes: string;
   mediaId: string;
 };
@@ -66,7 +70,7 @@ export function SourceForm({
     if (saving) return;
     const local: Record<string, string> = {};
     if (!values.title.trim()) local.title = "Bitte einen Titel angeben.";
-    const dateError = dateInputError(values.date);
+    const dateError = dateInputError(values.date, values.dateAsPhrase);
     if (dateError) local.date = dateError;
     if (Object.keys(local).length > 0) {
       setFields(local);
@@ -77,8 +81,9 @@ export function SourceForm({
     setSaving(true);
     setError(null);
     setFields({});
+    const { date, dateAsPhrase, datePhrase: _phrase, ...rest } = values;
     const payload = Object.fromEntries(
-      Object.entries(values)
+      Object.entries({ ...rest, ...datePayload("date", date, dateAsPhrase) })
         // Den Scan nur mitschicken, wenn er geändert wurde — ein Bild, das der
         // Benutzer nicht sehen darf, kommt hier leer an und bliebe sonst
         // versehentlich gelöscht.
@@ -167,8 +172,15 @@ export function SourceForm({
             id="source-date"
             label="Datum der Quelle"
             value={values.date}
-            error={fields.date}
+            error={fields.date || fields.datePhrase}
             onChange={(v) => set("date", v)}
+            allowPhrase
+            asPhrase={Boolean(values.dateAsPhrase)}
+            onAsPhraseChange={(on) => {
+              set("dateAsPhrase", on);
+              setFields((f) => ({ ...f, date: "" }));
+            }}
+            phrase={values.datePhrase}
           />
           {text("author", "Verfasser / Herkunft", { placeholder: "z.B. Pfarrer Meyer, Oma Erna" })}
           {text("url", "Internetadresse", { type: "url", placeholder: "https://…" })}

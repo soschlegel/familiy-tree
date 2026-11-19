@@ -1,0 +1,228 @@
+0 HEAD
+1 GEDC
+2 VERS 5.5.1
+2 FORM LINEAGE-LINKED
+1 CHAR UTF-8
+1 LANG German
+1 SOUR MYHERITAGE
+2 NAME MyHeritage Family Tree Builder
+2 VERS 5.5.1
+2 _RTLSAVE RTL
+2 CORP MyHeritage.com
+1 DEST MYHERITAGE
+1 DATE 3 MAR 2026
+2 TIME 10:15:00
+1 FILE Testbaum_Beispiel.ged
+1 SUBM @U1@
+1 _PROJECT_GUID 00000000-AAAA-BBBB-CCCC-000000000001
+1 _EXPORTED_FROM_SITE_ID 123456789
+1 _UID 00000000-AAAA-BBBB-CCCC-000000000002
+1 _RINS I9,F4,N2,M0,R1,S2,U1
+1 _DESCRIPTION_AWARE Y
+0  _PUBLISH
+1 _USERNAME beispiel@@example.invalid
+1 _DISABLED Y
+0 @U1@ SUBM
+1 NAME Erika Beispiel
+1 RIN MH:U1
+0 @I1@ INDI
+1 RIN MH:I1
+1 _UID 5F1A0000AAAA0001
+1 _UPD 2 MAR 2026 11:11:50 GMT+1
+1 NAME Hans /Mustermann/
+2 GIVN Hans
+2 SURN Mustermann
+1 SEX M
+1 BIRT
+2 _UID 5F1A0000AAAA0101
+2 RIN MH:IF1
+2 DATE 12 MAR 1850
+2 PLAC Musterdorf, Landkreis Beispiel, Bayern, Deutschland
+2 SOUR @S1@
+3 PAGE Taufbuch 1850, S. 12, Nr. 7
+3 QUAY 3
+3 EVEN BIRT
+4 ROLE CHIL
+3 DATA
+4 DATE 14 MAR 1850
+4 TEXT Hans, Sohn des Bauern ...
+1 BIRT
+2 DATE ABT 1851
+2 NOTE Alternative Angabe aus dem Familienbuch
+1 DEAT
+2 DATE BET ABT 1910 AND 1912
+2 PLAC Beispielstadt, Bayern, Deutschland
+2 AGE 61
+2 CAUS Lungenentzündung
+1 OCCU Landwirt
+2 PLAC Musterdorf
+1 RESI
+2 ADDR Hauptstraße 1
+3 ADR1 Hauptstraße 1
+3 ADR2 Musterdorf
+2 EMAIL hans@example.invalid
+2 DATE FROM 1880 TO 1905
+1 EVEN 4711
+2 TYPE Reference Number
+1 EVEN
+2 TYPE Auswanderungsversuch
+2 DATE 1872
+2 _UNKNOWN_EVENT_TAG Wert
+1 OBJE
+2 FORM jpg
+2 FILE https://example.invalid/mh/photos/000/111/222_333_A.jpg
+2 TITL Hans 1890
+2 _FILESIZE 123456
+2 _PRIM Y
+2 _CUTOUT Y
+2 _PARENTRIN MH:P500001
+2 _PERSONALPHOTO Y
+2 _PHOTO_RIN MH:P500002
+2 _PRIM_CUTOUT Y
+2 _POSITION 10 20 110 140
+2 _PARENTPHOTO Y
+1 SOUR @S1@
+2 PAGE Personenstandsregister
+2 QUAY 2
+1 NOTE @N1@
+1 FAMS @F1@
+1 FAMS @F3@
+1 FAMC @F2@
+1 _MTTAG @T1@
+0 @I2@ INDI
+1 RIN MH:I2
+1 _UID 5F1A0000AAAA0002
+1 _UPD 2 MAR 2026 11:12:00 GMT+1
+1 NAME Maria /Beispiel/
+2 GIVN Maria
+2 SURN Beispiel
+2 _MARNM Mustermann
+1 SEX F
+1 BIRT
+2 DATE 5 MAY 1855
+2 PLAC Nachbarort, Bayern, Deutschland
+1 DEAT
+2 DATE 1 FEB 1890
+1 FAMS @F1@
+0 @I3@ INDI
+1 RIN MH:I3
+1 _UID 5F1A0000AAAA0003
+1 _UPD 2 MAR 2026 11:13:00 GMT+1
+1 NAME Anna /Mustermann/
+2 GIVN Anna
+2 SURN Mustermann
+2 _MARNM Schmidt
+1 SEX F
+1 BIRT
+2 DATE 1 JAN 1880
+1 FAMC @F1@
+0 @I4@ INDI
+1 RIN MH:I4
+1 _UID 5F1A0000AAAA0004
+1 _UPD 2 MAR 2026 11:14:00 GMT+1
+1 NAME Karl /Mustermann/
+2 GIVN Karl
+2 SURN Mustermann
+1 SEX M
+1 BIRT
+2 DATE 1885
+1 ADOP
+2 DATE 1888
+2 FAMC @F1@
+3 ADOP BOTH
+1 FAMC @F1@
+2 PEDI adopted
+1 FAMC @F4@
+2 PEDI birth
+0 @I5@ INDI
+1 RIN MH:I5
+1 _UID 5F1A0000AAAA0005
+1 _UPD 2 MAR 2026 11:15:00 GMT+1
+1 NAME Private /Mustermann/
+2 GIVN Private
+2 SURN Mustermann
+1 SEX F
+1 RESN privacy
+1 FAMC @F1@
+2 PEDI foster
+0 @I6@ INDI
+1 RIN MH:I6
+1 _UID 5F1A0000AAAA0006
+1 NAME Johann /Altmann/
+1 SEX M
+1 FAMS @F2@
+0 @I7@ INDI
+1 RIN MH:I7
+1 _UID 5F1A0000AAAA0007
+1 NAME Theresia /Huber/
+1 SEX F
+1 FAMS @F2@
+1 FAMS @F3@
+0 @I8@ INDI
+1 RIN MH:I8
+1 _UID 5F1A0000AAAA0008
+1 NAME Leopold /Fremd/
+1 SEX M
+1 FAMS @F4@
+0 @F1@ FAM
+1 RIN MH:F1
+1 _UID 5F1A0000BBBB0001
+1 _UPD 2 MAR 2026 11:20:00 GMT+1
+1 HUSB @I1@
+1 WIFE @I2@
+1 CHIL @I3@
+1 CHIL @I4@
+1 CHIL @I5@
+1 MARR
+2 DATE 20 JUN 1878
+2 PLAC Musterdorf, Landkreis Beispiel, Bayern, Deutschland
+2 SOUR @S1@
+3 PAGE Heiratsbuch 1878, Nr. 3
+3 QUAY 1
+1 EVEN
+2 TYPE Death of Spouse
+2 DATE 1 FEB 1890
+0 @F2@ FAM
+1 RIN MH:F2
+1 _UID 5F1A0000BBBB0002
+1 HUSB @I6@
+1 WIFE @I7@
+1 CHIL @I1@
+0 @F3@ FAM
+1 RIN MH:F3
+1 _UID 5F1A0000BBBB0003
+1 HUSB @I1@
+1 WIFE @I7@
+1 MARR
+2 DATE 1892
+1 DIV
+2 DATE 1900
+0 @F4@ FAM
+1 RIN MH:F4
+1 _UID 5F1A0000BBBB0004
+1 HUSB @I8@
+1 CHIL @I4@
+0 @S1@ SOUR
+1 RIN MH:S1
+1 _UPD 2 MAR 2026 11:30:00 GMT+1
+1 TITL Kirchenbuch Musterdorf, Taufen 1840-1860
+1 AUTH Pfarramt Musterdorf
+1 PUBL Bistumsarchiv Beispielstadt
+1 TEXT Mikrofilm, Band 3
+1 _TYPE Kirchenbuch
+1 _MEDI Mikrofilm
+1 REPO @R1@
+2 CALN KB-MD-3
+3 MEDI film
+0 @R1@ REPO
+1 NAME Bistumsarchiv Beispielstadt
+1 ADDR Domplatz 1
+2 CITY Beispielstadt
+2 CTRY Deutschland
+0 @N1@ NOTE <p>Hans war <b>Ortsvorsteher</b> von 1890 bis 1900.</p><p>Er hatte 3
+1 CONC  Geschwister &amp; viele Neffen.</p>
+1 CONT Zweite Zeile mit Umlauten: äöüß
+1 _UPD 2 MAR 2026 11:31:00 GMT+1
+0 @T1@ _MTTAG
+1 NAME Zweig Mustermann
+0 TRLR

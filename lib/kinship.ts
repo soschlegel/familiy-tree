@@ -336,6 +336,8 @@ const sideOf = (first: KinshipStep | undefined): Side =>
       ? "maternal"
       : null;
 
+// Ehestand unbekannt (PARTNER_UNKNOWN) zählt wie unverheiratet: neutrale
+// Begriffe („Partner/Partnerin“), aber als bestehendes Paar.
 const isCouple = (s: KinshipStep) => s.relation === "partner" && s.subtype !== "DIVORCED";
 
 function partnerGenitive(step: KinshipStep): string {

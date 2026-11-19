@@ -22,6 +22,10 @@ export default async function UsersPage() {
       // Aktive KI-Schlüssel: nicht widerrufen, nicht abgelaufen.
       _count: {
         select: {
+          // Verknüpfte Anmeldekonten (Google/GitHub) und Familienzuordnungen —
+          // für „E-Mail korrigieren“ bzw. die Rückfrage beim Löschen.
+          accounts: true,
+          families: true,
           apiTokens: {
             where: { revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
           },
@@ -29,6 +33,9 @@ export default async function UsersPage() {
       },
     },
   });
+
+  // Wie in app/api/users/[id]/route.ts: zählt nur, wer sich schon angemeldet hat.
+  const activeAdmins = users.filter((u) => u.role === "ADMIN" && u.status === "ACTIVE").length;
 
   return (
     <div className="space-y-4">
@@ -46,6 +53,9 @@ export default async function UsersPage() {
           ...u,
           lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
           activeTokens: _count.apiTokens,
+          familyCount: _count.families,
+          neverSignedIn: u.status === "INVITED" && !u.lastLoginAt && _count.accounts === 0,
+          lastAdmin: u.role === "ADMIN" && u.status === "ACTIVE" && activeAdmins <= 1,
         }))}
         currentUserId={session.user.id}
       />

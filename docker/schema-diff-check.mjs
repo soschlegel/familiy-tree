@@ -1,6 +1,7 @@
 // Prüft ein SQL-Skript aus `prisma migrate diff --script` (über stdin) darauf,
-// ob es rein ergänzend ist. Wird von migrate.sh nur für Installationen ohne
-// Migrationshistorie ("pushed") benutzt, bevor `prisma db push` läuft.
+// ob es rein ergänzend ist. Werkzeug für die Entwicklung, nicht im Image:
+// eine neue Migration vor dem Commit prüfen (README, "Schema und Migrationen"):
+//   node docker/schema-diff-check.mjs < prisma/migrations/<name>/migration.sql
 //
 // Ergänzend:  CREATE TABLE/TYPE/INDEX, ADD COLUMN, ADD CONSTRAINT,
 //             ALTER TYPE … ADD VALUE, Standardwerte setzen,

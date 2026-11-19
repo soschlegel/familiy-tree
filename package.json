@@ -26,7 +26,8 @@
     "dev:mock": "node scripts/mock.mjs dev",
     "mock:env": "node scripts/mock.mjs env",
     "mcp:stdio": "node scripts/mock.mjs mcp",
-    "mcp:key": "node scripts/mock.mjs mcp-key"
+    "mcp:key": "node scripts/mock.mjs mcp-key",
+    "gedcom:check": "tsx lib/gedcom/cli.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

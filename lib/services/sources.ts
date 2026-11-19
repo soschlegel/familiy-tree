@@ -23,6 +23,8 @@ import {
   type SourceKindName,
 } from "../validation";
 import { fuzzyColumns, type DatePrecision, type DateQualifier, type FuzzyDate } from "../dates";
+import { phraseColumns } from "./persons";
+import { eventTitle } from "../events";
 import { forbiddenError, notFoundError, parseOrThrow, validationError } from "./errors";
 import { iso, toPersonRef, type PersonRef } from "./dto";
 
@@ -50,6 +52,8 @@ export type CitationConfidence = CitationConfidenceName;
 export type SourceBrief = { id: string; title: string; kind: SourceKind };
 
 export type SourceDto = SourceBrief & {
+  /** Freie Art, wenn die Quelle eine eigene Kategorie mitbringt. */
+  kindLabel: string | null;
   author: string | null;
   repository: string | null;
   callNumber: string | null;
@@ -57,6 +61,9 @@ export type SourceDto = SourceBrief & {
   date: string | null;
   datePrecision: DatePrecision;
   dateQualifier: DateQualifier;
+  dateTo: string | null;
+  dateToPrecision: DatePrecision;
+  datePhrase: string | null;
   notes: string | null;
   /** Scan — nur, wenn der Benutzer das Bild sehen darf. */
   mediaId: string | null;
@@ -85,11 +92,17 @@ export type CitationDto = {
   sourceId: string;
   personId: string | null;
   relationshipId: string | null;
+  /** Beleg für ein Ereignis (personId/relationshipId = dessen Träger). */
+  eventId: string | null;
   fact: CitationFact;
   detail: string | null;
   confidence: CitationConfidence | null;
+  /** Abschrift bzw. Notiz zum Beleg. */
+  text: string | null;
   createdAt: string;
   canEdit: boolean;
+  /** Nur bei Belegen für ein Ereignis: dessen Anzeigename, z.B. „Taufe“. */
+  eventTitle?: string;
 };
 
 export type SourceDetail = {
@@ -148,6 +161,7 @@ const citationInclude = {
       toPerson: { select: personSelect },
     },
   },
+  event: { select: { type: true, label: true } },
 } as const;
 
 type LoadedCitation = Prisma.CitationGetPayload<{ include: typeof citationInclude }>;
@@ -181,11 +195,14 @@ function toCitationDto(c: LoadedCitation | Prisma.CitationGetPayload<object>, ca
     sourceId: c.sourceId,
     personId: c.personId,
     relationshipId: c.relationshipId,
+    eventId: c.eventId,
     fact: c.fact,
     detail: c.detail,
     confidence: c.confidence,
+    text: c.text,
     createdAt: c.createdAt.toISOString(),
     canEdit,
+    ...("event" in c && c.event ? { eventTitle: eventTitle(c.event) } : {}),
   };
 }
 
@@ -235,6 +252,7 @@ async function toSourceDto(scope: Scope, s: SourceRow, mediaVisible?: boolean): 
     id: s.id,
     title: s.title,
     kind: s.kind,
+    kindLabel: s.kindLabel,
     author: s.author,
     repository: s.repository,
     callNumber: s.callNumber,
@@ -242,6 +260,9 @@ async function toSourceDto(scope: Scope, s: SourceRow, mediaVisible?: boolean): 
     date: iso(s.date),
     datePrecision: s.datePrecision,
     dateQualifier: s.dateQualifier,
+    dateTo: iso(s.dateTo),
+    dateToPrecision: s.dateToPrecision,
+    datePhrase: s.datePhrase,
     notes: s.notes,
     mediaId: showMedia ? s.mediaId : null,
     createdAt: s.createdAt.toISOString(),
@@ -495,7 +516,8 @@ export async function updateSource(scope: Scope, id: string, patch: unknown): Pr
     await assertMediaUsable(scope, data.mediaId);
   }
 
-  const columns = sourceColumns(data);
+  const { datePhrase: _dp, ...withoutPhrase } = data;
+  const columns = { ...sourceColumns(withoutPhrase), ...phraseColumns(access.source, data, ["date"]) };
   const source = await prisma.source.update({ where: { id }, data: columns });
 
   await audit({
@@ -541,6 +563,7 @@ async function assertCitationTarget(
   scope: Scope,
   target: { personId?: string | null; relationshipId?: string | null },
 ): Promise<readonly CitationFact[]> {
+  if (!target.personId && !target.relationshipId) throw notFoundError("Ereignis");
   if (target.personId) {
     const person = await prisma.person.findUnique({
       where: { id: target.personId },
@@ -576,6 +599,7 @@ const FACT_LABEL: Record<CitationFact, string> = {
   PARTNERSHIP: "Heirat/Partnerschaft",
   PARENTAGE: "Abstammung",
   OTHER: "Sonstiges",
+  EVENT: "Ereignis",
 };
 
 function assertFact(fact: CitationFact, allowed: readonly CitationFact[]) {
@@ -599,17 +623,40 @@ export async function createCitation(scope: Scope, input: unknown): Promise<Cita
   const access = await loadSourceAccess(scope, data.sourceId);
   if (!access) throw notFoundError("Quelle");
 
-  const allowed = await assertCitationTarget(scope, data);
-  assertFact(data.fact, allowed);
+  // Beleg an einem Ereignis: Träger des Ereignisses übernehmen — Rechte,
+  // Export und Löschen laufen dann über Person bzw. Beziehung wie gewohnt.
+  let target: { personId: string | null; relationshipId: string | null; eventId: string | null } = {
+    personId: data.personId ?? null,
+    relationshipId: data.relationshipId ?? null,
+    eventId: null,
+  };
+  let fact = data.fact;
+  if (data.eventId) {
+    const event = await prisma.event.findUnique({
+      where: { id: data.eventId },
+      select: { id: true, personId: true, relationshipId: true },
+    });
+    if (!event) throw notFoundError("Ereignis");
+    target = { personId: event.personId, relationshipId: event.relationshipId, eventId: event.id };
+    // „Sonstiges“ ist der Standard des Eingabeschemas — an einem Ereignis heißt das EVENT.
+    if (fact === "OTHER") fact = "EVENT";
+    if (fact !== "EVENT") {
+      throw validationError([{ path: "fact", message: "Ein Beleg an einem Ereignis hat die Angabe „Ereignis“" }]);
+    }
+    await assertCitationTarget(scope, target);
+  } else {
+    const allowed = await assertCitationTarget(scope, target);
+    assertFact(fact, allowed);
+  }
 
   const citation = await prisma.citation.create({
     data: {
       sourceId: data.sourceId,
-      personId: data.personId ?? null,
-      relationshipId: data.relationshipId ?? null,
-      fact: data.fact,
+      ...target,
+      fact,
       detail: data.detail,
       confidence: data.confidence,
+      text: data.text,
     },
   });
 
@@ -622,9 +669,11 @@ export async function createCitation(scope: Scope, input: unknown): Promise<Cita
       sourceId: citation.sourceId,
       personId: citation.personId,
       relationshipId: citation.relationshipId,
+      eventId: citation.eventId,
       fact: citation.fact,
       detail: citation.detail,
       confidence: citation.confidence,
+      text: citation.text,
     },
   });
   return toCitationDto(citation, true);
@@ -646,7 +695,11 @@ export async function updateCitation(scope: Scope, id: string, patch: unknown): 
   if (data.fact !== undefined) {
     assertFact(
       data.fact,
-      existing.relationship ? relationshipFacts(existing.relationship.type) : PERSON_FACTS,
+      existing.eventId
+        ? ["EVENT"]
+        : existing.relationship
+          ? relationshipFacts(existing.relationship.type)
+          : PERSON_FACTS,
     );
   }
 

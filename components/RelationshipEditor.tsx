@@ -6,9 +6,10 @@ import { useId, useState } from "react";
 
 import { PersonPicker, type PickerPerson } from "./PersonPicker";
 import { apiFetch, jsonBody } from "./api-client";
-import { DateInput } from "./DateInput";
-import { formatDate } from "@/lib/tree-layout";
-import { parseFuzzyDate, toDateInput, toFuzzyDate } from "@/lib/dates";
+import { DateInput, dateFieldFrom, dateInputError, datePayload } from "./DateInput";
+import { formatDateOf } from "@/lib/tree-layout";
+import { toDateInput, toFuzzyDate } from "@/lib/dates";
+import { PARTNER_SUBTYPE_LABEL, since } from "@/lib/partner-labels";
 
 export type RelationRow = {
   id: string;
@@ -20,6 +21,14 @@ export type RelationRow = {
   startDateQualifier?: string;
   endDatePrecision?: string;
   endDateQualifier?: string;
+  startDateTo?: string | null;
+  startDateToPrecision?: string;
+  startDatePhrase?: string | null;
+  startPlace?: string | null;
+  endDateTo?: string | null;
+  endDateToPrecision?: string;
+  endDatePhrase?: string | null;
+  endPlace?: string | null;
   otherId: string;
   otherName: string;
   /** Andere Seite ist für den Benutzer nicht sichtbar — kein Verweis. */
@@ -36,40 +45,44 @@ const SUBTYPE_LABEL: Record<string, string> = {
   MARRIED: "verheiratet",
   UNMARRIED: "unverheiratet",
   DIVORCED: "geschieden",
+  PARTNER_UNKNOWN: PARTNER_SUBTYPE_LABEL.PARTNER_UNKNOWN,
 };
 
-// Beschriftung der Datumsfelder je Beziehungsart. null = Feld ausblenden.
-const DATE_FIELDS: Record<string, { start: string | null; end: string | null }> =
-  {
-    MARRIED: { start: "Hochzeitsdatum", end: null },
-    UNMARRIED: { start: "Zusammen seit", end: null },
-    DIVORCED: { start: "Hochzeitsdatum", end: "Scheidungsdatum" },
-    ADOPTIVE: { start: "Adoption am", end: null },
-    FOSTER: { start: "In Pflege seit", end: null },
-    BIOLOGICAL: { start: null, end: null },
-    STEP: { start: null, end: null },
-  };
+const PARTNER_CHOICES = ["MARRIED", "UNMARRIED", "DIVORCED", "PARTNER_UNKNOWN"];
+const PARENT_CHOICES = ["BIOLOGICAL", "ADOPTIVE", "STEP", "FOSTER"];
 
-const fmt = (d: string | null, precision?: string, qualifier?: string) =>
-  d ? formatDate(d, precision, qualifier) : null;
+/**
+ * Beschriftung der Datums- und Ortsfelder je Beziehungsart. null = Feld
+ * ausblenden. „Hochzeit“ nur bei einer Ehe — bei unverheirateten
+ * Partnerschaften und unbekanntem Ehestand neutral.
+ */
+const DATE_FIELDS: Record<
+  string,
+  { start: string | null; end: string | null; startPlace: string | null; endPlace: string | null }
+> = {
+  MARRIED: { start: "Hochzeitsdatum", end: null, startPlace: "Hochzeitsort", endPlace: null },
+  UNMARRIED: { start: "Zusammen seit", end: null, startPlace: "Ort", endPlace: null },
+  PARTNER_UNKNOWN: { start: "Zusammen seit", end: null, startPlace: "Ort", endPlace: null },
+  DIVORCED: { start: "Hochzeitsdatum", end: "Scheidungsdatum", startPlace: "Hochzeitsort", endPlace: "Scheidungsort" },
+  ADOPTIVE: { start: "Adoption am", end: null, startPlace: null, endPlace: null },
+  FOSTER: { start: "In Pflege seit", end: null, startPlace: null, endPlace: null },
+  BIOLOGICAL: { start: null, end: null, startPlace: null, endPlace: null },
+  STEP: { start: null, end: null, startPlace: null, endPlace: null },
+};
+const NO_FIELDS = { start: null, end: null, startPlace: null, endPlace: null };
 
-/** "verheiratet seit 01.08.1984" bzw. "geschieden, um 1984 – 2001" */
+/** "verheiratet seit 01.08.1984 · Hildesheim" bzw. "geschieden, um 1984 – 2001" */
 function describe(r: RelationRow): string {
   const base = SUBTYPE_LABEL[r.subtype] ?? r.subtype;
-  const start = fmt(r.startDate, r.startDatePrecision, r.startDateQualifier);
-  const end = fmt(r.endDate, r.endDatePrecision, r.endDateQualifier);
+  const start = formatDateOf(r, "startDate") || null;
+  const end = formatDateOf(r, "endDate") || null;
+  const places = [r.startPlace, r.endPlace].filter(Boolean).join(" / ");
 
-  if (start && end) return `${base}, ${start} – ${end}`;
-  if (start) return `${base} seit ${start}`;
-  if (end) return `${base} bis ${end}`;
-  return base;
+  const when = start && end ? `${base}, ${start} – ${end}` : start ? `${base} ${since(start)}` : end ? `${base} bis ${end}` : base;
+  return places ? `${when} · ${places}` : when;
 }
 
-type PatchData = {
-  subtype: string;
-  startDate: string | null;
-  endDate: string | null;
-};
+type PatchData = Record<string, string | null>;
 
 function Field({
   label,
@@ -107,20 +120,38 @@ function RelationDateEditor({
   onCancel: () => void;
 }) {
   const [subtype, setSubtype] = useState(relation.subtype);
-  // Eingabetext in der gespeicherten Genauigkeit („um 1950“, „03.1950“).
-  const [start, setStart] = useState(
-    toDateInput(toFuzzyDate(relation.startDate, relation.startDatePrecision, relation.startDateQualifier)),
+  // Eingabetext in der gespeicherten Genauigkeit („um 1950“, „03.1950“,
+  // „zwischen 1950 und 1955“); ein Wortlaut ohne Datum steht als Text da.
+  const initialStart = dateFieldFrom(
+    toDateInput(
+      toFuzzyDate(
+        relation.startDate,
+        relation.startDatePrecision,
+        relation.startDateQualifier,
+        relation.startDateTo,
+        relation.startDateToPrecision,
+      ),
+    ),
+    relation.startDatePhrase,
   );
-  const [end, setEnd] = useState(
-    toDateInput(toFuzzyDate(relation.endDate, relation.endDatePrecision, relation.endDateQualifier)),
+  const initialEnd = dateFieldFrom(
+    toDateInput(
+      toFuzzyDate(relation.endDate, relation.endDatePrecision, relation.endDateQualifier, relation.endDateTo, relation.endDateToPrecision),
+    ),
+    relation.endDatePhrase,
   );
-  const invalid = !parseFuzzyDate(start).ok || !parseFuzzyDate(end).ok;
+  const [start, setStart] = useState(initialStart.text);
+  const [startAsPhrase, setStartAsPhrase] = useState(initialStart.asPhrase);
+  const [end, setEnd] = useState(initialEnd.text);
+  const [endAsPhrase, setEndAsPhrase] = useState(initialEnd.asPhrase);
+  const [startPlace, setStartPlace] = useState(relation.startPlace ?? "");
+  const [endPlace, setEndPlace] = useState(relation.endPlace ?? "");
 
-  const labels = DATE_FIELDS[subtype] ?? { start: null, end: null };
+  const labels = DATE_FIELDS[subtype] ?? NO_FIELDS;
+  const invalid =
+    Boolean(labels.start && dateInputError(start, startAsPhrase)) || Boolean(labels.end && dateInputError(end, endAsPhrase));
   const isPartner = relation.label === "Partner";
-  const choices = isPartner
-    ? ["MARRIED", "UNMARRIED", "DIVORCED"]
-    : ["BIOLOGICAL", "ADOPTIVE", "STEP", "FOSTER"];
+  const choices = isPartner ? PARTNER_CHOICES : PARENT_CHOICES;
 
   return (
     <form
@@ -129,8 +160,10 @@ function RelationDateEditor({
         if (invalid) return;
         onSave({
           subtype,
-          startDate: labels.start && start ? start : null,
-          endDate: labels.end && end ? end : null,
+          ...datePayload("startDate", labels.start ? start : "", startAsPhrase),
+          ...datePayload("endDate", labels.end ? end : "", endAsPhrase),
+          startPlace: labels.startPlace ? startPlace.trim() || null : null,
+          endPlace: labels.endPlace ? endPlace.trim() || null : null,
         });
       }}
       className="mt-2 flex flex-wrap items-end gap-2 border-t border-stone-200 pt-3 dark:border-stone-800"
@@ -148,11 +181,45 @@ function RelationDateEditor({
       </Field>
 
       {labels.start && (
-        <DateInput compact className="w-48" label={labels.start} error={fields.startDate} value={start} onChange={setStart} />
+        <DateInput
+          compact
+          className="w-56"
+          label={labels.start}
+          error={fields.startDate || fields.startDatePhrase}
+          value={start}
+          onChange={setStart}
+          allowPhrase
+          asPhrase={startAsPhrase}
+          onAsPhraseChange={setStartAsPhrase}
+          phrase={relation.startDatePhrase}
+        />
+      )}
+
+      {labels.startPlace && (
+        <Field label={labels.startPlace} error={fields.startPlace}>
+          {(id) => <input id={id} className="field w-48" value={startPlace} onChange={(e) => setStartPlace(e.target.value)} />}
+        </Field>
       )}
 
       {labels.end && (
-        <DateInput compact className="w-48" label={labels.end} error={fields.endDate} value={end} onChange={setEnd} />
+        <DateInput
+          compact
+          className="w-56"
+          label={labels.end}
+          error={fields.endDate || fields.endDatePhrase}
+          value={end}
+          onChange={setEnd}
+          allowPhrase
+          asPhrase={endAsPhrase}
+          onAsPhraseChange={setEndAsPhrase}
+          phrase={relation.endDatePhrase}
+        />
+      )}
+
+      {labels.endPlace && (
+        <Field label={labels.endPlace} error={fields.endPlace}>
+          {(id) => <input id={id} className="field w-48" value={endPlace} onChange={(e) => setEndPlace(e.target.value)} />}
+        </Field>
       )}
 
       <button type="submit" disabled={busy || invalid} className="btn-primary">
@@ -187,6 +254,8 @@ export function RelationshipEditor({
   const [subtype, setSubtype] = useState("BIOLOGICAL");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [startPlace, setStartPlace] = useState("");
+  const [endPlace, setEndPlace] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
@@ -199,7 +268,7 @@ export function RelationshipEditor({
   const [extraPeople, setExtraPeople] = useState<PickerPerson[]>([]);
   const options = [...people, ...extraPeople];
 
-  const dateLabels = DATE_FIELDS[subtype] ?? { start: null, end: null };
+  const dateLabels = DATE_FIELDS[subtype] ?? NO_FIELDS;
 
   function begin() {
     setBusy(true);
@@ -212,6 +281,8 @@ export function RelationshipEditor({
     setOtherId("");
     setStartDate("");
     setEndDate("");
+    setStartPlace("");
+    setEndPlace("");
   }
 
   async function add(e: React.FormEvent) {
@@ -221,7 +292,7 @@ export function RelationshipEditor({
       setError("Bitte zuerst eine Person auswählen.");
       return;
     }
-    if (!parseFuzzyDate(startDate).ok || !parseFuzzyDate(endDate).ok) {
+    if ((dateLabels.start && dateInputError(startDate)) || (dateLabels.end && dateInputError(endDate))) {
       setError("Bitte das Datum prüfen.");
       return;
     }
@@ -242,6 +313,8 @@ export function RelationshipEditor({
         subtype,
         startDate: dateLabels.start && startDate ? startDate : null,
         endDate: dateLabels.end && endDate ? endDate : null,
+        startPlace: dateLabels.startPlace ? startPlace.trim() || null : null,
+        endPlace: dateLabels.endPlace ? endPlace.trim() || null : null,
       }),
     );
     setBusy(false);
@@ -291,10 +364,7 @@ export function RelationshipEditor({
     router.refresh();
   }
 
-  const subtypeOptions =
-    kind === "PARTNER"
-      ? ["MARRIED", "UNMARRIED", "DIVORCED"]
-      : ["BIOLOGICAL", "ADOPTIVE", "STEP", "FOSTER"];
+  const subtypeOptions = kind === "PARTNER" ? PARTNER_CHOICES : PARENT_CHOICES;
 
   return (
     <section aria-labelledby="rel-editor-h" className="space-y-3" data-testid="relationship-editor">
@@ -430,6 +500,14 @@ export function RelationshipEditor({
             />
           )}
 
+          {dateLabels.startPlace && (
+            <Field label={dateLabels.startPlace} error={fields.startPlace}>
+              {(id) => (
+                <input id={id} className="field w-48" value={startPlace} onChange={(e) => setStartPlace(e.target.value)} />
+              )}
+            </Field>
+          )}
+
           {dateLabels.end && (
             <DateInput
               compact
@@ -439,6 +517,14 @@ export function RelationshipEditor({
               value={endDate}
               onChange={setEndDate}
             />
+          )}
+
+          {dateLabels.endPlace && (
+            <Field label={dateLabels.endPlace} error={fields.endPlace}>
+              {(id) => (
+                <input id={id} className="field w-48" value={endPlace} onChange={(e) => setEndPlace(e.target.value)} />
+              )}
+            </Field>
           )}
 
           <button type="submit" disabled={busy} className="btn-primary">
