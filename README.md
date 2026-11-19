@@ -48,7 +48,7 @@ Bildarchiv und rollenbasierter Benutzerverwaltung.
 | Bilder | Dateien im Medienordner (`MEDIA_DIR`), sharp |
 | Visualisierung | React Flow (Layout selbst geschrieben, `lib/layout-generations.ts`) |
 | KI-Schnittstelle | MCP (`@modelcontextprotocol/sdk`), Streamable HTTP unter `/api/mcp`, Anmeldung mit persönlichem Schlüssel |
-| Betrieb | Docker Compose (Portainer), ein App-Image aus GitHub Actions über ghcr.io (privat) |
+| Betrieb | Docker Compose (Portainer), ein App-Image aus GitHub Actions über ghcr.io |
 
 ## Lokal starten
 
@@ -708,10 +708,10 @@ bzw. über VPN**, hinter dem Reverse-Proxy, der auf der NAS ohnehin läuft
 git push (main)
    └─ GitHub Actions (.github/workflows/images.yml)
         ├─ prüft: Typen, Lint, Unit-Tests
-        ├─ baut EIN Image und lädt es nach ghcr.io (privates Paket):
+        ├─ baut EIN Image und lädt es nach ghcr.io (öffentliches Paket):
         │    ghcr.io/soschlegel/familiy-tree   (App samt Migrationen)
         └─ setzt Branch "deploy" auf diesen Commit
-Portainer (beobachtet "deploy") ─ lädt das Image (mit Token) ─ startet den Stack neu
+Portainer (beobachtet "deploy") ─ lädt das Image ─ startet den Stack neu
 ```
 
 Auf der NAS wird nichts gebaut, und der Stack braucht keine Dateien aus dem
@@ -787,39 +787,28 @@ Umgebungsvariablen und Docker Compose v2), ausgehender Internetzugang der NAS
    Run workflow* von Hand starten) und warten, bis der Lauf grün ist (ca.
    5–10 min). Danach gibt es den Branch `deploy` und das Paket
    `familiy-tree` (GitHub → Profil → *Packages*).
-2. **Zugang zur Registry für Portainer.** Das Paket bleibt **privat**
-   (Standard bei ghcr.io, auch bei öffentlichem Repository); Portainer meldet
-   sich mit einem Token an.
-   - **Token anlegen:** GitHub → *Settings → Developer settings → Personal
-     access tokens → Tokens (classic) → Generate new token (classic)*.
-     Nur den Scope **`read:packages`** anhaken, sonst nichts. Ablauf
-     (*Expiration*): lang, aber nicht unbegrenzt, z.B. 1 Jahr — und das
-     Ablaufdatum **in den Kalender** eintragen (zwei Wochen vorher erinnern).
-     Ein *fine-grained* Token geht hier **nicht**: laut GitHub-Doku
-     unterstützt die Container-Registry nur Tokens (classic) („GitHub
-     Packages only supports authentication using a personal access token
-     (classic)“, geprüft November 2026).
-   - **In Portainer eintragen:** *Registries → Add registry → Custom
-     registry*. *Name* `ghcr`, *Registry URL* `ghcr.io`, *Authentication*
-     an, *Username* `soschlegel` (GitHub-Benutzername), *Password* = das
-     Token → *Add registry*. (Der Anbieter „GitHub“ in der Liste gibt es nur
-     in Portainer Business, und er verlangt mehr Rechte; *Custom registry*
-     genügt zum Laden.)
-   - Portainer verwendet die Zugangsdaten beim Laden eines Images
-     automatisch, wenn der Image-Name mit dem Registry-Host (`ghcr.io/…`)
-     beginnt — auch beim *Re-pull* der automatischen Git-Updates. Bei einem
-     Git-Stack gibt es dafür kein eigenes Auswahlfeld; es genügt, dass die
-     Registry in der Umgebung zugänglich ist (als Portainer-Administrator
-     angelegt: für alle Stacks). Wer Stacks mit einem Nicht-Admin-Konto
-     verwaltet, gibt die Registry diesem Konto frei (*Registries → ghcr →
-     Manage access*). Nicht auf der NAS ausprobiert.
-   - **Wenn das Token abläuft:** Laufende Container laufen weiter, auch nach
-     einem Neustart der NAS (das Image liegt lokal). Erst das nächste Update
-     scheitert: Portainer meldet beim Deploy/Re-pull etwa
-     `failed to pull images of the stack … ghcr.io/soschlegel/familiy-tree …
-     denied` bzw. `unauthorized`, der Stack bleibt auf dem alten Stand.
-     Abhilfe: neues Token wie oben, in Portainer *Registries → ghcr* das
-     Passwort ersetzen, *Stacks → familytree → Pull and redeploy*.
+2. **Paket öffentlich machen (einmalig).** Neue Pakete auf ghcr.io sind
+   privat, auch bei öffentlichem Repository. GitHub → Profil → *Packages* →
+   `familiy-tree` → *Package settings* → *Danger Zone* → *Change
+   visibility* → *Public* → Paketnamen bestätigen. Das lässt sich **nicht
+   rückgängig machen** — GitHub erlaubt nicht, ein öffentliches Paket wieder
+   privat zu stellen. Unbedenklich, weil das Image nichts enthält, was nicht
+   ohnehin im öffentlichen Repository steht: gebauter Code, Schema,
+   Migrationen, Prisma-CLI; keine `.env`, keine Schlüssel (Geheimnisse
+   kommen erst zur Laufzeit über die Stack-Variablen). Danach lädt Portainer
+   das Image ohne Anmeldung; eine Registry muss dort nicht eingetragen
+   werden.
+
+   *Alternative: Paket privat halten.* Dann braucht Portainer ein Token
+   (classic) mit nur `read:packages` — *fine-grained* Tokens unterstützt die
+   Container-Registry laut GitHub-Doku nicht (geprüft November 2026) — und
+   unter *Registries → Add registry → Custom registry* einen Eintrag mit
+   *Registry URL* `ghcr.io`, *Authentication* an, GitHub-Benutzername und
+   Token als Passwort; Portainer nutzt ihn für alle `ghcr.io/…`-Images
+   (nicht auf der NAS ausprobiert). Das Token läuft ab: laufende Container
+   bleiben davon unberührt, aber jedes folgende Update scheitert am Laden
+   (`denied`/`unauthorized`) und der Stack bleibt still auf dem alten
+   Stand — Ablaufdatum in den Kalender, rechtzeitig erneuern.
 3. **Adresse festlegen.** Unter welcher Adresse die Familie den Stammbaum
    aufruft, z.B. `https://stammbaum.example.de` — das wird `PUBLIC_URL`.
    Der Name muss im Heimnetz (und im VPN) auf die NAS zeigen: lokaler
@@ -1043,7 +1032,7 @@ Die Ausgabe der Migrationen steht im Log von **`app`**, vor dem Serverstart
 | Symptom | Ursache / Abhilfe |
 |---|---|
 | Deploy bricht ab mit „… fehlt“ | Pflichtvariable nicht gesetzt (Meldung nennt sie) |
-| „pull access denied“ / „denied“ / „unauthorized“ für `ghcr.io/…` | Registry in Portainer fehlt, Token falsch oder abgelaufen ([Erste Installation](#erste-installation), Schritt 2), oder der Workflow ist noch nie gelaufen |
+| „pull access denied“ / „denied“ / „unauthorized“ für `ghcr.io/…` | Paket noch privat ([Erste Installation](#erste-installation), Schritt 2) bzw. bei privatem Paket Token falsch oder abgelaufen, oder der Workflow ist noch nie gelaufen |
 | Portainer findet `refs/heads/deploy` nicht | Workflow auf `main` noch nie erfolgreich durchgelaufen |
 | `app` „restarting“, Log `[start] FEHLER: Eine Migration ist fehlgeschlagen …` | → [Fehlgeschlagene Migration](#fehlgeschlagene-migration) |
 | `app` „restarting“, Log `[start] FEHLER: Die Datenbank enthält bereits Tabellen, aber keine Migrationshistorie` | Datenbank stammt aus einer `db push`-Installation → [Schema und Migrationen](#schema-und-migrationen), Baselining |

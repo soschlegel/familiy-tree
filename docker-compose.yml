@@ -1,8 +1,8 @@
 # Produktivstack — gedacht für Portainer auf der NAS (Git-Stack).
 #
 # Das App-Image baut GitHub Actions (.github/workflows/images.yml) und legt es
-# als privates Paket in der GitHub Container Registry (ghcr.io) ab; die NAS
-# lädt es nur noch (Zugangsdaten: Registry in Portainer, README).
+# als öffentliches Paket in der GitHub Container Registry (ghcr.io) ab; die NAS
+# lädt es nur noch (ohne Anmeldung; privat halten: README, Erste Installation).
 # Diese Datei bindet deshalb keine Dateien aus dem Repository ein — Portainer
 # klont das Repo in sein eigenes Datenvolume, relative Pfade wären auf dem
 # Docker-Host nicht auffindbar.
