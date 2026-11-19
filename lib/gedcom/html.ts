@@ -39,7 +39,8 @@ export function htmlToText(html: string): string {
   s = s.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "");
   s = s.replace(/<br\s*\/?>/gi, "\n");
   s = s.replace(/<li\b[^>]*>/gi, "\n• ");
-  s = s.replace(/<\/(p|div|h[1-6]|li|ul|ol|tr|table|blockquote|pre)\s*>/gi, "\n");
+  s = s.replace(/<\/li\s*>/gi, "");
+  s = s.replace(/<\/(p|div|h[1-6]|ul|ol|tr|table|blockquote|pre)\s*>/gi, "\n");
   s = s.replace(/<(p|div|h[1-6]|ul|ol|tr|table|blockquote|pre|hr)\b[^>]*>/gi, "\n");
   s = s.replace(/<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a\s*>/gi, (_m, href: string, label: string) => {
     const l = label.replace(/<[^>]*>/g, "").trim();

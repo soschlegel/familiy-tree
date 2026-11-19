@@ -110,13 +110,15 @@ const MONTH_LOOKUP: Record<string, number> = {
   dezember: 12, dez: 12, dec: 12, december: 12,
 };
 
+// Nach dem Zusatz darf kein Buchstabe folgen — sonst fräße „ca“ den Anfang
+// von „CAL 1850“.
 const QUALIFIER_PREFIXES: [RegExp, DateQualifier][] = [
   // „um“, „ca.“, „circa“, „etwa“, „~“; GEDCOM-Kürzel ABT für KI-Eingaben.
-  [/^(?:um|ca\.?|circa|zirka|etwa|ungefähr|ungef\.|~|abt\.?|about)\s*/i, "ABOUT"],
-  [/^(?:geschätzt|geschaetzt|gesch\.|est\.?|estimated)\s*/i, "ESTIMATED"],
-  [/^(?:errechnet|berechnet|err\.|cal\.?|calculated)\s*/i, "CALCULATED"],
-  [/^(?:vor|bef\.?|before|<)\s*/i, "BEFORE"],
-  [/^(?:nach|aft\.?|after|>)\s*/i, "AFTER"],
+  [/^(?:um|ca\.?|circa|zirka|etwa|ungefähr|ungef\.|~|abt\.?|about)(?![A-Za-zÄÖÜäöüß])\s*/i, "ABOUT"],
+  [/^(?:geschätzt|geschaetzt|gesch\.|est\.?|estimated)(?![A-Za-zÄÖÜäöüß])\s*/i, "ESTIMATED"],
+  [/^(?:errechnet|berechnet|err\.|cal\.?|calculated)(?![A-Za-zÄÖÜäöüß])\s*/i, "CALCULATED"],
+  [/^(?:vor|bef\.?|before|<)(?![A-Za-zÄÖÜäöüß])\s*/i, "BEFORE"],
+  [/^(?:nach|aft\.?|after|>)(?![A-Za-zÄÖÜäöüß])\s*/i, "AFTER"],
 ];
 
 const QUALIFIER_PREFIX: Record<DateQualifier, string> = {

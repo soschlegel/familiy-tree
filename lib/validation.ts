@@ -28,7 +28,8 @@ export const PARENT_SUBTYPES = [
   "STEP",
   "FOSTER",
 ] as const;
-export const PARTNER_SUBTYPES = ["MARRIED", "UNMARRIED", "DIVORCED"] as const;
+/** PARTNER_UNKNOWN: Partnerschaft, deren Ehestand unbekannt ist (z.B. Import ohne Heiratsangabe). */
+export const PARTNER_SUBTYPES = ["MARRIED", "UNMARRIED", "DIVORCED", "PARTNER_UNKNOWN"] as const;
 export const ALL_SUBTYPES = [...PARENT_SUBTYPES, ...PARTNER_SUBTYPES] as const;
 
 export type RelationTypeName = "PARENT_OF" | "PARTNER_OF";

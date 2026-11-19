@@ -68,17 +68,22 @@ const READ_TOOLS = [
   "get_source",
   "get_statistics",
   "get_timeline",
+  "list_events",
   "list_families",
   "search_persons",
   "search_sources",
 ];
 const WRITE_TOOLS = [
+  "add_event",
+  "add_name_variant",
   "cite_source",
   "create_person",
   "create_relationship",
   "create_source",
+  "delete_event",
   "delete_relationship",
   "set_person_families",
+  "update_event",
   "update_person",
   "update_relationship",
 ];
@@ -229,7 +234,17 @@ describe.skipIf(Boolean(skipReason))("MCP-Endpunkt /api/mcp (HTTP, Mock-Datenban
       expect(await s.tools(), key).toEqual(READ_TOOLS);
       const r = await s.call("create_person", { given_name: "Darf nicht", family_name: "Vitest-MCP-HTTP" });
       expect(r.isError, key).toBe(true);
+      // Auch Ereignisse und Namen lassen sich mit einem Lese-Schlüssel nicht anlegen.
+      const ev = await s.call("add_event", { person_id: L.genealogy.eventsPerson, type: "CENSUS", date: "1900" });
+      expect(ev.isError, key).toBe(true);
+      // Lesen geht: Ereignisse über list_events.
+      if (key === "viewer-read") {
+        const list = await s.call("list_events", { person_id: L.genealogy.eventsPerson });
+        expect(list.isError, list.text).toBe(false);
+        expect(list.data.events.map((e: { type: string }) => e.type)).toContain("BAPTISM");
+      }
     }
+    expect(await prisma.event.count({ where: { personId: L.genealogy.eventsPerson, type: "CENSUS" } })).toBe(0);
     expect(await prisma.person.count({ where: { familyName: "Vitest-MCP-HTTP" } })).toBe(0);
   });
 

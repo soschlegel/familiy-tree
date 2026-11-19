@@ -22,6 +22,9 @@ ALTER TYPE "DateQualifier" ADD VALUE 'PERIOD';
 ALTER TYPE "DateQualifier" ADD VALUE 'UNTIL';
 
 -- AlterEnum
+ALTER TYPE "RelationSubtype" ADD VALUE 'PARTNER_UNKNOWN';
+
+-- AlterEnum
 ALTER TYPE "CitationFact" ADD VALUE 'EVENT';
 
 -- AlterTable

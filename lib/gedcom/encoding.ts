@@ -150,7 +150,7 @@ export function decodeGedcomBytes(bytes: Uint8Array): DecodeResult {
     }
     return { text, info: { encoding: "ANSEL", bom: false, declared, detectedBy: "CHAR" }, warnings };
   }
-  return single(bytes, mapped, declared, "CHAR", warnings);
+  return single(bytes, mapped as "WINDOWS-1252" | "ISO-8859-1" | "MACINTOSH" | "UTF-16LE" | "UTF-16BE", declared, "CHAR", warnings);
 }
 
 /** Mindestens ein Mehrbytezeichen und gültig: echter UTF-8-Text. */

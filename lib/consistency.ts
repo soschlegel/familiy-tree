@@ -8,7 +8,12 @@
  * lib/dates.ts) zählen mit ihrem ganzen Zeitraum — gemeldet wird nur, was für
  * jede mögliche Lesart widersprüchlich ist. Ein Jahr allein ist also kein
  * Grund für eine Meldung, nur weil es intern als 1. Januar gespeichert ist.
+ * Bereiche („zwischen 1850 und 1855“) zählen mit ihrem ganzen Zeitraum.
+ *
+ * Lebensereignisse (Event) einer Person werden gegen Geburt und Tod geprüft;
+ * abweichende Zweitangaben (isAlternative) bleiben außen vor.
  */
+import { EVENT_TYPE_LABEL, POSTHUMOUS_EVENT_TYPES, eventTitle, type EventTypeName } from "./events";
 import {
   dateBounds,
   formatFuzzyDate,
@@ -38,7 +43,10 @@ export type ConsistencyKind =
   | "lifespanOver110"
   | "partnershipTooYoung"
   | "partnershipAfterDeath"
-  | "overlappingMarriages";
+  | "overlappingMarriages"
+  | "burialBeforeDeath"
+  | "eventBeforeBirth"
+  | "eventAfterDeath";
 
 export const CONSISTENCY_KINDS: ConsistencyKind[] = [
   "deathBeforeBirth",
@@ -49,6 +57,9 @@ export const CONSISTENCY_KINDS: ConsistencyKind[] = [
   "partnershipTooYoung",
   "partnershipAfterDeath",
   "overlappingMarriages",
+  "burialBeforeDeath",
+  "eventBeforeBirth",
+  "eventAfterDeath",
 ];
 
 export type ConsistencySeverity = "error" | "warning";
@@ -65,6 +76,24 @@ export type ConsistencyPerson = {
   birthDateQualifier?: DateQualifier;
   deathDatePrecision?: DatePrecision;
   deathDateQualifier?: DateQualifier;
+  birthDateTo?: Date | null;
+  birthDateToPrecision?: DatePrecision;
+  deathDateTo?: Date | null;
+  deathDateToPrecision?: DatePrecision;
+  /** Lebensereignisse der Person (ohne Angabe: keine Prüfung). */
+  events?: ConsistencyEvent[];
+};
+
+export type ConsistencyEvent = {
+  id: string;
+  type: EventTypeName;
+  label?: string | null;
+  isAlternative: boolean;
+  date: Date | null;
+  datePrecision?: DatePrecision;
+  dateQualifier?: DateQualifier;
+  dateTo?: Date | null;
+  dateToPrecision?: DatePrecision;
 };
 
 export type ConsistencyEdge = {
@@ -79,6 +108,10 @@ export type ConsistencyEdge = {
   startDateQualifier?: DateQualifier;
   endDatePrecision?: DatePrecision;
   endDateQualifier?: DateQualifier;
+  startDateTo?: Date | null;
+  startDateToPrecision?: DatePrecision;
+  endDateTo?: Date | null;
+  endDateToPrecision?: DatePrecision;
 };
 
 export type ConsistencyIssue = {
@@ -87,6 +120,8 @@ export type ConsistencyIssue = {
   /** Betroffene Personen; die erste ist die, bei der die Meldung "hängt". */
   personIds: string[];
   relationshipIds: string[];
+  /** Betroffene Ereignisse (Event.id), sonst leer. */
+  eventIds?: string[];
   message: string;
 };
 
@@ -116,8 +151,8 @@ export function findConsistencyIssues(
     persons.map((p) => [
       p.id,
       {
-        birth: toFuzzyDate(p.birthDate, p.birthDatePrecision, p.birthDateQualifier),
-        death: toFuzzyDate(p.deathDate, p.deathDatePrecision, p.deathDateQualifier),
+        birth: toFuzzyDate(p.birthDate, p.birthDatePrecision, p.birthDateQualifier, p.birthDateTo, p.birthDateToPrecision),
+        death: toFuzzyDate(p.deathDate, p.deathDatePrecision, p.deathDateQualifier, p.deathDateTo, p.deathDateToPrecision),
       },
     ]),
   );
@@ -145,6 +180,42 @@ export function findConsistencyIssues(
           message: death
             ? `${name(p)}: Lebensdauer von ${ageText(age, "min")} Jahren`
             : `${name(p)}: ohne Sterbedatum heute ${ageText(age, "min")} Jahre alt — vermutlich fehlt das Sterbedatum`,
+        });
+      }
+    }
+
+    // Lebensereignisse gegen Geburt und Tod.
+    for (const ev of p.events ?? []) {
+      if (ev.isAlternative) continue;
+      const when = toFuzzyDate(ev.date, ev.datePrecision, ev.dateQualifier, ev.dateTo, ev.dateToPrecision);
+      if (!when) continue;
+      const title = eventTitle(ev);
+      const base = { personIds: [p.id], relationshipIds: [], eventIds: [ev.id] };
+      if (ev.type === "BURIAL" || ev.type === "CREMATION") {
+        if (death && dateBounds(when).end <= dateBounds(death).start) {
+          issues.push({
+            ...base,
+            kind: "burialBeforeDeath",
+            severity: "error",
+            message: `${name(p)}: ${EVENT_TYPE_LABEL[ev.type]} ${day(when)} liegt vor dem Tod ${day(death)}`,
+          });
+          continue;
+        }
+      }
+      if (birth && dateBounds(when).end <= dateBounds(birth).start) {
+        issues.push({
+          ...base,
+          kind: "eventBeforeBirth",
+          severity: "error",
+          message: `${name(p)}: ${title} ${day(when)} liegt vor der Geburt ${day(birth)}`,
+        });
+      }
+      if (death && !POSTHUMOUS_EVENT_TYPES.includes(ev.type) && dateBounds(when).start >= dateBounds(death).end) {
+        issues.push({
+          ...base,
+          kind: "eventAfterDeath",
+          severity: "warning",
+          message: `${name(p)}: ${title} ${day(when)} liegt nach dem Tod ${day(death)}`,
         });
       }
     }
@@ -210,7 +281,7 @@ export function findConsistencyIssues(
     }
 
     // PARTNER_OF
-    const start = toFuzzyDate(e.startDate, e.startDatePrecision, e.startDateQualifier);
+    const start = toFuzzyDate(e.startDate, e.startDatePrecision, e.startDateQualifier, e.startDateTo, e.startDateToPrecision);
     if (start) {
       for (const p of [from, to]) {
         const other = p === from ? to : from;
@@ -239,6 +310,10 @@ export function findConsistencyIssues(
       }
     }
 
+    // Nur Ehen: unverheiratete Partnerschaften und solche mit unbekanntem
+    // Ehestand (PARTNER_UNKNOWN) zählen nicht als Ehe — eine Überschneidung
+    // wäre bei ihnen kein Widerspruch. Altersgrenze und „nach dem Tod“ gelten
+    // für jede Partnerschaft (oben).
     if (e.subtype === "MARRIED" || e.subtype === "DIVORCED") {
       for (const id of [e.from, e.to]) {
         const list = marriages.get(id) ?? [];
@@ -255,13 +330,13 @@ export function findConsistencyIssues(
   const reported = new Set<string>();
   for (const [personId, list] of marriages) {
     const intervals = list
-      .map((e) => ({ e, start: toFuzzyDate(e.startDate, e.startDatePrecision, e.startDateQualifier) }))
+      .map((e) => ({ e, start: toFuzzyDate(e.startDate, e.startDatePrecision, e.startDateQualifier, e.startDateTo, e.startDateToPrecision) }))
       .filter((x): x is { e: ConsistencyEdge; start: FuzzyDate } => x.start !== null)
       .map(({ e, start }) => {
         const deaths = [dated.get(e.from)!.death, dated.get(e.to)!.death].filter(
           (d): d is FuzzyDate => d !== null,
         );
-        const endDate = toFuzzyDate(e.endDate, e.endDatePrecision, e.endDateQualifier);
+        const endDate = toFuzzyDate(e.endDate, e.endDatePrecision, e.endDateQualifier, e.endDateTo, e.endDateToPrecision);
         let end: number | null;
         if (endDate) end = dateBounds(endDate).start;
         else if (e.subtype === "DIVORCED") end = null;

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { prisma } from "@/lib/prisma";
 import { requireScope } from "@/lib/session";
 import { editableFamilyIds } from "@/lib/scope";
 import { listFamilies, searchPersons, type PersonSort } from "@/lib/services";
@@ -19,7 +20,10 @@ const SORTS: { value: PersonSort; label: string }[] = [
   { value: "updatedAt", label: "Zuletzt geändert" },
 ];
 
-type Params = { q?: string; sort?: string; family?: string; page?: string; deleted?: string };
+type Params = { q?: string; place?: string; sort?: string; family?: string; page?: string; deleted?: string };
+
+const has = (text: string | null | undefined, word: string) =>
+  Boolean(text) && text!.toLocaleLowerCase("de").includes(word.toLocaleLowerCase("de"));
 
 export default async function PeoplePage({
   searchParams,
@@ -29,6 +33,7 @@ export default async function PeoplePage({
   const { scope } = await requireScope();
   const params = await searchParams;
   const needle = params.q?.trim() || undefined;
+  const placeNeedle = params.place?.trim() || undefined;
   const sort = SORTS.some((s) => s.value === params.sort)
     ? (params.sort as PersonSort)
     : "name";
@@ -39,6 +44,7 @@ export default async function PeoplePage({
 
   let { items: persons, total } = await searchPersons(scope, {
     q: needle,
+    place: placeNeedle,
     familyId,
     sort,
     limit: PAGE_SIZE,
@@ -61,13 +67,41 @@ export default async function PeoplePage({
   const hrefFor = (p: number) => {
     const sp = new URLSearchParams();
     if (needle) sp.set("q", needle);
+    if (placeNeedle) sp.set("place", placeNeedle);
     if (sort !== "name") sp.set("sort", sort);
     if (familyId) sp.set("family", familyId);
     if (p > 1) sp.set("page", String(p));
     const s = sp.toString();
     return s ? `/people?${s}` : "/people";
   };
-  const filtered = Boolean(needle || familyId);
+  const filtered = Boolean(needle || placeNeedle || familyId);
+
+  // Warum passt ein Treffer, wenn es nicht am sichtbaren Namen bzw. Ort liegt?
+  // (Rufname, weiterer Name, Ort eines Ereignisses oder einer Ehe.)
+  const words = (needle ?? "").split(/\s+/).filter(Boolean);
+  const otherNames =
+    words.length > 0
+      ? await prisma.personName.findMany({
+          where: { personId: { in: persons.map((x) => x.id) } },
+          select: { personId: true, givenName: true, familyName: true, nickname: true },
+        })
+      : [];
+  const matchHint = (x: (typeof persons)[number]): string | null => {
+    const hints: string[] = [];
+    const missing = words.filter((w) => !has(x.givenName, w) && !has(x.familyName, w) && !has(x.birthName, w));
+    if (missing.length > 0) {
+      if (missing.some((w) => has(x.nickname, w))) hints.push(`Rufname „${x.nickname}“`);
+      const variant = otherNames.find(
+        (n) => n.personId === x.id && missing.some((w) => has(n.givenName, w) || has(n.familyName, w) || has(n.nickname, w)),
+      );
+      if (variant) hints.push(`auch: ${[variant.givenName, variant.nickname && `„${variant.nickname}“`, variant.familyName].filter(Boolean).join(" ")}`);
+    }
+    if (placeNeedle) {
+      // Geburts-/Sterbeort erklärt sich selbst; sonst kam der Ort aus einem Ereignis oder einer Ehe.
+      if (![x.birthPlace, x.deathPlace].some((pl) => has(pl, placeNeedle))) hints.push(`„${placeNeedle}“ bei einem Ereignis oder einer Ehe`);
+    }
+    return hints.length > 0 ? hints.join(" · ") : null;
+  };
   const from = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const to = Math.min(total, page * PAGE_SIZE);
 
@@ -109,7 +143,20 @@ export default async function PeoplePage({
             name="q"
             type="search"
             defaultValue={needle}
-            placeholder="Vor-, Nach- oder Geburtsname…"
+            placeholder="Vor-, Nach-, Geburts- oder Rufname…"
+            className="field w-full"
+          />
+        </div>
+        <div className="min-w-0 basis-40">
+          <label htmlFor="people-place" className="field-label">
+            Ort
+          </label>
+          <input
+            id="people-place"
+            name="place"
+            type="search"
+            defaultValue={placeNeedle}
+            placeholder="z.B. Bremen"
             className="field w-full"
           />
         </div>
@@ -188,6 +235,11 @@ export default async function PeoplePage({
                     {lifeSpan(p) || "Lebensdaten unbekannt"}
                     {p.birthName && ` · geb. ${p.birthName}`}
                   </span>
+                  {matchHint(p) && (
+                    <span className="block truncate text-xs text-accent-700 dark:text-accent-300" data-testid="match-hint">
+                      {matchHint(p)}
+                    </span>
+                  )}
                   <span className="mt-1 flex flex-wrap gap-1">
                     {p.familyIds.slice(0, 2).map((f) => (
                       <span key={f} className="badge px-2 py-0 text-[11px]">

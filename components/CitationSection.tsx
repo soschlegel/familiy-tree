@@ -30,11 +30,18 @@ export type CitationRow = {
   relationshipId: string | null;
   /** Bezug bei Belegen an einer Beziehung, z.B. „Ehe mit Anna Becker“. */
   relationLabel: string | null;
+  /** Beleg für ein Lebensereignis. */
+  eventId?: string | null;
+  /** Bezug bei Belegen für ein Ereignis, z.B. „Taufe 1858“. */
+  eventLabel?: string | null;
 };
 
-/** Wofür sich hier etwas belegen lässt: die Person selbst oder eine ihrer Beziehungen. */
+/**
+ * Wofür sich hier etwas belegen lässt: die Person selbst, eine ihrer
+ * Beziehungen oder eines der Lebensereignisse.
+ */
 export type CitationTargetOption = {
-  /** "person" oder die ID der Beziehung. */
+  /** "person", die ID der Beziehung oder "event:<ID des Ereignisses>". */
   value: string;
   label: string;
   facts: CitationFactName[];
@@ -178,7 +185,9 @@ export function CitationSection({
   }, [targets, canEdit]);
 
   const factsFor = (row: CitationRow) =>
-    (row.relationshipId
+    row.eventId
+      ? (["EVENT"] as CitationFactName[])
+      : (row.relationshipId
       ? targets.find((t) => t.value === row.relationshipId)?.facts
       : targets.find((t) => t.value === "person")?.facts) ?? [row.fact];
 
@@ -224,7 +233,11 @@ export function CitationSection({
       "/api/citations",
       jsonBody("POST", {
         sourceId: useSource,
-        ...(target === "person" ? { personId } : { relationshipId: target }),
+        ...(target === "person"
+          ? { personId }
+          : target.startsWith("event:")
+            ? { eventId: target.slice("event:".length) }
+            : { relationshipId: target }),
         fact,
         detail: detail.trim() || null,
         confidence: confidence || null,
@@ -321,7 +334,8 @@ export function CitationSection({
                         {row.source.title}
                       </Link>
                       <span className="badge px-2 py-0 text-[11px]">{SOURCE_KIND_LABEL[row.source.kind]}</span>
-                      {row.relationLabel && <span className="text-xs muted">· {row.relationLabel}</span>}
+                      {row.eventLabel && <span className="text-xs muted">· {row.eventLabel}</span>}
+                      {!row.eventLabel && row.relationLabel && <span className="text-xs muted">· {row.relationLabel}</span>}
                       {row.detail && <span className="text-xs muted">· {row.detail}</span>}
                       {row.confidence && (
                         <span className={`${confidenceBadge[row.confidence]} px-2 py-0 text-[11px]`}>
@@ -389,15 +403,28 @@ export function CitationSection({
                 value={choice}
                 onChange={(e) => setChoice(e.target.value)}
               >
-                {targets.map((t) => (
-                  <optgroup key={t.value} label={t.label}>
-                    {t.facts.map((f) => (
-                      <option key={f} value={`${t.value}|${f}`}>
-                        {t.value === "person" ? CITATION_FACT_LABEL[f] : `${t.label} – ${CITATION_FACT_LABEL[f]}`}
-                      </option>
-                    ))}
+                {targets
+                  .filter((t) => !t.value.startsWith("event:"))
+                  .map((t) => (
+                    <optgroup key={t.value} label={t.label}>
+                      {t.facts.map((f) => (
+                        <option key={f} value={`${t.value}|${f}`}>
+                          {t.value === "person" ? CITATION_FACT_LABEL[f] : `${t.label} – ${CITATION_FACT_LABEL[f]}`}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                {targets.some((t) => t.value.startsWith("event:")) && (
+                  <optgroup label="Lebensereignisse">
+                    {targets
+                      .filter((t) => t.value.startsWith("event:"))
+                      .map((t) => (
+                        <option key={t.value} value={`${t.value}|EVENT`}>
+                          {t.label}
+                        </option>
+                      ))}
                   </optgroup>
-                ))}
+                )}
               </select>
               {fields.fact && <span className="field-error">{fields.fact}</span>}
             </div>

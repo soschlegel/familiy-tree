@@ -63,6 +63,7 @@ const QUALIFIER_WORDS: Record<string, string> = {
   FROM: "FROM", VON: "FROM", AB: "FROM",
   TO: "TO", BIS: "TO",
   INT: "INT", "INT.": "INT",
+  OR: "OR", ODER: "OR",
 };
 
 // ---------------------------------------------------------------------------
@@ -352,16 +353,15 @@ function parseInner(text: string, ctx: Ctx): Omit<GedcomDate, "original"> | null
   const plain = parsePoint(text, ctx);
   if (plain) return { kind: "EXACT", start: plain };
 
-  // „1850 - 1860“ bzw. „1850 bis 1860“ (nachsichtig)
-  const dashIdx = words.indexOf("-");
-  const bisIdx = norm.indexOf("TO");
-  if (dashIdx > 0 || bisIdx > 0) {
-    const idx = dashIdx > 0 ? dashIdx : bisIdx;
-    const pa = parsePoint(words.slice(0, idx).join(" "), ctx);
-    const pb = parsePoint(words.slice(idx + 1).join(" "), ctx);
+  // Nachsichtig: „1850 - 1860“, „1850 und 1860“, „1850 oder 1851“ → Bereich;
+  // „1850 bis 1860“ → Zeitraum.
+  const sepIdx = norm.findIndex((w, i) => i > 0 && (w === "-" || w === "AND" || w === "OR" || w === "TO"));
+  if (sepIdx > 0) {
+    const pa = parsePoint(words.slice(0, sepIdx).join(" "), ctx);
+    const pb = parsePoint(words.slice(sepIdx + 1).join(" "), ctx);
     if (pa && pb) {
       ctx.lenient = true;
-      return { kind: dashIdx > 0 ? "BETWEEN" : "FROM_TO", start: pa, end: pb };
+      return { kind: norm[sepIdx] === "TO" ? "FROM_TO" : "BETWEEN", start: pa, end: pb };
     }
   }
   const m2 = text.match(/^(\d{4})\s*-\s*(\d{4})$/);
@@ -421,7 +421,11 @@ function formatPoint(p: GedcomDatePoint, version: 5 | 7): string {
  */
 export function formatGedcomDate(date: GedcomDate, version: 5 | 7 = 5): string {
   if (date.kind === "INVALID") return date.original;
-  if (date.original && !date.lenient) {
+  // Original nur übernehmen, wenn es in der Zielversion gültig ist
+  // (7.0: Kalender als Wort/BCE; 5.5.1: @#D…@/B.C.).
+  const v7Syntax = /(JULIAN|GREGORIAN|HEBREW|FRENCH_R)|BCE/.test(date.original);
+  const v5Syntax = /@#D|B.C./.test(date.original);
+  if (date.original && !date.lenient && !(version === 5 && v7Syntax) && !(version === 7 && v5Syntax)) {
     const re = parseGedcomDate(date.original);
     if (!re.lenient && sameDate(re, date)) return date.original;
   }

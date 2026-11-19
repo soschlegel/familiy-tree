@@ -170,9 +170,21 @@ describe.skipIf(Boolean(skipReason))("Recherche-Ergänzungen (Mock-Datenbank)", 
       const r = await searchPersons(admin, { bornFrom: 1900, bornTo: 1930, gender: "FEMALE", deceased: true });
       expect(r.total).toBe(expected.length);
 
+      // Ort = Geburts-/Sterbeort, Ort eines eigenen Ereignisses, Heirats-/
+      // Scheidungsort oder Ort eines Ereignisses einer eigenen Beziehung.
       const place = "hannover";
-      const atPlace = mockData().persons.filter((p) =>
-        [p.birthPlace, p.deathPlace].some((x) => x?.toLowerCase().includes(place)),
+      const m = mockData();
+      const has = (x: string | null | undefined) => Boolean(x?.toLowerCase().includes(place));
+      const relHit = new Set(
+        m.relationships
+          .filter((r) => has(r.startPlace) || has(r.endPlace) || m.events.some((e) => e.relationshipId === r.id && has(e.place)))
+          .flatMap((r) => [r.fromPersonId, r.toPersonId]),
+      );
+      const atPlace = m.persons.filter(
+        (p) =>
+          [p.birthPlace, p.deathPlace].some(has) ||
+          m.events.some((e) => e.personId === p.id && has(e.place)) ||
+          relHit.has(p.id),
       );
       expect((await searchPersons(admin, { place })).total).toBe(atPlace.length);
       expect(atPlace.length).toBeGreaterThan(0);

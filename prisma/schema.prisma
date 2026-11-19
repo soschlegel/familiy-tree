@@ -310,6 +310,7 @@ enum RelationSubtype {
   MARRIED
   UNMARRIED
   DIVORCED
+  PARTNER_UNKNOWN // Partnerschaft, Ehestand unbekannt (z.B. Import ohne Heiratsangabe)
 }
 
 // Beziehungen liegen bewusst in einer eigenen Tabelle statt als parentId auf

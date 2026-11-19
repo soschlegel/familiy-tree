@@ -13,6 +13,10 @@ export function registerPrompts(server: McpServer, ctx: ToolContext): void {
     ? "Schreibwerkzeuge sind aktiv. Halte gesicherte Ergebnisse erst nach Rückfrage beim Benutzer fest: " +
       "fehlende Daten nur mit Beleg und nur so genau eintragen, wie die Quelle es hergibt (z.B. „um 1850“, „vor 1900“), " +
       "den Beleg mit search_sources/create_source und cite_source (Fundstelle in detail) erfassen, " +
+      "Taufe, Beruf, Wohnort, Beerdigung u.ä. als Ereignis mit add_event festhalten (nicht nur in die Notizen schreiben) " +
+      "und mit cite_source(event_id) belegen, weitere Namen mit add_name_variant, Heiratsorte mit update_relationship; " +
+      "Geburt, Tod, Heirat und Scheidung selbst gehören an Person bzw. Beziehung — als Ereignis nur mit is_alternative=true " +
+      "für eine abweichende zweite Angabe, nie als Hauptangabe, " +
       "Überlegungen und offene Fragen mit update_person(append_note) notieren, " +
       "nichts überschreiben, was nicht nachweislich falsch ist."
     : "Der Server ist schreibgeschützt. Formuliere Ergebnisse als Vorschläge, die der Benutzer selbst einträgt.";
@@ -36,7 +40,8 @@ export function registerPrompts(server: McpServer, ctx: ToolContext): void {
               `Recherchiere die Person mit der ID ${person_id} im Stammbaum. Antworte auf Deutsch.`,
               "",
               "Vorgehen:",
-              "1. get_person: Stammdaten, Notizen, Eltern, Partner, Kinder, Geschwister und Belege (citations).",
+              "1. get_person: Stammdaten, Notizen, Eltern, Partner (mit Heiratsort und Ereignissen der Ehe), Kinder, Geschwister, " +
+                "Lebensereignisse (events; alternative = abweichende Zweitangabe), weitere Namen (otherNames) und Belege (citations).",
               "   Für zitierte Quellen bei Bedarf get_source (Abschrift, weitere belegte Personen).",
               "2. get_timeline(person_id): Lebenslauf in zeitlicher Reihenfolge; `missing` zeigt fehlende Daten.",
               "3. check_consistency(person_id): widersprüchliche Daten.",
@@ -46,7 +51,8 @@ export function registerPrompts(server: McpServer, ctx: ToolContext): void {
               "",
               "Fasse danach zusammen:",
               "- Was ist belegt (Quelle und Fundstelle aus den Belegen, Verlässlichkeit), was nur in Notizen erwähnt, was unbelegt?",
-              "- Was fehlt, ist nur ungefähr bekannt (um/vor/nach, nur Jahr) oder widersprüchlich?",
+              "- Was fehlt, ist nur ungefähr bekannt (um/vor/nach, zwischen … und …, nur Jahr, nur Wortlaut) oder widersprüchlich " +
+                "(auch abweichende Angaben zu Geburt, Tod oder Heirat)?",
               "- Konkrete nächste Rechercheschritte mit passenden Quellen (Kirchenbücher, Standesamtsregister, " +
                 "Adressbücher, Grabsteine, Familienunterlagen), jeweils mit Ort und Zeitraum.",
               "",

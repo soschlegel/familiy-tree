@@ -4,7 +4,7 @@ import { requireScope } from "@/lib/session";
 import { canCreateSources, listSources, type SourceKind } from "@/lib/services";
 import { SOURCE_KINDS } from "@/lib/validation";
 import { SOURCE_KIND_LABEL } from "@/lib/source-labels";
-import { formatDate } from "@/lib/tree-layout";
+import { formatDateOf } from "@/lib/tree-layout";
 import { AutoSubmitSelect } from "@/components/AutoSubmit";
 
 export const dynamic = "force-dynamic";
@@ -119,7 +119,7 @@ export default async function SourcesPage({ searchParams }: { searchParams: Prom
         <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3" aria-label="Quellenliste" data-testid="sources-list">
           {items.map((s) => {
             const where = [s.repository, s.callNumber].filter(Boolean).join(" · ");
-            const date = formatDate(s.date, s.datePrecision, s.dateQualifier);
+            const date = formatDateOf(s, "date");
             return (
               <li key={s.id}>
                 <Link

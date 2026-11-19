@@ -144,7 +144,8 @@ async function main() {
     // Alles leeren. TRUNCATE … CASCADE ist schneller als deleteMany je
     // Tabelle und hält sich nicht mit Fremdschlüsseln auf.
     await prisma.$executeRawUnsafe(
-      `TRUNCATE TABLE "AuditLog", "Citation", "Source", "RelationshipMedia", "PersonMedia", "MediaAsset",
+      `TRUNCATE TABLE "ImportLink", "ExternalId", "ImportRawRecord", "ImportBatch", "Event", "PersonName",
+        "AuditLog", "Citation", "Source", "RelationshipMedia", "PersonMedia", "MediaAsset",
         "Relationship", "PersonFamily", "Person", "UserFamily", "Family",
         "Session", "Account", "VerificationToken", "ApiToken", "User" CASCADE`,
     );
@@ -195,6 +196,9 @@ async function main() {
       ),
     });
     await prisma.relationship.createMany({ data: data.relationships });
+    // Lebensereignisse und weitere Namen (siehe lib/events.ts).
+    await prisma.event.createMany({ data: data.events as never });
+    await prisma.personName.createMany({ data: data.personNames });
 
     let imageCount = 0;
     const createdImages = new Set<string>();
@@ -246,7 +250,8 @@ async function main() {
     console.log(
       `[mock] Fertig: ${data.persons.length} Personen über ${generations} Generationen, ` +
         `${data.relationships.length} Beziehungen, ${imageCount} Bilder, ` +
-        `${data.sources.length} Quellen mit ${data.citations.length} Belegen.`,
+        `${data.sources.length} Quellen mit ${data.citations.length} Belegen, ` +
+        `${data.events.length} Ereignisse, ${data.personNames.length} weitere Namen.`,
     );
     console.log(`[mock] Je Familie: ${perFamily}; ohne Familie: ${data.landmarks.noFamily.length}`);
     console.log("[mock] Benutzer (Dev-Login):");

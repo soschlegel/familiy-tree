@@ -1,9 +1,12 @@
 import {
+  formatDateWithPhrase,
   formatFuzzyDate,
   formatFuzzyYear,
+  fuzzyField,
   toFuzzyDate,
   type DatePrecision,
   type DateQualifier,
+  type FuzzyKey,
 } from "./dates";
 
 export type TreePerson = {
@@ -18,6 +21,11 @@ export type TreePerson = {
   birthDateQualifier?: DateQualifier;
   deathDatePrecision?: DatePrecision;
   deathDateQualifier?: DateQualifier;
+  /** Bereichsende der Lebensdaten (nur bei „zwischen … und …“ bzw. „von … bis …“). */
+  birthDateTo?: string | null;
+  birthDateToPrecision?: DatePrecision;
+  deathDateTo?: string | null;
+  deathDateToPrecision?: DatePrecision;
   primaryMediaId: string | null;
   /** Anonymer Platzhalter: der Benutzer darf diese Person nicht sehen. */
   restricted?: boolean;
@@ -37,6 +45,9 @@ export type TreeRelationship = {
   startDateQualifier?: DateQualifier;
   endDatePrecision?: DatePrecision;
   endDateQualifier?: DateQualifier;
+  /** Bereichsende des Beginns (z.B. Heirat „zwischen 1850 und 1855“). */
+  startDateTo?: string | null;
+  startDateToPrecision?: DatePrecision;
   primaryMediaId: string | null;
 };
 
@@ -61,6 +72,8 @@ export type MarriageEvent = {
   date: string;
   datePrecision?: DatePrecision;
   dateQualifier?: DateQualifier;
+  dateTo?: string | null;
+  dateToPrecision?: DatePrecision;
   subtype: string;
   primaryMediaId: string | null;
   partnerAId: string;
@@ -99,6 +112,9 @@ export type MarriageInfo = {
   /** Genauigkeit und Zusatz von `date` (Beginn der Ehe). */
   datePrecision?: DatePrecision;
   dateQualifier?: DateQualifier;
+  /** Bereichsende von `date`. */
+  dateTo?: string | null;
+  dateToPrecision?: DatePrecision;
   subtype: string;
   primaryMediaId: string | null;
 };
@@ -181,15 +197,41 @@ export function formatDate(
   d: string | Date | null | undefined,
   precision?: DatePrecision | string | null,
   qualifier?: DateQualifier | string | null,
+  /** Ende eines Bereichs (zwischen … und …, von … bis …). */
+  to?: string | Date | null,
+  toPrecision?: DatePrecision | string | null,
 ): string {
-  return formatFuzzyDate(toFuzzyDate(d ?? null, precision, qualifier));
+  return formatFuzzyDate(toFuzzyDate(d ?? null, precision, qualifier, to ?? null, toPrecision));
+}
+
+/**
+ * Ein Datumsfeld eines Datensatzes vollständig anzeigen — Anker, Genauigkeit,
+ * Zusatz, Bereichsende und Wortlaut (`…To`, `…ToPrecision`, `…Phrase`):
+ * formatDateOf(person, "birthDate") → „zwischen 1850 und 1855“, „Weihnachten
+ * 1850“ (nur Wortlaut) oder „1850 („Weihnachten 1850“)“. Bevorzugt vor
+ * formatDate, weil kein Teil der Angabe vergessen werden kann.
+ */
+export function formatDateOf(obj: object, key: FuzzyKey): string {
+  const phrase = (obj as Record<string, unknown>)[`${key}Phrase`];
+  return formatDateWithPhrase(fuzzyField(obj, key), typeof phrase === "string" ? phrase : null);
 }
 
 export function displayName(p: TreePerson): string {
   return [p.givenName, p.familyName].filter(Boolean).join(" ");
 }
 
-/** „1850 – 1912“, „um 1850 – vor 1920“, „* um 1850“, „† 1912“. */
+/** Wortlaut in Kurzanzeigen (Lebensspanne) kürzen. */
+const shortPhrase = (v: unknown): string => {
+  if (typeof v !== "string" || !v.trim()) return "";
+  const t = v.trim();
+  return t.length > 24 ? `${t.slice(0, 23)}…` : t;
+};
+
+/**
+ * „1850 – 1912“, „um 1850 – vor 1920“, „zw. 1850 u. 1855 – 1912“, „* um
+ * 1850“, „† 1912“. Bereichsenden (`…To`) und — ohne Datum — der Wortlaut
+ * (`…Phrase`, gekürzt) zählen mit, wenn das Objekt sie mitbringt.
+ */
 export function lifeSpan(p: {
   birthDate: string | null;
   deathDate: string | null;
@@ -197,9 +239,21 @@ export function lifeSpan(p: {
   birthDateQualifier?: DateQualifier | string | null;
   deathDatePrecision?: DatePrecision | string | null;
   deathDateQualifier?: DateQualifier | string | null;
+  birthDateTo?: string | null;
+  birthDateToPrecision?: DatePrecision | string | null;
+  deathDateTo?: string | null;
+  deathDateToPrecision?: DatePrecision | string | null;
+  birthDatePhrase?: string | null;
+  deathDatePhrase?: string | null;
 }): string {
-  const b = formatFuzzyYear(toFuzzyDate(p.birthDate, p.birthDatePrecision, p.birthDateQualifier));
-  const d = formatFuzzyYear(toFuzzyDate(p.deathDate, p.deathDatePrecision, p.deathDateQualifier));
+  const b =
+    formatFuzzyYear(
+      toFuzzyDate(p.birthDate, p.birthDatePrecision, p.birthDateQualifier, p.birthDateTo, p.birthDateToPrecision),
+    ) || shortPhrase(p.birthDatePhrase);
+  const d =
+    formatFuzzyYear(
+      toFuzzyDate(p.deathDate, p.deathDatePrecision, p.deathDateQualifier, p.deathDateTo, p.deathDateToPrecision),
+    ) || shortPhrase(p.deathDatePhrase);
   if (!b && !d) return "";
   if (b && d) return `${b} – ${d}`;
   if (b) return `* ${b}`;

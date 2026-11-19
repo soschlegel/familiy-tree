@@ -5,7 +5,8 @@ import { cache } from "react";
 import { requireScope } from "@/lib/session";
 import { getSource, type CitationTarget, type PersonRef, type SourceDetail } from "@/lib/services";
 import { CITATION_FACT_LABEL, CONFIDENCE_LABEL, SOURCE_KIND_LABEL } from "@/lib/source-labels";
-import { formatDate, lifeSpan } from "@/lib/tree-layout";
+import { formatDateOf, lifeSpan } from "@/lib/tree-layout";
+import { PARTNER_SUBTYPE_LABEL } from "@/lib/partner-labels";
 import { LockIcon } from "@/components/PersonNode";
 import { DeleteSourceButton } from "@/components/DeleteSourceButton";
 
@@ -44,6 +45,7 @@ const RELATION_LABEL: Record<string, string> = {
   MARRIED: "Ehe",
   DIVORCED: "Ehe (geschieden)",
   UNMARRIED: "Partnerschaft",
+  PARTNER_UNKNOWN: `Partnerschaft (${PARTNER_SUBTYPE_LABEL.PARTNER_UNKNOWN})`,
   BIOLOGICAL: "Eltern – Kind",
   ADOPTIVE: "Adoption",
   STEP: "Stiefelternteil – Kind",
@@ -94,7 +96,7 @@ export default async function SourcePage({
   // Unsichtbar = nicht vorhanden (wie bei Personen).
   if (!detail) notFound();
   const { source: s, citations } = detail;
-  const date = formatDate(s.date, s.datePrecision, s.dateQualifier);
+  const date = formatDateOf(s, "date");
   const total = citations.length + detail.hiddenCitationCount;
 
   return (
@@ -193,7 +195,7 @@ export default async function SourcePage({
             {citations.map((c) => (
               <li key={c.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-2.5 text-sm" data-testid="source-citation">
                 <span className="w-36 shrink-0 text-xs font-medium uppercase tracking-wide text-accent-700 dark:text-accent-300">
-                  {CITATION_FACT_LABEL[c.fact]}
+                  {c.eventTitle ? `${CITATION_FACT_LABEL[c.fact]}: ${c.eventTitle}` : CITATION_FACT_LABEL[c.fact]}
                 </span>
                 <Target target={c.target} />
                 {c.detail && <span className="text-xs muted">· {c.detail}</span>}
