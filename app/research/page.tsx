@@ -4,7 +4,7 @@ import { requireScope } from "@/lib/session";
 import {
   findDataGaps,
   findInconsistencies,
-  findPossibleDuplicates,
+  listDuplicateCandidates,
   getStatistics,
   RELATIONSHIP_GAP_KINDS,
   type DataGapKind,
@@ -14,6 +14,7 @@ import {
 } from "@/lib/services";
 import type { ConsistencyKind } from "@/lib/consistency";
 import { lifeSpan } from "@/lib/tree-layout";
+import { DuplicateList } from "@/components/DuplicateList";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Recherche" };
@@ -116,7 +117,7 @@ export default async function ResearchPage() {
   const [stats, gaps, duplicates, consistency] = await Promise.all([
     getStatistics(scope),
     findDataGaps(scope, { limit: 25 }),
-    findPossibleDuplicates(scope, { limit: 20 }),
+    listDuplicateCandidates(scope, { limit: 20 }),
     findInconsistencies(scope, { limit: 200 }),
   ]);
 
@@ -262,28 +263,24 @@ export default async function ResearchPage() {
                   Mögliche Dubletten
                 </h2>
                 <p className="text-sm muted">
-                  Ähnliche Namen und Geburtsjahre — bitte prüfen, ob es dieselbe Person ist.
+                  Ähnliche Namen (auch Ehe- und Geburtsname), Daten und Verwandte — bitte prüfen, ob es dieselbe
+                  Person ist, und dann zusammenführen oder als „kein Duplikat“ markieren.
                 </p>
               </div>
-              {duplicates.length === 0 ? (
+              {duplicates.total === 0 ? (
                 <p className="alert-success">Keine verdächtigen Doppelungen gefunden.</p>
               ) : (
-                <ul className="space-y-2">
-                  {duplicates.map((d) => (
-                    <li key={`${d.a.id}-${d.b.id}`} className="card p-3">
-                      <div className="flex items-center gap-2">
-                        <span className="badge tabular-nums" title="Ähnlichkeit">
-                          {Math.round(d.score * 100)} %
-                        </span>
-                        <span className="text-xs muted">{d.reasons.join(" · ")}</span>
-                      </div>
-                      <div className="mt-2 grid gap-1 sm:grid-cols-2">
-                        <PersonLink person={d.a} />
-                        <PersonLink person={d.b} />
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <p className="text-sm">
+                    <span className="tabular-nums">{duplicates.counts.high}</span> sicher ·{" "}
+                    <span className="tabular-nums">{duplicates.counts.medium}</span> wahrscheinlich ·{" "}
+                    <span className="tabular-nums">{duplicates.counts.low}</span> unklar ·{" "}
+                    <Link href="/research/duplicates" className="font-medium underline" data-testid="research-duplicates-all">
+                      alle {duplicates.total} prüfen
+                    </Link>
+                  </p>
+                  <DuplicateList items={duplicates.items} />
+                </>
               )}
             </section>
           </div>

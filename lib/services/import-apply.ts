@@ -412,7 +412,10 @@ async function applyInTx(
   }
 
   // --- Vorhandene Ziele für update/skip und Herkunft laden ------------------
-  async function existingFor(section: Section, items: { ref: string; action: ImportAction; id?: string | null }[]) {
+  async function existingFor(
+    section: Section,
+    items: { ref: string; action: ImportAction; id?: string | null; externalKey?: string | null }[],
+  ) {
     const entity = SECTION_ENTITY[section];
     const wanted = items.filter((i) => i.action !== "create");
     for (const i of wanted) {
@@ -424,7 +427,29 @@ async function applyInTx(
     const links = targetIds.length
       ? await db.importLink.findMany({ where: { [col]: { in: targetIds } } })
       : [];
-    const linkBy = new Map(links.map((l) => [(l as Record<string, unknown>)[col] as string, l]));
+    // Ein Datensatz kann mehrere Links haben (zusammengeführt, oder aus
+    // mehreren Quell-Bäumen verknüpft). Maßgeblich ist der Link DIESES Baums
+    // und DIESES Datensatzes der Quelle (externalKey); ohne passenden Schlüssel
+    // ein Link dieses Baums, dessen Schlüssel in diesem Lauf niemand sonst
+    // benutzt (umnummerierte Quelle). Sonst entsteht ein neuer Link — der
+    // Datensatz wird damit aus diesem Baum zusätzlich wiedererkennbar, ohne
+    // dass die Links anderer Bäume (bzw. des anderen Datensatzes einer
+    // zusammengeführten Dublette) verloren gehen.
+    const linksOf = new Map<string, typeof links>();
+    for (const l of links) {
+      const id = (l as Record<string, unknown>)[col] as string;
+      linksOf.set(id, [...(linksOf.get(id) ?? []), l]);
+    }
+    const keysInRun = new Set(items.map((i) => i.externalKey).filter((k): k is string => Boolean(k)));
+    const linkBy = new Map<string, (typeof links)[number]>();
+    for (const i of wanted) {
+      if (!i.id || linkBy.has(`${i.id}|${i.ref}`)) continue;
+      const own = (linksOf.get(i.id) ?? []).filter((l) => (l.sourceTreeId ?? null) === (sourceTreeId ?? null));
+      const pick =
+        (i.externalKey ? own.find((l) => l.externalKey === i.externalKey) : own[0]) ??
+        own.find((l) => !l.externalKey || !keysInRun.has(l.externalKey));
+      if (pick) linkBy.set(`${i.id}|${i.ref}`, pick);
+    }
     for (const i of wanted) {
       if (i.id && !rows.has(i.id)) bad(section, i.ref, "id", `${entity} ${i.id} gibt es nicht`);
     }
@@ -812,7 +837,7 @@ async function applyInTx(
     const col = importLinkColumn(entity);
     for (const u of updates as Pending<{ ref: string; action: ImportAction; externalKey: string | null; sourceStamp: string | null }>[]) {
       const current = existing[section].rows.get(u.id)!;
-      const link = existing[section].linkBy.get(u.id);
+      const link = existing[section].linkBy.get(`${u.id}|${u.item.ref}`);
       const currentHash = importFingerprint(entity, current);
       if (u.item.action === "skip") {
         outcomes[section][u.item.ref] = "skipped";
