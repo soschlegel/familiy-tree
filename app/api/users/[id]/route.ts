@@ -27,9 +27,30 @@ export const PATCH = route<Params>("user:manage", async (ctx, req, { id }) => {
 
   const target = await prisma.user.findUnique({
     where: { id },
-    select: { role: true, status: true },
+    select: { role: true, status: true, email: true, lastLoginAt: true, _count: { select: { accounts: true } } },
   });
   if (!target) return notFound();
+
+  // E-Mail korrigieren: nur, solange der Benutzer sich nie angemeldet hat —
+  // danach hängt an der Adresse ein verknüpftes Anmeldekonto, und eine
+  // Änderung würde die Anmeldung stillschweigend auf eine andere Person
+  // umlenken.
+  if (parsed.data.email !== undefined && parsed.data.email !== target.email) {
+    if (target.status !== "INVITED" || target.lastLoginAt || target._count.accounts > 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Die E-Mail-Adresse lässt sich nur ändern, solange sich der Benutzer noch nie angemeldet hat. " +
+            "Sonst bitte einen neuen Benutzer einladen und diesen löschen.",
+        },
+        { status: 409 },
+      );
+    }
+    const taken = await prisma.user.findUnique({ where: { email: parsed.data.email }, select: { id: true } });
+    if (taken) {
+      return NextResponse.json({ error: "Diese E-Mail ist bereits eingeladen." }, { status: 409 });
+    }
+  }
 
   const losesAdmin =
     target.role === "ADMIN" &&
@@ -71,7 +92,9 @@ export const PATCH = route<Params>("user:manage", async (ctx, req, { id }) => {
     action: "UPDATE",
     entityType: "User",
     entityId: id,
-    diff: parsed.data,
+    diff: parsed.data.email && parsed.data.email !== target.email
+      ? { ...parsed.data, previousEmail: target.email }
+      : parsed.data,
   });
 
   return NextResponse.json(user);

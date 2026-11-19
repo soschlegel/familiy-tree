@@ -112,6 +112,8 @@ function gedcom(v: Variant): string {
   return lines.join("\r\n");
 }
 
+const CRLF = "\r\n";
+
 const newVariant = (): Variant => {
   const id = randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase();
   return { guid: `TEST-${id}`, uid: `T${id}` };
@@ -372,8 +374,7 @@ describe.skipIf(Boolean(skipReason))("GEDCOM-Import (Testdatenbank)", () => {
     const v = newVariant();
     const viewer = await scope("viewer@example.test");
     const famId = [...viewer.families.keys()][0];
-    const text = gedcom(v).replace("1 NAME Lena /Probe/", "1 NAME Lena /Probe/
-1 RESN privacy");
+    const text = gedcom(v).replace("1 NAME Lena /Probe/", "1 NAME Lena /Probe/\r\n1 RESN privacy");
     const plan = await startGedcomImport(admin, { fileName: `test-${v.guid}.ged`, bytes: Buffer.from(text) });
     trees.push(plan.sourceTreeId);
     await applyGedcomImport(admin, plan.batchId, { family: { mode: "existing", familyIds: [famId] }, privacyUnassigned: true });
@@ -403,6 +404,81 @@ describe.skipIf(Boolean(skipReason))("GEDCOM-Import (Testdatenbank)", () => {
     expect(asViewer.warnings.filter((w) => w.code === "DANGLING_POINTER")).toHaveLength(0);
     const vCouple = asViewer.document.families.find((f) => f.children.length && seen.some((p) => f.partners.includes(p.id)))!;
     expect(vCouple.children).toHaveLength(1);
+  });
+
+  it("Fotos: nur auf Wunsch, über den SSRF-Schutz, verarbeitet, Hauptbild, kein zweites Mal", async () => {
+    const sharp = (await import("sharp")).default;
+    const png = await sharp({ create: { width: 40, height: 30, channels: 3, background: "#884422" } }).png().toBuffer();
+    const v = newVariant();
+    const text = gedcom(v)
+      .replace("1 NAME Otto /Probe/", ["1 NAME Otto /Probe/", "1 OBJE", "2 FORM jpg", "2 FILE https://bilder.example.test/otto.jpg", "2 _PRIM Y", "2 _PHOTO_RIN MH:P1"].join(CRLF))
+      .replace("1 NAME Lena /Probe/", ["1 NAME Lena /Probe/", "1 OBJE", "2 FILE https://intern.example.test/lena.jpg", "1 OBJE", "2 FILE C:/Bilder/lena.jpg"].join(CRLF));
+    const requested: string[] = [];
+    const photoFetch = {
+      resolver: async (host: string) => [{ address: host.startsWith("intern") ? "192.168.0.10" : "93.184.216.34", family: 4 as const }],
+      transport: async (req: { url: URL }) => {
+        requested.push(req.url.toString());
+        return { status: 200, headers: { "content-type": "image/png" }, body: (await import("node:stream")).Readable.from([png]), destroy: () => {} };
+      },
+    };
+    const plan = await startGedcomImport(admin, { fileName: `test-${v.guid}.ged`, bytes: Buffer.from(text) });
+    trees.push(plan.sourceTreeId);
+    expect(plan.photos).toMatchObject({ total: 2, localPaths: 1 });
+    expect(requested).toHaveLength(0); // Vorschau holt nie etwas
+    const r = await applyGedcomImport(admin, plan.batchId, { downloadPhotos: true }, { photoFetch });
+    expect(r.photos).toMatchObject({ requested: 2, stored: 1 });
+    expect(r.photos!.failed[0].message).toMatch(/internen Netz/);
+    expect(requested).toEqual(["https://bilder.example.test/otto.jpg"]);
+    const otto = await personByUid(`${v.uid}03`);
+    const pm = await prisma.personMedia.findMany({ where: { personId: otto.id }, include: { media: true } });
+    expect(pm).toHaveLength(1);
+    expect(pm[0]).toMatchObject({ isPrimary: true, media: { mimeType: "image/webp", width: 40, height: 30 } });
+    expect(await prisma.importLink.count({ where: { mediaId: pm[0].mediaId, externalKey: "PHOTO:MH:P1" } })).toBe(1);
+    const batch = await prisma.importBatch.findUnique({ where: { id: plan.batchId } });
+    expect(JSON.stringify(batch?.counts)).toContain("bilder.example.test/otto.jpg"); // jede Adresse im Lauf protokolliert
+    // Export: Bild als Dateiverweis, nicht mehr als fremde Adresse
+    const out = parseGedcom((await buildGedcomExport(admin)).bytes).document.persons.find((p) => p.externalIds.some((x) => x.value === `${v.uid}03`))!;
+    expect(out.media.map((m) => m.inline?.files[0].location)).toEqual([expect.stringMatching(/^media\/.+\.webp$/)]);
+    // Erneuter Import: schon gespeichert → nicht erneut geholt
+    const p2 = await startGedcomImport(admin, { fileName: `test-${v.guid}.ged`, bytes: Buffer.from(text) });
+    const r2 = await applyGedcomImport(admin, p2.batchId, { downloadPhotos: true }, { photoFetch });
+    expect(r2.photos).toMatchObject({ stored: 0, skipped: 1 });
+    expect(requested).toHaveLength(1);
+    await prisma.mediaAsset.deleteMany({ where: { id: pm[0].mediaId } });
+  });
+
+  it("Vorschauen: verwerfen (Lauf, Plan, Datei), gleiche Datei ersetzt alte Vorschau, alte verfallen, Ausgeführtes bleibt", async () => {
+    const { discardGedcomPreview, discardStalePreviews } = await import("@/lib/services/gedcom-import");
+    const { getObjectBuffer } = await import("@/lib/storage");
+    const v = newVariant();
+    const applied = await importFile(v);
+    const appliedBatch = (await prisma.importBatch.findUnique({ where: { id: applied.plan.batchId } }))!;
+    await expect(discardGedcomPreview(admin, appliedBatch.id)).rejects.toThrow(/ausgeführter Import/);
+
+    const first = await startGedcomImport(admin, { fileName: `test-${v.guid}.ged`, bytes: bytes({ ...v, withPaul: true }) });
+    const firstKey = (await prisma.importBatch.findUnique({ where: { id: first.batchId } }))!.storageKey!;
+    expect(await getObjectBuffer(firstKey)).not.toBeNull();
+    // dieselbe Datei erneut hochgeladen: die alte Vorschau verschwindet samt Datei und Plan
+    const second = await startGedcomImport(admin, { fileName: `test-${v.guid}.ged`, bytes: bytes({ ...v, withPaul: true }) });
+    expect(await prisma.importBatch.findUnique({ where: { id: first.batchId } })).toBeNull();
+    expect(await getObjectBuffer(firstKey)).toBeNull();
+    expect(await getObjectBuffer(`imports/${first.batchId}.plan.json`)).toBeNull();
+    // ausdrücklich verwerfen
+    const secondKey = (await prisma.importBatch.findUnique({ where: { id: second.batchId } }))!.storageKey!;
+    await discardGedcomPreview(admin, second.batchId);
+    expect(await prisma.importBatch.findUnique({ where: { id: second.batchId } })).toBeNull();
+    expect(await getObjectBuffer(secondKey)).toBeNull();
+    // alt: nach 7 Tagen verworfen
+    const old = await startGedcomImport(admin, { fileName: `test-${v.guid}.ged`, bytes: bytes({ ...v, withPaul: true, hansBirth: "1851" }) });
+    await prisma.importBatch.update({ where: { id: old.batchId }, data: { createdAt: new Date(Date.now() - 8 * 86_400_000) } });
+    expect(await discardStalePreviews(admin, {})).toBeGreaterThanOrEqual(1);
+    expect(await prisma.importBatch.findUnique({ where: { id: old.batchId } })).toBeNull();
+    // der ausgeführte Lauf und seine Originaldatei bleiben unberührt
+    expect(await prisma.importBatch.findUnique({ where: { id: appliedBatch.id } })).not.toBeNull();
+    expect(await getObjectBuffer(appliedBatch.storageKey!)).not.toBeNull();
+    // Rechte
+    const viewer = await scope("viewer@example.test");
+    await expect(discardGedcomPreview(viewer, appliedBatch.id)).rejects.toSatisfy((e: unknown) => e instanceof ServiceError && e.code === "FORBIDDEN");
   });
 
   it("Rechte: nur Administratoren", async () => {

@@ -24,7 +24,28 @@ type Row = {
   aiAccess: AiAccessLevel;
   /** Nicht widerrufene, nicht abgelaufene KI-Schlüssel. */
   activeTokens: number;
+  /** Zahl der Familienzuordnungen (für die Rückfrage beim Löschen). */
+  familyCount: number;
+  /** Eingeladen, nie angemeldet, kein verknüpftes Konto: E-Mail darf korrigiert werden. */
+  neverSignedIn: boolean;
+  /** Einziger aktiver Admin — darf weder gelöscht noch herabgestuft werden. */
+  lastAdmin: boolean;
 };
+
+/** Was beim Löschen mitgeht — nach den onDelete-Regeln in prisma/schema.prisma. */
+function deleteQuestion(u: Row): string {
+  const gone = [
+    u.familyCount > 0 ? `${u.familyCount === 1 ? "die Zuordnung zu einer Familie" : `die Zuordnungen zu ${u.familyCount} Familien`}` : null,
+    "alle KI-Schlüssel",
+    "die Anmeldungen (Sitzungen und verknüpfte Google-/GitHub-Konten)",
+  ].filter(Boolean);
+  return (
+    `${u.email} endgültig löschen?\n\n` +
+    `Gelöscht werden auch ${gone.join(", ")}.\n` +
+    "Protokolleinträge, hochgeladene Bilder, angelegte Quellen und Importläufe bleiben erhalten — " +
+    "nur ohne Verweis auf diesen Benutzer. Eine erneute Anmeldung ist erst nach einer neuen Einladung möglich."
+  );
+}
 
 /** Was eine Änderung des KI-Rechts für vorhandene Schlüssel bedeutet. */
 function aiAccessEffect(from: AiAccessLevel, to: AiAccessLevel, keys: number): string {
@@ -90,6 +111,25 @@ export function UserAdmin({
 
   const patch = (id: string, data: Partial<Pick<Row, "role" | "status">>, success: string) =>
     call(`/api/users/${id}`, jsonBody("PATCH", data), success);
+
+  // --- Löschen und E-Mail korrigieren --------------------------------------
+  const [editingEmail, setEditingEmail] = useState<string | null>(null);
+  const [newEmail, setNewEmail] = useState("");
+
+  async function removeUser(u: Row) {
+    if (!confirm(deleteQuestion(u))) return;
+    await call(`/api/users/${u.id}`, { method: "DELETE" }, `${u.email} gelöscht.`);
+  }
+
+  async function saveEmail(e: React.FormEvent, u: Row) {
+    e.preventDefault();
+    const ok = await call(
+      `/api/users/${u.id}`,
+      jsonBody("PATCH", { email: newEmail }),
+      `E-Mail-Adresse von ${u.email} in ${newEmail.trim().toLowerCase()} geändert.`,
+    );
+    if (ok) setEditingEmail(null);
+  }
 
   // --- KI-Zugang -----------------------------------------------------------
   const [openKeys, setOpenKeys] = useState<string | null>(null);
@@ -285,6 +325,23 @@ export function UserAdmin({
                     </div>
                   </td>
                   <td className="px-3 text-right">
+                    <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 whitespace-nowrap">
+                    {!self && u.neverSignedIn && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        className="btn-link"
+                        aria-expanded={editingEmail === u.id}
+                        aria-controls={`email-edit-${u.id}`}
+                        aria-label={`Adresse von ${u.email} korrigieren`}
+                        onClick={() => {
+                          setEditingEmail(editingEmail === u.id ? null : u.id);
+                          setNewEmail(u.email);
+                        }}
+                      >
+                        E-Mail ändern
+                      </button>
+                    )}
                     {!self && (
                       <button
                         type="button"
@@ -306,8 +363,58 @@ export function UserAdmin({
                         {blocking ? "sperren" : "entsperren"}
                       </button>
                     )}
+                    <button
+                      type="button"
+                      disabled={busy || self || u.lastAdmin}
+                      className="btn-link-danger"
+                      aria-label={`${u.email} löschen`}
+                      aria-describedby={self || u.lastAdmin ? `delete-why-${u.id}` : undefined}
+                      onClick={() => void removeUser(u)}
+                    >
+                      löschen
+                    </button>
+                    {(self || u.lastAdmin) && (
+                      <span id={`delete-why-${u.id}`} className="text-xs muted" data-testid="user-delete-why">
+                        {self ? "eigener Zugang" : "letzter aktiver Admin"}
+                      </span>
+                    )}
+                    </div>
                   </td>
                 </tr>
+                {editingEmail === u.id && (
+                  <tr id={`email-edit-${u.id}`} data-testid="user-email-edit">
+                    <td colSpan={6} className="bg-stone-50/70 px-3 py-3 dark:bg-stone-900/40">
+                      <form
+                        onSubmit={(e) => void saveEmail(e, u)}
+                        aria-label={`Adresse von ${u.email} korrigieren`}
+                        className="sticky left-3 flex w-[min(40rem,calc(100vw-4.5rem))] flex-wrap items-end gap-2"
+                      >
+                        <div className="min-w-0 flex-1 basis-56">
+                          <label htmlFor={`email-new-${u.id}`} className="field-label">
+                            Neue E-Mail-Adresse
+                          </label>
+                          <input
+                            id={`email-new-${u.id}`}
+                            type="email"
+                            required
+                            className="field w-full"
+                            value={newEmail}
+                            onChange={(e) => setNewEmail(e.target.value)}
+                          />
+                        </div>
+                        <button disabled={busy} className="btn-primary">
+                          {busy ? "Speichert…" : "Speichern"}
+                        </button>
+                        <button type="button" disabled={busy} className="btn-secondary" onClick={() => setEditingEmail(null)}>
+                          Abbrechen
+                        </button>
+                        <p className="basis-full text-xs muted">
+                          Möglich, solange sich der Benutzer noch nie angemeldet hat. Familien, Rolle und KI-Zugang bleiben.
+                        </p>
+                      </form>
+                    </td>
+                  </tr>
+                )}
                 {open && (
                   <tr id={`ai-keys-${u.id}`} data-testid="user-ai-keys">
                     <td colSpan={6} className="bg-stone-50/70 px-3 py-3 dark:bg-stone-900/40">

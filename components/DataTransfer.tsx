@@ -75,12 +75,25 @@ export function DataTransfer({ canImport }: { canImport: boolean }) {
           zusätzlich die Bilddateien und eignet sich als vollständige Sicherung
           oder für den Umzug auf eine andere Instanz.
         </p>
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 flex flex-wrap gap-2">
           <a href="/api/export?format=zip" className="btn-primary">
             ZIP mit Bildern
           </a>
           <a href="/api/export?format=json" className="btn-secondary">
             Nur JSON
+          </a>
+        </div>
+        <p className="mt-4 text-sm muted">
+          GEDCOM 5.5.1 für andere Stammbaumprogramme — mit Ereignissen, Namen, Quellen und Belegen; beim Import
+          aufbewahrte Zusatzangaben (z.B. von MyHeritage) werden zurückgeschrieben. Ob MyHeritage, Gramps oder Ancestry die
+          Datei vollständig übernehmen, ist noch nicht ausprobiert.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <a href="/api/export?format=gedcom" className="btn-secondary">
+            GEDCOM
+          </a>
+          <a href="/api/export?format=gedzip" className="btn-secondary">
+            GEDCOM mit Bildern (ZIP)
           </a>
         </div>
       </section>
