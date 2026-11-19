@@ -82,7 +82,7 @@ const GROUP_INFO: Record<Group, { label: string; help: string }> = {
     label: "Fehlt in der Datei",
     help: "Früher importiert, im neuen Stand nicht mehr enthalten. Standard: bleibt erhalten und wird markiert.",
   },
-  invalid: { label: "Nicht übernehmbar", help: "Verstößt gegen eine Regel der App und wird ausgelassen." },
+  invalid: { label: "Nicht übernehmbar", help: "Verstößt gegen eine Regel der App und wird ausgelassen — das Original geht nicht verloren." },
   existing: { label: "Schon vorhanden", help: "Gibt es in der App bereits (von Hand angelegt) — bleibt unverändert." },
   unchanged: { label: "Unverändert", help: "Datei und App stimmen überein." },
 };
@@ -298,7 +298,7 @@ export function GedcomImport({ families }: { families: { id: string; name: strin
             />
           </div>
           <button type="button" className="btn-primary" disabled={!file || Boolean(busy)} onClick={() => void upload()}>
-            {busy ? "Prüfe …" : "Vorschau anzeigen"}
+            {busy ? "Prüfe …" : "Vorschau der GEDCOM-Datei"}
           </button>
         </div>
       )}
@@ -385,7 +385,7 @@ function Preview(props: {
   const exceptions = Object.values(props.overrides).filter((v) => v !== props.editedDefault).length;
 
   return (
-    <div className="mt-4 space-y-5">
+    <div className="mt-4 space-y-5" data-testid="gedcom-preview">
       <div className="text-sm">
         <p className="font-medium">{s.fileName}</p>
         <p className="muted">
@@ -435,13 +435,13 @@ function Preview(props: {
         <h3 className="field-label">Übersicht</h3>
         <ul className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-4">
           {(["new", "changed", "edited", "missing", "invalid", "unchanged"] as Group[]).map((g) => (
-            <li key={g} className={`rounded-lg border p-2 text-sm dark:border-stone-700 ${g === "invalid" && props.total(g) ? "border-red-300" : "border-stone-200"}`}>
-              <span className="block text-xl font-semibold tabular-nums">{props.total(g)}</span>
+            <li key={g} data-testid={`gedcom-tile-${g}`} className={`rounded-lg border p-2 text-sm dark:border-stone-700 ${g === "invalid" && props.total(g) ? "border-red-300" : "border-stone-200"}`}>
+              <span className="block text-xl font-semibold tabular-nums" data-testid="gedcom-tile-count">{props.total(g)}</span>
               <span className="muted">{GROUP_INFO[g].label}</span>
             </li>
           ))}
         </ul>
-        <div className="mt-3 overflow-x-auto">
+        <div className="mt-3 overflow-x-auto" tabIndex={0} role="region" aria-label="Einträge je Art und Gruppe (waagerecht verschiebbar)">
           <table className="w-full min-w-[34rem] text-sm">
             <caption className="sr-only">Einträge je Art und Gruppe</caption>
             <thead>
@@ -587,7 +587,7 @@ function Preview(props: {
       <Notices summary={s} />
 
       {/* Was passiert */}
-      <div className="alert-info text-sm">
+      <div className="alert-info text-sm" data-testid="gedcom-what">
         <p className="font-medium">Was der Import tut</p>
         <ul className="mt-1 list-disc space-y-0.5 pl-5">
           <li>
@@ -612,7 +612,7 @@ function Preview(props: {
           {props.total("invalid") > 0 && (
             <li>
               {plural(props.total("invalid"), "Eintrag verstößt", "Einträge verstoßen")} gegen Regeln der App und{" "}
-              {props.total("invalid") === 1 ? "wird" : "werden"} ausgelassen.
+              {props.total("invalid") === 1 ? "wird" : "werden"} ausgelassen; abgelehnte Beziehungen bleiben samt Ereignissen im Original bei einer beteiligten Person erhalten (Rohdaten, auch im GEDCOM-Export).
             </li>
           )}
           <li>Familienzuordnungen vorhandener Personen und von Hand angelegte Einträge bleiben unverändert.</li>
@@ -622,7 +622,7 @@ function Preview(props: {
 
       <div className="flex flex-wrap gap-2">
         <button type="button" className="btn-primary" disabled={props.disabled} onClick={props.onApply}>
-          Import ausführen
+          GEDCOM-Import ausführen
         </button>
         <button type="button" className="btn-secondary" disabled={props.disabled} onClick={props.onCancel}>
           Abbrechen
@@ -676,7 +676,7 @@ function GroupList(props: {
   const withSuggestion = useMemo(() => items.filter((i) => i.suggestions?.length).length, [items]);
 
   return (
-    <details className="rounded-lg border border-stone-200 dark:border-stone-700" open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
+    <details data-testid={`gedcom-group-${group}`} className="rounded-lg border border-stone-200 dark:border-stone-700" open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
       <summary className="cursor-pointer select-none px-3 py-2 text-sm">
         <span className="font-medium">{GROUP_INFO[group].label}</span> <span className="badge ml-1">{count}</span>
         <span className="block text-xs muted sm:ml-2 sm:inline">{GROUP_INFO[group].help}</span>
@@ -752,7 +752,7 @@ function GroupList(props: {
           )}
           <ul className="divide-y divide-stone-100 text-sm dark:divide-stone-800">
             {items.map((i) => (
-              <li key={i.ref} className="py-1.5">
+              <li key={i.ref} className="py-1.5" data-testid="gedcom-item">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                   <span className="min-w-0 break-words">
                     {i.appId && i.kind === "persons" ? (
@@ -884,7 +884,7 @@ function Notices({ summary: s }: { summary: Summary }) {
 function ResultView({ result: r, onAgain }: { result: Result; onAgain: () => void }) {
   const sum = (o: string) => KINDS.reduce((n, k) => n + (r.counts[k]?.[o] ?? 0), 0);
   return (
-    <div role="status" className="alert-success mt-4 space-y-2 text-sm">
+    <div role="status" className="alert-success mt-4 space-y-2 text-sm" data-testid="gedcom-result">
       <p className="font-medium">{r.alreadyApplied ? "Dieser Import war bereits ausgeführt." : `Import abgeschlossen (${(r.durationMs / 1000).toFixed(1)} s)`}</p>
       <ul className="space-y-0.5">
         {KINDS.map((k) => {

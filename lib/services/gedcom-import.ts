@@ -18,7 +18,7 @@ import {
 import { suggestMatches, type Suggestion, type SuggestPerson } from "../gedcom-import/suggest";
 import type { ImportEntity } from "../import-fingerprint";
 import { conflictError, forbiddenError, notFoundError, parseOrThrow, validationError } from "./errors";
-import { applyGenealogyImport, type GenealogyImportResult, type ImportAction } from "./import-apply";
+import { applyGenealogyImport, REJECTED_RAW_SUFFIX, type GenealogyImportResult, type ImportAction } from "./import-apply";
 import { createImportBatch, finishImportBatch, IMPORT_FILES_DIR, readImportBatchFile } from "./imports";
 import { deleteCitation, deleteSource } from "./sources";
 import { deleteEvent } from "./events";
@@ -522,6 +522,7 @@ async function computePlan(scope: Scope, batch: { id: string; fileName: string }
       `${personLabel.get(r.fromRef) ?? "?"} ${r.type === "PARTNER_OF" ? "⚭" : "→"} ${personLabel.get(r.toRef) ?? "?"}`,
     ]),
   );
+  const relByRef = new Map(mapped.relationships.map((r) => [r.ref, r]));
   const ownerLabel = (ref: string) => personLabel.get(ref) ?? relLabel.get(ref) ?? "";
   const sourceTitle = new Map(mapped.sources.map((s) => [s.ref, s.title]));
   const labelOf = (kind: PlanKind, x: Record<string, unknown>): string => {
@@ -568,7 +569,17 @@ async function computePlan(scope: Scope, batch: { id: string; fileName: string }
         item.fields = ch.fields;
         if (g === "edited") item.conflict = ch.fileChangedSinceImport;
       }
-      if (g === "invalid") item.reason = invalidReason.get(`${kind}|${ref}`) ?? "ungültig";
+      if (g === "invalid") {
+        item.reason = invalidReason.get(`${kind}|${ref}`) ?? "ungültig";
+        // Abgelehnte Beziehung (samt ihren Ereignissen und Belegen): das
+        // Original der Familie bleibt bei einer beteiligten Person (applyGenealogyImport).
+        const relRef = kind === "relationships" ? ref : mapped.owners[ref];
+        const rel = relRef ? relByRef.get(relRef) : undefined;
+        if (rel && dry.outcomes.relationships[rel.ref] === "invalid") {
+          const keeper = personLabel.get(rel.fromRef) ?? personLabel.get(rel.toRef) ?? "einer beteiligten Person";
+          item.reason += ` — nicht übernehmbar, Original bleibt bei ${keeper} erhalten`;
+        }
+      }
       if (g === "existing") item.reason = "Gibt es in der App schon (nicht aus diesem Baum) — bleibt unverändert";
       counts[kind][g]++;
       items.push(item);
@@ -1086,6 +1097,8 @@ async function changedRawRecords(
       where: {
         supersededAt: null,
         OR: [{ personId: { in: chunk } }, { relationshipId: { in: chunk } }, { sourceId: { in: chunk } }],
+        // Abgelehnte Familien bei einer Person zählen nicht zu deren eigenen Rohdaten.
+        NOT: { recordType: { endsWith: REJECTED_RAW_SUFFIX } },
       },
       select: { personId: true, relationshipId: true, sourceId: true, recordType: true, content: true },
     });

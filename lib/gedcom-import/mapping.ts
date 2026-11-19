@@ -967,13 +967,25 @@ export function mapGedcomDocument(doc: GedcomDocument, options: MapOptions = {})
   }
 
   function familyRaw(f: GedcomFamily, carrier: { personRef?: string; relationshipRef?: string }): MappedRawRecord {
+    // Quellen, auf die die Familie verweist (Xref → ref): wird die Beziehung
+    // beim Import abgelehnt, hält applyGenealogyImport damit fest, welche
+    // App-Quelle gemeint ist — der Export braucht das für die Belege.
+    const sourceRefs: Record<string, string> = {};
+    const walk = (v: unknown) => {
+      if (!v || typeof v !== "object") return;
+      if (Array.isArray(v)) return v.forEach(walk);
+      const o = v as Record<string, unknown>;
+      if (typeof o.sourceId === "string" && sourceRefById.has(o.sourceId)) sourceRefs[o.sourceId] = sourceRefById.get(o.sourceId)!;
+      Object.values(o).forEach(walk);
+    };
+    if (carrier.relationshipRef) walk(f);
     return {
       recordType: RAW_TYPES.family,
       xref: f.id,
       ...carrier,
       replace: true,
       reason: "Originaldatensatz der Familie (GEDCOM) — Grundlage für den Export",
-      content: jsonClean({ format: RAW_FORMAT, record: f, ...referenced(f) }),
+      content: jsonClean({ format: RAW_FORMAT, record: f, ...referenced(f), ...(Object.keys(sourceRefs).length ? { sourceRefs } : {}) }),
     };
   }
 
