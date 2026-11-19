@@ -1,8 +1,9 @@
-# Baut die Container-Images und legt sie in der GitHub Container Registry ab.
-# Die NAS (Portainer) lädt sie nur noch — gebaut wird dort nichts.
+# Baut das Container-Image und legt es in der GitHub Container Registry ab.
+# Die NAS (Portainer) lädt es nur noch — gebaut wird dort nichts.
 #
-#   ghcr.io/<owner>/<repo>           Anwendung   (Dockerfile, Ziel runner)
-#   ghcr.io/<owner>/<repo>-migrate   Migrator    (Dockerfile, Ziel migrator)
+#   ghcr.io/<owner>/<repo>   Anwendung samt Migrationen (Dockerfile, Ziel runner;
+#                            Migrationen und Admin beim Containerstart,
+#                            docker/entrypoint.sh)
 #
 # Alle übrigen Images des Stacks (postgres, caddy) kommen unverändert von
 # Docker Hub; Bilder liegen als Dateien auf der NAS, ein Objektspeicher wird
@@ -14,8 +15,8 @@
 # "deploy" statt "main" und sieht neue Compose-Dateien so erst, wenn die
 # passenden Images fertig sind (README, "Updates").
 #
-# Neue Pakete auf ghcr.io sind zunächst privat — einmalig auf "Public"
-# stellen oder Zugangsdaten in Portainer hinterlegen (README).
+# Das Paket auf ghcr.io bleibt privat; Portainer meldet sich mit einem
+# Token (classic, nur read:packages) an der Registry an (README).
 
 name: Images
 
@@ -61,7 +62,7 @@ jobs:
       - run: npm test
 
   images:
-    name: App- und Migrator-Image
+    name: App-Image
     needs: checks
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -81,7 +82,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - id: meta-app
+      - id: meta
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
@@ -90,16 +91,6 @@ jobs:
             type=sha,prefix=sha-,format=short
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-      - id: meta-migrate
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.IMAGE }}-migrate
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,prefix=sha-,format=short
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-
       - name: Anwendung (runner)
         uses: docker/build-push-action@v7
         with:
@@ -108,27 +99,10 @@ jobs:
           platforms: linux/amd64
           push: true
           provenance: false
-          tags: ${{ steps.meta-app.outputs.tags }}
-          labels: ${{ steps.meta-app.outputs.labels }}
-          cache-from: |
-            type=gha,scope=runner
-            type=gha,scope=migrator
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=runner
           cache-to: type=gha,mode=max,scope=runner
-
-      - name: Migrator
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          target: migrator
-          platforms: linux/amd64
-          push: true
-          provenance: false
-          tags: ${{ steps.meta-migrate.outputs.tags }}
-          labels: ${{ steps.meta-migrate.outputs.labels }}
-          cache-from: |
-            type=gha,scope=migrator
-            type=gha,scope=runner
-          cache-to: type=gha,mode=max,scope=migrator
 
   promote:
     name: Branch "deploy" nachziehen
