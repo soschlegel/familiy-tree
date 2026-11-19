@@ -158,3 +158,38 @@ test.describe("Benutzer ohne Familie", () => {
     await expect(page.getByText("Noch nichts auszuwerten.")).toBeVisible();
   });
 });
+
+test.describe("Build-Angabe in der Fußzeile", () => {
+  // Gebaut von der GitHub-Action: „Build 2026.11.19 · 68c8471“; im Dev-Server
+  // (Tests) ohne Build-Argumente: „Build lokal“ (lib/build-info.ts).
+  const SIGNED_IN = /^Build (lokal|\d{4}\.\d{2}\.\d{2}( · [0-9a-f]{7})?)$/;
+  const SIGNED_OUT = /^Build (lokal|\d{4}\.\d{2}\.\d{2})$/;
+
+  test("angemeldet auf jeder Seite, auf der Anmeldeseite höchstens das Datum", async ({ loginAs }) => {
+    const { page } = await loginAs("viewer");
+    for (const path of ["/people", "/sources", "/admin/data"]) {
+      await page.goto(path);
+      await expect(page.getByTestId("build-info")).toHaveText(SIGNED_IN);
+    }
+    const { page: anon } = await loginAs(null);
+    await anon.goto("/login");
+    await expect(anon.getByTestId("build-info")).toHaveText(SIGNED_OUT);
+  });
+
+  for (const width of [1440, 390]) {
+    test(`Baumseite bei ${width} px: Fußzeile sichtbar, ohne Überlappung und ohne Bildlauf`, async ({ loginAs }) => {
+      const { page } = await loginAs("viewer");
+      await page.setViewportSize({ width, height: width > 500 ? 900 : 844 });
+      await page.goto("/tree");
+      const tree = page.getByTestId("family-tree");
+      await expect(tree).toBeVisible();
+      const footer = page.getByTestId("build-info");
+      await expect(footer).toBeInViewport();
+      const [t, f] = [await tree.boundingBox(), await footer.boundingBox()];
+      expect(t && f).toBeTruthy();
+      expect(f!.y).toBeGreaterThanOrEqual(t!.y + t!.height);
+      const scroll = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+      expect(scroll).toBeLessThanOrEqual(1);
+    });
+  }
+});

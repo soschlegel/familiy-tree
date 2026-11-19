@@ -6,6 +6,7 @@ import "reactflow/dist/style.css";
 import { auth, signOut } from "@/lib/auth";
 import { can } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
+import { buildInfo, buildLabel } from "@/lib/build-info";
 import { MainContainer, NavBar, type NavItem } from "@/components/NavBar";
 
 export const metadata: Metadata = {
@@ -99,6 +100,12 @@ export default async function RootLayout({
           />
         )}
         <MainContainer>{children}</MainContainer>
+        {/* Feste Höhe (--footer-h): die Baumseite rechnet sie aus ihrer Höhe heraus. */}
+        <footer className="flex h-[var(--footer-h)] items-center justify-center px-4 text-xs muted">
+          <span data-testid="build-info" className="tabular-nums">
+            {buildLabel(buildInfo(), Boolean(user))}
+          </span>
+        </footer>
       </body>
     </html>
   );
