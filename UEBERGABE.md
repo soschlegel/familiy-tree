@@ -1,8 +1,7 @@
 # Übergabe (Stand 20.11.2026)
 
-Arbeitsnotiz für die Fortsetzung auf einem anderen Rechner. Liegt nur auf dem
-Branch `optimierung`; vor einem Zusammenführen nach `main` entfernen oder
-aktualisieren.
+Arbeitsnotiz für die Fortsetzung auf einem anderen Rechner. Beim Weiterarbeiten
+aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
 
 ## Stand
 
@@ -10,7 +9,7 @@ aktualisieren.
   (GitHub Actions, Workflow „Images“) und zieht den Branch `deploy` nach;
   Portainer aktualisiert den Stack von dort. **Ein Merge ist ein
   Produktiv-Deployment auf echte Daten.**
-- `optimierung` = Arbeitsbranch, inhaltlich gleich `main` plus diese Datei.
+- `optimierung` = Arbeitsbranch, zum Zeitpunkt der Übergabe gleich `main`.
 - Zuletzt ausgerollt: Importe verbinden, Korrekturen beim Zusammenführen und
   an der Quellenanzeige, Favicon. Keine offene Migration; letzter
   Migrationsordner `20261121000000_quellen_einordnen`.
