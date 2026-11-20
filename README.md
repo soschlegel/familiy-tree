@@ -153,7 +153,7 @@ chromium`.
 |---|---|---|
 | `npm run test:e2e` | alles: setup → read → write | ca. 9–10 min |
 | `npm run test:e2e:setup` | nur Ausgangszustand: Mock-Daten neu, Anmeldungen, Vorwärmen | ca. 1–2 min (Kaltstart des Dev-Servers: länger) |
-| `npm run test:e2e:read` | setup + lesende Tests (`e2e/read/`, 146 Tests, 4 parallel) | ca. 3:10–3:20 min ohne Setup |
+| `npm run test:e2e:read` | setup + lesende Tests (`e2e/read/`, 147 Tests, 4 parallel) | ca. 3:10–3:20 min ohne Setup |
 | `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 74 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 4–5 min ohne Setup |
 | `npm run test:e2e:headed` | alles mit sichtbarem Browser, ein Test nach dem anderen | |
 | `npm run test:e2e:ui` | Playwright-Oberfläche: Tests einzeln starten, Schritte ansehen | |
