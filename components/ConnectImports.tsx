@@ -331,7 +331,7 @@ function PairRow({ pair: p, editable, busy, onDecide }: { pair: ConnectPair; edi
       </div>
       <div className="mt-2 grid gap-1 sm:grid-cols-2">
         {[p.a, p.b].map((x) => (
-          <Link key={x.id} href={`/people/${x.id}`} className="rounded-md px-2 py-1 hover:bg-stone-100 dark:hover:bg-stone-800">
+          <Link key={x.id} href={`/people/${x.id}`} className="rounded-md px-2 py-1 hover:bg-stone-100 max-md:py-3 dark:hover:bg-stone-800">
             <span className="font-medium">{x.name}</span> <span className="text-xs muted">{x.life}</span>
             <span className="block text-xs muted">{x.groupLabel}</span>
           </Link>

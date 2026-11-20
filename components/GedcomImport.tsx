@@ -306,7 +306,7 @@ export function GedcomImport({ families }: { families: { id: string; name: strin
                 setFile(e.target.files?.[0] ?? null);
                 setError(null);
               }}
-              className="block w-full text-sm file:mr-3 file:rounded-lg file:border file:border-stone-300 file:bg-surface file:px-3 file:py-1.5 file:text-sm dark:file:border-stone-700 dark:file:text-stone-100"
+              className="block w-full text-sm file:mr-3 file:rounded-lg file:border file:border-stone-300 file:bg-surface file:px-3 file:py-1.5 file:text-sm max-md:file:min-h-11 dark:file:border-stone-700 dark:file:text-stone-100"
             />
           </div>
           <button type="button" className="btn-primary" disabled={!file || Boolean(busy)} onClick={() => void upload()}>

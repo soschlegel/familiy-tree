@@ -310,7 +310,7 @@ function Card({
         data-testid={secondary.testId}
         aria-label={secondary.label}
         title={secondary.title}
-        className="absolute right-1 top-1 z-[1] flex h-6 w-6 items-center justify-center rounded-full text-stone-400 transition hover:bg-accent-50 hover:text-accent-700 focus-visible:text-accent-700 dark:text-stone-500 dark:hover:bg-accent-900/50 dark:hover:text-accent-300"
+        className="absolute right-1 top-1 z-[1] flex h-6 w-6 items-center max-md:before:absolute max-md:before:-inset-2.5 max-md:before:content-[''] justify-center rounded-full text-stone-400 transition hover:bg-accent-50 hover:text-accent-700 focus-visible:text-accent-700 dark:text-stone-500 dark:hover:bg-accent-900/50 dark:hover:text-accent-300"
       >
         {secondary.icon}
       </Link>
