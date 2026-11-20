@@ -132,7 +132,7 @@ export function DataTransfer({ canImport }: { canImport: boolean }) {
                 setApplied(false);
                 setError(null);
               }}
-              className="block w-full text-sm file:mr-3 file:rounded-lg file:border file:border-stone-300 file:bg-surface file:px-3 file:py-1.5 file:text-sm dark:file:border-stone-700 dark:file:text-stone-100"
+              className="block w-full text-sm file:mr-3 file:rounded-lg file:border file:border-stone-300 file:bg-surface file:px-3 file:py-1.5 file:text-sm max-md:file:min-h-11 dark:file:border-stone-700 dark:file:text-stone-100"
             />
 
             <div className="mt-3 flex flex-wrap gap-2">

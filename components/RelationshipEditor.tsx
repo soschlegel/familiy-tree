@@ -166,7 +166,7 @@ function RelationDateEditor({
           endPlace: labels.endPlace ? endPlace.trim() || null : null,
         });
       }}
-      className="mt-2 flex flex-wrap items-end gap-2 border-t border-stone-200 pt-3 dark:border-stone-800"
+      className="mt-2 flex flex-wrap items-end gap-2 border-t border-stone-200 pt-3 max-sm:[&>div]:w-full max-sm:[&_.field]:w-full dark:border-stone-800"
     >
       <Field label="Näheres" error={fields.subtype}>
         {(id) => (
@@ -441,7 +441,7 @@ export function RelationshipEditor({
         <form
           onSubmit={add}
           aria-label="Beziehung hinzufügen"
-          className="flex flex-wrap items-end gap-2 rounded-xl border border-dashed border-stone-300 p-3 dark:border-stone-700"
+          className="flex flex-wrap items-end gap-2 rounded-xl border border-dashed border-stone-300 p-3 max-sm:[&>div]:w-full max-sm:[&_.field]:w-full dark:border-stone-700"
         >
           <Field label="Art">
             {(id) => (

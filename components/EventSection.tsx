@@ -289,7 +289,7 @@ function EventForm({
       </label>
 
       <details className="rounded-lg bg-stone-100/60 px-3 py-2 dark:bg-stone-900/40" open={more}>
-        <summary className="cursor-pointer text-xs font-medium text-accent-700 dark:text-accent-300">
+        <summary className="cursor-pointer text-xs font-medium text-accent-700 max-md:py-3 max-md:text-sm dark:text-accent-300">
           Weitere Felder (Ursache, Alter, Institution, Anschrift, Notizen)
         </summary>
         <div className="mt-2 grid gap-3 sm:grid-cols-2">

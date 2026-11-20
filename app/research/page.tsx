@@ -67,7 +67,7 @@ function PersonLink({ person, detail }: { person: PersonBrief; detail?: string }
   return (
     <Link
       href={`/people/${person.id}`}
-      className="flex items-baseline gap-2 rounded-md px-2 py-1 text-sm hover:bg-stone-100 dark:hover:bg-stone-800"
+      className="flex items-baseline gap-2 rounded-md px-2 py-1 text-sm hover:bg-stone-100 max-md:py-3 dark:hover:bg-stone-800"
     >
       <span className="truncate font-medium">{fullName(person)}</span>
       <span className="ml-auto shrink-0 text-xs muted">{detail ?? lifeSpan(person)}</span>
@@ -88,7 +88,7 @@ function PairLink({ persons, relationshipId, detail }: { persons: PersonRef[]; r
   return first ? (
     <Link
       href={`/people/${first.id}?rel=${relationshipId}`}
-      className="flex items-baseline gap-2 rounded-md px-2 py-1 text-sm hover:bg-stone-100 dark:hover:bg-stone-800"
+      className="flex items-baseline gap-2 rounded-md px-2 py-1 text-sm hover:bg-stone-100 max-md:py-3 dark:hover:bg-stone-800"
     >
       {body}
     </Link>

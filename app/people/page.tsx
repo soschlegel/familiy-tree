@@ -132,7 +132,7 @@ export default async function PeoplePage({
       <form
         role="search"
         aria-label="Personen filtern"
-        className="card flex flex-wrap items-end gap-3 p-3"
+        className="card flex flex-wrap items-end gap-3 p-3 max-sm:[&>div]:grow max-sm:[&_.field]:w-full"
       >
         <div className="min-w-0 flex-1 basis-56">
           <label htmlFor="people-q" className="field-label">
@@ -276,8 +276,8 @@ export default async function PeoplePage({
               aria-label={`Seite ${n}`}
               className={
                 n === page
-                  ? "btn-primary min-w-9"
-                  : "btn-secondary min-w-9"
+                  ? "btn-primary min-w-9 max-md:min-w-11"
+                  : "btn-secondary min-w-9 max-md:min-w-11"
               }
             >
               {n}
