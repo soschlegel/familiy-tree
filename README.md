@@ -43,6 +43,9 @@ Bildarchiv und rollenbasierter Benutzerverwaltung.
   Ehe- gegen Geburtsname und aus verschiedenen Importen), mit einem Klick
   zusammenführen, ohne dass etwas verloren geht; „sichere“ Paare auch
   mehrere auf einmal ([Dubletten zusammenführen](#dubletten-zusammenführen))
+- **Importe verbinden** — Personen, die in mehreren Importen vorkommen,
+  finden und zusammenführen: aus mehreren Importen wird ein gemeinsamer
+  Stammbaum ([Importe verbinden](#importe-verbinden))
 - **Benutzerverwaltung** — einladen, Rolle ändern, sperren, löschen; die
   E-Mail-Adresse eines noch nie angemeldeten Benutzers korrigieren
   ([Benutzerverwaltung](#benutzerverwaltung))
@@ -151,7 +154,7 @@ chromium`.
 | `npm run test:e2e` | alles: setup → read → write | ca. 9–10 min |
 | `npm run test:e2e:setup` | nur Ausgangszustand: Mock-Daten neu, Anmeldungen, Vorwärmen | ca. 1–2 min (Kaltstart des Dev-Servers: länger) |
 | `npm run test:e2e:read` | setup + lesende Tests (`e2e/read/`, 116 Tests, 4 parallel) | ca. 3:10–3:20 min ohne Setup |
-| `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 68 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 4–5 min ohne Setup |
+| `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 70 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 4–5 min ohne Setup |
 | `npm run test:e2e:headed` | alles mit sichtbarem Browser, ein Test nach dem anderen | |
 | `npm run test:e2e:ui` | Playwright-Oberfläche: Tests einzeln starten, Schritte ansehen | |
 | `npm run test:e2e:report` | HTML-Bericht des letzten Laufs öffnen | |
@@ -1713,6 +1716,56 @@ Rückgängig per Knopf gibt es nicht; **von Hand** hieße das: die Person aus
 aufgegangene ID, ihre Rohdaten (`rawRecordIds`) und Fremdkennungen
 zurückhängen und Beziehungen, Ereignisse, Namen und Belege anhand der IDs im
 Eintrag wieder zuordnen — einfacher ist meist die Sicherung vom Vortag.
+
+### Importe verbinden
+
+Mehrere Importe (z.B. zwei MyHeritage-Exporte verschiedener Verwandter)
+enthalten oft dieselben Menschen. **Recherche → „Importe verbinden“**
+(`/research/connect`, nur Administratoren) findet diese
+Verbindungspersonen und führt sie nach Bestätigung zusammen — aus den
+Importen wird ein gemeinsamer Stammbaum.
+
+Schneller Weg: Seite öffnen (Auswahl „alle Importe“ steht schon), **Abgleichen**
+(läuft im Hintergrund), oben steht „Jetzt N getrennte Teile — mit den sicheren
+Verbindungen M“ und je Import-Paar die Zahl der Verbindungspersonen;
+**Gemeinsame Vorschau** (was umzieht, zusammenfällt, Zweitangabe wird, was
+blockiert ist, wie viele Personen danach zu weiteren Familien gehören und
+damit für deren Mitglieder sichtbar werden), **Jetzt zusammenführen**,
+bestätigen. Danach startet von selbst ein neuer Abgleich — durch die
+Verbindungen haben Verwandte jetzt gemeinsame Eltern, Partner und Kinder.
+
+Abgleich ([lib/import-linking.ts](lib/import-linking.ts)): Kandidaten nur
+zwischen verschiedenen Importen (bzw. innerhalb eines Imports, wenn gewählt),
+geblockt nach Vor- und Nachnamen; dann Ausbreitung über Eltern, Partner und
+Kinder schon verbundener Paare; je Person und Import höchstens ein Partner;
+Gruppen über mehrere Importe nur, wenn alle Mitglieder zueinander passen.
+
+| Klasse | Bedeutung | vorausgewählt |
+|---|---|---|
+| **sicher** | wie bei den Dubletten (gleicher ganzer Name, gleiche tagesgenaue Geburts- und Sterbedaten bzw. gemeinsame Eltern, kein Widerspruch) oder über einen *sicheren* Verwandten mit gleichem ganzen Vornamen und vereinbarem Geburtsdatum | ja |
+| **sehr wahrscheinlich** | zwei übereinstimmende Verwandte, oder gleiches tagesgenaues Geburtsdatum plus ein Verwandter; nie einseitig fehlendes Geburtsdatum | nein |
+| **wahrscheinlich** | Name und vereinbare Daten plus ein weiterer Beleg (tagesgenaue Geburt, passender Tod oder Verwandte) | nein |
+| **unklar** | nur Name und ungefähres Jahr, Widerspruch, mehrere gleich gute Kandidaten | nein |
+
+Eine Verbindung, die als **einzige** zwei sonst getrennte Familien
+zusammenführt und sich auf keinen übereinstimmenden Verwandten stützt, ist
+nie „sicher“ — ein Irrtum dort verbände fremde Familien. Jede Brücke zeigt,
+wie viele Personen sie verbindet. Auf erfundenen Testbäumen mit Fallen
+(gleichnamige Geschwister, Vater und Sohn gleichen Namens, Zwillinge,
+Wiederverheiratung, falsche Einzelbrücke, Widerspruch im dritten Import):
+„sicher“ und „sehr wahrscheinlich“ ohne Fehler, „wahrscheinlich“ 99,4–99,9 %
+richtig (Vorsicht bei gleichnamigen Verwandten mit fehlenden Daten);
+`tests/import-linking.test.ts`. Laufzeit: zwei Importe à ~5000 Personen
+unter einer Sekunde, fünf Importe mit zusammen ~12 000 Personen etwa 5 s.
+
+Ausführen im Hintergrund; jede Personengruppe ist eine eigene Transaktion
+(danach ist der Stammbaum stimmig). Der Lauf liegt als Datei unter
+`MEDIA_DIR/connect/`; wird die App mitten im Lauf neu gestartet, zeigt die
+Seite „unterbrochen — X von Y erledigt“ und **Fortsetzen** macht weiter
+(schon Zusammengeführtes wird erkannt, nichts doppelt). Abgelehnte Paare
+lassen sich dauerhaft als „kein Duplikat“ markieren; ein späterer Abgleich
+zeigt nur Neues. Ein Audit-Eintrag `CONNECT` je Lauf listet alle Gruppen,
+dazu je Zusammenführung der übliche `MERGE`-Eintrag. Kein KI-Werkzeug.
 
 ### Herkunft und spätere Importe
 

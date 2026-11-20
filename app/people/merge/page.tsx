@@ -25,7 +25,7 @@ export default async function MergePage({ searchParams }: { searchParams: Promis
         </p>
       </div>
       {keep && other ? (
-        <MergeView keepId={keep} otherId={other} />
+        <MergeView key={`${keep}:${other}`} keepId={keep} otherId={other} />
       ) : (
         <p className="alert-info">
           Bitte zwei Personen wählen — über <Link href="/research/duplicates" className="underline">Mögliche Dubletten</Link> oder
