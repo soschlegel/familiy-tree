@@ -892,6 +892,22 @@ async function batchBytes(scope: Scope, batchId: string, fileName: string): Prom
   return (await extractGedcom(fileName, buf)).bytes;
 }
 
+/**
+ * Eine schon ausgeführte Datei erneut einlesen — aus dem aufbewahrten
+ * Original, ohne sie neu hochzuladen (z.B. damit verbesserte Zuordnungen wie
+ * die Einordnung der Quellen greifen). Ergibt einen neuen Lauf mit der
+ * üblichen Vorschau; geschrieben wird erst nach Bestätigung. Der alte Lauf
+ * und seine Datei bleiben unangetastet. Nur Administratoren.
+ */
+export async function rereadGedcomBatch(scope: Scope, batchId: string): Promise<GedcomPlanSummary> {
+  assertAdmin(scope);
+  const b = await pendingBatch(batchId);
+  if (b.status !== "COMPLETED") throw conflictError("Nur ausgeführte Importe lassen sich erneut einlesen");
+  const original = await readImportBatchFile(scope, batchId);
+  if (!original) throw notFoundError("Originaldatei des Laufs");
+  return startGedcomImport(scope, { fileName: b.fileName, bytes: original });
+}
+
 /** Vorschau mit anderer Wahl des Quell-Baums neu berechnen. */
 export async function recomputeGedcomPreview(scope: Scope, batchId: string, choice: TreeChoice): Promise<GedcomPlanSummary> {
   assertAdmin(scope);

@@ -20,7 +20,7 @@ const fullName = (p: PersonBrief) => [p.givenName, p.familyName].filter(Boolean)
  * Duplikat“ (dauerhaft ausblenden) und — nur für die Klasse „sicher“ —
  * mehrere auswählen, gemeinsame Vorschau, in einem Rutsch zusammenführen.
  */
-export function DuplicateList({ items }: { items: DuplicateCandidate[] }) {
+export function DuplicateList({ items, emptyText }: { items: DuplicateCandidate[]; emptyText?: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -132,6 +132,7 @@ export function DuplicateList({ items }: { items: DuplicateCandidate[] }) {
         </p>
       )}
 
+      {items.length === 0 && emptyText && <p className="alert-success">{emptyText}</p>}
       <ul className="space-y-2" data-testid="dup-list">
         {items.map((d) => (
           <li key={key(d)} className="card p-3" data-testid="dup-item" data-confidence={d.confidence}>

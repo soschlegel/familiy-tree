@@ -262,7 +262,7 @@ export async function buildGedcomExport(scope: Scope, options: { mediaPrefix?: s
     relationships: (Row & { id: string; type: string; subtype: string; fromPersonId: string; toPersonId: string; media?: { mediaId: string; isPrimary: boolean }[] })[];
     media: { id: string; fileName: string; caption: string | null; mimeType: string }[];
     sources: (Row & { id: string; title: string; mediaId?: string | null })[];
-    citations: (Row & { id: string; sourceId: string; personId: string | null; relationshipId: string | null; eventId: string | null; fact: string })[];
+    citations: (Row & { id: string; sourceId: string; personId: string | null; relationshipId: string | null; eventId: string | null; fact: string; url?: string | null })[];
     events: (Row & { id: string; personId: string | null; relationshipId: string | null; type: EventTypeName; isAlternative: boolean })[];
     personNames: (Row & { id: string; personId: string; type: string })[];
     externalIds: { id: string; system: string; value: string; personId: string | null; relationshipId: string | null; eventId: string | null; sourceId: string | null; mediaId: string | null }[];
@@ -381,7 +381,9 @@ export async function buildGedcomExport(scope: Scope, options: { mediaPrefix?: s
   const citationsBy = (field: "personId" | "relationshipId" | "eventId", id: string) => d.citations.filter((c) => c[field] === id);
   const citationOf = (c: (typeof d.citations)[number], idx: OriginalIndex | null, raw: RawContent): GedcomCitation => {
     const base: GedcomCitation = { sourceId: c.sourceId, texts: c.text ? [String(c.text)] : [], notes: [], media: [], externalIds: [], extensions: [] };
-    if (c.detail) base.page = String(c.detail);
+    // Fundstelle und Adresse des Eintrags stehen in GEDCOM gemeinsam in PAGE.
+    const page = [c.detail, c.url].filter(Boolean).join(", ");
+    if (page) base.page = String(page);
     if (c.confidence) {
       base.confidence = c.confidence as GedcomCitation["confidence"];
       base.quality = c.confidence === "HIGH" ? 3 : c.confidence === "MEDIUM" ? 2 : 1;

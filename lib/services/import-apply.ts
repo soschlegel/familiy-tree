@@ -13,7 +13,8 @@ import {
   type FuzzyDate,
 } from "../dates";
 import { EVENT_TYPES, PERSON_NAME_TYPES, eventIssues, type EventTypeName } from "../events";
-import { FINGERPRINT_FIELDS, importFingerprint, type ImportEntity } from "../import-fingerprint";
+import { FINGERPRINT_FIELDS, OPTIONAL_FINGERPRINT_FIELDS, importFingerprint, type ImportEntity } from "../import-fingerprint";
+import { MAX_URL_LENGTH, safeHttpUrl } from "../source-classify";
 
 /** Vergleichsform eines Feldes (wie im Fingerabdruck). */
 function canonicalValue(v: unknown): unknown {
@@ -232,6 +233,7 @@ const sourceItem = z.object({
   title: z.string().trim().min(1).max(300),
   kind: z.enum(SOURCE_KINDS).default("OTHER"),
   kindLabel: txt(200),
+  provider: txt(200),
   author: txt(),
   repository: txt(),
   callNumber: txt(),
@@ -252,6 +254,8 @@ const citationItem = z.object({
   eventId: optId,
   fact: z.enum(CITATION_FACTS).default("OTHER"),
   detail: txt(),
+  /** Internetadresse des Eintrags; nur http/https ohne Zugangsdaten (sonst ungültig). */
+  url: txt(MAX_URL_LENGTH),
   confidence: z.enum(CITATION_CONFIDENCES).optional().nullable().transform((v) => v ?? null),
   text: txt(20000),
 });
@@ -555,6 +559,7 @@ async function applyInTx(
       title: s.title,
       kind: s.kind,
       kindLabel: s.kindLabel,
+      provider: s.provider,
       author: s.author,
       repository: s.repository,
       callNumber: s.callNumber,
@@ -760,8 +765,10 @@ async function applyInTx(
       target = { personId: null, relationshipId: rid, eventId: null };
       if (!relationshipFacts(type).includes(fact)) bad("citations", c.ref, "fact", `Angabe ${fact} passt nicht zur Beziehung`);
     }
+    const url = c.url ? safeHttpUrl(c.url) : null;
+    if (c.url && !url) bad("citations", c.ref, "url", "Nur http- und https-Adressen ohne Zugangsdaten");
     if (isBad("citations", c.ref)) continue;
-    const row = { sourceId, ...target, fact, detail: c.detail, confidence: c.confidence, text: c.text };
+    const row = { sourceId, ...target, fact, detail: c.detail, url, confidence: c.confidence, text: c.text };
     queue("citations", c, row, citationCreates, citationUpdates);
   }
 
@@ -844,7 +851,9 @@ async function applyInTx(
         counts[section].skipped++;
         continue;
       }
-      const fields = FINGERPRINT_FIELDS[entity].filter((f) => canonicalValue(current[f]) !== canonicalValue(u.row[f]));
+      const fields = [...FINGERPRINT_FIELDS[entity], ...(OPTIONAL_FINGERPRINT_FIELDS[entity] ?? [])].filter(
+        (f) => canonicalValue(current[f]) !== canonicalValue(u.row[f]),
+      );
       changes[section][u.item.ref] = { fields, fileChangedSinceImport: !link || link.importHash !== u.hash };
       if (u.item.action === "updateIfUnchanged" && (!link || link.importHash !== currentHash)) {
         outcomes[section][u.item.ref] = "skippedEdited";

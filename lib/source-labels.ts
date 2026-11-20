@@ -17,6 +17,20 @@ export const SOURCE_KIND_LABEL: Record<SourceKindName, string> = {
   ORAL: "Mündliche Überlieferung",
   WEBSITE: "Webseite / Datenbank",
   OTHER: "Sonstige Quelle",
+  ONLINE_TREE: "Online-Stammbaum",
+  ONLINE_COLLECTION: "Online-Sammlung",
+};
+
+/**
+ * Arten, deren Angaben aus Stammbäumen anderer stammen — keine unabhängige
+ * Quelle; ihre Belege tragen keine Verlässlichkeit aus der Datei.
+ */
+export const DERIVED_SOURCE_KINDS: readonly SourceKindName[] = ["ONLINE_TREE"];
+
+/** Erläuterung je Art (Hinweistext an Badges). */
+export const SOURCE_KIND_HINT: Partial<Record<SourceKindName, string>> = {
+  ONLINE_TREE: "Aus einem Online-Stammbaum anderer Nutzer übernommen — keine unabhängige Quelle, bitte mit Urkunden belegen.",
+  ONLINE_COLLECTION: "Online-Sammlung eines Genealogie-Anbieters.",
 };
 
 export const CITATION_FACT_LABEL: Record<CitationFactName, string> = {
@@ -25,7 +39,7 @@ export const CITATION_FACT_LABEL: Record<CitationFactName, string> = {
   DEATH: "Tod",
   PARTNERSHIP: "Heirat & Partnerschaft",
   PARENTAGE: "Abstammung",
-  OTHER: "Sonstiges",
+  OTHER: "Allgemein",
   EVENT: "Ereignis",
 };
 

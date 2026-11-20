@@ -79,6 +79,17 @@ export const FINGERPRINT_FIELDS: Record<ImportEntity, readonly string[]> = {
   MEDIA: ["fileName", "caption"],
 };
 
+/**
+ * Später hinzugekommene Felder: gehen nur in den Fingerabdruck ein, wenn sie
+ * gesetzt sind. So bleiben die Fingerabdrücke älterer Importe gültig (kein
+ * Massen-„in der App geändert“ nach einem Update), und ein neuer Wert aus
+ * der Datei gilt als „in der Datei geändert“.
+ */
+export const OPTIONAL_FINGERPRINT_FIELDS: Partial<Record<ImportEntity, readonly string[]>> = {
+  SOURCE: ["provider"],
+  CITATION: ["url"],
+};
+
 function canonical(v: unknown): unknown {
   if (v === undefined || v === null) return null;
   if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v.toISOString();
@@ -88,6 +99,10 @@ function canonical(v: unknown): unknown {
 /** Fingerabdruck (SHA-256, hex) der Importfelder einer Zeile. */
 export function importFingerprint(entity: ImportEntity, row: Record<string, unknown>): string {
   const values = FINGERPRINT_FIELDS[entity].map((f) => canonical(row[f]));
+  for (const f of OPTIONAL_FINGERPRINT_FIELDS[entity] ?? []) {
+    const v = canonical(row[f]);
+    if (v !== null) values.push([f, v]);
+  }
   return createHash("sha256")
     .update(JSON.stringify([FINGERPRINT_VERSION, entity, values]))
     .digest("hex");

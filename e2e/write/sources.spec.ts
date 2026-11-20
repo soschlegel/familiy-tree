@@ -145,7 +145,8 @@ test("Detailseite listet, wofür die Quelle zitiert ist", async ({ page }) => {
   await page.goto(`/sources/${sourceId}`);
   const cited = page.getByTestId("source-citations");
   await expect(cited).toContainText("2 Angaben stützen sich auf diese Quelle.");
-  const rows = cited.getByTestId("source-citation");
+  // Je Person bzw. Beziehung eine Gruppe
+  const rows = cited.getByTestId("source-citation-group");
   await expect(rows).toHaveCount(2);
   await expect(rows.filter({ hasText: "Geburt" })).toContainText(pName());
   const marriageRow = rows.filter({ hasText: "Heirat & Partnerschaft" });
