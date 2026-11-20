@@ -85,10 +85,10 @@ export default async function RootLayout({
 
   return (
     <html lang="de" className={`${serif.variable} ${sans.variable}`}>
-      {/* Spalte über mindestens die sichtbare Höhe (dvh: folgt auf dem
-          Telefon dem Ein- und Ausblenden der Adressleiste, vh als Rückfall);
-          <main> wächst, die Fußzeile sitzt so immer am unteren Rand. */}
-      <body className="flex min-h-screen min-h-dvh flex-col">
+      {/* Spalte über mindestens die sichtbare Höhe (min-height in
+          globals.css); <main> wächst, die Fußzeile sitzt so immer am
+          unteren Rand. */}
+      <body className="flex flex-col">
         <a
           href="#inhalt"
           className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:shadow dark:focus:bg-stone-900"

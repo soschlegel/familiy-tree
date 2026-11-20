@@ -47,6 +47,14 @@ html {
 
 body {
   @apply bg-paper font-sans text-stone-900 antialiased;
+  /* Mindestens die SICHTBARE Höhe (dvh). 100vh nur als Rückfall für alte
+     Browser — und deshalb zuerst: Edge auf Android rechnet in vh die Fläche
+     hinter seiner unteren Leiste mit, die Seite würde sonst um deren Höhe
+     zu lang (Lücke über der Fußzeile, Seite lässt sich schieben). Nicht als
+     zwei Tailwind-Klassen schreiben: deren Reihenfolge im CSS bestimmt
+     Tailwind, und dort gewann 100vh. */
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 @media (prefers-color-scheme: dark) {
