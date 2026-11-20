@@ -343,7 +343,7 @@ export function CitationSection({
                       {!row.eventLabel && row.relationLabel && <span className="text-xs muted">· {row.relationLabel}</span>}
                       {row.detail && <span className="text-xs muted">· {row.detail}</span>}
                       <CitationLink url={row.url} />
-                      {row.confidence ? (
+                      {row.confidence && !DERIVED_SOURCE_KINDS.includes(row.source.kind) ? (
                         <span className={`${confidenceBadge[row.confidence]} px-2 py-0 text-[11px]`}>
                           {CONFIDENCE_LABEL[row.confidence]}
                         </span>
