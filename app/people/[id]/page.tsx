@@ -9,6 +9,7 @@ import {
   canCreateSources,
   compareEvents,
   getPersonDetail,
+  listDuplicatesOfPerson,
   listFamilies,
   listPickablePersons,
   listSourceOptions,
@@ -36,6 +37,7 @@ import { Avatar } from "@/components/Avatar";
 import { LockIcon } from "@/components/PersonNode";
 import { MediaGallery } from "@/components/MediaGallery";
 import { DeletePersonButton } from "@/components/DeletePersonButton";
+import { DuplicateBanner } from "@/components/DuplicateBanner";
 import { MergeWithPicker } from "@/components/MergeWithPicker";
 import { PersonFamilies } from "@/components/PersonFamilies";
 import {
@@ -253,13 +255,16 @@ export default async function PersonPage({
 
   // Auswahl und Familienliste brauchen nur Bearbeiter. Nur sichtbare Personen
   // anbieten — die Suchhilfe darf keine Namen aus fremden Familien preisgeben.
-  const [allPersons, allFamilies, sourceOptions] = canEdit
+  // Mögliche Dubletten ebenfalls nur für Bearbeiter; der Dienst prüft das Recht
+  // an beiden Einträgen selbst noch einmal.
+  const [allPersons, allFamilies, sourceOptions, duplicates] = canEdit
     ? await Promise.all([
         listPickablePersons(scope, { excludeId: id }),
         listFamilies(scope).then((list) => list.map(({ id, name }) => ({ id, name }))),
         listSourceOptions(scope),
+        listDuplicatesOfPerson(scope, id),
       ])
-    : [[], [], []];
+    : [[], [], [], null];
 
   // Lebensereignisse: die der Person und die ihrer Beziehungen in einer
   // Liste (eine Stelle zum Lesen und Bearbeiten), chronologisch.
@@ -368,6 +373,8 @@ export default async function PersonPage({
           ← Alle Personen
         </Link>
       </nav>
+
+      {duplicates && <DuplicateBanner personId={person.id} duplicates={duplicates} />}
 
       <header className="card relative overflow-hidden p-5 sm:p-7">
         <div

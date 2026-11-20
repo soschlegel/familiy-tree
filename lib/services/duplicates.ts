@@ -1,9 +1,9 @@
 import { prisma } from "../prisma";
-import { canEditPerson, canViewPerson, type Scope } from "../scope";
+import { canEditPerson, canViewPerson, editableFamilyIds, type Scope } from "../scope";
 import { fuzzyField } from "../dates";
-import { findDuplicatePairs, type Confidence, type DupPerson } from "../duplicates";
-import { nameKey } from "../name-keys";
-import { toPersonBrief, type PersonBrief } from "./dto";
+import { findDuplicatePairs, scoreDuplicate, type Confidence, type DupPerson } from "../duplicates";
+import { firstGivenKey, nameKey } from "../name-keys";
+import { importLabel, MANUAL_ORIGIN_LABEL, toPersonBrief, type PersonBrief } from "./dto";
 import { loadGraph, type LoadedGraph } from "./graph-data";
 import { forbiddenError, notFoundError, validationError } from "./errors";
 import { audit, auditActor } from "../audit";
@@ -42,6 +42,40 @@ export type DuplicateList = {
 const relKey = (p: { givenName: string; familyName: string | null } | undefined) =>
   p ? `${nameKey(p.givenName)} ${nameKey(p.familyName)}`.trim() : "";
 
+/** Spalten einer Person, die der Vergleich braucht (dazu die Datumsfelder für fuzzyField). */
+type DupSource = Pick<DupPerson, "id" | "givenName" | "familyName" | "birthName" | "gender" | "birthPlace">;
+
+/**
+ * Eine Person in der Form für lib/duplicates.ts — eine Stelle für die
+ * Gesamtliste (loadDuplicatePeople) und die Kandidaten einer einzelnen Person
+ * (listDuplicatesOfPerson), damit beide dasselbe vergleichen.
+ */
+function toDupPerson(
+  p: DupSource,
+  rel: { parents: string[]; partners: string[]; children: string[] },
+  relName: (id: string) => string,
+  variants: DupPerson["variants"],
+  trees: string[],
+): DupPerson {
+  return {
+    id: p.id,
+    givenName: p.givenName,
+    familyName: p.familyName,
+    birthName: p.birthName,
+    gender: p.gender,
+    birth: fuzzyField(p, "birthDate"),
+    death: fuzzyField(p, "deathDate"),
+    birthPlace: p.birthPlace,
+    variants,
+    parents: rel.parents,
+    partners: rel.partners,
+    children: rel.children,
+    parentNames: rel.parents.map(relName).filter(Boolean),
+    partnerNames: rel.partners.map(relName).filter(Boolean),
+    trees,
+  };
+}
+
 /** Vergleichsdaten aller sichtbaren Personen (ein Ladevorgang, wenige Abfragen). */
 export async function loadDuplicatePeople(scope: Scope, graph?: LoadedGraph): Promise<{ graph: LoadedGraph; people: DupPerson[] }> {
   const g = graph ?? (await loadGraph(scope));
@@ -56,28 +90,19 @@ export async function loadDuplicatePeople(scope: Scope, graph?: LoadedGraph): Pr
   const treesOf = new Map<string, Set<string>>();
   for (const l of links) treesOf.set(l.personId!, new Set([...(treesOf.get(l.personId!) ?? []), l.sourceTreeId!]));
 
-  const people: DupPerson[] = visible.map((p) => {
-    const parents = (g.index.parentsOf.get(p.id) ?? []).map((e) => e.from);
-    const partners = (g.index.partnersOf.get(p.id) ?? []).map((e) => (e.from === p.id ? e.to : e.from));
-    const children = (g.index.childrenOf.get(p.id) ?? []).map((e) => e.to);
-    return {
-      id: p.id,
-      givenName: p.givenName,
-      familyName: p.familyName,
-      birthName: p.birthName,
-      gender: p.gender,
-      birth: fuzzyField(p, "birthDate"),
-      death: fuzzyField(p, "deathDate"),
-      birthPlace: p.birthPlace,
-      variants: namesOf.get(p.id) ?? [],
-      parents,
-      partners,
-      children,
-      parentNames: parents.map((id) => relKey(g.persons.get(id))).filter(Boolean),
-      partnerNames: partners.map((id) => relKey(g.persons.get(id))).filter(Boolean),
-      trees: [...(treesOf.get(p.id) ?? [])],
-    };
-  });
+  const people: DupPerson[] = visible.map((p) =>
+    toDupPerson(
+      p,
+      {
+        parents: (g.index.parentsOf.get(p.id) ?? []).map((e) => e.from),
+        partners: (g.index.partnersOf.get(p.id) ?? []).map((e) => (e.from === p.id ? e.to : e.from)),
+        children: (g.index.childrenOf.get(p.id) ?? []).map((e) => e.to),
+      },
+      (id) => relKey(g.persons.get(id)),
+      namesOf.get(p.id) ?? [],
+      [...(treesOf.get(p.id) ?? [])],
+    ),
+  );
   return { graph: g, people };
 }
 
@@ -124,6 +149,168 @@ export async function listDuplicateCandidates(
     };
   });
   return { total: filtered.length, counts, dismissed: dismissedRows.length, items };
+}
+
+export type PersonDuplicateCandidate = {
+  person: PersonBrief;
+  /** Herkunft des Kandidaten: Importe (Dateiname nur für Administratoren) oder „von Hand erfasst“. */
+  origin: string[];
+  score: number;
+  confidence: Confidence;
+  reasons: string[];
+  conflicts: string[];
+};
+
+export type PersonDuplicates = {
+  /** Alle Kandidaten, die der Benutzer mit dieser Person zusammenführen dürfte. */
+  total: number;
+  /** Die ersten `limit`: „sicher“ zuerst, dann nach Punkten. */
+  items: PersonDuplicateCandidate[];
+};
+
+const NO_DUPLICATES: PersonDuplicates = { total: 0, items: [] };
+
+/** Namen und Geschlecht — genug, um die meisten Personen ohne weiteres Laden auszuschließen. */
+const SLIM_SELECT = { id: true, givenName: true, familyName: true, birthName: true, gender: true, birthPlace: true } as const;
+
+const DUP_SELECT = {
+  ...SLIM_SELECT,
+  birthDate: true,
+  deathDate: true,
+  birthDatePrecision: true,
+  birthDateQualifier: true,
+  deathDatePrecision: true,
+  deathDateQualifier: true,
+  birthDateTo: true,
+  birthDateToPrecision: true,
+  deathDateTo: true,
+  deathDateToPrecision: true,
+  families: { select: { familyId: true } },
+  names: { select: { givenName: true, familyName: true } },
+} as const;
+
+/**
+ * Mögliche Dubletten EINER Person (Hinweis auf der Personenseite) — dieselbe
+ * Bewertung, Schwelle und „kein Duplikat“-Ausnahme wie die Gesamtliste
+ * (findDuplicatePairs mit scoreDuplicate, Standardwerte), davon nur die
+ * Klassen „sicher“ und „wahrscheinlich“, und ohne den ganzen
+ * Graphen zu laden: erst von allen bearbeitbaren Personen nur Namen und
+ * Geschlecht (der Blockschlüssel — erster Vorname in Vergleichsform — lässt
+ * sich in SQL nicht bilden), dann vollständig nur die wenigen mit gleichem
+ * erstem Vornamen und passendem Nachnamen samt ihren Beziehungen.
+ *
+ * Rechte: Kandidaten gibt es nur, wenn der Benutzer die Person selbst UND den
+ * Kandidaten bearbeiten darf (wie `canMerge` in der Liste). Alle anderen
+ * erfahren nichts — auch keine Anzahl.
+ */
+export async function listDuplicatesOfPerson(scope: Scope, personId: string, options: { limit?: number } = {}): Promise<PersonDuplicates> {
+  const limit = Math.max(1, Math.min(50, Math.floor(options.limit ?? 3)));
+  const self = await prisma.person.findUnique({
+    where: { id: personId },
+    select: { ...SLIM_SELECT, families: { select: { familyId: true } }, names: { select: { givenName: true, familyName: true } } },
+  });
+  if (!self || !canEditPerson(scope, self.families.map((f) => f.familyId))) return NO_DUPLICATES;
+  const keys = new Set([self.givenName, ...self.names.map((n) => n.givenName)].map(firstGivenKey).filter(Boolean));
+  if (keys.size === 0) return NO_DUPLICATES;
+
+  // 1. Schmal: von allen bearbeitbaren Personen nur Namen und Geschlecht.
+  //    Übrig bleibt, wer denselben ersten Vornamen hat (Hauptname oder
+  //    Variante) und für scoreDuplicate allein nach Namen und Geschlecht in
+  //    Frage kommt — Daten und Verwandte können danach nur noch ausschließen.
+  //    Der SQL-Filter grenzt nur vor; entschieden wird unten mit canEditPerson.
+  const editable = scope.isAdmin ? {} : { families: { some: { familyId: { in: editableFamilyIds(scope) } } } };
+  const [slim, slimNames] = await Promise.all([
+    prisma.person.findMany({ where: { id: { not: personId }, ...editable }, select: SLIM_SELECT }),
+    prisma.personName.findMany({
+      where: { personId: { not: personId }, ...(scope.isAdmin ? {} : { person: editable }) },
+      select: { personId: true, givenName: true, familyName: true },
+    }),
+  ]);
+  const variantsOf = new Map<string, DupPerson["variants"]>();
+  for (const n of slimNames) variantsOf.set(n.personId, [...(variantsOf.get(n.personId) ?? []), n]);
+  const namesOnly = (p: DupSource, variants: DupPerson["variants"]) =>
+    toDupPerson(p, { parents: [], partners: [], children: [] }, () => "", variants, []);
+  const selfNames = namesOnly(self, self.names);
+  const candidateIds = new Set<string>();
+  for (const p of slim) {
+    const variants = variantsOf.get(p.id) ?? [];
+    if (!keys.has(firstGivenKey(p.givenName)) && !variants.some((v) => keys.has(firstGivenKey(v.givenName)))) continue;
+    if (scoreDuplicate(selfNames, namesOnly(p, variants))) candidateIds.add(p.id);
+  }
+  if (candidateIds.size === 0) return NO_DUPLICATES;
+
+  // 2. Vollständig nur diese Personen und ihre Beziehungen.
+  const ids = [personId, ...candidateIds];
+  const [rows, rels, links, dismissedRows] = await Promise.all([
+    prisma.person.findMany({ where: { id: { in: ids } }, select: DUP_SELECT }),
+    prisma.relationship.findMany({
+      where: { OR: [{ fromPersonId: { in: ids } }, { toPersonId: { in: ids } }] },
+      select: { type: true, fromPersonId: true, toPersonId: true },
+    }),
+    prisma.importLink.findMany({
+      where: { personId: { in: ids } },
+      select: { personId: true, sourceTreeId: true, lastBatch: { select: { fileName: true, createdAt: true } } },
+    }),
+    prisma.duplicateDismissal.findMany({
+      where: { OR: [{ personAId: personId }, { personBId: personId }] },
+      select: { personAId: true, personBId: true },
+    }),
+  ]);
+  const rowOf = new Map(rows.filter((r) => canEditPerson(scope, r.families.map((f) => f.familyId))).map((r) => [r.id, r]));
+  if (!rowOf.has(personId)) return NO_DUPLICATES;
+
+  const relOf = new Map<string, { parents: string[]; partners: string[]; children: string[] }>();
+  const rel = (id: string) => {
+    let x = relOf.get(id);
+    if (!x) relOf.set(id, (x = { parents: [], partners: [], children: [] }));
+    return x;
+  };
+  for (const r of rels) {
+    if (r.type === "PARENT_OF") {
+      rel(r.toPersonId).parents.push(r.fromPersonId);
+      rel(r.fromPersonId).children.push(r.toPersonId);
+    } else {
+      rel(r.fromPersonId).partners.push(r.toPersonId);
+      rel(r.toPersonId).partners.push(r.fromPersonId);
+    }
+  }
+  // Namen der Eltern und Partner — nur als Vergleichsform, sie verlassen den Dienst nicht.
+  const nameRows = new Map<string, { givenName: string; familyName: string | null }>(rows.map((r) => [r.id, r]));
+  const missing = new Set<string>();
+  for (const id of rowOf.keys()) for (const x of [...rel(id).parents, ...rel(id).partners]) if (!nameRows.has(x)) missing.add(x);
+  if (missing.size) {
+    const more = await prisma.person.findMany({ where: { id: { in: [...missing] } }, select: { id: true, givenName: true, familyName: true } });
+    for (const r of more) nameRows.set(r.id, r);
+  }
+  const treesOf = new Map<string, Set<string>>();
+  const originOf = new Map<string, Set<string>>();
+  for (const l of links) {
+    if (l.sourceTreeId) treesOf.set(l.personId!, new Set([...(treesOf.get(l.personId!) ?? []), l.sourceTreeId]));
+    originOf.set(l.personId!, new Set([...(originOf.get(l.personId!) ?? []), importLabel(scope, l.lastBatch)]));
+  }
+
+  const people = [...rowOf.values()].map((r) => toDupPerson(r, rel(r.id), (id) => relKey(nameRows.get(id)), r.names, [...(treesOf.get(r.id) ?? [])]));
+  const dismissed = new Set(dismissedRows.map((d) => pairKey(d.personAId, d.personBId)));
+  // Der Hinweis nennt nur „sicher“ und „wahrscheinlich“: Die Klasse „unklar“
+  // bleibt der Dublettenliste vorbehalten, damit er nicht wegen schwacher
+  // Treffer auf vielen Seiten steht. Strenger als die Liste, nie lockerer.
+  const pairs = findDuplicatePairs(people, {
+    include: (a, b) => (a.id === personId || b.id === personId) && !dismissed.has(pairKey(a.id, b.id)),
+  }).filter((p) => p.confidence !== "low");
+  return {
+    total: pairs.length,
+    items: pairs.slice(0, limit).map((p) => {
+      const otherId = p.a === personId ? p.b : p.a;
+      return {
+        person: toPersonBrief(rowOf.get(otherId)!),
+        origin: [...(originOf.get(otherId) ?? [MANUAL_ORIGIN_LABEL])],
+        score: p.score,
+        confidence: p.confidence,
+        reasons: p.reasons,
+        conflicts: p.conflicts,
+      };
+    }),
+  };
 }
 
 async function assertBothEditable(scope: Scope, aId: string, bId: string) {
