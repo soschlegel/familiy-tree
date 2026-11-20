@@ -529,6 +529,9 @@ enum SourceKind {
   ORAL // mündliche Überlieferung
   WEBSITE // Webseite, Online-Datenbank
   OTHER
+  // Seit „Quellen aus dem Import sauber übernehmen“ (lib/source-classify.ts):
+  ONLINE_TREE // Stammbäume anderer Nutzer bei einem Anbieter (MyHeritage, Ancestry …) — keine unabhängige Quelle
+  ONLINE_COLLECTION // Online-Sammlung/Datenbank eines Anbieters (ohne bestimmbare Inhaltsart)
 }
 
 // Eine Quelle (z.B. ein Kirchenbuch) kann viele Angaben vieler Personen
@@ -540,6 +543,8 @@ model Source {
   kind            SourceKind    @default(OTHER)
   // Freie Art, wenn die Quelle eine eigene Kategorie mitbringt (z.B. „Adressbuch“).
   kindLabel       String?
+  // Anbieter, über den die Quelle zugänglich ist („MyHeritage“, „Ancestry“ …).
+  provider        String?
   author          String? // Verfasser bzw. Herkunft
   repository      String? // Archiv, Pfarramt, Standesamt
   callNumber      String? // Signatur
@@ -595,6 +600,8 @@ model Citation {
   eventId        String?
   fact           CitationFact        @default(OTHER)
   detail         String? // Seite, Eintragsnummer, Fundstelle (GEDCOM PAGE)
+  // Internetadresse des Eintrags (aus PAGE herausgelöst; nur http/https).
+  url            String?
   confidence     CitationConfidence?
   text           String? // Abschrift bzw. Notiz zum Beleg (GEDCOM DATA.TEXT, NOTE)
   createdAt      DateTime            @default(now())

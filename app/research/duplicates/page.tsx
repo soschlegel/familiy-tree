@@ -58,11 +58,7 @@ export default async function DuplicatesPage({ searchParams }: { searchParams: P
         })}
       </nav>
 
-      {list.items.length === 0 ? (
-        <p className="alert-success">Keine (weiteren) möglichen Dubletten in dieser Auswahl.</p>
-      ) : (
-        <DuplicateList items={list.items} />
-      )}
+      <DuplicateList items={list.items} emptyText="Keine (weiteren) möglichen Dubletten in dieser Auswahl." />
 
       {pages > 1 && (
         <nav aria-label="Seiten" className="flex flex-wrap items-center gap-3 text-sm">

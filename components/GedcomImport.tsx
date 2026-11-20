@@ -186,6 +186,18 @@ export function GedcomImport({ families }: { families: { id: string; name: strin
   const [privacyUnassigned, setPrivacyUnassigned] = useState(true);
   const [downloadPhotos, setDownloadPhotos] = useState(false);
 
+  // „Aus der aufbewahrten Datei neu einlesen“ im Importverlauf
+  useEffect(() => {
+    const on = (ev: Event) => {
+      const data = (ev as CustomEvent<Summary>).detail;
+      if (!data) return;
+      reset();
+      setSummary(data);
+    };
+    window.addEventListener("import-preview-started", on);
+    return () => window.removeEventListener("import-preview-started", on);
+  }, []);
+
   function reset() {
     setSummary(null);
     setResult(null);

@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
 import { prisma } from "../prisma";
+import { safeHttpUrl } from "../source-classify";
 import { audit, auditActor } from "../audit";
 import { canViewMedia } from "../media-scope";
 import {
@@ -54,6 +55,8 @@ export type SourceBrief = { id: string; title: string; kind: SourceKind };
 export type SourceDto = SourceBrief & {
   /** Freie Art, wenn die Quelle eine eigene Kategorie mitbringt. */
   kindLabel: string | null;
+  /** Anbieter, über den die Quelle zugänglich ist (MyHeritage, Ancestry …). */
+  provider: string | null;
   author: string | null;
   repository: string | null;
   callNumber: string | null;
@@ -96,6 +99,8 @@ export type CitationDto = {
   eventId: string | null;
   fact: CitationFact;
   detail: string | null;
+  /** Internetadresse des Eintrags (geprüft: nur http/https). */
+  url: string | null;
   confidence: CitationConfidence | null;
   /** Abschrift bzw. Notiz zum Beleg. */
   text: string | null;
@@ -198,6 +203,7 @@ function toCitationDto(c: LoadedCitation | Prisma.CitationGetPayload<object>, ca
     eventId: c.eventId,
     fact: c.fact,
     detail: c.detail,
+    url: safeHttpUrl(c.url),
     confidence: c.confidence,
     text: c.text,
     createdAt: c.createdAt.toISOString(),
@@ -253,10 +259,11 @@ async function toSourceDto(scope: Scope, s: SourceRow, mediaVisible?: boolean): 
     title: s.title,
     kind: s.kind,
     kindLabel: s.kindLabel,
+    provider: s.provider,
     author: s.author,
     repository: s.repository,
     callNumber: s.callNumber,
-    url: s.url,
+    url: safeHttpUrl(s.url),
     date: iso(s.date),
     datePrecision: s.datePrecision,
     dateQualifier: s.dateQualifier,
@@ -655,6 +662,7 @@ export async function createCitation(scope: Scope, input: unknown): Promise<Cita
       ...target,
       fact,
       detail: data.detail,
+      url: data.url,
       confidence: data.confidence,
       text: data.text,
     },

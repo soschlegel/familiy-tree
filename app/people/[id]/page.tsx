@@ -310,6 +310,7 @@ export default async function PersonPage({
     id: c.id,
     fact: c.fact,
     detail: c.detail,
+    url: c.url,
     confidence: c.confidence,
     canEdit: c.canEdit,
     source: c.source,

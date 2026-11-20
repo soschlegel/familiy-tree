@@ -151,7 +151,7 @@ chromium`.
 | `npm run test:e2e` | alles: setup → read → write | ca. 9–10 min |
 | `npm run test:e2e:setup` | nur Ausgangszustand: Mock-Daten neu, Anmeldungen, Vorwärmen | ca. 1–2 min (Kaltstart des Dev-Servers: länger) |
 | `npm run test:e2e:read` | setup + lesende Tests (`e2e/read/`, 116 Tests, 4 parallel) | ca. 3:10–3:20 min ohne Setup |
-| `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 66 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 4–5 min ohne Setup |
+| `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 68 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 4–5 min ohne Setup |
 | `npm run test:e2e:headed` | alles mit sichtbarem Browser, ein Test nach dem anderen | |
 | `npm run test:e2e:ui` | Playwright-Oberfläche: Tests einzeln starten, Schritte ansehen | |
 | `npm run test:e2e:report` | HTML-Bericht des letzten Laufs öffnen | |
@@ -432,14 +432,51 @@ bzw. Notizen und optional einen Scan (ein bereits hochgeladenes Bild einer
 belegten Person oder Ehe).
 
 Ein **Beleg** verbindet eine Quelle mit genau einer Angabe: an einer Person
-`Name`, `Geburt`, `Tod` oder `Sonstiges`, an einer Beziehung `Heirat &
-Partnerschaft` bzw. `Abstammung` (oder `Sonstiges`). Dazu kommen
-Fundstelle (Seite, Eintragsnummer), Verlässlichkeit (gesichert,
-wahrscheinlich, unsicher) und optional eine Abschrift (`text`). Ein Beleg
+`Name`, `Geburt`, `Tod` oder `Allgemein` (die Person als Ganzes), an einer
+Beziehung `Heirat & Partnerschaft` bzw. `Abstammung` (oder `Allgemein`).
+Dazu kommen Fundstelle (Seite, Eintragsnummer), Internetadresse des
+Eintrags (nur http/https; angezeigt als Link „Eintrag öffnen“ mit dem
+Hostnamen, nie von der App selbst abgerufen), Verlässlichkeit (gesichert,
+wahrscheinlich, unsicher oder nicht bewertet) und optional eine Abschrift
+(`text`). Ein Beleg
 kann auch ein einzelnes Lebensereignis stützen (`eventId`, Angabe
 „Ereignis“); er hängt dann zugleich an dessen Person bzw. Beziehung, Rechte
 und Export gelten wie dort. Eine Quelle kann beliebig viele Angaben vieler
 Personen belegen.
+
+**Quellen aus Importen.** Genealogie-Anbieter liefern ihre Quellen mit
+eigenen Angaben (MyHeritage: `_TYPE`, `_MEDI`, HTML im Text, Adressen der
+Einträge in der Fundstelle). Der GEDCOM-Import ordnet sie ein
+([lib/source-classify.ts](lib/source-classify.ts)):
+
+| Art | Wann |
+|---|---|
+| Kirchenbuch, Standesamt, Volkszählung, Grabstein … | Titel bzw. `_TYPE` nennen, was die Sammlung **ist** — auch wenn sie bei einem Anbieter liegt (der Anbieter steht dann daneben) |
+| **Online-Stammbaum** | Stammbäume anderer Nutzer („… Stammbäume“, „Family Trees“, „Smart Matches“, Geni, WikiTree): **keine unabhängige Quelle** |
+| **Online-Sammlung** | Sammlung/Datenbank eines erkannten Anbieters ohne bestimmbare Inhaltsart |
+| Webseite / Sonstige | alles andere, wie bisher |
+
+Der **Anbieter** (MyHeritage, Ancestry, FamilySearch, Geneanet, Filae, Geni,
+WikiTree, Find a Grave, Matricula, Archion …) wird an Adressen oder am Namen
+erkannt und an der Quelle angezeigt; unbekannte Anbieter bleiben leer. HTML
+in Titel, Text und Notizen wird lesbarer Text (das Original bleibt in den
+Rohdaten), die erste Adresse darin wird die Internetadresse der Quelle. Eine
+Adresse in der Fundstelle eines Belegs wird dessen Link. Belege auf
+**Online-Stammbäume** übernehmen die Verlässlichkeit der Datei nicht
+(MyHeritage schreibt „QUAY 3“ an automatische Treffer) — sie sind „nicht
+bewertet“ und tragen den Hinweis „aus einem Online-Stammbaum — keine
+unabhängige Quelle“. Derselbe Beleg zweimal an derselben Person fällt beim
+Import zusammen; ein allgemeiner Beleg, der sein Ereignis nennt (`EVEN BIRT`),
+gehört zur Geburt usw.
+
+Für schon Importiertes genügt ein erneuter Import derselben Datei: Quellen
+und Belege gelten als „in der Datei geändert“ und werden berichtigt — außer
+dem, was in der App von Hand geändert wurde. Ohne Datei zur Hand: im
+Importverlauf (`/admin/data`) **„Aus der aufbewahrten Datei neu einlesen“** —
+das Original des Laufs geht durch die normale Vorschau; geschrieben wird erst
+nach „Importieren“, der alte Lauf bleibt unverändert. Doppelte Belege aus
+älteren Importen erscheinen dabei unter „Fehlt in der Datei“ und lassen sich
+dort entfernen.
 
 **Oberfläche:**
 
@@ -448,8 +485,9 @@ Personen belegen.
   Quelle), ändern und entfernen — auch für die Ehen und Eltern-Kind-
   Beziehungen der Person. In der Beziehungsliste („Verwaltung“) führt
   „Belege“ direkt dorthin.
-- **„Quellen“** in der Navigation: Liste mit Suche und Filter nach Art,
-  Detailseite mit allem, wofür die Quelle zitiert wird, Anlegen, Bearbeiten,
+- **„Quellen“** in der Navigation: Liste mit Suche und Filter nach Art
+  (mit Anbieter), Detailseite mit allem, wofür die Quelle zitiert wird — je
+  Person bzw. Beziehung gruppiert, seitenweise —, Anlegen, Bearbeiten,
   Löschen.
 - **„Recherche“**: Datenlücke „Angaben ohne Beleg“ — Personen, deren Geburt
   bzw. Tod erfasst ist (Datum oder Ort), aber keinen Beleg für genau diese
@@ -1198,8 +1236,9 @@ Das Schema liegt in `prisma/schema.prisma`, die Migrationen in
 | `0_init` | Ausgangsstand |
 | `20261116000000_ungenaue_daten_und_quellen` | Genauigkeit/Zusatz für alle Daten (Spalten mit Standardwert), Tabellen `Source` und `Citation` — rein ergänzend, keine Datenumstellung |
 | `20261117000000_ki_zugang` | KI-Zugang: `User.aiAccess` (Standard „kein Zugang“), Tabelle `ApiToken`, im `AuditLog` die Spalten `channel` und `apiTokenId` — rein ergänzend; nach dem Update hat niemand KI-Zugang, bis der Administrator ihn vergibt |
-| `20261120000000_dubletten_zusammenfuehren` | Mehrere Herkunftsangaben je Datensatz: die Unique-Indizes auf den sieben Träger-Spalten von `ImportLink` werden gewöhnliche Indizes; neue Spalten `ImportLink.mergedFromId`/`mergedAt`; Tabelle `DuplicateDismissal` — **nicht rein ergänzend** (`schema-diff-check` meldet die sieben `DROP INDEX`), aber ohne Datenänderung: aus „höchstens ein Link je Datensatz“ wird „beliebig viele“, jede bestehende Zeile erfüllt die gelockerte Regel |
 | `20261119000000_genealogie_ereignisse_import` | Lebensereignisse (`Event`), weitere Namen (`PersonName`), Importläufe, Herkunft, Fremdkennungen und Rohdaten (`ImportBatch`, `ImportLink`, `ExternalId`, `ImportRawRecord`); neue Datumszusätze und je Datum Bereichsende und Wortlaut; Rufname, Titel, Namenszusatz, Todesursache; Heirats-/Scheidungsort; Beleg an einem Ereignis; Ehestand unbekannt (`PARTNER_UNKNOWN`) — rein ergänzend (neue Enum-Werte, Spalten mit Standardwert, neue Tabellen) |
+| `20261120000000_dubletten_zusammenfuehren` | Mehrere Herkunftsangaben je Datensatz: die Unique-Indizes auf den sieben Träger-Spalten von `ImportLink` werden gewöhnliche Indizes; neue Spalten `ImportLink.mergedFromId`/`mergedAt`; Tabelle `DuplicateDismissal` — **nicht rein ergänzend** (`schema-diff-check` meldet die sieben `DROP INDEX`), aber ohne Datenänderung: aus „höchstens ein Link je Datensatz“ wird „beliebig viele“, jede bestehende Zeile erfüllt die gelockerte Regel |
+| `20261121000000_quellen_einordnen` | Quellenarten `ONLINE_TREE` und `ONLINE_COLLECTION`, `Source.provider`, `Citation.url` — rein ergänzend |
 
 Schemaänderungen künftig mit `npm run db:migrate` (`prisma migrate dev`) als
 Migration anlegen und mit einchecken. Vor dem Commit prüfen, ob sie rein
@@ -1245,6 +1284,7 @@ npx prisma migrate resolve --applied 20261116000000_ungenaue_daten_und_quellen
 npx prisma migrate resolve --applied 20261117000000_ki_zugang
 npx prisma migrate resolve --applied 20261119000000_genealogie_ereignisse_import
 npx prisma migrate resolve --applied 20261120000000_dubletten_zusammenfuehren
+npx prisma migrate resolve --applied 20261121000000_quellen_einordnen
 ```
 
 Auf der NAS (SSH, Stack `familytree`) geht Schritt 2 mit dem App-Image
