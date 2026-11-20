@@ -10,12 +10,12 @@ aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
   Portainer aktualisiert den Stack von dort. **Ein Merge ist ein
   Produktiv-Deployment auf echte Daten.**
 - `optimierung` = Arbeitsbranch, zum Zeitpunkt der Übergabe gleich `main`.
-- Zuletzt ausgerollt: Importe verbinden, Korrekturen beim Zusammenführen und
-  an der Quellenanzeige, Favicon. Keine offene Migration; letzter
-  Migrationsordner `20261121000000_quellen_einordnen`.
-- Prüfstand des letzten Pakets: Typecheck, Lint, Vitest 666/666; Playwright
-  mit einem Worker auf frischem Server: setup 6/6, read 116/116,
-  write 71/72 (ein Kaltstart-Timeout in `dates.spec`, einzeln grün).
+- Zuletzt ausgerollt: Dubletten-Hinweis auf der Personenseite (erster Schritt
+  aus Paket 1) und die Überarbeitung für das Telefon. Keine offene Migration;
+  letzter Migrationsordner `20261121000000_quellen_einordnen`.
+- Prüfstand des letzten Pakets: Typecheck, Lint, Vitest 676/676; Playwright
+  auf frischem Server, zwischen read und write neu gestartet: setup 6/6,
+  read 146/146, write 74/74.
 
 ## Lokal einrichten
 
@@ -47,11 +47,12 @@ README, Abschnitt „Tests“.
 
 ### 1. Zusammenführen: Komfort und KI-Vorprüfung (Entwurf freigegeben)
 
-- **Banner auf der Personenseite** für Bearbeiter beider Einträge:
-  „N mögliche Dubletten: Name (Lebensdaten, Import) — Vergleichen“. Billig
-  berechnen: Personen mit gleichem erstem Vornamen laden, dann
-  `scoreDuplicate` (`lib/duplicates.ts`); als „kein Duplikat“ markierte Paare
-  ausschließen; Seitenzeit messen.
+- **Banner auf der Personenseite** — erledigt (`listDuplicatesOfPerson` in
+  `lib/services/duplicates.ts`, `components/DuplicateBanner.tsx`). Zeigt nur
+  „sicher“ und „wahrscheinlich“, höchstens drei, mit Klassen-Kennzeichen;
+  „unklar“ bleibt der Dublettenliste vorbehalten (Entscheidung des
+  Eigentümers). Gemessen: rund 4 ms auf den Mock-Daten, rund 120 ms bei
+  11 847 erzeugten Personen; mit echten Daten nicht gemessen.
 - **Knopf „Zusammenführen …“** neben „Im Stammbaum zeigen“ mit Dialog:
   zuerst die Kandidaten dieser Person (Klasse, Begründungssatz über
   `evidenceSentence` in `lib/import-linking.ts`), darunter die freie
@@ -129,6 +130,18 @@ README, Abschnitt „Tests“.
 
 ### 4. Weitere offene Punkte
 
+- **Karte „Wurzeln nach Jahr“** (Wunsch für das nächste Release): Welt-/
+  Europakarte mit Jahresregler, die zeigt, wo die Vorfahren einer Person
+  wann lebten. Orte sind heute Freitext ohne Koordinaten. Entwurf liegt dem
+  Eigentümer vor, noch nicht freigegeben: Ortsverzeichnis mitliefern statt
+  Online-Dienst, eigene Karte ohne fremde Server, neue Tabelle für Orte
+  (ergänzende Migration).
+- **Stammbaum auf dem Telefon**: Kopf und Werkzeugleiste belegen bei
+  360×740 gut 40 % der Höhe, die Karten sind beim Standardzoom klein.
+  Braucht eine Gestaltungsentscheidung (Leiste einklappen, Vollbild, Titel
+  und Zähler weglassen). Dunkles Farbschema, Querformat und echtes
+  iOS-Safari sind für die Telefon-Überarbeitung nicht geprüft.
+
 - **Admin-Aktion „Quellen neu einordnen“** für gespeicherte Daten. Die
   Anzeige ist bereits robust; gespeicherte Art, Anbieter und Belegadressen
   älterer Importe sind es noch nicht. Regeln: von Hand Geändertes nicht
@@ -177,6 +190,8 @@ Laufzeit: 2 Importe mit je rund 4800 Personen 0,56 s; 5 Importe mit zusammen
   `permissions`, die nur Last sind.
 - **Windows**: `prisma generate` scheitert mit EPERM, solange ein
   Entwicklungsserver die Engine-Datei geladen hat. Vorher stoppen.
+- **npm ab Version 12** blockiert Install-Skripte: nach `npm install` einmal
+  `npx prisma generate` ausführen.
 - **Mock**: Seed und Setup verweigern Datenbanknamen ohne Endung
   `_mock`/`_test` und Medienordner ohne `-mock`/`-test`.
 - **Playwright**: schreibende Tests mit 2 Workern; Dateien im Modus `serial`
