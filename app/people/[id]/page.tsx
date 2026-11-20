@@ -36,6 +36,7 @@ import { Avatar } from "@/components/Avatar";
 import { LockIcon } from "@/components/PersonNode";
 import { MediaGallery } from "@/components/MediaGallery";
 import { DeletePersonButton } from "@/components/DeletePersonButton";
+import { MergeWithPicker } from "@/components/MergeWithPicker";
 import { PersonFamilies } from "@/components/PersonFamilies";
 import {
   RelationshipEditor,
@@ -595,6 +596,10 @@ export default async function PersonPage({
             }
             canEdit={canEdit}
           />
+
+          <div className="border-t border-stone-200 pt-4 dark:border-stone-800">
+            <MergeWithPicker personId={person.id} people={allPersons} />
+          </div>
 
           <div className="border-t border-stone-200 pt-4 dark:border-stone-800">
             <DeletePersonButton personId={person.id} personName={name(person)} />

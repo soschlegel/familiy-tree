@@ -153,7 +153,7 @@ test("E-Mail-Adresse korrigieren, solange der Benutzer sich nie angemeldet hat",
   await expect(page.getByText(`${typo} eingeladen.`)).toBeVisible();
 
   const row = page.getByTestId("user-row").filter({ hasText: typo });
-  await row.getByRole("button", { name: `Adresse von ${typo} korrigieren` }).click();
+  await row.getByRole("button", { name: `E-Mail ändern von ${typo}` }).click();
   const form = page.getByRole("form", { name: `Adresse von ${typo} korrigieren` });
   // Großschreibung wird wie beim Einladen vereinheitlicht.
   await form.getByLabel("Neue E-Mail-Adresse").fill(fixed.toUpperCase());
@@ -164,13 +164,13 @@ test("E-Mail-Adresse korrigieren, solange der Benutzer sich nie angemeldet hat",
 
   // Doppelte Adresse: 409 mit Meldung, auch über die Oberfläche.
   const fixedRow = page.getByTestId("user-row").filter({ hasText: fixed });
-  await fixedRow.getByRole("button", { name: `Adresse von ${fixed} korrigieren` }).click();
+  await fixedRow.getByRole("button", { name: `E-Mail ändern von ${fixed}` }).click();
   await page.getByRole("form", { name: `Adresse von ${fixed} korrigieren` }).getByLabel("Neue E-Mail-Adresse").fill("editor@example.test");
   await page.getByRole("form", { name: `Adresse von ${fixed} korrigieren` }).getByRole("button", { name: "Speichern" }).click();
   await expect(page.getByRole("alert").filter({ hasText: "bereits eingeladen" })).toBeVisible();
 
   // Wer sich schon angemeldet hat, behält seine Adresse — kein Knopf, und die API lehnt ab.
-  await expect(page.getByTestId("user-row").filter({ hasText: email }).getByRole("button", { name: /Adresse von .* korrigieren/ })).toHaveCount(0);
+  await expect(page.getByTestId("user-row").filter({ hasText: email }).getByRole("button", { name: /E-Mail ändern von / })).toHaveCount(0);
   const api = await apiAs("admin");
   const users = (await (await api.get("/api/users")).json()) as { id: string; email: string }[];
   const signedIn = users.find((u) => u.email === email)!;

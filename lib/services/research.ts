@@ -13,10 +13,10 @@ import {
   formatFuzzyYear,
   fuzzyField,
   isPreciseDate,
-  minYearDistance,
   yearsBetween,
 } from "../dates";
 import { loadGraph, type GraphPerson, type GraphRelationship, type LoadedGraph } from "./graph-data";
+import { listDuplicateCandidates, type DuplicateCandidate } from "./duplicates";
 
 /**
  * Recherche-Werkzeuge über den Stammbaum: Vorfahren, Nachfahren,
@@ -532,151 +532,17 @@ export function normalizeName(name: string | null | undefined): string {
     .replace(/(.)\1+/g, "$1");
 }
 
-function levenshtein(a: string, b: string): number {
-  if (a === b) return 0;
-  if (!a.length) return b.length;
-  if (!b.length) return a.length;
-  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i++) {
-    const cur = [i];
-    for (let j = 1; j <= b.length; j++) {
-      cur[j] = Math.min(
-        prev[j] + 1,
-        cur[j - 1] + 1,
-        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
-      );
-    }
-    prev = cur;
-  }
-  return prev[b.length];
-}
-
-export type DuplicateCandidate = {
-  a: PersonBrief;
-  b: PersonBrief;
-  /** 0..1, höher = wahrscheinlicher dieselbe Person. */
-  score: number;
-  reasons: string[];
-};
-
 /**
- * Paare sichtbarer Personen, die vermutlich doppelt erfasst sind: gleicher
- * oder sehr ähnlicher Name und Geburtsjahr höchstens `maxYearDiff` Jahre
- * auseinander (oder bei einer Seite unbekannt). Direkt miteinander verbundene
- * Personen (Eltern/Kind, Partner) werden nicht gemeldet.
+ * Paare sichtbarer Personen, die vermutlich doppelt erfasst sind — nach
+ * Klasse („sicher“ zuerst) und Punkten sortiert, ohne als „kein Duplikat“
+ * markierte Paare. Bewertung: lib/duplicates.ts (Namen samt Geburtsname und
+ * Varianten, Daten, Orte, Verwandte). Direkt miteinander verbundene Personen
+ * (Eltern/Kind, Partner) werden nie gemeldet. Seitenweise: listDuplicateCandidates.
  */
 export async function findPossibleDuplicates(
   scope: Scope,
   options: { maxYearDiff?: number; limit?: number } = {},
 ): Promise<DuplicateCandidate[]> {
-  const maxYearDiff = Math.max(0, Math.min(10, options.maxYearDiff ?? 2));
   const limit = Math.max(1, Math.min(500, options.limit ?? 100));
-  const graph = await loadGraph(scope);
-
-  const visible = [...graph.persons.values()].filter((p) => p.visible);
-
-  const linked = new Set<string>();
-  for (const r of graph.relationships) {
-    linked.add(`${r.from}|${r.to}`);
-    linked.add(`${r.to}|${r.from}`);
-  }
-
-  // Vorab nach normalisiertem Vornamen gruppieren — vergleicht nur, was
-  // überhaupt in Frage kommt, statt jedes Paar.
-  const byGiven = new Map<string, GraphPerson[]>();
-  for (const p of visible) {
-    const key = normalizeName(p.givenName.split(/\s+/)[0]);
-    const list = byGiven.get(key);
-    if (list) list.push(p);
-    else byGiven.set(key, [p]);
-  }
-
-  const result: DuplicateCandidate[] = [];
-
-  for (const group of byGiven.values()) {
-    for (let i = 0; i < group.length; i++) {
-      for (let j = i + 1; j < group.length; j++) {
-        const [a, b] = [group[i], group[j]].sort((x, y) => x.id.localeCompare(y.id));
-        if (linked.has(`${a.id}|${b.id}`)) continue;
-        if (a.gender !== "UNKNOWN" && b.gender !== "UNKNOWN" && a.gender !== b.gender) continue;
-
-        const reasons: string[] = [];
-        let score = 0;
-
-        const famA = normalizeName(a.familyName);
-        const famB = normalizeName(b.familyName);
-        const birthA = normalizeName(a.birthName);
-        const birthB = normalizeName(b.birthName);
-
-        if (famA && famA === famB) {
-          score += 0.4;
-          reasons.push(
-            a.familyName === b.familyName
-              ? "gleicher Nachname"
-              : `ähnliche Schreibweise (${a.familyName} / ${b.familyName})`,
-          );
-        } else if (famA && famB && levenshtein(famA, famB) <= 1) {
-          score += 0.3;
-          reasons.push(`ähnlicher Nachname (${a.familyName} / ${b.familyName})`);
-        } else if ((birthA && birthA === famB) || (birthB && birthB === famA)) {
-          score += 0.3;
-          reasons.push("Geburtsname entspricht dem Nachnamen");
-        } else {
-          continue;
-        }
-
-        if (a.givenName.trim() === b.givenName.trim()) {
-          score += 0.2;
-          reasons.push("gleicher Vorname");
-        } else {
-          score += 0.1;
-          reasons.push(`ähnlicher Vorname (${a.givenName} / ${b.givenName})`);
-        }
-
-        const fa = fuzzyField(a, "birthDate");
-        const fb = fuzzyField(b, "birthDate");
-        if (fa && fb) {
-          // Genaue Jahre: Differenz der Jahre wie bisher. Ungenaue: kleinster
-          // möglicher Abstand („um 1850“ und 1852 passen zusammen).
-          const exactYears = fa.qualifier === "EXACT" && fb.qualifier === "EXACT";
-          const ya = fa.date.getUTCFullYear();
-          const yb = fb.date.getUTCFullYear();
-          const diff = exactYears ? Math.abs(ya - yb) : Math.ceil(minYearDistance(fa, fb) - 1e-9);
-          if (diff > maxYearDiff) continue;
-          const same = exactYears && ya === yb;
-          score += same ? 0.3 : 0.2;
-          reasons.push(
-            same
-              ? `gleiches Geburtsjahr (${ya})`
-              : `Geburtsjahre ${formatFuzzyYear(fa)} / ${formatFuzzyYear(fb)}`,
-          );
-          if (isPreciseDate(fa) && isPreciseDate(fb) && fa.date.getTime() === fb.date.getTime()) {
-            score += 0.1;
-            reasons.push(`identisches Geburtsdatum (${formatFuzzyDate(fa)})`);
-          }
-        } else if (!fa && !fb) {
-          continue;
-        } else {
-          score += 0.05;
-          reasons.push("Geburtsjahr nur bei einer Person bekannt");
-        }
-
-        if (a.birthPlace && b.birthPlace && a.birthPlace === b.birthPlace) {
-          score += 0.1;
-          reasons.push(`gleicher Geburtsort (${a.birthPlace})`);
-        }
-
-        result.push({
-          a: brief(a),
-          b: brief(b),
-          score: Math.min(1, Math.round(score * 100) / 100),
-          reasons,
-        });
-      }
-    }
-  }
-
-  return result
-    .sort((x, y) => y.score - x.score || x.a.id.localeCompare(y.a.id))
-    .slice(0, limit);
+  return (await listDuplicateCandidates(scope, { maxYearDiff: options.maxYearDiff, limit })).items;
 }

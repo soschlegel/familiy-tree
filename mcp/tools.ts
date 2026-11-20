@@ -772,9 +772,13 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
     {
       title: "Mögliche Dubletten",
       description:
-        "Pairs of persons that are probably recorded twice (similar normalized names incl. spelling variants such as " +
-        "ph/f, th/t, umlauts; birth years close). Directly linked persons are never reported. Score 0..1, higher = more likely; " +
-        "`reasons` explains the match (German). Verify with get_person before treating as duplicate.",
+        "Pairs of persons that are probably recorded twice (normalized names incl. spelling variants such as ph/f, th/t, " +
+        "umlauts; married vs. birth surname and other recorded names; birth/death dates incl. imprecise ones; places; " +
+        "same or same-named parents/partners; persons imported from different source trees). Directly linked persons and " +
+        "pairs a user marked as 'kein Duplikat' are never reported. Score 0..1, higher = more likely; confidence " +
+        "high ('sicher': same full name, same exact birth and death date or same parents, no contradiction) / medium / low; " +
+        "`reasons` and `conflicts` explain it (German). Verify with get_person before treating as duplicate. " +
+        "Merging is only possible in the web app, not via this server.",
       inputSchema: {
         min_score: z.number().min(0).max(1).optional().describe("Default 0.5."),
         max_year_diff: z.number().int().min(0).max(10).optional().describe("Max. birth year difference, default 2."),
@@ -801,7 +805,10 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
           a: side(d.a),
           b: side(d.b),
           score: d.score,
+          confidence: d.confidence,
           reasons: d.reasons,
+          ...(d.conflicts.length ? { conflicts: d.conflicts } : {}),
+          ...(d.crossTree ? { crossTree: true } : {}),
         })),
       };
     }),
