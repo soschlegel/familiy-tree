@@ -245,7 +245,7 @@ export function PersonForm({
         open={MORE_KEYS.some((k) => Boolean(initial?.[k])) || MORE_KEYS.some((k) => Boolean(fields[k]))}
         data-testid="person-more"
       >
-        <summary className="cursor-pointer text-sm font-medium text-accent-700 dark:text-accent-300">
+        <summary className="cursor-pointer text-sm font-medium text-accent-700 max-md:py-1 dark:text-accent-300">
           Weitere Angaben
           <span className="ml-2 text-xs font-normal muted">Rufname, Namenszusätze, Todesursache</span>
         </summary>
@@ -274,7 +274,7 @@ export function PersonForm({
                       active ? prev.filter((id) => id !== f.id) : [...prev, f.id],
                     )
                   }
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition ${
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition max-md:min-h-11 max-md:px-4 ${
                     active
                       ? "border-accent-700 bg-accent-700 text-white dark:border-accent-300 dark:bg-accent-300 dark:text-stone-950"
                       : "border-stone-300 bg-surface text-stone-700 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"

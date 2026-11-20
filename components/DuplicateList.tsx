@@ -158,7 +158,7 @@ export function DuplicateList({ items, emptyText }: { items: DuplicateCandidate[
             </div>
             <div className="mt-2 grid gap-1 sm:grid-cols-2">
               {[d.a, d.b].map((p) => (
-                <Link key={p.id} href={`/people/${p.id}`} className="flex items-baseline gap-2 rounded-md px-2 py-1 text-sm hover:bg-stone-100 dark:hover:bg-stone-800">
+                <Link key={p.id} href={`/people/${p.id}`} className="flex items-baseline gap-2 rounded-md px-2 py-1 text-sm hover:bg-stone-100 max-md:py-3 dark:hover:bg-stone-800">
                   <span className="truncate font-medium">{fullName(p)}</span>
                   <span className="ml-auto shrink-0 text-xs muted">{lifeSpan(p)}</span>
                 </Link>

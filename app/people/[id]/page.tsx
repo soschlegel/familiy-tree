@@ -515,7 +515,7 @@ export default async function PersonPage({
                     id={`rel-${r.relationshipId}`}
                     className="border-t border-stone-200 px-3 py-2 dark:border-stone-800"
                   >
-                    <summary className="cursor-pointer text-xs font-medium text-accent-700 dark:text-accent-300">
+                    <summary className="cursor-pointer text-xs font-medium text-accent-700 max-md:py-3 max-md:text-sm dark:text-accent-300">
                       {r.media.length > 0
                         ? `${r.media.length} ${r.media.length === 1 ? "Bild" : "Bilder"} zur ${partnershipNoun(r.subtype)}`
                         : `Bilder zur ${partnershipNoun(r.subtype)} hinzufügen`}

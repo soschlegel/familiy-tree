@@ -88,7 +88,7 @@ export function PersonFamilies({
                     : "Dieser Familie zuordnen"
                   : "Keine Bearbeitungsrechte in dieser Familie"
               }
-              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition ${
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition max-md:min-h-11 max-md:px-4 ${
                 active
                   ? "border-accent-700 bg-accent-700 text-white dark:border-accent-300 dark:bg-accent-300 dark:text-stone-950"
                   : "border-stone-300 bg-surface text-stone-700 dark:border-stone-700 dark:text-stone-300"

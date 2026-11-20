@@ -196,7 +196,7 @@ export function PersonPicker({
               tabIndex={-1}
               onMouseEnter={() => setCursor(i)}
               onClick={() => pick(p)}
-              className={`flex w-full items-baseline gap-2 px-3 py-2 text-left text-sm ${
+              className={`flex w-full items-baseline gap-2 px-3 py-2 text-left text-sm max-md:py-3 ${
                 i === cursor ? "bg-stone-100 dark:bg-stone-800" : ""
               }`}
             >
@@ -214,7 +214,7 @@ export function PersonPicker({
               disabled={creating}
               onMouseEnter={() => setCursor(matches.length)}
               onClick={() => void createFromQuery()}
-              className={`flex w-full items-center gap-2 border-t border-stone-200 px-3 py-2 text-left text-sm dark:border-stone-700 ${
+              className={`flex w-full items-center gap-2 border-t border-stone-200 px-3 py-2 text-left text-sm max-md:py-3 dark:border-stone-700 ${
                 cursor === matches.length ? "bg-stone-100 dark:bg-stone-800" : ""
               }`}
             >

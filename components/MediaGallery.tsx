@@ -190,25 +190,27 @@ export function MediaGallery({
               {(canUpload || canDelete) && (
                 // Aktionen auf dem Telefon immer sichtbar, sonst bei Zeiger
                 // oder Tastaturfokus — nicht nur beim Überfahren mit der Maus.
-                <div className="absolute inset-x-2 bottom-2 flex justify-between gap-1 opacity-100 transition sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
+                // Auf dem Telefon stehen sie unter dem Bild statt darauf: als
+                // Tippziele (44 px) hätten sie auf dem Vorschaubild keinen Platz.
+                <div className="absolute inset-x-2 bottom-2 flex justify-between gap-1 opacity-100 transition max-sm:static max-sm:mt-1.5 max-sm:flex-wrap sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
                   {canUpload && !item.isPrimary ? (
                     <button
                       type="button"
                       onClick={() => void makePrimary(item.mediaId)}
                       disabled={busy !== null}
-                      className="rounded-full bg-stone-900/80 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur hover:bg-stone-900"
+                      className="rounded-full bg-stone-900/80 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur hover:bg-stone-900 max-sm:min-h-11 max-sm:flex-1 max-sm:whitespace-nowrap max-sm:text-xs"
                     >
                       Als {primaryLabel}
                     </button>
                   ) : (
-                    <span />
+                    <span className="max-sm:hidden" />
                   )}
                   {canDelete && (
                     <button
                       type="button"
                       onClick={() => void remove(item.mediaId)}
                       disabled={busy !== null}
-                      className="rounded-full bg-red-700/90 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur hover:bg-red-700"
+                      className="rounded-full bg-red-700/90 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur hover:bg-red-700 max-sm:min-h-11 max-sm:flex-1 max-sm:whitespace-nowrap max-sm:text-xs"
                       aria-label="Bild löschen"
                     >
                       Löschen
