@@ -119,9 +119,11 @@ export const sourceSchema = z.object({
   id: z.string(),
   title: z.string().min(1),
   kind: z
-    .enum(["CHURCH_BOOK", "CIVIL_REGISTRY", "CENSUS", "GRAVESTONE", "FAMILY_DOCUMENT", "ORAL", "WEBSITE", "OTHER"])
+    .enum(["CHURCH_BOOK", "CIVIL_REGISTRY", "CENSUS", "GRAVESTONE", "FAMILY_DOCUMENT", "ORAL", "WEBSITE", "OTHER", "ONLINE_TREE", "ONLINE_COLLECTION"])
     .default("OTHER"),
   kindLabel: text,
+  /** Anbieter (MyHeritage, Ancestry …); fehlt in älteren Dateien. */
+  provider: text,
   author: text,
   repository: text,
   callNumber: text,
@@ -144,6 +146,8 @@ export const citationSchema = z.object({
   eventId: text,
   fact: z.enum(["NAME", "BIRTH", "DEATH", "PARTNERSHIP", "PARENTAGE", "OTHER", "EVENT"]).default("OTHER"),
   detail: text,
+  /** Internetadresse des Eintrags; fehlt in älteren Dateien. */
+  url: text,
   confidence: z.enum(["HIGH", "MEDIUM", "LOW"]).nullable().optional(),
   text,
 });

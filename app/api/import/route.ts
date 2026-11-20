@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import JSZip from "jszip";
+import { safeHttpUrl } from "@/lib/source-classify";
 
 import { prisma } from "@/lib/prisma";
 import { route } from "@/lib/api";
@@ -473,10 +474,11 @@ export const POST = route("data:import", async (ctx, req) => {
       title: src.title,
       kind: src.kind,
       kindLabel: src.kindLabel ?? null,
+      provider: src.provider ?? null,
       author: src.author ?? null,
       repository: src.repository ?? null,
       callNumber: src.callNumber ?? null,
-      url: src.url ?? null,
+      url: safeHttpUrl(src.url),
       ...dates("date", src),
       notes: src.notes ?? null,
       mediaId: src.mediaId && existingMediaIds.has(src.mediaId) ? src.mediaId : null,
@@ -556,12 +558,13 @@ export const POST = route("data:import", async (ctx, req) => {
       eventId: c.eventId ?? null,
       fact: c.fact,
       detail: c.detail ?? null,
+      url: safeHttpUrl(c.url),
       confidence: c.confidence ?? null,
       text: c.text ?? null,
     };
     await prisma.citation.upsert({
       where: { id: c.id },
-      update: { fact: fields.fact, detail: fields.detail, confidence: fields.confidence, text: fields.text },
+      update: { fact: fields.fact, detail: fields.detail, url: fields.url, confidence: fields.confidence, text: fields.text },
       create: { id: c.id, ...fields },
     });
   }

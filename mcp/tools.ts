@@ -60,7 +60,7 @@ import {
 } from "../lib/services";
 import { CONSISTENCY_KINDS, type ConsistencyKind } from "../lib/consistency";
 import { isPreciseDate, toFuzzyDate, toIsoPartial } from "../lib/dates";
-import { CITATION_FACT_LABEL, SOURCE_KIND_LABEL } from "../lib/source-labels";
+import { CITATION_FACT_LABEL, SOURCE_KIND_LABEL, DERIVED_SOURCE_KINDS } from "../lib/source-labels";
 import { CITATION_CONFIDENCES, CITATION_FACTS, SOURCE_KINDS } from "../lib/validation";
 import { ALTERNATIVE_ONLY_TYPES, EVENT_TYPES, PERSON_NAME_TYPES } from "../lib/events";
 import { appendResearchNote, dateFields, isoDay, ref, type PersonLike } from "./format";
@@ -252,7 +252,9 @@ function personCitationOut(c: PersonCitation) {
     kind: c.source.kind,
     fact: c.fact,
     ...(c.detail ? { detail: c.detail } : {}),
+    ...(c.url ? { url: c.url } : {}),
     ...(c.confidence ? { confidence: c.confidence } : {}),
+    ...(DERIVED_SOURCE_KINDS.includes(c.source.kind) ? { independent: false } : {}),
     ...(c.relationshipId ? { relationshipId: c.relationshipId } : {}),
     ...(c.eventId ? { eventId: c.eventId, ...(c.eventTitle ? { event: c.eventTitle } : {}) } : {}),
     ...(c.relationship ? { relation: { role: c.relationship.role, subtype: c.relationship.subtype, with: ref(c.relationship.other) } } : {}),
@@ -337,6 +339,8 @@ function sourceOut(s: SourceDto) {
     title: s.title,
     kind: s.kind,
     kindLabel: SOURCE_KIND_LABEL[s.kind],
+    ...(s.provider ? { provider: s.provider } : {}),
+    ...(DERIVED_SOURCE_KINDS.includes(s.kind) ? { independent: false } : {}),
     ...(s.author ? { author: s.author } : {}),
     ...(s.repository ? { repository: s.repository } : {}),
     ...(s.callNumber ? { callNumber: s.callNumber } : {}),
@@ -1034,6 +1038,7 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
           fact: c.fact,
           factLabel: CITATION_FACT_LABEL[c.fact],
           ...(c.detail ? { detail: c.detail } : {}),
+          ...(c.url ? { url: c.url } : {}),
           ...(c.confidence ? { confidence: c.confidence } : {}),
           ...(c.eventId ? { eventId: c.eventId, ...(c.eventTitle ? { event: c.eventTitle } : {}) } : {}),
           ...citationTargetOut(c.target),
