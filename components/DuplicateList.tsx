@@ -98,7 +98,7 @@ export function DuplicateList({ items }: { items: DuplicateCandidate[] }) {
           <ul className="space-y-1 text-sm">
             {bulk.pairs.map((p) => (
               <li key={`${p.keepId}|${p.mergeId}`} className={p.status === "blocked" ? "text-red-700 dark:text-red-300" : ""}>
-                <strong>{p.keepName}</strong> ← {p.mergeName}:{" "}
+                Bleibt <strong>{p.keepName}</strong>, darin geht auf: {p.mergeName} —{" "}
                 {p.status === "ready" ? "bereit" : p.status === "afterParents" ? p.reason : (p.blockers ?? []).map((b) => b.message).join(" ") || p.reason}
               </li>
             ))}

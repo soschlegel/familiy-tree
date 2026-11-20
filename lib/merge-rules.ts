@@ -178,14 +178,14 @@ export function compareFields(keep: PersonValues, other: PersonValues): FieldCom
       choice = "other";
       why =
         field === "familyName"
-          ? "Die bleibende Person führt den Geburtsnamen als Nachnamen — Ehename aus der anderen"
-          : "Geburtsname aus der anderen Person";
+          ? "Der bleibende Eintrag führt den Geburtsnamen als Nachnamen — Ehename aus dem anderen"
+          : "Geburtsname aus dem anderen Eintrag";
     } else if (marriedFromKeep && field === "familyName") {
       choice = "keep";
-      why = "Der Nachname der anderen Person ist der Geburtsname der bleibenden";
+      why = "Der Nachname des anderen Eintrags ist der Geburtsname des bleibenden";
     } else if (kEmpty && !oEmpty) {
       choice = "other";
-      why = "Nur bei der anderen Person vorhanden";
+      why = "Nur beim anderen Eintrag vorhanden";
     } else if (differs && (field === "birthDate" || field === "deathDate")) {
       const k = dateOf(keep, field);
       const o = dateOf(other, field);

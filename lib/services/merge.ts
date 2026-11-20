@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { prisma } from "../prisma";
 import { canEditPerson, canViewPerson, visibleFamilyIds, type Scope } from "../scope";
-import { fuzzyColumns, formatDateWithPhrase, type FuzzyDate } from "../dates";
+import { fuzzyColumns, fuzzyField, formatDateWithPhrase, type FuzzyDate } from "../dates";
 import { EVENT_TYPE_LABEL, PERSON_NAME_TYPE_LABEL } from "../events";
 import { importFingerprint, type ImportEntity } from "../import-fingerprint";
 import {
@@ -188,6 +188,33 @@ export type MergePlan = {
 
 const personName = (p: { givenName: string; familyName: string | null }) => [p.givenName, p.familyName].filter(Boolean).join(" ");
 
+/**
+ * Unterscheidungsmerkmal eines Eintrags in Sätzen: Dubletten heißen fast
+ * immer gleich — deshalb „der bleibende“/„der andere Eintrag“ mit
+ * Lebensdaten, den Namen nur, wenn er sich unterscheidet. „ (*02.04.1801, †1870)“
+ */
+export function entryTag(p: PersonValues & { familyName?: unknown }, other: PersonValues): string {
+  const differs = personName(p as never) !== personName(other as never);
+  const birth = formatDateWithPhrase(fuzzyField(p, "birthDate"), (p.birthDatePhrase as string | null) ?? null);
+  const death = formatDateWithPhrase(fuzzyField(p, "deathDate"), (p.deathDatePhrase as string | null) ?? null);
+  const bits = [differs ? `„${personName(p as never)}“` : null, birth ? `*${birth}` : null, death ? `†${death}` : null].filter(Boolean);
+  return bits.length ? ` (${bits.join(", ")})` : "";
+}
+/** Rollen-Bezeichnungen beider Einträge (Nominativ, Dativ). */
+function roleLabels(keep: PersonValues, other: PersonValues) {
+  const k = entryTag(keep, other);
+  const o = entryTag(other, keep);
+  return {
+    keep: `der bleibende Eintrag${k}`,
+    other: `der andere Eintrag${o}`,
+    keepDat: `dem bleibenden Eintrag${k}`,
+    otherDat: `dem anderen Eintrag${o}`,
+    keepTag: k,
+    otherTag: o,
+  };
+}
+const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+
 /** Name für Meldungen — nicht sichtbare Personen bleiben ungenannt. */
 function nameFor(scope: Scope, p: { givenName: string; familyName: string | null; families: { familyId: string }[] }) {
   return canViewPerson(scope, p.families.map((f) => f.familyId)) ? `„${personName(p)}“` : "eine nicht freigegebene Person";
@@ -240,8 +267,11 @@ export function planMerge(
   if (K === X) blockers.push({ code: "SAME", message: "Eine Person lässt sich nicht mit sich selbst zusammenführen." });
 
   const existingNames = [...keep.names, ...other.names].map((n) => ({ type: n.type, givenName: n.givenName, familyName: n.familyName }));
-  const labels = { keep: `„${personName(keep)}“`, other: `„${personName(other)}“` };
-  const resolved = resolvePersonMerge(keep as unknown as PersonValues, other as unknown as PersonValues, input.choices ?? {}, existingNames, labels);
+  const role = roleLabels(keep as unknown as PersonValues, other as unknown as PersonValues);
+  const resolved = resolvePersonMerge(keep as unknown as PersonValues, other as unknown as PersonValues, input.choices ?? {}, existingNames, {
+    keep: role.keepDat,
+    other: role.otherDat,
+  });
   const fields = compareFields(keep as unknown as PersonValues, other as unknown as PersonValues).map((f) => ({ ...f, choice: resolved.choices[f.field] }));
 
   const dateIssues = personDateIssues({
@@ -260,8 +290,8 @@ export function planMerge(
         code: "RELATED",
         message:
           r.type === "PARTNER_OF"
-            ? `${labels.keep} und ${labels.other} sind als Partner eingetragen — eine Person kann nicht ihr eigener Partner sein. Bitte zuerst diese Partnerschaft prüfen und löschen, falls sie ein Erfassungsfehler ist.`
-            : `${labels.keep} und ${labels.other} sind als Elternteil und Kind eingetragen. Bitte zuerst diese Beziehung prüfen und löschen, falls sie ein Erfassungsfehler ist.`,
+            ? "Die beiden Einträge sind als Partner eingetragen — eine Person kann nicht ihr eigener Partner sein. Bitte zuerst diese Partnerschaft prüfen und löschen, falls sie ein Erfassungsfehler ist."
+            : "Die beiden Einträge sind als Elternteil und Kind eingetragen. Bitte zuerst diese Beziehung prüfen und löschen, falls sie ein Erfassungsfehler ist.",
       });
     }
   }
@@ -325,7 +355,7 @@ export function planMerge(
     blockers.push({
       code: "BIO_PARENTS",
       message:
-        `Die beiden Einträge haben verschiedene leibliche Eltern: ${labels.keep} ${list(keepParents) || "—"}, ${labels.other} ${list(otherParents) || "—"}. ` +
+        `Die beiden Einträge haben verschiedene leibliche Eltern — ${role.keep}: ${list(keepParents) || "keine"}; ${role.other}: ${list(otherParents) || "keine"}. ` +
         `Zusammen wären es ${bio.length} leibliche Elternteile (erlaubt sind ${MAX_BIOLOGICAL_PARENTS}). ` +
         "Sind es dieselben Eltern, doppelt erfasst, bitte zuerst diese Eltern zusammenführen — danach geht auch dieses Paar.",
       suggestPairs: suggest,
@@ -359,8 +389,8 @@ export function planMerge(
   const ancX = ancestors(edges, [X]);
   if (!blockers.some((b) => b.code === "RELATED")) {
     if (ancK.has(X) || ancX.has(K)) {
-      const [anc, desc] = ancK.has(X) ? [labels.other, labels.keep] : [labels.keep, labels.other];
-      blockers.push({ code: "CYCLE", message: `${anc} ist (über mehrere Generationen) Vorfahre von ${desc} — zusammengeführt wäre die Person ihr eigener Vorfahre.` });
+      const [anc, desc] = ancK.has(X) ? [role.other, role.keepDat.replace(/^dem /, "des ").replace("bleibenden Eintrag", "bleibenden Eintrags")] : [role.keep, role.otherDat.replace(/^dem /, "des ").replace("anderen Eintrag", "anderen Eintrags")];
+      blockers.push({ code: "CYCLE", message: `${cap(anc)} ist (über mehrere Generationen) Vorfahre ${desc} — zusammengeführt wäre die Person ihr eigener Vorfahre.` });
     } else {
       const desc = descendants(edges, [K, X]);
       const loop = [...ancK, ...ancX].find((id) => desc.has(id));
@@ -433,12 +463,10 @@ export function summarizePlan(scope: Scope, plan: MergePlan): MergeSummary {
     text: `${PERSON_NAME_TYPE_LABEL[n.type]}: ${[n.prefix, n.givenName, n.nickname ? `„${n.nickname}“` : null, n.familyName, n.suffix].filter(Boolean).join(" ")}`,
   }));
   const dropped = [...plan.resolved.dropped, ...plan.collapses.flatMap((c) => c.dropped.map((d) => `${c.label}: ${d}`))];
-  const sameName = personName(keep) === personName(other);
-  const K = `„${personName(keep)}“${sameName ? " (bleibender Eintrag)" : ""}`;
-  const X = `„${personName(other)}“${sameName ? " (anderer Eintrag)" : ""}`;
+  const role = roleLabels(keep as unknown as PersonValues, other as unknown as PersonValues);
 
   const s: string[] = [];
-  s.push(`${X} geht in ${K} auf; danach gibt es nur noch ${K}. Der Eintrag ${X} wird gelöscht, nachdem alles umgezogen ist.`);
+  s.push(`${cap(role.other)} geht im bleibenden Eintrag${role.keepTag} auf; danach gibt es nur noch diesen. Der andere Eintrag wird gelöscht, nachdem alles umgezogen ist.`);
   const moved = [
     events.move && plural(events.move, "Lebensereignis", "Lebensereignisse"),
     names.move && plural(names.move, "Namensvariante", "Namensvarianten"),
@@ -447,9 +475,9 @@ export function summarizePlan(scope: Scope, plan: MergePlan): MergeSummary {
     plan.moves.length && plural(plan.moves.length, "Beziehung", "Beziehungen"),
   ].filter(Boolean) as string[];
   const taken = plan.fields.filter((f) => f.choice === "other" && f.other && f.other !== f.keep);
-  if (taken.length) s.push(`Von ${X} übernommen: ${taken.map((f) => `${f.label} (${f.other.length > 60 ? `${f.other.slice(0, 60)}…` : f.other})`).join(", ")}.`);
+  if (taken.length) s.push(`Übernommen vom anderen Eintrag: ${taken.map((f) => `${f.label} (${f.other.length > 60 ? `${f.other.slice(0, 60)}…` : f.other})`).join(", ")}.`);
   if (plan.fields.some((f) => f.field === "notes" && f.choice === "both" && f.differs)) s.push("Die Notizen beider Einträge werden aneinandergehängt.");
-  if (moved.length) s.push(`Von ${X} ziehen um: ${moved.join(", ")}.`);
+  if (moved.length) s.push(`Vom anderen Eintrag ziehen um: ${moved.join(", ")}.`);
   const same = [
     events.collapse && plural(events.collapse, "gleiches Ereignis", "gleiche Ereignisse"),
     names.collapse && plural(names.collapse, "gleiche Namensvariante", "gleiche Namensvarianten"),
@@ -465,15 +493,15 @@ export function summarizePlan(scope: Scope, plan: MergePlan): MergeSummary {
   for (const d of dropped) s.push(d);
   if (visibleNew.length) {
     s.push(
-      `${K} gehört danach zusätzlich zu ${visibleNew.length === 1 ? "der Familie" : "den Familien"} ${visibleNew.map((f) => `„${f.family.name}“`).join(", ")} — wer diese Familien sehen darf, sieht die Person dann auch.`,
+      `Die Person gehört danach zusätzlich zu ${visibleNew.length === 1 ? "der Familie" : "den Familien"} ${visibleNew.map((f) => `„${f.family.name}“`).join(", ")} — wer diese Familien sehen darf, sieht die Person dann auch.`,
     );
   }
   const trees = new Set([...keep.importLinks, ...other.importLinks].map((l) => l.sourceTreeId ?? "?"));
   if (other.importLinks.length) {
     s.push(
       trees.size > 1
-        ? `Beide Einträge stammen aus verschiedenen Importen. Die Herkunft bleibt vermerkt: Ein späterer Import jeder dieser Dateien erkennt ${K} wieder und ergänzt sie, statt ${X} neu anzulegen.`
-        : `Die Herkunft bleibt vermerkt: Ein späterer Import erkennt ${K} unter beiden Einträgen der Datei wieder.`,
+        ? `Beide Einträge stammen aus verschiedenen Importen. Die Herkunft bleibt vermerkt: Ein späterer Import jeder dieser Dateien erkennt die Person wieder und ergänzt sie, statt den anderen Eintrag neu anzulegen.`
+        : `Die Herkunft bleibt vermerkt: Ein späterer Import erkennt die Person unter beiden Einträgen der Datei wieder.`,
     );
   }
   for (const b of plan.blockers) s.push(`Blockiert: ${b.message}`);
@@ -524,6 +552,14 @@ export type MergePersonSide = {
   values: Record<MergeField, string>;
   familyNames: string[];
   counts: { events: number; names: number; citations: number; media: number; relationships: number };
+  /** Was hilft, zwei gleichnamige Einträge auseinanderzuhalten. */
+  born: string | null;
+  died: string | null;
+  parents: string[];
+  partners: string[];
+  children: number;
+  /** Importe (Datei und Datum; Dateinamen nur für Administratoren). */
+  imports: string[];
   /** Herkunft: Stammbaum (Datei des letzten Imports) je Link. */
   provenance: { sourceTreeId: string | null; fileName: string | null; externalKey: string | null; merged: boolean }[];
 };
@@ -541,6 +577,21 @@ export type MergePreview = {
 };
 
 function side(scope: Scope, p: PersonBundle, rels: RelBundle[]): MergePersonSide {
+  const fact = (date: string, place: string | null) => [date, place].filter(Boolean).join(", ") || null;
+  const mine = rels.filter((r) => r.fromPersonId === p.id || r.toPersonId === p.id);
+  const parents = mine.filter((r) => r.type === "PARENT_OF" && r.toPersonId === p.id).map((r) => nameFor(scope, r.fromPerson).replace(/^„|“$/g, ""));
+  const partners = mine
+    .filter((r) => r.type === "PARTNER_OF")
+    .map((r) => nameFor(scope, r.fromPersonId === p.id ? r.toPerson : r.fromPerson).replace(/^„|“$/g, ""));
+  const children = mine.filter((r) => r.type === "PARENT_OF" && r.fromPersonId === p.id).length;
+  const dateText = (k: "birthDate" | "deathDate") => formatDateWithPhrase(fuzzyField(p, k), p[`${k}Phrase`]);
+  const imports = [
+    ...new Set(
+      p.importLinks.map((l) =>
+        scope.isAdmin && l.lastBatch ? `„${l.lastBatch.fileName}“ (${l.lastBatch.createdAt.toLocaleDateString("de-DE", { timeZone: "Europe/Berlin" })})` : "importiert",
+      ),
+    ),
+  ];
   const values = Object.fromEntries(MERGE_FIELDS.map((f) => [f, ""])) as Record<MergeField, string>;
   const cmp = compareFields(p as unknown as PersonValues, p as unknown as PersonValues);
   for (const c of cmp) values[c.field] = c.keep;
@@ -549,6 +600,12 @@ function side(scope: Scope, p: PersonBundle, rels: RelBundle[]): MergePersonSide
     name: personName(p),
     values,
     familyNames: p.families.filter((f) => visibleFamilyIds(scope, [f.familyId]).length).map((f) => f.family.name),
+    born: fact(dateText("birthDate"), p.birthPlace),
+    died: fact(dateText("deathDate"), p.deathPlace),
+    parents,
+    partners,
+    children,
+    imports,
     counts: {
       events: p.events.length,
       names: p.names.length,
@@ -780,7 +837,8 @@ async function executePlan(db: Db, scope: Scope, plan: MergePlan, input: z.infer
   const K = keep.id;
   const X = other.id;
   const summary = summarizePlan(scope, plan);
-  const labels = { keep: `„${personName(keep)}“`, other: `„${personName(other)}“` };
+  const role = roleLabels(keep as unknown as PersonValues, other as unknown as PersonValues);
+  const labels = { keep: role.keepDat, other: role.otherDat };
 
   // 1. Hauptangaben
   await db.person.update({ where: { id: K }, data: plan.resolved.columns as Prisma.PersonUpdateInput });
@@ -850,7 +908,7 @@ async function executePlan(db: Db, scope: Scope, plan: MergePlan, input: z.infer
   for (const c of plan.collapses) {
     const S = c.survivor;
     const R = c.removed;
-    const relLabels = { keep: `der bleibenden Beziehung`, other: `der zusammengeführten Beziehung (${labels.other})` };
+    const relLabels = { keep: "der bleibenden Beziehung", other: "der zusammengeführten Beziehung" };
     if (Object.keys(c.patch).length) await db.relationship.update({ where: { id: S.id }, data: c.patch as Prisma.RelationshipUpdateInput });
     await moveEvents(db, R.events, { personId: null, relationshipId: S.id }, S.events, now);
     const relEvents = await db.event.findMany({ where: { relationshipId: S.id } });

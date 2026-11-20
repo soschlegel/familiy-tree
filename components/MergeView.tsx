@@ -17,7 +17,6 @@ const SUBTYPE_LABEL: Record<string, string> = {
   PARTNER_UNKNOWN: "Ehestand unbekannt",
 };
 
-const CHOICE_LABEL: Record<FieldChoice, string> = { keep: "bleibende Person", other: "andere Person", both: "beide" };
 
 /**
  * Vergleich zweier Personen vor dem Zusammenführen: beide Seiten
@@ -70,7 +69,7 @@ export function MergeView({ keepId: initialKeep, otherId: initialOther }: { keep
 
   async function merge() {
     if (!preview || busy) return;
-    if (!confirm(`„${preview.other.name}“ in „${preview.keep.name}“ zusammenführen? Das lässt sich nicht mit einem Klick rückgängig machen.`)) return;
+    if (!confirm("Den anderen Eintrag in den bleibenden zusammenführen? Das lässt sich nicht mit einem Klick rückgängig machen.")) return;
     setBusy(true);
     const res = await apiFetch<MergeResult>(
       "/api/persons/merge",
@@ -184,9 +183,6 @@ export function MergeView({ keepId: initialKeep, otherId: initialOther }: { keep
         <Link href={`/people/${keepId}`} className="btn-secondary">
           Abbrechen
         </Link>
-        <span className="text-xs muted">
-          {CHOICE_LABEL.keep}: „{preview.keep.name}“ · {CHOICE_LABEL.other}: „{preview.other.name}“
-        </span>
       </div>
 
       <details className="card group p-4" data-testid="merge-details" open={openDetails}>
@@ -204,7 +200,7 @@ export function MergeView({ keepId: initialKeep, otherId: initialOther }: { keep
           </h2>
           <p className="mb-3 text-sm muted">
             {differing === 0
-              ? "Keine widersprüchlichen Angaben — leere Felder werden aus der anderen Person ergänzt."
+              ? "Keine widersprüchlichen Angaben — leere Felder werden aus dem anderen Eintrag ergänzt."
               : `${differing} ${differing === 1 ? "Angabe weicht" : "Angaben weichen"} ab (markiert). Nicht gewählte Geburts- und Sterbeangaben bleiben als Zweitangabe, nicht gewählte Namen als Namensvariante erhalten.`}
           </p>
           <div className="divide-y divide-stone-200 dark:divide-stone-800">
@@ -285,6 +281,13 @@ export function MergeView({ keepId: initialKeep, otherId: initialOther }: { keep
 
 function PersonCard({ label, side, testId }: { label: string; side: MergePreview["keep"]; testId: string }) {
   const c = side.counts;
+  const row = (term: string, value: string | null | undefined) =>
+    value ? (
+      <div className="flex gap-2">
+        <dt className="w-20 shrink-0 muted">{term}</dt>
+        <dd className="min-w-0">{value}</dd>
+      </div>
+    ) : null;
   return (
     <div className="card p-4" data-testid={testId}>
       <p className="eyebrow">{label}</p>
@@ -293,23 +296,18 @@ function PersonCard({ label, side, testId }: { label: string; side: MergePreview
           {side.name}
         </Link>
       </p>
-      {(side.values.birthDate || side.values.deathDate) && (
-        <p className="text-sm">
-          {side.values.birthDate && `* ${side.values.birthDate}`} {side.values.deathDate && `† ${side.values.deathDate}`}
-        </p>
-      )}
-      <p className="mt-1 text-xs muted">
-        {c.relationships} Beziehungen · {c.events} Ereignisse · {c.names} Namensvarianten · {c.citations} Belege · {c.media} Bilder
+      <dl className="mt-2 space-y-0.5 text-sm">
+        {row("geboren", side.born)}
+        {row("gestorben", side.died)}
+        {row("Eltern", side.parents.join(", "))}
+        {row(side.partners.length > 1 ? "Partner" : "Partner/in", side.partners.join(", "))}
+        {row("Kinder", side.children ? String(side.children) : null)}
+        {row("Familien", side.familyNames.join(", "))}
+        {row("Import", side.imports.join(", "))}
+      </dl>
+      <p className="mt-2 text-xs muted">
+        {c.events} Ereignisse · {c.names} Namensvarianten · {c.citations} Belege · {c.media} Bilder
       </p>
-      {side.familyNames.length > 0 && <p className="mt-1 text-xs muted">Familien: {side.familyNames.join(", ")}</p>}
-      {side.provenance.length > 0 && (
-        <p className="mt-1 text-xs muted">
-          Importiert
-          {side.provenance.some((p) => p.fileName)
-            ? `: ${[...new Set(side.provenance.map((p) => p.fileName).filter(Boolean))].join(", ")}`
-            : ` (${side.provenance.length} Herkunftsangabe${side.provenance.length === 1 ? "" : "n"})`}
-        </p>
-      )}
     </div>
   );
 }

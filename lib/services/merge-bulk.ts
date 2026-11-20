@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../prisma";
 import { canEditPerson, canViewPerson, type Scope } from "../scope";
 import { scoreDuplicate } from "../duplicates";
+import { formatFuzzyYear, fuzzyField } from "../dates";
 import { forbiddenError, parseOrThrow, ServiceError } from "./errors";
 import { loadDuplicatePeople } from "./duplicates";
 import { loadMergeSnapshot, mergePersons, planMerge, summarizePlan, type MergeBlocker, type MergeSummary } from "./merge";
@@ -51,7 +52,13 @@ export type BulkResult = {
   skipped: { a: string; b: string; reason: string }[];
 };
 
-const nameOf = (p: { givenName: string; familyName: string | null }) => [p.givenName, p.familyName].filter(Boolean).join(" ");
+/** Name mit Lebensjahren — Dubletten heißen gleich, die Daten unterscheiden sie. */
+const nameOf = (p: { givenName: string; familyName: string | null }) => {
+  const name = [p.givenName, p.familyName].filter(Boolean).join(" ");
+  const b = formatFuzzyYear(fuzzyField(p, "birthDate"));
+  const d = formatFuzzyYear(fuzzyField(p, "deathDate"));
+  return b || d ? `${name} (${[b && `*${b}`, d && `†${d}`].filter(Boolean).join(" ")})` : name;
+};
 
 /** Paare prüfen, ordnen und je die bleibende Person wählen. */
 async function preparePairs(scope: Scope, raw: unknown) {
