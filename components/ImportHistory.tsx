@@ -56,6 +56,20 @@ export function ImportHistory() {
     void load();
   }
 
+  async function reread(e: Entry) {
+    setError(null);
+    setMessage("Originaldatei wird neu eingelesen …");
+    const res = await apiFetch<unknown>(`/api/import/gedcom/${e.id}/reread`, { method: "POST" });
+    if (!res.ok) {
+      setMessage(null);
+      return setError(res.message);
+    }
+    setMessage("Neue Vorschau steht oben im GEDCOM-Import bereit — erst nach „Importieren“ wird etwas übernommen.");
+    window.dispatchEvent(new CustomEvent("import-preview-started", { detail: res.data }));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    void load();
+  }
+
   async function discard(e: Entry) {
     if (!confirm(`Vorschau „${e.fileName}“ verwerfen? Die aufbewahrte Kopie der Datei wird gelöscht.`)) return;
     const res = await apiFetch(`/api/import/gedcom/${e.id}`, { method: "DELETE" });
@@ -117,6 +131,11 @@ export function ImportHistory() {
                   <a className="btn-secondary btn-sm" href={`/api/import/batches/${e.id}/file`}>
                     Originaldatei
                   </a>
+                )}
+                {e.hasFile && e.format === "GEDCOM" && e.status === "COMPLETED" && (
+                  <button type="button" className="btn-secondary btn-sm" onClick={() => void reread(e)} data-testid="import-reread">
+                    Aus der aufbewahrten Datei neu einlesen
+                  </button>
                 )}
                 {e.supersededRawRecords > 0 && (
                   <button type="button" className="btn-secondary btn-sm" onClick={() => void prune(e)}>

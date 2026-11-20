@@ -4,13 +4,17 @@ import { cache } from "react";
 
 import { requireScope } from "@/lib/session";
 import { getSource, type CitationTarget, type PersonRef, type SourceDetail } from "@/lib/services";
-import { CITATION_FACT_LABEL, CONFIDENCE_LABEL, SOURCE_KIND_LABEL } from "@/lib/source-labels";
+import { CITATION_FACT_LABEL, CONFIDENCE_LABEL, DERIVED_SOURCE_KINDS, SOURCE_KIND_HINT, SOURCE_KIND_LABEL } from "@/lib/source-labels";
+import { CitationLink } from "@/components/CitationLink";
 import { formatDateOf, lifeSpan } from "@/lib/tree-layout";
 import { PARTNER_SUBTYPE_LABEL } from "@/lib/partner-labels";
 import { LockIcon } from "@/components/PersonNode";
 import { DeleteSourceButton } from "@/components/DeleteSourceButton";
 
 export const dynamic = "force-dynamic";
+
+/** Gruppen (Personen/Beziehungen) je Seite der Beleg-Liste. */
+const GROUPS_PER_PAGE = 50;
 
 const name = (p: { givenName: string; familyName: string | null }) =>
   [p.givenName, p.familyName].filter(Boolean).join(" ");
@@ -88,16 +92,27 @@ export default async function SourcePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string }>;
+  searchParams: Promise<{ saved?: string; seite?: string }>;
 }) {
   const { id } = await params;
-  const { saved } = await searchParams;
+  const { saved, seite } = await searchParams;
   const detail: SourceDetail | null = await loadDetail(id);
   // Unsichtbar = nicht vorhanden (wie bei Personen).
   if (!detail) notFound();
   const { source: s, citations } = detail;
   const date = formatDateOf(s, "date");
   const total = citations.length + detail.hiddenCitationCount;
+  // Belege je Person bzw. Beziehung gruppiert (wer doppelt erscheint, ist
+  // vermutlich doppelt erfasst) und seitenweise — Quellen aus Importen haben
+  // oft tausende Belege.
+  const groupKey = (t: CitationTarget) => (t.kind === "person" ? `p:${t.person.id}` : `r:${t.relationshipId}`);
+  const groups = new Map<string, typeof citations>();
+  for (const c of citations) groups.set(groupKey(c.target), [...(groups.get(groupKey(c.target)) ?? []), c]);
+  const groupList = [...groups.values()];
+  const pageCount = Math.max(1, Math.ceil(groupList.length / GROUPS_PER_PAGE));
+  const page = Math.min(pageCount, Math.max(1, Number(seite ?? 1) || 1));
+  const shown = groupList.slice((page - 1) * GROUPS_PER_PAGE, page * GROUPS_PER_PAGE);
+  const derived = DERIVED_SOURCE_KINDS.includes(s.kind);
 
   return (
     <div className="space-y-8">
@@ -120,11 +135,20 @@ export default async function SourcePage({
         />
         <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start">
           <div className="min-w-0 flex-1 space-y-2">
-            <p>
-              <span className="badge-accent">{SOURCE_KIND_LABEL[s.kind]}</span>
+            <p className="flex flex-wrap gap-2" data-testid="source-badges">
+              <span className="badge-accent" title={SOURCE_KIND_HINT[s.kind]}>
+                {SOURCE_KIND_LABEL[s.kind]}
+              </span>
+              {s.provider && <span className="badge">{s.provider}</span>}
+              {s.kindLabel && <span className="badge-alt">{s.kindLabel}</span>}
             </p>
             <h1 className="font-serif text-2xl font-semibold tracking-tight sm:text-3xl">{s.title}</h1>
             {s.author && <p className="muted">{s.author}</p>}
+            {derived && (
+              <p className="alert-warning text-sm" data-testid="source-derived-hint">
+                {SOURCE_KIND_HINT[s.kind]} Belege daraus tragen deshalb keine Verlässlichkeit aus der Datei.
+              </p>
+            )}
           </div>
           {detail.canEdit && (
             <Link href={`/sources/${s.id}/edit`} className="btn-primary self-start">
@@ -190,19 +214,51 @@ export default async function SourcePage({
                 : `${total} Angaben stützen sich auf diese Quelle.`}
           </p>
         </div>
-        {citations.length > 0 && (
+        {shown.length > 0 && (
           <ul className="card divide-y divide-stone-200 dark:divide-stone-800">
-            {citations.map((c) => (
-              <li key={c.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-2.5 text-sm" data-testid="source-citation">
-                <span className="w-36 shrink-0 text-xs font-medium uppercase tracking-wide text-accent-700 dark:text-accent-300">
-                  {c.eventTitle ? `${CITATION_FACT_LABEL[c.fact]}: ${c.eventTitle}` : CITATION_FACT_LABEL[c.fact]}
-                </span>
-                <Target target={c.target} />
-                {c.detail && <span className="text-xs muted">· {c.detail}</span>}
-                {c.confidence && <span className="badge px-2 py-0 text-[11px]">{CONFIDENCE_LABEL[c.confidence]}</span>}
+            {shown.map((group) => (
+              <li key={groupKey(group[0].target)} className="px-4 py-2.5 text-sm" data-testid="source-citation-group">
+                <Target target={group[0].target} />
+                <ul className="mt-1 space-y-1">
+                  {group.map((c) => (
+                    <li key={c.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1" data-testid="source-citation">
+                      <span className="text-xs font-medium uppercase tracking-wide text-accent-700 dark:text-accent-300">
+                        {c.eventTitle ? `${CITATION_FACT_LABEL[c.fact]}: ${c.eventTitle}` : CITATION_FACT_LABEL[c.fact]}
+                      </span>
+                      {c.detail && <span className="text-xs muted">{c.detail}</span>}
+                      <CitationLink url={c.url} />
+                      {c.confidence ? (
+                        <span className="badge px-2 py-0 text-[11px]">{CONFIDENCE_LABEL[c.confidence]}</span>
+                      ) : (
+                        derived && (
+                          <span className="badge-alt px-2 py-0 text-[11px]" title={SOURCE_KIND_HINT[s.kind]}>
+                            nicht bewertet
+                          </span>
+                        )
+                      )}
+                    </li>
+                  ))}
+                </ul>
               </li>
             ))}
           </ul>
+        )}
+        {pageCount > 1 && (
+          <nav aria-label="Seiten der Belege" className="flex flex-wrap items-center gap-3 text-sm">
+            {page > 1 && (
+              <Link href={`/sources/${s.id}?seite=${page - 1}`} className="btn-secondary btn-sm">
+                ← Zurück
+              </Link>
+            )}
+            <span className="muted">
+              Seite {page} von {pageCount} ({groupList.length} Personen und Beziehungen)
+            </span>
+            {page < pageCount && (
+              <Link href={`/sources/${s.id}?seite=${page + 1}`} className="btn-secondary btn-sm">
+                Weiter →
+              </Link>
+            )}
+          </nav>
         )}
         {detail.hiddenCitationCount > 0 && (
           <p className="alert-info" data-testid="source-hidden-citations">

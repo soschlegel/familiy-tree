@@ -136,6 +136,7 @@ export default async function SourcesPage({ searchParams }: { searchParams: Prom
                   )}
                   <span className="mt-auto flex flex-wrap items-center gap-1.5 pt-1">
                     <span className="badge px-2 py-0 text-[11px]">{SOURCE_KIND_LABEL[s.kind]}</span>
+                    {s.provider && <span className="badge-alt px-2 py-0 text-[11px]">{s.provider}</span>}
                     <span className="text-[11px] text-stone-500 dark:text-stone-400">
                       {s.citationCount === 0
                         ? "noch kein Beleg"

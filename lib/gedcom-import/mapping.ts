@@ -13,6 +13,7 @@ import { createHash } from "node:crypto";
 
 import type { EventTypeName, PersonNameTypeName } from "../events";
 import type { SourceKindName } from "../validation";
+import { classifySource, plainText, safeHttpUrl, splitCitationPage } from "../source-classify";
 import { deriveRelationships } from "../gedcom/relationships";
 import type {
   GedcomChildKind,
@@ -100,6 +101,8 @@ export type MappedSource = Common & {
   title: string;
   kind: SourceKindName;
   kindLabel: string | null;
+  /** Anbieter (MyHeritage, Ancestry …), lib/source-classify.ts. */
+  provider: string | null;
   author: string | null;
   repository: string | null;
   callNumber: string | null;
@@ -115,6 +118,8 @@ export type MappedCitation = Common & {
   eventRef?: string;
   fact: "NAME" | "BIRTH" | "DEATH" | "PARTNERSHIP" | "PARENTAGE" | "OTHER" | "EVENT";
   detail: string | null;
+  /** Internetadresse aus PAGE (nur http/https, geprüft). */
+  url: string | null;
   confidence: "HIGH" | "MEDIUM" | "LOW" | null;
   text: string | null;
 };
@@ -287,6 +292,12 @@ const GERMAN_TYPE: Partial<Record<GedcomEventType, string>> = {
   SOCIAL_SECURITY_NUMBER: "Sozialversicherungsnummer",
   CHILDREN_COUNT: "Zahl der Kinder",
 };
+
+/** Quellenarten ohne unabhängigen Beweiswert (Belege ohne Verlässlichkeit). */
+const DERIVED_KINDS: readonly SourceKindName[] = ["ONLINE_TREE"];
+/** EVEN-Angabe eines allgemeinen Belegs → Fakt. */
+const PERSON_EVENT_FACT: Record<string, MappedCitation["fact"]> = { BIRT: "BIRTH", CHR: "BIRTH", BAPM: "BIRTH", DEAT: "DEATH", BURI: "DEATH", CREM: "DEATH", NAME: "NAME" };
+const FAMILY_EVENT_FACT: Record<string, MappedCitation["fact"]> = { MARR: "PARTNERSHIP", MARB: "PARTNERSHIP", ENGA: "PARTNERSHIP", DIV: "PARTNERSHIP" };
 
 const SOURCE_KIND_PATTERNS: [RegExp, SourceKindName][] = [
   [/kirch|church|pfarr|parish|tauf|bapt/i, "CHURCH_BOOK"],
@@ -516,6 +527,22 @@ export function mapGedcomDocument(doc: GedcomDocument, options: MapOptions = {})
   };
 
   // --- Quellen ------------------------------------------------------------------
+  // Fundstellen der Belege je Quelle (Beispiele) — verraten oft den Anbieter.
+  const pagesBySource = new Map<string, string[]>();
+  const collectPages = (v: unknown, depth = 0): void => {
+    if (!v || typeof v !== "object" || depth > 12) return;
+    if (Array.isArray(v)) return v.forEach((x) => collectPages(x, depth + 1));
+    const o = v as Record<string, unknown>;
+    if (typeof o.sourceId === "string" && typeof o.page === "string") {
+      const list = pagesBySource.get(o.sourceId) ?? [];
+      if (list.length < 20) list.push(o.page);
+      pagesBySource.set(o.sourceId, list);
+    }
+    for (const x of Object.values(o)) if (x && typeof x === "object") collectPages(x, depth + 1);
+  };
+  collectPages([doc.persons, doc.families]);
+  /** Quellen ohne unabhängigen Beweiswert (Online-Stammbäume), je ref. */
+  const derivedSource = new Set<string>();
   const sourceRefById = new Map<string, string>();
   const sourceKeyTaken = new Set<string>();
   for (const s of doc.sources) {
@@ -524,6 +551,7 @@ export function mapGedcomDocument(doc: GedcomDocument, options: MapOptions = {})
     sourceKeyTaken.add(key);
     sourceRefById.set(s.id, key);
     out.sources.push(mapSource(s, key));
+    if (DERIVED_KINDS.includes(out.sources[out.sources.length - 1].kind)) derivedSource.add(key);
     out.sourceMeta.push({ ref: key, xref: s.id, title: out.sources[out.sources.length - 1].title, author: clean(s.author), inline: false });
     for (const x of s.externalIds) {
       if (x.value?.trim()) out.externalIds.push({ system: x.type, value: x.value.trim().slice(0, 500), sourceRef: key });
@@ -549,20 +577,37 @@ export function mapGedcomDocument(doc: GedcomDocument, options: MapOptions = {})
   function mapSource(s: GedcomSource, key: string): MappedSource {
     const repoRef = s.repositories[0];
     const repoName = repoRef?.repositoryId ? reposById.get(repoRef.repositoryId)?.name : repoRef?.name;
-    const { kind, kindLabel } = sourceKind(s.sourceType, s.title);
-    const notesText = [clean(s.text, 50000), noteText(s.notes)].filter(Boolean).join("\n\n");
+    const cls = classifySource({
+      title: s.title,
+      type: s.sourceType,
+      medium: s.medium,
+      author: s.author,
+      publication: s.publication,
+      repository: repoName,
+      text: [s.text, noteText(s.notes)].filter(Boolean).join("\n"),
+      urls: s.urls,
+      citationPages: pagesBySource.get(s.id),
+    });
+    // Allgemeine Muster (sourceKind) nur, wenn die Einordnung nichts Besseres weiß
+    const fallback = sourceKind(plainText(s.sourceType) ?? undefined, plainText(s.title) ?? undefined);
+    const kind = cls.kind === "OTHER" ? fallback.kind : cls.kind;
+    const kindLabel = cls.kind === "OTHER" ? fallback.kindLabel : cls.kindLabel;
+    const notesText = [plainText(clean(s.text, 50000)), plainText(noteText(s.notes)), s.publication ? `Veröffentlichung: ${plainText(s.publication)}` : null]
+      .filter(Boolean)
+      .join("\n\n");
     return {
       ref: key,
       action: "create",
       externalKey: key,
       sourceStamp: clean(s.updated ?? s.changed, 200),
-      title: clean(s.title, 300) ?? clean(s.abbreviation, 300) ?? `Quelle ${s.id}`,
+      title: clean(plainText(s.title), 300) ?? clean(plainText(s.abbreviation), 300) ?? `Quelle ${s.id}`,
       kind,
       kindLabel,
-      author: clean(s.author),
+      provider: cls.provider,
+      author: clean(plainText(s.author)),
       repository: clean(repoName),
       callNumber: clean(repoRef?.callNumbers[0]),
-      url: s.urls.find((u) => /^https?:\/\/\S+$/i.test(u.trim()))?.trim() ?? null,
+      url: safeHttpUrl(s.urls.find((u) => /^https?:\/\/\S+$/i.test(u.trim()))?.trim()) ?? safeHttpUrl(cls.url),
       date: null,
       notes: clean(notesText, 50000),
     };
@@ -581,6 +626,7 @@ export function mapGedcomDocument(doc: GedcomDocument, options: MapOptions = {})
         title: clean(text.split(/\r?\n/)[0], 300) ?? "Eingebettete Quelle",
         kind: "OTHER",
         kindLabel: null,
+        provider: null,
         author: null,
         repository: null,
         callNumber: null,
@@ -600,20 +646,33 @@ export function mapGedcomDocument(doc: GedcomDocument, options: MapOptions = {})
     fact: MappedCitation["fact"],
     ownerRef: string,
   ) => {
+    const seen = new Set<string>();
     list.forEach((c, i) => {
       const sourceRef = c.sourceId ? sourceRefById.get(c.sourceId) : c.inlineText?.trim() ? inlineSource(c.inlineText.trim()) : undefined;
       if (!sourceRef) return; // verwaister Verweis: steht im Originaldatensatz (Rohdaten)
       const key = `${ownerKey}/SOUR#${i + 1}`;
-      const text = [...c.texts.map((t) => t.trim()).filter(Boolean), noteText(c.notes)].filter(Boolean).join("\n\n");
+      const text = [...c.texts.map((t) => plainText(t.trim())).filter(Boolean), plainText(noteText(c.notes))].filter(Boolean).join("\n\n");
+      const page = splitCitationPage(c.page);
+      const url = safeHttpUrl(page.url);
+      // Allgemeiner Beleg, der sein Ereignis nennt (EVEN BIRT …): diesem Fakt zuordnen.
+      const named = fact === "OTHER" && c.eventType ? (target.relationshipRef ? FAMILY_EVENT_FACT : PERSON_EVENT_FACT)[c.eventType.trim().toUpperCase()] : undefined;
+      const f = named ?? fact;
+      // Derselbe Beleg zweimal am selben Träger (kommt in Exporten vor): einmal.
+      const dedupe = JSON.stringify([sourceRef, f, page.detail, url, text]);
+      if (seen.has(dedupe)) return;
+      seen.add(dedupe);
       out.citations.push({
         ref: key,
         action: "create",
         externalKey: key,
         sourceRef,
         ...target,
-        fact,
-        detail: clean(c.page),
-        confidence: c.confidence ?? null,
+        fact: f,
+        detail: clean(page.detail ?? (url ? null : c.page)),
+        url,
+        // Stammbäume anderer Nutzer: die Verlässlichkeit der Datei (MyHeritage
+        // schreibt QUAY 3 an automatische Treffer) wird nicht übernommen.
+        confidence: derivedSource.has(sourceRef) ? null : (c.confidence ?? null),
         text: clean(text, 20000),
       });
       out.owners[key] = ownerRef;

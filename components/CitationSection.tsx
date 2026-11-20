@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { CitationLink } from "./CitationLink";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 
@@ -8,6 +9,8 @@ import { apiFetch, jsonBody } from "./api-client";
 import {
   CITATION_FACT_LABEL,
   CONFIDENCE_LABEL,
+  DERIVED_SOURCE_KINDS,
+  SOURCE_KIND_HINT,
   SOURCE_KIND_LABEL,
 } from "@/lib/source-labels";
 import {
@@ -24,6 +27,8 @@ export type CitationRow = {
   id: string;
   fact: CitationFactName;
   detail: string | null;
+  /** Internetadresse des Eintrags (geprüft). */
+  url?: string | null;
   confidence: CitationConfidenceName | null;
   canEdit: boolean;
   source: { id: string; title: string; kind: SourceKindName };
@@ -337,10 +342,17 @@ export function CitationSection({
                       {row.eventLabel && <span className="text-xs muted">· {row.eventLabel}</span>}
                       {!row.eventLabel && row.relationLabel && <span className="text-xs muted">· {row.relationLabel}</span>}
                       {row.detail && <span className="text-xs muted">· {row.detail}</span>}
-                      {row.confidence && (
+                      <CitationLink url={row.url} />
+                      {row.confidence ? (
                         <span className={`${confidenceBadge[row.confidence]} px-2 py-0 text-[11px]`}>
                           {CONFIDENCE_LABEL[row.confidence]}
                         </span>
+                      ) : (
+                        DERIVED_SOURCE_KINDS.includes(row.source.kind) && (
+                          <span className="badge-alt px-2 py-0 text-[11px]" title={SOURCE_KIND_HINT[row.source.kind]}>
+                            aus einem Online-Stammbaum — keine unabhängige Quelle
+                          </span>
+                        )
                       )}
                       {row.canEdit && (
                         <span className="ml-auto flex shrink-0 gap-3">

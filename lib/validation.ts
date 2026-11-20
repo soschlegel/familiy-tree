@@ -10,6 +10,7 @@ import {
   type FuzzyDate,
 } from "./dates";
 import { EVENT_TYPES, PERSON_NAME_TYPES } from "./events";
+import { safeHttpUrl } from "./source-classify";
 
 // ---------------------------------------------------------------------------
 // Fachregeln — bewusst als reine Funktionen, damit API, Dienste (lib/services)
@@ -355,6 +356,8 @@ export const SOURCE_KINDS = [
   "ORAL",
   "WEBSITE",
   "OTHER",
+  "ONLINE_TREE",
+  "ONLINE_COLLECTION",
 ] as const;
 export type SourceKindName = (typeof SOURCE_KINDS)[number];
 
@@ -377,14 +380,15 @@ const sourceUrl = z
   .optional()
   .nullable()
   .transform((v) => (v ? v : null))
-  .refine((v) => v === null || /^https?:\/\/\S+$/i.test(v), {
-    message: "Bitte eine vollständige Adresse mit http:// oder https:// angeben",
+  .refine((v) => v === null || (/^https?:\/\/\S+$/i.test(v) && safeHttpUrl(v) !== null), {
+    message: "Bitte eine vollständige Adresse mit http:// oder https:// angeben (ohne Zugangsdaten)",
   });
 
 const sourceFields = z.object({
   title: z.string().trim().min(1, "Bitte einen Titel angeben").max(300),
   kind: z.enum(SOURCE_KINDS).default("OTHER"),
   kindLabel: shortText,
+  provider: shortText,
   author: optionalText,
   repository: optionalText,
   callNumber: optionalText,
@@ -423,6 +427,8 @@ export const sourcePatch = sourceFields.partial().superRefine((s, ctx) => addIss
 const citationFields = {
   fact: z.enum(CITATION_FACTS).default("OTHER"),
   detail: optionalText,
+  /** Internetadresse des Eintrags (nur http/https, ohne Zugangsdaten). */
+  url: sourceUrl,
   text: z
     .string()
     .trim()
