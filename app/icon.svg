@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Stammbaum-Zeichen: zwei Vorfahren oben, ein Nachkomme unten.
+       Für kleine Größen kräftiger gezeichnet als das Logo in der Kopfzeile. -->
+  <style>
+    .grund { fill: #285649; }
+    /* In dunklen Browser-Oberflächen etwas heller, damit sich das Zeichen abhebt. */
+    @media (prefers-color-scheme: dark) { .grund { fill: #3a7f6d; } }
+  </style>
+  <rect class="grund" width="32" height="32" rx="7.5"/>
+  <g fill="none" stroke="#fffdf8" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M16 23.5V16M16 16l-6-5M16 16l6-5"/>
+  </g>
+  <g fill="#e2c389">
+    <circle cx="9.5" cy="9" r="3.4"/>
+    <circle cx="22.5" cy="9" r="3.4"/>
+    <circle cx="16" cy="24" r="3.4"/>
+  </g>
+</svg>

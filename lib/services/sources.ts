@@ -1,7 +1,9 @@
 import type { Prisma } from "@prisma/client";
 
 import { prisma } from "../prisma";
-import { safeHttpUrl } from "../source-classify";
+import { displayCitation, displaySourceKind, findUrls, plainText, safeHttpUrl } from "../source-classify";
+
+const findUrlsIn = (text: string | null) => findUrls(text)[0] ?? null;
 import { audit, auditActor } from "../audit";
 import { canViewMedia } from "../media-scope";
 import {
@@ -202,10 +204,11 @@ function toCitationDto(c: LoadedCitation | Prisma.CitationGetPayload<object>, ca
     relationshipId: c.relationshipId,
     eventId: c.eventId,
     fact: c.fact,
-    detail: c.detail,
-    url: safeHttpUrl(c.url),
+    // Ältere Importe: Adresse noch in der Fundstelle, HTML im Text — zur
+    // Anzeige aufbereitet, gespeichert bleibt es, bis neu eingelesen wird.
+    ...displayCitation({ detail: c.detail, url: c.url }),
     confidence: c.confidence,
-    text: c.text,
+    text: plainText(c.text),
     createdAt: c.createdAt.toISOString(),
     canEdit,
     ...("event" in c && c.event ? { eventTitle: eventTitle(c.event) } : {}),
@@ -250,27 +253,29 @@ function sourceVisibilityWhere(scope: Scope): Prisma.SourceWhereInput {
 
 type SourceRow = Prisma.SourceGetPayload<object>;
 
-async function toSourceDto(scope: Scope, s: SourceRow, mediaVisible?: boolean): Promise<SourceDto> {
+async function toSourceDto(scope: Scope, s: SourceRow, mediaVisible?: boolean, citationDetails: (string | null)[] = []): Promise<SourceDto> {
+  const shown = displaySourceKind(s, citationDetails);
+  const text = (v: string | null) => plainText(v);
   const showMedia = s.mediaId
     ? (mediaVisible ?? (await canViewMedia(scope, s.mediaId)))
     : false;
   return {
     id: s.id,
-    title: s.title,
-    kind: s.kind,
+    title: text(s.title) ?? s.title,
+    kind: shown.kind as SourceKind,
     kindLabel: s.kindLabel,
-    provider: s.provider,
-    author: s.author,
+    provider: shown.provider,
+    author: text(s.author),
     repository: s.repository,
     callNumber: s.callNumber,
-    url: safeHttpUrl(s.url),
+    url: safeHttpUrl(s.url) ?? safeHttpUrl(findUrlsIn(s.notes)),
     date: iso(s.date),
     datePrecision: s.datePrecision,
     dateQualifier: s.dateQualifier,
     dateTo: iso(s.dateTo),
     dateToPrecision: s.dateToPrecision,
     datePhrase: s.datePhrase,
-    notes: s.notes,
+    notes: text(s.notes),
     mediaId: showMedia ? s.mediaId : null,
     createdAt: s.createdAt.toISOString(),
     updatedAt: s.updatedAt.toISOString(),
@@ -392,7 +397,7 @@ export async function getSource(scope: Scope, id: string): Promise<SourceDetail 
   const { source, rated, visible, canEdit, canDelete } = access;
 
   return {
-    source: await toSourceDto(scope, source),
+    source: await toSourceDto(scope, source, undefined, visible.slice(0, 20).map((r) => r.c.detail)),
     canEdit,
     canDelete,
     citations: visible.map((r) => ({ ...toCitationDto(r.c, r.editable), target: targetOf(scope, r.c) })),
@@ -464,9 +469,15 @@ export async function listPersonCitations(scope: Scope, personId: string): Promi
         { relationship: { OR: [{ fromPersonId: personId }, { toPersonId: personId }] } },
       ],
     },
-    include: { ...citationInclude, source: { select: { id: true, title: true, kind: true } } },
+    include: { ...citationInclude, source: { select: { id: true, title: true, kind: true, kindLabel: true, notes: true, url: true, provider: true } } },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
+  // Art je Quelle einmal zur Anzeige einordnen (ältere Importe)
+  const kindOf = new Map<string, SourceKind>();
+  for (const c of rows) {
+    if (kindOf.has(c.source.id)) continue;
+    kindOf.set(c.source.id, displaySourceKind(c.source, rows.filter((x) => x.sourceId === c.sourceId).slice(0, 20).map((x) => x.detail)).kind as SourceKind);
+  }
 
   const out: PersonCitation[] = [];
   for (const c of rows) {
@@ -484,7 +495,11 @@ export async function listPersonCitations(scope: Scope, personId: string): Promi
         other: refOf(scope, other),
       };
     }
-    out.push({ ...toCitationDto(c, access.editable), source: c.source, relationship });
+    out.push({
+      ...toCitationDto(c, access.editable),
+      source: { id: c.source.id, title: plainText(c.source.title) ?? c.source.title, kind: kindOf.get(c.source.id) ?? c.source.kind },
+      relationship,
+    });
   }
   return out;
 }

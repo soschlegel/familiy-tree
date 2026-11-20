@@ -95,6 +95,40 @@ test("verbundene Personen: Blockade mit Erklärung, Knopf gesperrt", async ({ pa
   await shot(page, "merge-blocked");
 });
 
+test("blockiert durch doppelt erfasste Mutter: beschrifteter Link öffnet den Eltern-Vergleich, danach geht das Paar", async ({ page }) => {
+  acceptDialogs(page);
+  const father = await person({ givenName: "E2E Konrad", gender: "MALE", birthDate: "1800" });
+  const m1 = await person({ givenName: "E2E Regina", gender: "FEMALE", birthDate: "1802" });
+  const m2 = await person({ givenName: "E2E Regina", gender: "FEMALE", birthDate: "1802" });
+  const k = await person({ givenName: "E2E Lotte", gender: "FEMALE", birthDate: "1830-05-01" });
+  const x = await person({ givenName: "E2E Lotte", gender: "FEMALE", birthDate: "1830-05-01" });
+  const api = await apiAs("editor");
+  for (const [par, ch] of [[father, k], [m1, k], [father, x], [m2, x]]) await createRelationship(api, { type: "PARENT_OF", fromPersonId: par.id, toPersonId: ch.id });
+  await api.dispose();
+
+  await page.goto(`/people/merge?keep=${k.id}&other=${x.id}`);
+  const blockers = page.getByTestId("merge-blockers");
+  await expect(blockers).toContainText("als Vater");
+  await expect(blockers).toContainText("Als Mutter ist bei jedem Eintrag eine eigene Person eingetragen");
+  const links = page.getByTestId("merge-parent-link");
+  await expect(links).toHaveCount(1);
+  await expect(links).toContainText("E2E Regina");
+  await expect(links).not.toContainText("E2E Konrad");
+  await links.click();
+  await expect(page).toHaveURL(new RegExp(`keep=${m1.id}&other=${m2.id}`));
+  await expect(page.getByTestId("merge-keep")).toContainText("E2E Regina");
+  await page.getByTestId("merge-confirm").click();
+  await expect(page.getByTestId("merge-result")).toContainText("Zusammengeführt");
+
+  await page.goto(`/people/merge?keep=${k.id}&other=${x.id}`);
+  await expect(page.getByTestId("merge-blockers")).toHaveCount(0);
+  await expect(page.getByTestId("merge-confirm")).toBeEnabled();
+  // Seiten tauschen ändert die URL
+  await page.getByTestId("merge-swap").click();
+  await expect(page).toHaveURL(new RegExp(`keep=${x.id}&other=${k.id}`));
+  await expect(page.getByTestId("merge-keep")).toContainText("E2E Lotte");
+});
+
 test("Mögliche Dubletten: sicher erkannt, „kein Duplikat“ blendet aus, sichere Paare in einem Rutsch", async ({ page }) => {
   acceptDialogs(page);
   const pairs: CreatedPerson[][] = [];

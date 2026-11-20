@@ -196,3 +196,43 @@ export function urlHost(value: string | null | undefined): string | null {
     return null;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Anzeige: unabhängig davon, ob die Zeile schon neu eingelesen wurde
+// ---------------------------------------------------------------------------
+
+/**
+ * Beleg zur Anzeige: Steht im gespeicherten Beleg (ältere Importe) die
+ * Adresse noch in der Fundstelle, wird sie hier herausgelöst — mit derselben
+ * Prüfung wie gespeicherte Adressen; HTML in der Fundstelle wird Text.
+ */
+export function displayCitation(c: { detail: string | null; url: string | null }): { detail: string | null; url: string | null } {
+  const stored = safeHttpUrl(c.url);
+  if (stored) return { detail: plainText(c.detail), url: stored };
+  if (!c.detail) return { detail: null, url: null };
+  const split = splitCitationPage(c.detail);
+  const url = safeHttpUrl(split.url);
+  return url ? { detail: split.detail, url } : { detail: plainText(c.detail), url: null };
+}
+
+/**
+ * Art und Anbieter zur Anzeige: Ist eine Quelle als „Sonstige“ bzw.
+ * „Webseite“ gespeichert (ältere Importe), ordnet die Einordnung sie anhand
+ * von Titel, Art-Bezeichnung, Notizen, Adresse und einigen Fundstellen ein —
+ * einmal je Quelle, nicht je Beleg. Gespeichertes anderer Arten bleibt.
+ */
+export function displaySourceKind<K extends string>(
+  s: { kind: K; kindLabel: string | null; title: string; notes?: string | null; url?: string | null; provider?: string | null },
+  citationDetails: (string | null)[] = [],
+): { kind: K | "ONLINE_TREE" | "ONLINE_COLLECTION"; provider: string | null } {
+  if (s.kind !== "OTHER" && s.kind !== "WEBSITE") return { kind: s.kind, provider: s.provider ?? null };
+  const c = classifySource({
+    title: s.title,
+    type: s.kindLabel,
+    text: s.notes ?? null,
+    urls: s.url ? [s.url] : [],
+    citationPages: citationDetails.filter((x): x is string => Boolean(x)).slice(0, 20),
+  });
+  if (c.kind === "ONLINE_TREE" || c.kind === "ONLINE_COLLECTION") return { kind: c.kind, provider: s.provider ?? c.provider };
+  return { kind: s.kind, provider: s.provider ?? c.provider };
+}

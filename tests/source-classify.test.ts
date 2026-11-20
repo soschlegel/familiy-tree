@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { classifySource, detectProvider, findUrls, plainText, splitCitationPage } from "@/lib/source-classify";
+import { classifySource, detectProvider, displayCitation, displaySourceKind, findUrls, plainText, splitCitationPage } from "@/lib/source-classify";
 
 describe("classifySource", () => {
   it("Stammbaum-Sammlung eines Anbieters mit HTML-Text: Online-Stammbaum, Anbieter, Adresse", () => {
@@ -58,5 +58,30 @@ describe("Hilfen", () => {
     expect(findUrls('<a href="https://www.geni.com/people/x">x</a>')).toContain("https://www.geni.com/people/x");
     expect(detectProvider(["https://sites-cf.mhcache.com/a.jpg"], [])).toBe("MyHeritage");
     expect(detectProvider([], ["Daten von FamilySearch"])).toBe("FamilySearch");
+  });
+});
+
+describe("Anzeige älterer Importe (ohne neues Einlesen)", () => {
+  it("„<Name> Web Site“ mit _TYPE „Smart Matching“ und Personen-Adressen: Online-Stammbaum von MyHeritage", () => {
+    const c = classifySource({
+      title: "Kelvaro Web Site",
+      type: "Smart Matching",
+      text: "<p>MyHeritage-Stammbaum</p><p>Familienseite: Kelvaro Web Site</p>Stammbaum: 123456789",
+      citationPages: ["https://www.myheritage.de/person-1000001_123456789_123456789/anna-kelvaro"],
+    });
+    expect(c).toMatchObject({ kind: "ONLINE_TREE", provider: "MyHeritage", derived: true });
+  });
+
+  it("displaySourceKind ordnet gespeichertes „Sonstige“ ein; andere Arten bleiben", () => {
+    const stored = { kind: "OTHER", kindLabel: "Smart Matching", title: "Kelvaro Web Site", notes: "<p>MyHeritage-Stammbaum</p>", url: null };
+    expect(displaySourceKind(stored, ["https://www.myheritage.de/person-1_2_3/x"])).toEqual({ kind: "ONLINE_TREE", provider: "MyHeritage" });
+    expect(displaySourceKind({ ...stored, kind: "CHURCH_BOOK" })).toEqual({ kind: "CHURCH_BOOK", provider: null });
+  });
+
+  it("displayCitation: Adresse in der Fundstelle wird Link, Rest bleibt; unsichere Adressen nicht", () => {
+    expect(displayCitation({ detail: "https://www.myheritage.de/person-1_2_3/anna", url: null })).toEqual({ detail: null, url: "https://www.myheritage.de/person-1_2_3/anna" });
+    expect(displayCitation({ detail: "S. 4, https://beispiel.invalid/x", url: null })).toEqual({ detail: "S. 4", url: "https://beispiel.invalid/x" });
+    expect(displayCitation({ detail: "https://nutzer:geheim@beispiel.invalid/x", url: null }).url).toBeNull();
+    expect(displayCitation({ detail: "<b>S. 7</b>", url: null })).toEqual({ detail: "S. 7", url: null });
   });
 });

@@ -340,7 +340,10 @@ describe.skipIf(Boolean(skipReason))("Dubletten zusammenführen (Testdatenbank)"
     for (const [par, ch] of [[f1, k], [m1, k], [f2, x]]) await createRelationship(admin, { type: "PARENT_OF", fromPersonId: par, toPersonId: ch });
     const p2 = await previewPersonMerge(admin, k, x);
     const bio = p2.blockers.find((b2) => b2.code === "BIO_PARENTS")!;
-    expect(bio.message).toContain("zuerst diese Eltern zusammenführen");
+    expect(bio.message).toContain("Führe zuerst diese beiden zusammen");
+    // nur das plausible Paar (beide Otto), nie Mutter × Vater
+    expect(bio.suggestPairs).toEqual([[f1, f2]]);
+    expect(bio.suggestions![0].label).toMatch(/Otto Blockprobe.*↔.*Otto Blockprobe.*vergleichen/);
     expect(bio.suggestPairs).toContainEqual([f1, f2]);
     // Eltern zuerst zusammenführen → dann geht es
     await mergePersons(admin, { keepId: f1, mergeId: f2 });
@@ -493,5 +496,39 @@ describe.skipIf(Boolean(skipReason))("Dubletten zusammenführen (Testdatenbank)"
     expect(r.counts.persons.created).toBe(0);
     const after = await prisma.importRawRecord.findMany({ where: { personId: manual.id, recordType: { endsWith: REJECTED_RAW_SUFFIX }, supersededAt: null } });
     expect(after).toHaveLength(1);
+  });
+
+  it("Eltern-Vorschläge: gemeinsamer Vater, doppelt erfasste Mutter → genau ein Paar, ehrliche Meldung; unpassende Eltern → Hinweis auf die Art der Abstammung", async () => {
+    const mk = async (given: string, gender: string, extra: Record<string, unknown> = {}) => {
+      const p = await createPerson(admin, { givenName: given, familyName: "Elternprobe", gender, familyIds: [FAMILY_A], ...extra });
+      persons.push(p.id);
+      return p.id;
+    };
+    const f = await mk("Konrad", "MALE", { birthDate: "1800" });
+    const m1 = await mk("Regina", "FEMALE", { birthDate: "1802" });
+    const m2 = await mk("Regina", "FEMALE", { birthDate: "1802" });
+    const k = await mk("Lotte", "FEMALE", { birthDate: "1830-05-01" });
+    const x = await mk("Lotte", "FEMALE", { birthDate: "1830-05-01" });
+    for (const [par, ch] of [[f, k], [m1, k], [f, x], [m2, x]]) await createRelationship(admin, { type: "PARENT_OF", fromPersonId: par, toPersonId: ch });
+    const p = await previewPersonMerge(admin, k, x);
+    const bio = p.blockers.find((b) => b.code === "BIO_PARENTS")!;
+    expect(bio.suggestPairs).toEqual([[m1, m2]]);
+    expect(bio.message).toContain("Beide Einträge haben Konrad Elternprobe (*1800) als Vater");
+    expect(bio.message).toMatch(/Als Mutter ist bei jedem Eintrag eine eigene Person eingetragen/);
+    expect(bio.message).not.toMatch(/Konrad.*↔|verschiedene leibliche Eltern/);
+    // Eltern zusammenführen → Paar geht
+    await mergePersons(admin, { keepId: m1, mergeId: m2 });
+    expect((await previewPersonMerge(admin, k, x)).canMerge).toBe(true);
+
+    // Drei verschiedene Eltern ohne Ähnlichkeit: kein Vorschlag, Hinweis auf die Art der Abstammung
+    const a1 = await mk("Bruno", "MALE");
+    const a2 = await mk("Erna", "FEMALE");
+    const a3 = await mk("Gustav", "MALE", { familyName: "Fremdling" });
+    const c1 = await mk("Ida", "FEMALE", { birthDate: "1860-01-01" });
+    const c2 = await mk("Ida", "FEMALE", { birthDate: "1860-01-01" });
+    for (const [par, ch] of [[a1, c1], [a2, c1], [a3, c2]]) await createRelationship(admin, { type: "PARENT_OF", fromPersonId: par, toPersonId: ch });
+    const q = (await previewPersonMerge(admin, c1, c2)).blockers.find((b) => b.code === "BIO_PARENTS")!;
+    expect(q.suggestPairs).toEqual([]);
+    expect(q.message).toContain("Art der Abstammung");
   });
 });

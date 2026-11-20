@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiFetch, jsonBody } from "./api-client";
@@ -25,9 +26,11 @@ const SUBTYPE_LABEL: Record<string, string> = {
  * Jede Änderung der Wahl holt die Vorschau neu — sie ist die Rechnung des
  * Servers, nicht eine Schätzung im Browser.
  */
-export function MergeView({ keepId: initialKeep, otherId: initialOther }: { keepId: string; otherId: string }) {
-  const [keepId, setKeepId] = useState(initialKeep);
-  const [otherId, setOtherId] = useState(initialOther);
+export function MergeView({ keepId, otherId }: { keepId: string; otherId: string }) {
+  // Die beiden IDs kommen aus der URL (die Seite setzt key={keep:other}): Links
+  // auf ein anderes Paar und „Seiten tauschen“ ändern die URL, nicht einen
+  // inneren Zustand — sonst zeigte die Seite nach einem Link das alte Paar.
+  const router = useRouter();
   const [choices, setChoices] = useState<Partial<Record<MergeField, FieldChoice>>>({});
   const [subtypes, setSubtypes] = useState<Record<string, string>>({});
   const [preview, setPreview] = useState<MergePreview | null>(null);
@@ -61,10 +64,7 @@ export function MergeView({ keepId: initialKeep, otherId: initialOther }: { keep
   }, [load]);
 
   function swap() {
-    setKeepId(otherId);
-    setOtherId(keepId);
-    setChoices({});
-    setSubtypes({});
+    router.replace(`/people/merge?keep=${otherId}&other=${keepId}`);
   }
 
   async function merge() {
@@ -153,9 +153,9 @@ export function MergeView({ keepId: initialKeep, otherId: initialOther }: { keep
             {preview.blockers.map((b, i) => (
               <li key={i}>
                 {b.message}
-                {(b.suggestPairs ?? []).map(([a, c]) => (
-                  <Link key={`${a}-${c}`} href={`/people/merge?keep=${a}&other=${c}`} className="ml-1 underline">
-                    Diese Eltern vergleichen
+                {(b.suggestions ?? []).map((sg) => (
+                  <Link key={`${sg.a}-${sg.b}`} href={`/people/merge?keep=${sg.a}&other=${sg.b}`} className="mt-1 block underline" data-testid="merge-parent-link">
+                    {sg.label}
                   </Link>
                 ))}
               </li>
