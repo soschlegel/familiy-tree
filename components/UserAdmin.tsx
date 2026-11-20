@@ -333,13 +333,12 @@ export function UserAdmin({
                         className="btn-link"
                         aria-expanded={editingEmail === u.id}
                         aria-controls={`email-edit-${u.id}`}
-                        aria-label={`Adresse von ${u.email} korrigieren`}
                         onClick={() => {
                           setEditingEmail(editingEmail === u.id ? null : u.id);
                           setNewEmail(u.email);
                         }}
                       >
-                        E-Mail ändern
+                        E-Mail ändern<span className="sr-only"> von {u.email}</span>
                       </button>
                     )}
                     {!self && (

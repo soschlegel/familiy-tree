@@ -203,6 +203,13 @@ type Match = {
   existingRels: Set<string>;
   /** Fehlende: Links des Baums ohne Gegenstück in der Datei. */
   missing: { kind: PlanKind; linkId: string; appId: string }[];
+  /**
+   * `kind|ref` von Einträgen, die über einen beim Zusammenführen übernommenen
+   * Link (mergedFromId) auf einen Datensatz zeigen, den schon ein anderer
+   * Eintrag der Datei trägt — eine Dublette innerhalb dieses Baums, die in
+   * der App zusammengeführt wurde. Sie überschreiben nichts („link“).
+   */
+  secondary: Set<string>;
   otherTreeHits: number;
 };
 
@@ -220,6 +227,7 @@ async function matchExisting(mapped: MappedImport, sourceTreeId: string, extraPe
       personNameId: true,
       citationId: true,
       sourceId: true,
+      mergedFromId: true,
     },
   });
   const entityId = (l: (typeof links)[number]) =>
@@ -228,7 +236,17 @@ async function matchExisting(mapped: MappedImport, sourceTreeId: string, extraPe
   for (const l of links) if (l.externalKey) byKey.set(`${l.entityType}|${l.externalKey}`, l);
   const claimed = new Set<string>();
   const usedLinks = new Set<string>();
-  const take = (kind: PlanKind, ref: string, id: string, linkId?: string) => {
+  const secondary = new Set<string>();
+  const take = (kind: PlanKind, ref: string, id: string, linkId?: string, merged = false) => {
+    // Zusammengeführte Dublette desselben Baums: zweiter Eintrag der Datei
+    // mit eigenem Link auf denselben Datensatz — zuordnen, aber nicht
+    // schreiben lassen.
+    if (claimed.has(id) && linkId && merged) {
+      ids[kind].set(ref, id);
+      usedLinks.add(linkId);
+      secondary.add(`${kind}|${ref}`);
+      return true;
+    }
     if (claimed.has(id)) return false;
     claimed.add(id);
     ids[kind].set(ref, id);
@@ -238,10 +256,15 @@ async function matchExisting(mapped: MappedImport, sourceTreeId: string, extraPe
 
   for (const [ref, id] of Object.entries(extraPersons)) take("persons", ref, id);
   for (const kind of ["persons", "names", "events", "citations", "relationships"] as PlanKind[]) {
-    for (const item of mapped[kind] as { ref: string }[]) {
-      const l = byKey.get(`${KIND_ENTITY[kind]}|${item.ref}`);
+    // Ursprüngliche Links zuerst, übernommene (mergedFromId) danach — so
+    // schreibt bei einer zusammengeführten Dublette der Eintrag, dessen
+    // Datensatz geblieben ist.
+    const hits = (mapped[kind] as { ref: string }[])
+      .map((item) => ({ item, l: byKey.get(`${KIND_ENTITY[kind]}|${item.ref}`) }))
+      .sort((a, b) => Number(Boolean(a.l?.mergedFromId)) - Number(Boolean(b.l?.mergedFromId)));
+    for (const { item, l } of hits) {
       const id = l ? entityId(l) : null;
-      if (l && id) take(kind, item.ref, id, l.id);
+      if (l && id) take(kind, item.ref, id, l.id, Boolean(l.mergedFromId));
     }
   }
 
@@ -251,19 +274,23 @@ async function matchExisting(mapped: MappedImport, sourceTreeId: string, extraPe
   if (pending.length) {
     const hits = await prisma.externalId.findMany({
       where: { system: "UID", value: { in: pending.map((m) => m.uid!) }, personId: { not: null } },
-      select: { value: true, personId: true, person: { select: { importLink: { select: { sourceTreeId: true, id: true } } } } },
+      select: { value: true, personId: true, person: { select: { importLinks: { select: { sourceTreeId: true, id: true } } } } },
     });
     const byUid = new Map<string, (typeof hits)[number]>();
     for (const h of hits) byUid.set(h.value.toUpperCase(), h);
     for (const m of pending) {
       const h = byUid.get(m.uid!.toUpperCase());
       if (!h?.personId) continue;
-      const tree = h.person?.importLink?.sourceTreeId ?? null;
-      if (tree && tree !== sourceTreeId) {
+      // Mehrere Links je Person (nach dem Zusammenführen): ein Link dieses
+      // Baums zählt; hat sie nur Links anderer Bäume, ist es ein Treffer im
+      // fremden Baum (Vorschlag, keine Zuordnung).
+      const links = h.person?.importLinks ?? [];
+      const own = links.find((l) => l.sourceTreeId === sourceTreeId);
+      if (!own && links.some((l) => l.sourceTreeId && l.sourceTreeId !== sourceTreeId)) {
         otherTreeHits++;
         continue;
       }
-      take("persons", m.ref, h.personId, h.person?.importLink?.id);
+      take("persons", m.ref, h.personId, own?.id);
     }
   }
 
@@ -273,7 +300,7 @@ async function matchExisting(mapped: MappedImport, sourceTreeId: string, extraPe
   if (appPersonIds.length) {
     const rels = await prisma.relationship.findMany({
       where: { fromPersonId: { in: appPersonIds }, toPersonId: { in: appPersonIds } },
-      select: { id: true, type: true, fromPersonId: true, toPersonId: true, importLink: { select: { id: true, sourceTreeId: true } } },
+      select: { id: true, type: true, fromPersonId: true, toPersonId: true, importLinks: { select: { id: true, sourceTreeId: true } } },
     });
     const relKey = (type: string, a: string, b: string) => (type === "PARTNER_OF" ? `${type}|${[a, b].sort().join("|")}` : `${type}|${a}|${b}`);
     const byPair = new Map(rels.map((r) => [relKey(r.type, r.fromPersonId, r.toPersonId), r]));
@@ -284,7 +311,8 @@ async function matchExisting(mapped: MappedImport, sourceTreeId: string, extraPe
       if (!a || !b) continue;
       const hit = byPair.get(relKey(r.type, a, b));
       if (!hit || claimed.has(hit.id)) continue;
-      if (hit.importLink && hit.importLink.sourceTreeId === sourceTreeId) take("relationships", r.ref, hit.id, hit.importLink.id);
+      const own = hit.importLinks.find((l) => l.sourceTreeId === sourceTreeId);
+      if (own) take("relationships", r.ref, hit.id, own.id);
       else {
         take("relationships", r.ref, hit.id);
         existingRels.add(r.ref);
@@ -335,7 +363,7 @@ async function matchExisting(mapped: MappedImport, sourceTreeId: string, extraPe
     if (!kind || !id || usedLinks.has(l.id) || claimed.has(id)) continue;
     missing.push({ kind, linkId: l.id, appId: id });
   }
-  return { ids, existingRels, missing, otherTreeHits };
+  return { ids, existingRels, missing, otherTreeHits, secondary };
 }
 
 /** Familien, Entscheidungen usw. für den eigentlichen Lauf. */
@@ -382,6 +410,7 @@ function buildInput(mapped: MappedImport, match: Match, batchId: string, sourceT
     }
     if (!id) return { action: "create" };
     if (kind === "relationships" && match.existingRels.has(ref)) return { action: "skip", id };
+    if (match.secondary.has(`${kind}|${ref}`)) return { action: "link", id };
     if (!opts.forPreview && editedRefs.has(`${kind}|${ref}`)) {
       const choice = d?.edited.overrides[ref] ?? d?.edited.default ?? "keep";
       return { action: choice === "file" ? "update" : "link", id };
@@ -456,12 +485,14 @@ async function treeCandidates(mapped: MappedImport): Promise<TreeCandidate[]> {
     for (let i = 0; i < uids.length; i += 5000) {
       const hits = await prisma.externalId.findMany({
         where: { system: "UID", value: { in: uids.slice(i, i + 5000) }, personId: { not: null } },
-        select: { person: { select: { importLink: { select: { sourceTreeId: true } } } } },
+        select: { person: { select: { importLinks: { select: { sourceTreeId: true } } } } },
       });
       for (const h of hits) {
-        const t = h.person?.importLink?.sourceTreeId;
-        const c = t ? by.get(t) : undefined;
-        if (c) c.uidOverlap++;
+        const trees = new Set((h.person?.importLinks ?? []).map((l) => l.sourceTreeId).filter((t): t is string => Boolean(t)));
+        for (const t of trees) {
+          const c = by.get(t);
+          if (c) c.uidOverlap++;
+        }
       }
     }
   }
@@ -555,11 +586,38 @@ async function computePlan(scope: Scope, batch: { id: string; fileName: string }
   const items: PlanItem[] = [];
   const counts = emptyCounts();
   const newPersons = new Set<string>();
+  // Zusammengeführte Einträge (README, „Dubletten zusammenführen“): Hat die
+  // Datei seit dem letzten Import nichts Neues dazu, ist „in der App
+  // geändert“ nur die Folge des Zusammenführens — keine Frage an den
+  // Administrator. Sie zählen als unverändert, der App-Stand bleibt. Bringt
+  // die Datei Neues (Konflikt), bleiben sie unter „in der App geändert“.
+  const mergedIds = new Set<string>();
+  {
+    const editedIds = (kind: PlanKind) =>
+      (mapped[kind] as { ref: string }[])
+        .filter((x) => dry.outcomes[kind][x.ref] === "skippedEdited" && !dry.changes[kind][x.ref]?.fileChangedSinceImport)
+        .map((x) => match.ids[kind].get(x.ref))
+        .filter((x): x is string => Boolean(x));
+    const or = (["persons", "relationships", "events", "names", "citations"] as const)
+      .map((k) => ({ col: ({ persons: "personId", relationships: "relationshipId", events: "eventId", names: "personNameId", citations: "citationId" } as const)[k], ids: editedIds(k) }))
+      .filter((x) => x.ids.length)
+      .map((x) => ({ [x.col]: { in: x.ids } }));
+    if (or.length) {
+      for (const l of await prisma.importLink.findMany({
+        where: { mergedAt: { not: null }, OR: or },
+        select: { personId: true, relationshipId: true, eventId: true, personNameId: true, citationId: true },
+      })) {
+        const id = l.personId ?? l.relationshipId ?? l.eventId ?? l.personNameId ?? l.citationId;
+        if (id) mergedIds.add(id);
+      }
+    }
+  }
   for (const kind of PLAN_KINDS) {
     for (const x of mapped[kind] as Record<string, unknown>[]) {
       const ref = x.ref as string;
       const outcome = dry.outcomes[kind][ref] ?? "invalid";
-      const g = OUTCOME_GROUP[outcome];
+      const quietMerged = outcome === "skippedEdited" && mergedIds.has(match.ids[kind].get(ref) ?? "");
+      const g = quietMerged ? "unchanged" : OUTCOME_GROUP[outcome];
       if (kind === "persons" && g === "new") newPersons.add(ref);
       const item: PlanItem = { ref, kind, group: g, label: labelOf(kind, x) };
       const appId = match.ids[kind].get(ref);
@@ -602,7 +660,7 @@ async function computePlan(scope: Scope, batch: { id: string; fileName: string }
   let suggestionCount = 0;
   if (newPersons.size) {
     const manual = await prisma.person.findMany({
-      where: { importLink: null },
+      where: { importLinks: { none: {} } },
       select: {
         id: true,
         givenName: true,
@@ -911,7 +969,7 @@ export async function applyGedcomImport(
   const chosen = Object.values(decisions.suggestions).map((s) => s.personId);
   if (new Set(chosen).size !== chosen.length) throw validationError([{ path: "suggestions", message: "Eine Person der App ist mehrfach gewählt" }]);
   if (chosen.length) {
-    const n = await prisma.person.count({ where: { id: { in: chosen }, importLink: null } });
+    const n = await prisma.person.count({ where: { id: { in: chosen }, importLinks: { none: {} } } });
     if (n !== chosen.length) throw validationError([{ path: "suggestions", message: "Zuordnung nur zu von Hand angelegten Personen" }]);
   }
   if (decisions.family.mode === "existing") {

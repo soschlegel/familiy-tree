@@ -42,12 +42,13 @@ model User {
   accounts Account[]
   sessions Session[]
 
-  uploadedMedia  MediaAsset[]  @relation("MediaUploader")
+  uploadedMedia  MediaAsset[]         @relation("MediaUploader")
   auditLogs      AuditLog[]
   families       UserFamily[]
-  createdSources Source[]      @relation("SourceCreator")
+  createdSources Source[]             @relation("SourceCreator")
   apiTokens      ApiToken[]
-  importBatches  ImportBatch[] @relation("ImportUser")
+  importBatches  ImportBatch[]        @relation("ImportUser")
+  dismissals     DuplicateDismissal[]
 }
 
 // ---------------------------------------------------------------------------
@@ -252,14 +253,19 @@ model Person {
   relationsFrom Relationship[] @relation("RelationFrom")
   relationsTo   Relationship[] @relation("RelationTo")
 
-  media       PersonMedia[]
-  families    PersonFamily[]
-  citations   Citation[]
-  events      Event[]
-  names       PersonName[]
-  externalIds ExternalId[]
-  rawRecords  ImportRawRecord[]
-  importLink  ImportLink?
+  media        PersonMedia[]
+  families     PersonFamily[]
+  citations    Citation[]
+  events       Event[]
+  names        PersonName[]
+  externalIds  ExternalId[]
+  rawRecords   ImportRawRecord[]
+  // Herkunft: je Datensatz der Quelle ein Link — nach dem Zusammenführen
+  // zweier importierter Personen mehrere (README, „Dubletten zusammenführen“).
+  importLinks  ImportLink[]
+  // Als „kein Duplikat“ markierte Paare (lib/services/duplicates.ts).
+  dismissedAsA DuplicateDismissal[] @relation("DismissalA")
+  dismissedAsB DuplicateDismissal[] @relation("DismissalB")
 
   @@index([familyName, givenName])
 }
@@ -291,8 +297,8 @@ model PersonName {
   sortOrder  Int            @default(0)
   createdAt  DateTime       @default(now())
 
-  person     Person      @relation(fields: [personId], references: [id], onDelete: Cascade)
-  importLink ImportLink?
+  person      Person       @relation(fields: [personId], references: [id], onDelete: Cascade)
+  importLinks ImportLink[]
 
   @@index([personId])
 }
@@ -348,7 +354,7 @@ model Relationship {
   events      Event[]
   externalIds ExternalId[]
   rawRecords  ImportRawRecord[]
-  importLink  ImportLink?
+  importLinks ImportLink[]
 
   @@unique([type, fromPersonId, toPersonId])
   @@index([fromPersonId])
@@ -449,7 +455,7 @@ model Event {
   relationship Relationship? @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
   citations    Citation[]
   externalIds  ExternalId[]
-  importLink   ImportLink?
+  importLinks  ImportLink[]
 
   @@index([personId])
   @@index([relationshipId])
@@ -480,7 +486,7 @@ model MediaAsset {
   relationships RelationshipMedia[]
   sources       Source[]
   externalIds   ExternalId[]
-  importLink    ImportLink?
+  importLinks   ImportLink[]
 }
 
 // Bilder zu einem Ereignis statt zu einer Person — vor allem Hochzeitsfotos.
@@ -555,7 +561,7 @@ model Source {
   citations   Citation[]
   externalIds ExternalId[]
   rawRecords  ImportRawRecord[]
-  importLink  ImportLink?
+  importLinks ImportLink[]
 
   @@index([title])
 }
@@ -597,7 +603,7 @@ model Citation {
   person       Person?       @relation(fields: [personId], references: [id], onDelete: Cascade)
   relationship Relationship? @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
   event        Event?        @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  importLink   ImportLink?
+  importLinks  ImportLink[]
 
   @@index([sourceId])
   @@index([personId])
@@ -655,9 +661,15 @@ model ImportBatch {
   @@index([createdAt])
 }
 
-// Herkunft eines importierten Datensatzes — genau eine Zeile je Datensatz,
-// angelegt bzw. fortgeschrieben von jedem Import, der ihn anlegt oder
-// aktualisiert. Manuell angelegte Datensätze haben keine.
+// Herkunft eines importierten Datensatzes — eine Zeile je Datensatz UND
+// Datensatz der Quelle (sourceTreeId + externalKey), angelegt bzw.
+// fortgeschrieben von jedem Import, der ihn anlegt, aktualisiert oder mit
+// einem vorhandenen Datensatz verknüpft. Manuell angelegte Datensätze haben
+// keine. Mehrere Zeilen je Datensatz entstehen beim Zusammenführen
+// (mergedFromId) und beim Verknüpfen mit einem zweiten Baum: Der Datensatz
+// bleibt so aus jedem Quell-Baum wiedererkennbar. Bewusst kein Unique auf
+// (Datensatz, Baum): Wer eine Dublette INNERHALB eines Baums zusammenführt,
+// behält beide Links desselben Baums (verschiedene externalKey).
 //
 // Wiederholter Import: Der Import erkennt den Datensatz über externalKey
 // (innerhalb derselben sourceTreeId) bzw. ExternalId wieder. importHash ist
@@ -668,28 +680,36 @@ model ImportBatch {
 // Fehlt ein Datensatz in einem neueren Stand der Quelle, wird nichts
 // gelöscht: missingSinceBatchId hält fest, dass er dort fehlte.
 model ImportLink {
-  id                  String   @id @default(cuid())
+  id                  String    @id @default(cuid())
   // PERSON | RELATIONSHIP | EVENT | PERSON_NAME | CITATION | SOURCE | MEDIA
   entityType          String
-  personId            String?  @unique
-  relationshipId      String?  @unique
-  eventId             String?  @unique
-  personNameId        String?  @unique
-  citationId          String?  @unique
-  sourceId            String?  @unique
-  mediaId             String?  @unique
+  personId            String?
+  relationshipId      String?
+  eventId             String?
+  personNameId        String?
+  citationId          String?
+  sourceId            String?
+  mediaId             String?
   sourceTreeId        String?
   // Schlüssel in der Quelle, frei vom Import gewählt, z.B. "UID:4F2A…",
   // "XREF:@I12@", "XREF:@I12@/BIRT#2".
   externalKey         String?
   firstBatchId        String?
   lastBatchId         String?
-  importedAt          DateTime @default(now())
+  importedAt          DateTime  @default(now())
   importHash          String
   // Änderungsstempel der Quelle, wörtlich (z.B. _UPD, CHAN.DATE).
   sourceStamp         String?
   missingSinceBatchId String?
-  createdAt           DateTime @default(now())
+  // mergedFromId: Der Link kam beim Zusammenführen vom weggefallenen
+  // Datensatz (dessen ID, ohne Fremdschlüssel). Ohne: ursprünglicher Link des
+  // Datensatzes — der GEDCOM-Export schreibt dessen Originaldaten (_UID).
+  // mergedAt: Der Datensatz war an einem Zusammenführen beteiligt; ein
+  // erneuter Import ohne neue Angaben in der Datei meldet ihn dann nicht als
+  // „in der App geändert“, sondern still als unverändert.
+  mergedFromId        String?
+  mergedAt            DateTime?
+  createdAt           DateTime  @default(now())
 
   firstBatch   ImportBatch?  @relation("ImportLinkFirst", fields: [firstBatchId], references: [id], onDelete: SetNull)
   lastBatch    ImportBatch?  @relation("ImportLinkLast", fields: [lastBatchId], references: [id], onDelete: SetNull)
@@ -704,6 +724,30 @@ model ImportLink {
   @@index([sourceTreeId, externalKey])
   @@index([firstBatchId])
   @@index([lastBatchId])
+  @@index([personId])
+  @@index([relationshipId])
+  @@index([eventId])
+  @@index([personNameId])
+  @@index([citationId])
+  @@index([sourceId])
+  @@index([mediaId])
+}
+
+// Ein Paar, das ein Bearbeiter als „kein Duplikat“ markiert hat: erscheint
+// nicht mehr unter „Mögliche Dubletten“, nicht als Importvorschlag und nicht
+// beim Zusammenlegen von Bäumen. Kanonisch gespeichert (personAId < personBId).
+model DuplicateDismissal {
+  personAId String
+  personBId String
+  userId    String?
+  createdAt DateTime @default(now())
+
+  personA Person @relation("DismissalA", fields: [personAId], references: [id], onDelete: Cascade)
+  personB Person @relation("DismissalB", fields: [personBId], references: [id], onDelete: Cascade)
+  user    User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@id([personAId, personBId])
+  @@index([personBId])
 }
 
 // Fremdkennung eines Datensatzes, damit ein erneuter Import ihn wiedererkennt:
