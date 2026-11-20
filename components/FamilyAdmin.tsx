@@ -171,10 +171,12 @@ export function FamilyAdmin({
             </p>
           </div>
 
+          {/* Unter md je Benutzer ein Block mit den Familien als beschriftete
+              Felder (zwei Spalten) statt einer seitlich verschiebbaren Tabelle. */}
           <div className="card overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm max-md:block">
               <caption className="sr-only">Zugriffsrechte je Benutzer und Familie</caption>
-              <thead className="border-b border-stone-200 text-left text-stone-600 dark:border-stone-800 dark:text-stone-400">
+              <thead className="border-b border-stone-200 text-left text-stone-600 max-md:hidden dark:border-stone-800 dark:text-stone-400">
                 <tr>
                   <th scope="col" className="px-3 py-2 font-medium">Benutzer</th>
                   {families.map((f) => (
@@ -184,10 +186,10 @@ export function FamilyAdmin({
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-stone-200 dark:divide-stone-800">
+              <tbody className="divide-y divide-stone-200 max-md:block dark:divide-stone-800">
                 {users.map((u) => (
-                  <tr key={u.id}>
-                    <th scope="row" className="whitespace-nowrap px-3 py-2 text-left font-normal">
+                  <tr key={u.id} className="max-md:grid max-md:grid-cols-2 max-md:gap-x-3 max-md:gap-y-2 max-md:p-3">
+                    <th scope="row" className="whitespace-nowrap px-3 py-2 text-left font-normal max-md:col-span-2 max-md:whitespace-normal max-md:break-words max-md:p-0 max-md:font-medium">
                       {u.name ?? u.email}
                       {u.isAdmin && (
                         <span className="ml-2 rounded bg-stone-200 px-1.5 py-0.5 text-[10px] dark:bg-stone-700">
@@ -196,9 +198,13 @@ export function FamilyAdmin({
                       )}
                     </th>
                     {families.map((f) => (
-                      <td key={f.id} className="px-2 py-2">
+                      <td
+                        key={f.id}
+                        data-label={f.name}
+                        className="px-2 py-2 max-md:min-w-0 max-md:p-0 max-md:before:mb-1 max-md:before:block max-md:before:truncate max-md:before:text-xs max-md:before:font-medium max-md:before:text-stone-600 max-md:before:content-[attr(data-label)] dark:max-md:before:text-stone-400"
+                      >
                         <select
-                          className={field}
+                          className={`${field} max-md:w-full`}
                           aria-label={`Zugriff von ${u.name ?? u.email} auf ${f.name}`}
                           disabled={busy || u.isAdmin}
                           title={

@@ -47,11 +47,13 @@ export function NavBar({
 
   return (
     <header className="relative z-30 border-b border-stone-900/10 bg-surface/90 backdrop-blur dark:border-white/10">
+      {/* Unter md ist der Menü-Knopf 44 px hoch (Tippziel); der kleinere
+          Innenabstand hält die Kopfzeile bei 55 px — damit rechnet die Baumseite. */}
       <nav
         aria-label="Hauptnavigation"
-        className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-2.5"
+        className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-2.5 max-md:py-[5px]"
       >
-        <Link href="/tree" className="mr-4 flex items-center gap-2" aria-label="Stammbaum — Startseite">
+        <Link href="/tree" className="mr-4 flex items-center gap-2 max-lg:-my-2 max-lg:py-2" aria-label="Stammbaum — Startseite">
           <BrandMark />
           <span className="font-serif text-lg font-semibold tracking-tight">Stammbaum</span>
         </Link>
@@ -109,7 +111,7 @@ export function NavBar({
                   <Link
                     href={item.href}
                     aria-current={active ? "page" : undefined}
-                    className={`block ${linkClass(active)} py-2`}
+                    className={`block ${linkClass(active)} py-3`}
                   >
                     {item.label}
                   </Link>

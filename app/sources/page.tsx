@@ -71,7 +71,7 @@ export default async function SourcesPage({ searchParams }: { searchParams: Prom
         )}
       </div>
 
-      <form role="search" aria-label="Quellen filtern" className="card flex flex-wrap items-end gap-3 p-3">
+      <form role="search" aria-label="Quellen filtern" className="card flex flex-wrap items-end gap-3 p-3 max-sm:[&>div]:grow max-sm:[&_.field]:w-full">
         <div className="min-w-0 flex-1 basis-56">
           <label htmlFor="sources-q" className="field-label">
             Suche
@@ -160,7 +160,7 @@ export default async function SourcesPage({ searchParams }: { searchParams: Prom
               href={hrefFor(n)}
               aria-current={n === page ? "page" : undefined}
               aria-label={`Seite ${n}`}
-              className={n === page ? "btn-primary min-w-9" : "btn-secondary min-w-9"}
+              className={n === page ? "btn-primary min-w-9 max-md:min-w-11" : "btn-secondary min-w-9 max-md:min-w-11"}
             >
               {n}
             </Link>

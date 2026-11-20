@@ -1042,7 +1042,7 @@ function TreeCanvas({
                       onMouseEnter={() => setCursor(i)}
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => goToHit(i)}
-                      className={`flex cursor-pointer items-baseline gap-2 px-3 py-1.5 text-sm ${
+                      className={`flex cursor-pointer items-baseline gap-2 px-3 py-1.5 text-sm max-md:py-3 ${
                         i === cursor ? "bg-stone-100 dark:bg-stone-800" : ""
                       }`}
                     >
@@ -1100,7 +1100,7 @@ function TreeCanvas({
                     setFamilyMenuOpen(false);
                     familyTriggerRef.current?.focus();
                   }}
-                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-stone-100 dark:hover:bg-stone-800 ${
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-stone-100 max-md:min-h-11 dark:hover:bg-stone-800 ${
                     selectedFamilies.length === 0 ? "font-medium" : ""
                   }`}
                 >
@@ -1125,7 +1125,7 @@ function TreeCanvas({
                           active ? prev.filter((id) => id !== f.id) : [...prev, f.id],
                         )
                       }
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-stone-100 dark:hover:bg-stone-800"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-stone-100 max-md:min-h-11 dark:hover:bg-stone-800"
                     >
                       <span
                         aria-hidden
@@ -1152,7 +1152,7 @@ function TreeCanvas({
               ? "Ehepartner ohne gemeinsames Kind im Ausschnitt ausblenden — es bleibt die reine Abstammung"
               : "Ehen aus der Darstellung nehmen — es bleibt die reine Abstammung"
           }
-          className={`${toolbarBox} flex cursor-pointer items-center gap-2 px-3 py-1.5`}
+          className={`${toolbarBox} flex cursor-pointer items-center gap-2 px-3 py-1.5 max-md:min-h-11 ${focusData ? "max-sm:order-2" : ""}`}
         >
           <input
             type="checkbox"
@@ -1163,7 +1163,9 @@ function TreeCanvas({
           Ehen zeigen
         </label>
 
-        <div className={`${toolbarBox} flex overflow-hidden`} role="group" aria-label="Ansicht">
+        {/* Fokus-Ansicht auf dem Telefon: Ansicht zuerst, „Ehen zeigen“ und die
+            Tiefe teilen sich die nächste Zeile — sonst vier Zeilen bei 360 px. */}
+        <div className={`${toolbarBox} flex overflow-hidden ${focusData ? "max-sm:order-1" : ""}`} role="group" aria-label="Ansicht">
           {(
             [
               ["focus", "Fokus", "Eine Person im Mittelpunkt mit Vorfahren und Nachkommen"],
@@ -1178,7 +1180,7 @@ function TreeCanvas({
               aria-pressed={activeView === value}
               data-testid={`tree-view-${value}`}
               onClick={() => switchView(value)}
-              className={`px-2.5 py-1.5 sm:px-3 transition ${
+              className={`px-2.5 py-1.5 max-md:min-h-11 sm:px-3 transition ${
                 activeView === value
                   ? "bg-accent-700 text-white dark:bg-accent-300 dark:text-stone-950"
                   : "hover:bg-stone-100 dark:hover:bg-stone-800"
@@ -1192,7 +1194,7 @@ function TreeCanvas({
         {focusData ? (
           <>
             <div
-              className={`${toolbarBox} flex items-center gap-1 py-1 pl-2 pr-0.5 sm:pl-3 sm:pr-1`}
+              className={`${toolbarBox} flex items-center gap-1 py-1 pl-2 pr-0.5 max-md:py-0 max-sm:order-3 sm:pl-3 sm:pr-1`}
               role="group"
               aria-label="Generationen im Ausschnitt"
             >
@@ -1205,7 +1207,7 @@ function TreeCanvas({
                 data-testid="tree-depth-up"
                 value={up}
                 onChange={(e) => navigate(treeUrl({ focus: currentFocus, up: Number(e.target.value), down }), true)}
-                className="rounded-md bg-transparent py-0.5 pl-1 pr-1 font-medium tabular-nums focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+                className="rounded-md bg-transparent py-0.5 pl-1 pr-1 font-medium tabular-nums focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 max-md:min-h-[2.625rem] max-md:min-w-11 max-md:text-base"
               >
                 {Array.from({ length: FOCUS_DEPTH.max - FOCUS_DEPTH.min + 1 }, (_, i) => FOCUS_DEPTH.min + i).map((n) => (
                   <option key={n} value={n}>{n}</option>
@@ -1221,7 +1223,7 @@ function TreeCanvas({
                 data-testid="tree-depth-down"
                 value={down}
                 onChange={(e) => navigate(treeUrl({ focus: currentFocus, up, down: Number(e.target.value) }), true)}
-                className="rounded-md bg-transparent py-0.5 pl-1 pr-1 font-medium tabular-nums focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+                className="rounded-md bg-transparent py-0.5 pl-1 pr-1 font-medium tabular-nums focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 max-md:min-h-[2.625rem] max-md:min-w-11 max-md:text-base"
               >
                 {Array.from({ length: FOCUS_DEPTH.max - FOCUS_DEPTH.min + 1 }, (_, i) => FOCUS_DEPTH.min + i).map((n) => (
                   <option key={n} value={n}>{n}</option>
@@ -1262,7 +1264,7 @@ function TreeCanvas({
         data-view={activeView}
         data-focus-id={currentFocus ?? undefined}
         aria-busy={pending}
-        className="relative min-h-[420px] w-full flex-1 overflow-hidden rounded-2xl border border-stone-200 bg-[radial-gradient(ellipse_at_top,rgb(var(--surface)),rgb(var(--paper))_70%)] shadow-card dark:border-stone-800"
+        className="relative min-h-[320px] w-full flex-1 md:min-h-[420px] overflow-hidden rounded-2xl border border-stone-200 bg-[radial-gradient(ellipse_at_top,rgb(var(--surface)),rgb(var(--paper))_70%)] shadow-card dark:border-stone-800"
       >
         <ReactFlow
           nodes={nodes}
@@ -1322,7 +1324,7 @@ function TreeCanvas({
                 key={r.id}
                 href={focusHref(r.id)}
                 onClick={(e) => onFocusClick(e, r.id)}
-                className="shrink-0 rounded-full bg-white/80 px-2.5 py-1 text-stone-700 ring-1 ring-stone-200 backdrop-blur transition hover:bg-white hover:ring-accent-300 dark:bg-stone-900/80 dark:text-stone-300 dark:ring-stone-800 dark:hover:ring-accent-600"
+                className="shrink-0 rounded-full bg-white/80 px-2.5 py-1 text-stone-700 max-md:px-3 max-md:py-2.5 max-md:text-sm ring-1 ring-stone-200 backdrop-blur transition hover:bg-white hover:ring-accent-300 dark:bg-stone-900/80 dark:text-stone-300 dark:ring-stone-800 dark:hover:ring-accent-600"
               >
                 {r.name}
               </Link>
@@ -1418,16 +1420,18 @@ function Legend({
 }) {
   return (
     <div
+      // Auf dem Telefon liegen die Zoom-Knöpfe als Zeile am unteren Rand;
+      // die aufgeklappte Legende rückt dort darüber, statt sie zu verdecken.
       className={`absolute bottom-3 z-10 rounded-lg bg-white/95 text-xs text-stone-600 shadow-sm ring-1 ring-stone-200 backdrop-blur dark:bg-stone-900/95 dark:text-stone-300 dark:ring-stone-800 ${
         timeline ? "left-16" : "left-3"
-      }`}
+      } ${open ? "max-md:bottom-[4.25rem]" : ""}`}
     >
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
         aria-controls="tree-legend"
-        className="flex w-full items-center gap-2 px-3 py-1.5 font-medium"
+        className="flex w-full items-center gap-2 px-3 py-1.5 font-medium max-md:min-h-11"
       >
         Legende
         <span aria-hidden className="text-[10px]">{open ? "▾" : "▸"}</span>

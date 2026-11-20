@@ -192,7 +192,7 @@ export function UserAdmin({
       <form
         onSubmit={invite}
         aria-label="Benutzer einladen"
-        className="card flex flex-wrap items-end gap-3 p-3"
+        className="card flex flex-wrap items-end gap-3 p-3 max-sm:[&>div]:grow max-sm:[&_.field]:w-full"
       >
         <div className="min-w-0 flex-1 basis-56">
           <label htmlFor="invite-email" className="field-label">
@@ -238,11 +238,14 @@ export function UserAdmin({
       </div>
 
       {/* relative: hält die absolut positionierte sr-only-Beschriftung im
-          Scrollbereich — sonst verbreitert sie auf dem Telefon die Seite. */}
+          Scrollbereich — sonst verbreitert sie auf dem Telefon die Seite.
+          Unter md wird aus jeder Zeile ein Block (E-Mail, darunter Rolle und
+          Status, Anmeldung, KI-Zugang, Aktionen) statt einer Tabelle, die
+          seitlich geschoben werden muss. */}
       <div className="card relative overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm max-md:block">
           <caption className="sr-only">Benutzer</caption>
-          <thead className="border-b border-stone-200 text-left text-stone-600 dark:border-stone-800 dark:text-stone-400">
+          <thead className="max-md:hidden border-b border-stone-200 text-left text-stone-600 dark:border-stone-800 dark:text-stone-400">
             <tr>
               <th scope="col" className="px-3 py-2 font-medium">E-Mail</th>
               <th scope="col" className="px-2 font-medium">Rolle</th>
@@ -254,7 +257,7 @@ export function UserAdmin({
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-stone-200 dark:divide-stone-800">
+          <tbody className="divide-y divide-stone-200 max-md:block dark:divide-stone-800">
             {users.map((u) => {
               const self = u.id === currentUserId;
               const blocking = u.status !== "BLOCKED";
@@ -262,12 +265,12 @@ export function UserAdmin({
               const list = keys[u.id];
               return (
                 <Fragment key={u.id}>
-                <tr data-testid="user-row" data-email={u.email}>
-                  <td className="whitespace-nowrap px-3 py-2">
+                <tr data-testid="user-row" data-email={u.email} className="max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-2 max-md:p-3">
+                  <td className="whitespace-nowrap px-3 py-2 max-md:basis-full max-md:whitespace-normal max-md:break-all max-md:p-0 max-md:font-medium">
                     {u.email}
                     {self && <span className="ml-2 text-xs muted">(du)</span>}
                   </td>
-                  <td className="px-2">
+                  <td className="px-2 max-md:px-0">
                     <select
                       className="field"
                       aria-label={`Rolle von ${u.email}`}
@@ -288,14 +291,14 @@ export function UserAdmin({
                       ))}
                     </select>
                   </td>
-                  <td className="px-2">
+                  <td className="px-2 max-md:px-0">
                     <span className={STATUS_CLASS[u.status]}>{STATUS_LABEL[u.status]}</span>
                   </td>
-                  <td className="whitespace-nowrap px-2 muted">
+                  <td className="whitespace-nowrap px-2 muted max-md:basis-full max-md:px-0 max-md:before:content-['Letzte_Anmeldung:_']">
                     {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString("de-DE") : "nie"}
                   </td>
-                  <td className="px-2">
-                    <div className="flex items-center gap-2">
+                  <td className="px-2 max-md:basis-full max-md:px-0 max-md:before:mb-1 max-md:before:block max-md:before:text-xs max-md:before:font-medium max-md:before:text-stone-600 max-md:before:content-['KI-Zugang'] dark:max-md:before:text-stone-400">
+                    <div className="flex items-center gap-2 max-md:gap-4">
                       <select
                         className="field"
                         aria-label={`KI-Zugang von ${u.email}`}
@@ -324,8 +327,8 @@ export function UserAdmin({
                       </button>
                     </div>
                   </td>
-                  <td className="px-3 text-right">
-                    <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 whitespace-nowrap">
+                  <td className="px-3 text-right max-md:basis-full max-md:px-0 max-md:py-1 max-md:text-left">
+                    <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 whitespace-nowrap max-md:justify-start max-md:gap-x-5">
                     {!self && u.neverSignedIn && (
                       <button
                         type="button"
@@ -381,8 +384,8 @@ export function UserAdmin({
                   </td>
                 </tr>
                 {editingEmail === u.id && (
-                  <tr id={`email-edit-${u.id}`} data-testid="user-email-edit">
-                    <td colSpan={6} className="bg-stone-50/70 px-3 py-3 dark:bg-stone-900/40">
+                  <tr id={`email-edit-${u.id}`} data-testid="user-email-edit" className="max-md:block">
+                    <td colSpan={6} className="bg-stone-50/70 px-3 py-3 max-md:block dark:bg-stone-900/40">
                       <form
                         onSubmit={(e) => void saveEmail(e, u)}
                         aria-label={`Adresse von ${u.email} korrigieren`}
@@ -415,8 +418,8 @@ export function UserAdmin({
                   </tr>
                 )}
                 {open && (
-                  <tr id={`ai-keys-${u.id}`} data-testid="user-ai-keys">
-                    <td colSpan={6} className="bg-stone-50/70 px-3 py-3 dark:bg-stone-900/40">
+                  <tr id={`ai-keys-${u.id}`} data-testid="user-ai-keys" className="max-md:block">
+                    <td colSpan={6} className="bg-stone-50/70 px-3 py-3 max-md:block dark:bg-stone-900/40">
                       {/* sticky + feste Breite: bleibt auf dem Telefon im
                           sichtbaren Teil, auch wenn die Tabelle seitlich
                           gescrollt ist. */}
