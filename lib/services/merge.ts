@@ -30,6 +30,7 @@ import {
 import { personDateIssues, MAX_BIOLOGICAL_PARENTS, PARENT_SUBTYPES, PARTNER_SUBTYPES } from "../validation";
 import { conflictError, forbiddenError, notFoundError, parseOrThrow, validationError } from "./errors";
 import { newId } from "./imports";
+import { importLabel } from "./dto";
 
 /**
  * Dubletten zusammenführen: Die Person `mergeId` geht in `keepId` auf.
@@ -673,13 +674,7 @@ function side(scope: Scope, p: PersonBundle, rels: RelBundle[]): MergePersonSide
     .map((r) => nameFor(scope, r.fromPersonId === p.id ? r.toPerson : r.fromPerson).replace(/^„|“$/g, ""));
   const children = mine.filter((r) => r.type === "PARENT_OF" && r.fromPersonId === p.id).length;
   const dateText = (k: "birthDate" | "deathDate") => formatDateWithPhrase(fuzzyField(p, k), p[`${k}Phrase`]);
-  const imports = [
-    ...new Set(
-      p.importLinks.map((l) =>
-        scope.isAdmin && l.lastBatch ? `„${l.lastBatch.fileName}“ (${l.lastBatch.createdAt.toLocaleDateString("de-DE", { timeZone: "Europe/Berlin" })})` : "importiert",
-      ),
-    ),
-  ];
+  const imports = [...new Set(p.importLinks.map((l) => importLabel(scope, l.lastBatch)))];
   const values = Object.fromEntries(MERGE_FIELDS.map((f) => [f, ""])) as Record<MergeField, string>;
   const cmp = compareFields(p as unknown as PersonValues, p as unknown as PersonValues);
   for (const c of cmp) values[c.field] = c.keep;
