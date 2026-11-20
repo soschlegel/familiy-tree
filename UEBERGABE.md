@@ -15,7 +15,7 @@ aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
   letzter Migrationsordner `20261121000000_quellen_einordnen`.
 - Prüfstand des letzten Pakets: Typecheck, Lint, Vitest 676/676; Playwright
   auf frischem Server, zwischen read und write neu gestartet: setup 6/6,
-  read 147/147, write 74/74.
+  read 148/148, write 74/74.
 
 ## Lokal einrichten
 

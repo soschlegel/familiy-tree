@@ -171,6 +171,30 @@ test.describe("Telefon (390 px), ohne Anmeldung", () => {
     expect(await smallFontFields(page)).toEqual([]);
   });
 
+  test("Mindesthöhe der Seite ist die sichtbare Höhe (dvh), nicht vh", async ({ page }) => {
+    // Im Test-Browser sind vh und dvh gleich groß; auf Android (Edge) ist vh
+    // um die Browserleiste größer. Deshalb hier die Regel selbst prüfen: Die
+    // zuletzt wirksame min-height von <body> muss dvh sein.
+    await page.goto("/login");
+    const minHeights = await page.evaluate(() => {
+      const out: string[] = [];
+      for (const sheet of Array.from(document.styleSheets)) {
+        let rules: CSSRuleList;
+        try {
+          rules = sheet.cssRules;
+        } catch {
+          continue;
+        }
+        for (const rule of Array.from(rules)) {
+          if (!(rule instanceof CSSStyleRule) || !document.body.matches(rule.selectorText)) continue;
+          if (rule.style.minHeight) out.push(rule.style.minHeight);
+        }
+      }
+      return out;
+    });
+    expect(minHeights.at(-1), `min-height-Regeln für body: ${minHeights.join(", ")}`).toBe("100dvh");
+  });
+
   test("kurze Seite: Fußzeile sitzt am unteren Rand, auch wenn das Fenster wächst", async ({ page }) => {
     await page.goto("/login");
     await expect(page.getByLabel("E-Mail-Adresse")).toBeVisible();
