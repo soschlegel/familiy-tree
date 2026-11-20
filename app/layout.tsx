@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fraunces, Source_Sans_3 } from "next/font/google";
 
 import "./globals.css";
@@ -12,6 +12,15 @@ import { MainContainer, NavBar, type NavItem } from "@/components/NavBar";
 export const metadata: Metadata = {
   title: { default: "Stammbaum", template: "%s · Stammbaum" },
   description: "Familienstammbaum mit Bildarchiv",
+};
+
+// Browserleiste auf dem Telefon in der Papierfarbe (--paper in globals.css),
+// damit sie beim Ein- und Ausblenden nicht als fremder Streifen absticht.
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f6f2ea" },
+    { media: "(prefers-color-scheme: dark)", color: "#12100e" },
+  ],
 };
 
 // Überschriften in einer Antiqua mit Charakter, Fließtext in einer gut
@@ -76,7 +85,10 @@ export default async function RootLayout({
 
   return (
     <html lang="de" className={`${serif.variable} ${sans.variable}`}>
-      <body className="min-h-screen">
+      {/* Spalte über mindestens die sichtbare Höhe (dvh: folgt auf dem
+          Telefon dem Ein- und Ausblenden der Adressleiste, vh als Rückfall);
+          <main> wächst, die Fußzeile sitzt so immer am unteren Rand. */}
+      <body className="flex min-h-screen min-h-dvh flex-col">
         <a
           href="#inhalt"
           className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:shadow dark:focus:bg-stone-900"
@@ -101,7 +113,7 @@ export default async function RootLayout({
         )}
         <MainContainer>{children}</MainContainer>
         {/* Feste Höhe (--footer-h): die Baumseite rechnet sie aus ihrer Höhe heraus. */}
-        <footer className="flex h-[var(--footer-h)] items-center justify-center px-4 text-xs muted">
+        <footer className="flex h-[var(--footer-h)] shrink-0 items-center justify-center px-4 text-xs muted">
           <span data-testid="build-info" className="tabular-nums">
             {buildLabel(buildInfo(), Boolean(user))}
           </span>

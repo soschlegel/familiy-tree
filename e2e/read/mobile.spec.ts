@@ -170,4 +170,20 @@ test.describe("Telefon (390 px), ohne Anmeldung", () => {
     await expectNoHorizontalOverflow(page);
     expect(await smallFontFields(page)).toEqual([]);
   });
+
+  test("kurze Seite: Fußzeile sitzt am unteren Rand, auch wenn das Fenster wächst", async ({ page }) => {
+    await page.goto("/login");
+    await expect(page.getByLabel("E-Mail-Adresse")).toBeVisible();
+    const footer = page.locator("footer");
+    // Wächst wie beim Ausblenden der Adressleiste auf Android.
+    for (const height of [844, 920]) {
+      await page.setViewportSize({ width: 390, height });
+      await expect
+        .poll(async () => {
+          const box = (await footer.boundingBox())!;
+          return Math.round(box.y + box.height);
+        }, { message: `Unterkante der Fußzeile bei ${height} px` })
+        .toBe(height);
+    }
+  });
 });

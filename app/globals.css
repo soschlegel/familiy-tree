@@ -38,6 +38,13 @@
   }
 }
 
+/* Auch <html> in Papierfarbe: Was der Browser beim Überziehen des
+   Bildlaufs oder beim Ein- und Ausblenden der Adressleiste außerhalb von
+   <body> zeigt, ist dann kein schwarzer oder weißer Streifen. */
+html {
+  @apply bg-paper;
+}
+
 body {
   @apply bg-paper font-sans text-stone-900 antialiased;
 }

@@ -156,7 +156,10 @@ export function MainContainer({ children }: { children: React.ReactNode }) {
   return (
     <main
       id="inhalt"
-      className={wide ? "px-2 py-3 sm:px-4" : "mx-auto max-w-6xl px-4 py-6"}
+      // flex-1: füllt die Höhe zwischen Kopf- und Fußzeile (body ist eine
+      // Spalte, app/layout.tsx); w-full, weil auto-Ränder sonst die Breite
+      // auf den Inhalt schrumpfen ließen.
+      className={wide ? "w-full flex-1 px-2 py-3 sm:px-4" : "mx-auto w-full max-w-6xl flex-1 px-4 py-6"}
     >
       {children}
     </main>
