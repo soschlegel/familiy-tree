@@ -154,6 +154,15 @@ export default async function ResearchPage() {
         </div>
       ) : (
         <>
+          {scope.isAdmin && (
+            <p className="card flex flex-wrap items-center justify-between gap-3 p-4 text-sm" data-testid="research-connect">
+              <span>Mehrere Importe? Personen, die in mehreren vorkommen, verbinden sie zu einem gemeinsamen Stammbaum.</span>
+              <Link href="/research/connect" className="btn-secondary btn-sm">
+                Importe verbinden
+              </Link>
+            </p>
+          )}
+
           <section aria-label="Bestand" className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="research-stats">
             <Stat
               label="Personen"

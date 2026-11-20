@@ -5,7 +5,8 @@ import { z } from "zod";
 
 import { prisma } from "../prisma";
 import { canEditPerson, canViewPerson, visibleFamilyIds, type Scope } from "../scope";
-import { fuzzyColumns, fuzzyField, formatDateWithPhrase, type FuzzyDate } from "../dates";
+import { fuzzyColumns, fuzzyField, formatDateWithPhrase, formatFuzzyYear, type FuzzyDate } from "../dates";
+import { scoreDuplicate, type DupPerson } from "../duplicates";
 import { EVENT_TYPE_LABEL, PERSON_NAME_TYPE_LABEL } from "../events";
 import { importFingerprint, type ImportEntity } from "../import-fingerprint";
 import {
@@ -108,7 +109,27 @@ async function loadPersonBundle(db: Db | typeof prisma, id: string) {
 }
 type PersonBundle = NonNullable<Awaited<ReturnType<typeof loadPersonBundle>>>;
 
-const personSel = { select: { id: true, givenName: true, familyName: true, families: { select: { familyId: true } } } } as const;
+const personSel = {
+  select: {
+    id: true,
+    givenName: true,
+    familyName: true,
+    birthName: true,
+    gender: true,
+    birthDate: true,
+    birthDatePrecision: true,
+    birthDateQualifier: true,
+    birthDateTo: true,
+    birthDateToPrecision: true,
+    deathDate: true,
+    deathDatePrecision: true,
+    deathDateQualifier: true,
+    deathDateTo: true,
+    deathDateToPrecision: true,
+    birthPlace: true,
+    families: { select: { familyId: true } },
+  },
+} as const;
 
 async function loadRelationships(db: Db | typeof prisma, ids: string[]) {
   return db.relationship.findMany({
@@ -161,8 +182,10 @@ export async function loadMergeSnapshot(
 export type MergeBlocker = {
   code: "RELATED" | "BIO_PARENTS" | "CYCLE" | "PARTNER_AND_PARENT" | "DATES" | "SAME";
   message: string;
-  /** Personen, die zuerst zusammengeführt werden könnten (IDs, nur sichtbare). */
+  /** Personen, die zuerst zusammengeführt werden könnten (IDs, nur sichtbare), bestes Paar zuerst. */
   suggestPairs?: [string, string][];
+  /** Dieselben Paare mit Beschriftung („Anna X (*1820) ↔ Anna Y (*1821) vergleichen“). */
+  suggestions?: { a: string; b: string; label: string }[];
 };
 
 type RelMove = { rel: RelBundle; from: string; to: string };
@@ -331,34 +354,99 @@ export function planMerge(
     collapses.push({ survivor, removed: r, ...res, label });
   }
 
-  // Leibliche Eltern nach dem Zusammenführen
-  const parentSubtype = new Map<string, { subtype: string; person: RelBundle["fromPerson"]; side: "keep" | "other" }>();
-  for (const r of relationships) {
-    if (r.type !== "PARENT_OF" || (r.toPersonId !== K && r.toPersonId !== X) || r.fromPersonId === K || r.fromPersonId === X) continue;
-    const prev = parentSubtype.get(r.fromPersonId);
-    const collapse = collapses.find((c) => c.survivor.id === r.id || c.removed.id === r.id);
-    const subtype = collapse ? ((collapse.patch.subtype as string | undefined) ?? collapse.survivor.subtype) : r.subtype;
-    if (!prev) parentSubtype.set(r.fromPersonId, { subtype, person: r.fromPerson, side: r.toPersonId === K ? "keep" : "other" });
-  }
-  const bio = [...parentSubtype.entries()].filter(([, v]) => v.subtype === "BIOLOGICAL");
-  if (bio.length > MAX_BIOLOGICAL_PARENTS) {
-    const keepParents = bio.filter(([, v]) => v.side === "keep");
-    const otherParents = bio.filter(([, v]) => v.side === "other");
-    const list = (l: typeof bio) => l.map(([, v]) => nameFor(scope, v.person)).join(" und ");
-    const suggest: [string, string][] = [];
-    for (const [a, va] of keepParents) {
-      for (const [b, vb] of otherParents) {
-        const visible = canViewPerson(scope, va.person.families.map((f) => f.familyId)) && canViewPerson(scope, vb.person.families.map((f) => f.familyId));
-        if (visible) suggest.push([a, b]);
+  // Leibliche Eltern nach dem Zusammenführen — je Seite getrennt, damit ein
+  // Elternteil, den beide schon gemeinsam haben, nicht als „verschieden“ gilt.
+  const subtypeOf = (r: RelBundle) => {
+    const c = collapses.find((x) => x.survivor.id === r.id || x.removed.id === r.id);
+    return c ? ((c.patch.subtype as string | undefined) ?? c.survivor.subtype) : r.subtype;
+  };
+  const bioOf = (child: string) =>
+    new Map(
+      relationships
+        .filter((r) => r.type === "PARENT_OF" && r.toPersonId === child && r.fromPersonId !== K && r.fromPersonId !== X && subtypeOf(r) === "BIOLOGICAL")
+        .map((r) => [r.fromPersonId, r.fromPerson] as const),
+    );
+  const bioK = bioOf(K);
+  const bioX = bioOf(X);
+  const allBio = new Set([...bioK.keys(), ...bioX.keys()]);
+  if (allBio.size > MAX_BIOLOGICAL_PARENTS) {
+    type ParentP = RelBundle["fromPerson"];
+    const visible = (pp: ParentP) => canViewPerson(scope, pp.families.map((f) => f.familyId));
+    const roleOf = (pp: ParentP) => (pp.gender === "MALE" ? "Vater" : pp.gender === "FEMALE" ? "Mutter" : "Elternteil");
+    const life = (pp: ParentP) => {
+      const b = formatFuzzyYear(fuzzyField(pp, "birthDate"));
+      const d = formatFuzzyYear(fuzzyField(pp, "deathDate"));
+      return [b && `*${b}`, d && `†${d}`].filter(Boolean).join(" ");
+    };
+    const label = (pp: ParentP) => (visible(pp) ? `${personName(pp)}${life(pp) ? ` (${life(pp)})` : ""}` : "eine nicht freigegebene Person");
+    const dup = (pp: ParentP): DupPerson => ({
+      id: pp.id,
+      givenName: pp.givenName,
+      familyName: pp.familyName,
+      birthName: pp.birthName,
+      gender: pp.gender,
+      birth: fuzzyField(pp, "birthDate"),
+      death: fuzzyField(pp, "deathDate"),
+      birthPlace: pp.birthPlace,
+      variants: [],
+      parents: [],
+      partners: [],
+      children: [],
+      parentNames: [],
+      partnerNames: [],
+      trees: [],
+    });
+    const common = [...bioK.keys()].filter((id) => bioX.has(id)).map((id) => bioK.get(id)!);
+    const keepOnly = [...bioK.values()].filter((pp) => !bioX.has(pp.id));
+    const otherOnly = [...bioX.values()].filter((pp) => !bioK.has(pp.id));
+    // Nur plausible Paare: gleiches (oder unbekanntes) Geschlecht und eine
+    // Bewertung der Dublettenerkennung; bestes zuerst, jede Person einmal.
+    const cands: { a: ParentP; b: ParentP; score: number }[] = [];
+    for (const a of keepOnly) {
+      for (const b of otherOnly) {
+        if (a.gender !== "UNKNOWN" && b.gender !== "UNKNOWN" && a.gender !== b.gender) continue;
+        const sc = scoreDuplicate(dup(a), dup(b));
+        if (sc && sc.conflicts.length === 0) cands.push({ a, b, score: sc.score });
       }
     }
+    cands.sort((x, y) => y.score - x.score);
+    const used = new Set<string>();
+    const pairs = cands.filter((c) => {
+      if (used.has(c.a.id) || used.has(c.b.id)) return false;
+      used.add(c.a.id);
+      used.add(c.b.id);
+      return true;
+    });
+    const parts: string[] = [];
+    if (common.length) {
+      parts.push(`Beide Einträge haben ${common.map((pp) => `${label(pp)} als ${roleOf(pp)}`).join(" und ")}.`);
+    }
+    for (const c of pairs) {
+      parts.push(
+        `Als ${roleOf(c.a)} ist bei jedem Eintrag eine eigene Person eingetragen: ${label(c.a)} und ${label(c.b)} — vermutlich dieselbe Person, doppelt erfasst.`,
+      );
+    }
+    if (pairs.length) {
+      parts.push(
+        pairs.length === 1
+          ? "Führe zuerst diese beiden zusammen; danach geht auch dieses Paar."
+          : "Führe zuerst diese Paare zusammen; danach geht auch dieses Paar.",
+      );
+    }
+    const rest = [...keepOnly, ...otherOnly].filter((pp) => !used.has(pp.id));
+    if (!pairs.length || allBio.size - pairs.length > MAX_BIOLOGICAL_PARENTS) {
+      parts.push(
+        `Zusammen wären es ${allBio.size} leibliche Elternteile (erlaubt sind ${MAX_BIOLOGICAL_PARENTS})` +
+          (rest.length ? `; ${rest.map(label).join(", ")} ${rest.length === 1 ? "sieht" : "sehen"} nicht nach einem der anderen Elternteile aus` : "") +
+          ". Dann ist meist die Art der Abstammung falsch erfasst (Adoption, Stief- oder Pflegeelternteil) — bitte sie bei einem der Einträge prüfen, statt Eltern zusammenzuführen.",
+      );
+    }
+    const shown = pairs.filter((c) => visible(c.a) && visible(c.b));
     blockers.push({
       code: "BIO_PARENTS",
-      message:
-        `Die beiden Einträge haben verschiedene leibliche Eltern — ${role.keep}: ${list(keepParents) || "keine"}; ${role.other}: ${list(otherParents) || "keine"}. ` +
-        `Zusammen wären es ${bio.length} leibliche Elternteile (erlaubt sind ${MAX_BIOLOGICAL_PARENTS}). ` +
-        "Sind es dieselben Eltern, doppelt erfasst, bitte zuerst diese Eltern zusammenführen — danach geht auch dieses Paar.",
-      suggestPairs: suggest,
+      message: parts.join(" "),
+      suggestPairs: shown.map((c) => [c.a.id, c.b.id]),
+      suggestions: shown.map((c) => ({ a: c.a.id, b: c.b.id, label: `${label(c.a)} ↔ ${label(c.b)} vergleichen` })),
     });
   }
 

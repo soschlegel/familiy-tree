@@ -227,7 +227,7 @@ export default async function SourcePage({
                       </span>
                       {c.detail && <span className="text-xs muted">{c.detail}</span>}
                       <CitationLink url={c.url} />
-                      {c.confidence ? (
+                      {c.confidence && !derived ? (
                         <span className="badge px-2 py-0 text-[11px]">{CONFIDENCE_LABEL[c.confidence]}</span>
                       ) : (
                         derived && (

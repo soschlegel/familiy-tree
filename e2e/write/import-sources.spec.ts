@@ -12,6 +12,8 @@ test.use({ storageState: authFile("admin") });
 const tag = uniq();
 let personId = "";
 let sourceId = "";
+let oldSourceId = "";
+const oldUrl = `https://www.myheritage.de/person-1000001_${tag}/anna-e2e`;
 const url = `https://www.myheritage.de/research/collection-1/e2e?itemId=${tag}&action=showRecord`;
 
 test.beforeAll(async () => {
@@ -24,6 +26,14 @@ test.beforeAll(async () => {
   expect(bad.status()).toBe(400);
   const c = await api.post("/api/citations", { data: { sourceId, personId, fact: "OTHER", url } });
   expect(c.status(), await c.text()).toBe(201);
+  // So sahen Quellen aus Importen vor der Einordnung aus (gespeichert, nicht neu eingelesen)
+  const old = await api.post("/api/sources", {
+    data: { title: `E2E${tag} Web Site`, kind: "OTHER", kindLabel: "Smart Matching", notes: "<p>MyHeritage-Stammbaum</p><p>Familienseite: Web Site</p>Stammbaum: 123" },
+  });
+  expect(old.status(), await old.text()).toBe(201);
+  oldSourceId = (await old.json()).id;
+  const oc = await api.post("/api/citations", { data: { sourceId: oldSourceId, personId, fact: "OTHER", detail: oldUrl, confidence: "HIGH" } });
+  expect(oc.status(), await oc.text()).toBe(201);
   await api.dispose();
 });
 
@@ -31,6 +41,7 @@ test.afterAll(async () => {
   const api = await apiAs("admin");
   await deletePerson(api, personId);
   await deleteSource(api, sourceId);
+  await deleteSource(api, oldSourceId);
   await api.dispose();
 });
 
@@ -56,4 +67,20 @@ test("Personenseite: Beleg mit Link und Hinweis statt Verlässlichkeit", async (
   const row = page.getByTestId("citation-row").filter({ hasText: `E2E Stammbäume ${tag}` });
   await expect(row.getByTestId("citation-link")).toHaveAttribute("href", url);
   await expect(row).toContainText("aus einem Online-Stammbaum — keine unabhängige Quelle");
+});
+
+test("ältere Quelle ohne neues Einlesen: sauberer Text, Link, richtige Art", async ({ page }) => {
+  await page.goto(`/sources/${oldSourceId}`);
+  await expect(page.getByTestId("source-badges")).toContainText("Online-Stammbaum");
+  await expect(page.getByTestId("source-badges")).toContainText("MyHeritage");
+  await expect(page.getByTestId("source-derived-hint")).toBeVisible();
+  await expect(page.getByRole("main")).toContainText("MyHeritage-Stammbaum");
+  await expect(page.getByRole("main")).not.toContainText("<p>");
+  const group = page.getByTestId("source-citation-group").filter({ hasText: `E2E Quelle${tag}` });
+  await expect(group.getByTestId("citation-link")).toHaveAttribute("href", oldUrl);
+  await expect(group).not.toContainText("https://");
+  await page.goto(`/people/${personId}`);
+  const row = page.getByTestId("citation-row").filter({ hasText: `E2E${tag} Web Site` });
+  await expect(row.getByTestId("citation-link")).toHaveAttribute("href", oldUrl);
+  await expect(row).toContainText("Online-Stammbaum");
 });
