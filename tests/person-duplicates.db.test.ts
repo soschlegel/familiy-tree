@@ -185,6 +185,68 @@ describe.skipIf(Boolean(skipReason))("Mögliche Dubletten einer Person (Testdate
     expect(await listDuplicatesOfPerson(admin, a.id)).toEqual({ total: 0, items: [] });
   });
 
+  /** Paar in der Gesamtliste (beliebige Klasse)? */
+  const listedPair = async (s: Scope, x: string, y: string) =>
+    (await listDuplicateCandidates(s, { limit: 500 })).items.find((d) => [d.a.id, d.b.id].includes(x) && [d.a.id, d.b.id].includes(y));
+  const parentOf = (parent: string, child: string, subtype: "BIOLOGICAL" | "ADOPTIVE" | "STEP" | "FOSTER" = "BIOLOGICAL") =>
+    prisma.relationship.create({ data: { type: "PARENT_OF", subtype, fromPersonId: parent, toPersonId: child } });
+
+  it("Vorfahren und Nachkommen über mehrere Generationen sind nie Kandidaten — weder in der Liste noch im Hinweis", async () => {
+    const sn = randomSurname();
+    // Urgroßvater und Urenkel gleichen Namens; zum Vergleich ein unverbundener Namensvetter.
+    const same = { givenName: "Ortwin", familyName: sn, gender: "MALE", birthDate: "1800", birthPlace: "Nirgendhausen" };
+    const top = await person(same);
+    const g1 = await person({ givenName: "Lambert", familyName: sn, gender: "MALE", birthDate: "1830" });
+    const g2 = await person({ givenName: "Eckhard", familyName: sn, gender: "MALE", birthDate: "1860" });
+    const bottom = await person(same);
+    const stranger = await person(same);
+    await parentOf(top.id, g1.id);
+    await parentOf(g1.id, g2.id, "ADOPTIVE"); // auch nicht-leibliche Kanten zählen
+    await parentOf(g2.id, bottom.id);
+
+    // Kontrolle: der unverbundene Namensvetter ist mit beiden ein Kandidat („wahrscheinlich“).
+    expect((await listedPair(admin, top.id, stranger.id))?.confidence).toBe("medium");
+    expect((await listedPair(admin, bottom.id, stranger.id))?.confidence).toBe("medium");
+    expect(await idsOf(admin, stranger.id)).toEqual(expect.arrayContaining([top.id, bottom.id]));
+    // Urgroßvater/Urenkel: in keiner Richtung.
+    expect(await listedPair(admin, top.id, bottom.id)).toBeUndefined();
+    expect(await idsOf(admin, top.id)).toEqual([stranger.id]);
+    expect(await idsOf(admin, bottom.id)).toEqual([stranger.id]);
+    // Ebenso für den Bearbeiter der Familie (alle in Familie A).
+    expect(await listedPair(editor, top.id, bottom.id)).toBeUndefined();
+    expect(await idsOf(editor, top.id)).toEqual([stranger.id]);
+  });
+
+  it("auch ohne Lebensdaten beim Vorfahren („unklar“) und über Stief-/Pflegekanten: nicht in der Liste", async () => {
+    const sn = randomSurname();
+    const top = await person({ givenName: "Hartmut", familyName: sn, gender: "MALE" });
+    const mid = await person({ givenName: "Gisbert", familyName: sn, gender: "MALE", birthDate: "1790" });
+    const bottom = await person({ givenName: "Hartmut", familyName: sn, gender: "MALE", birthDate: "1820-04-02" });
+    const stranger = await person({ givenName: "Hartmut", familyName: sn, gender: "MALE" });
+    await parentOf(top.id, mid.id, "STEP");
+    await parentOf(mid.id, bottom.id, "FOSTER");
+    expect(await listedPair(admin, top.id, bottom.id)).toBeUndefined();
+    expect((await listedPair(admin, bottom.id, stranger.id))?.confidence).toBe("low");
+  });
+
+  it("Kette über eine unsichtbare Person: geprüft wird nur über sichtbare Personen — Liste und Hinweis gleich", async () => {
+    const sn = randomSurname();
+    const same = { givenName: "Ruprecht", familyName: sn, gender: "MALE", birthDate: "1810", birthPlace: "Irgendwo am See" };
+    const top = await person(same, [FAMILY_A]);
+    const hidden = await person({ givenName: "Wigand", familyName: sn, gender: "MALE", birthDate: "1840" }, ["mock-family-c"]);
+    const bottom = await person(same, [FAMILY_A]);
+    await parentOf(top.id, hidden.id);
+    await parentOf(hidden.id, bottom.id);
+    // Admin sieht die ganze Kette: kein Kandidat.
+    expect(await listedPair(admin, top.id, bottom.id)).toBeUndefined();
+    expect(await idsOf(admin, top.id)).toEqual([]);
+    // Der Bearbeiter (Familie C unsichtbar) erfährt nichts über die verborgene
+    // Abstammung: Für ihn ist es ein gewöhnliches Paar — in Liste und Hinweis.
+    expect((await listedPair(editor, top.id, bottom.id))?.confidence).toBe("medium");
+    expect(await idsOf(editor, top.id)).toEqual([bottom.id]);
+    expect(await idsOf(editor, bottom.id)).toEqual([top.id]);
+  });
+
   it("„unklar“ steht in der Gesamtliste, aber nicht im Hinweis — auch nicht in der Anzahl", async () => {
     const sn = randomSurname();
     const a = await person({ givenName: "Philippine", familyName: sn, birthDate: "1844-02-03" });

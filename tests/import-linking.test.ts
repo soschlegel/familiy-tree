@@ -165,3 +165,78 @@ function mergeSure(people: LinkPerson[], pairs: LinkPair[], truthOf: Map<string,
   return [...by.values()];
 }
 
+
+describe("Importe verbinden — Vorfahren und Nachkommen", () => {
+  const person = (id: string, group: string, x: Partial<LinkPerson> = {}): LinkPerson => ({
+    id,
+    group,
+    givenName: "Ortwin",
+    familyName: "Quellmar",
+    birthName: null,
+    gender: "MALE",
+    birth: null,
+    death: null,
+    birthPlace: "Nirgendhausen",
+    variants: [],
+    parents: [],
+    partners: [],
+    children: [],
+    parentNames: [],
+    partnerNames: [],
+    trees: [],
+    ...x,
+  });
+  const link = (parent: LinkPerson, child: LinkPerson) => {
+    parent.children.push(child.id);
+    child.parents.push(parent.id);
+  };
+
+  it("innerhalb eines Imports: Urgroßvater und gleichnamiger Urenkel sind kein Paar, ein Namensvetter schon", () => {
+    const top = person("A:1", "A");
+    const m1 = person("A:2", "A", { givenName: "Lambert" });
+    const m2 = person("A:3", "A", { givenName: "Eckhard" });
+    const bottom = person("A:4", "A");
+    const stranger = person("A:5", "A");
+    link(top, m1);
+    link(m1, m2);
+    link(m2, bottom);
+    const res = linkImports([top, m1, m2, bottom, stranger], { withinGroup: true });
+    const has = (x: string, y: string) => res.pairs.some((p) => [p.a, p.b].includes(x) && [p.a, p.b].includes(y));
+    expect(has(top.id, bottom.id)).toBe(false);
+    expect(has(top.id, stranger.id)).toBe(true);
+  });
+
+  it("über Importgrenzen: Kette über Personen eines anderen Imports zählt mit, auch in der Ausbreitung", () => {
+    // Import A: Großvater; Import B: dessen gleichnamiger Enkel, verbunden über
+    // einen Sohn aus A (z.B. nach einer früheren Zusammenführung).
+    const grand = person("A:1", "A", { birth: { date: new Date("1800-01-01T00:00:00Z"), precision: "YEAR", qualifier: "EXACT" } });
+    const son = person("A:2", "A", { givenName: "Lambert" });
+    const grandson = person("B:1", "B", { birth: { date: new Date("1800-01-01T00:00:00Z"), precision: "YEAR", qualifier: "EXACT" } });
+    link(grand, son);
+    link(son, grandson);
+    const all = [grand, son, grandson];
+    expect(linkImports(all).pairs).toEqual([]);
+    // Kontrolle: ohne die Kette (Sohn fehlt) wären sie ein Paar.
+    const g2 = person("A:1", "A", { birth: grand.birth });
+    const s2 = person("B:1", "B", { birth: grandson.birth });
+    expect(linkImports([g2, s2]).pairs).toHaveLength(1);
+  });
+
+  it("Ausbreitung: verbundenes Paar schlägt Eltern×Eltern nicht vor, wenn einer Vorfahre des anderen ist", () => {
+    // A:k ↔ B:k sicher (gleiche genaue Daten). Eltern: A:p und B:p, wobei B:p
+    // laut Eintrag ein Enkel von A:p ist (Kette über A:x).
+    const exact = (iso: string) => ({ date: new Date(`${iso}T00:00:00Z`), precision: "DAY" as const, qualifier: "EXACT" as const });
+    const ak = person("A:k", "A", { givenName: "Bertold", birth: exact("1850-05-05"), death: exact("1900-01-01") });
+    const bk = person("B:k", "B", { givenName: "Bertold", birth: exact("1850-05-05"), death: exact("1900-01-01") });
+    const ap = person("A:p", "A", { givenName: "Hugo", birthPlace: null });
+    const ax = person("A:x", "A", { givenName: "Zeno" });
+    const bp = person("B:p", "B", { givenName: "Hugo", birthPlace: null });
+    link(ap, ak);
+    link(bp, bk);
+    link(ap, ax);
+    link(ax, bp);
+    const res = linkImports([ak, bk, ap, ax, bp]);
+    expect(res.pairs.some((p) => p.a === "A:k" && p.b === "B:k")).toBe(true);
+    expect(res.pairs.some((p) => [p.a, p.b].includes("A:p") && [p.a, p.b].includes("B:p"))).toBe(false);
+  });
+});

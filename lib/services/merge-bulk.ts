@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { prisma } from "../prisma";
 import { canEditPerson, canViewPerson, type Scope } from "../scope";
-import { scoreDuplicate } from "../duplicates";
+import { lineageOf, scoreDuplicate } from "../duplicates";
 import { formatFuzzyYear, fuzzyField } from "../dates";
 import { forbiddenError, parseOrThrow, ServiceError } from "./errors";
 import { loadDuplicatePeople } from "./duplicates";
@@ -66,6 +66,8 @@ async function preparePairs(scope: Scope, raw: unknown) {
   const { pairs } = parseOrThrow(bulkInput.safeParse(raw));
   const { graph, people } = await loadDuplicatePeople(scope);
   const byId = new Map(people.map((p) => [p.id, p]));
+  // Dieselbe Abstammungsregel wie die Dublettenliste (Kette über sichtbare Personen).
+  const lineage = lineageOf(people);
   const used = new Set<string>();
   const skipped: BulkResult["skipped"] = [];
   const ok: { keepId: string; mergeId: string; birth: number }[] = [];
@@ -94,7 +96,7 @@ async function preparePairs(scope: Scope, raw: unknown) {
       skipped.push({ a, b, reason: "Person steht schon in einem anderen ausgewählten Paar" });
       continue;
     }
-    const s = scoreDuplicate(pa, pb);
+    const s = scoreDuplicate(pa, pb, { lineage });
     if (!s || s.confidence !== "high") {
       skipped.push({ a, b, reason: "Nicht (mehr) in der Klasse „sicher“ — bitte einzeln prüfen" });
       continue;

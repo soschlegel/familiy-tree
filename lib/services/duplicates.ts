@@ -1,5 +1,7 @@
+import { Prisma } from "@prisma/client";
+
 import { prisma } from "../prisma";
-import { canEditPerson, canViewPerson, editableFamilyIds, type Scope } from "../scope";
+import { canEditPerson, canViewPerson, editableFamilyIds, viewableFamilyIds, type Scope } from "../scope";
 import { fuzzyField } from "../dates";
 import { findDuplicatePairs, scoreDuplicate, type Confidence, type DupPerson } from "../duplicates";
 import { firstGivenKey, nameKey } from "../name-keys";
@@ -239,9 +241,10 @@ export async function listDuplicatesOfPerson(scope: Scope, personId: string, opt
   }
   if (candidateIds.size === 0) return NO_DUPLICATES;
 
-  // 2. Vollständig nur diese Personen und ihre Beziehungen.
+  // 2. Vollständig nur diese Personen und ihre Beziehungen; dazu, welche
+  //    Kandidaten eingetragene Vorfahren bzw. Nachkommen sind.
   const ids = [personId, ...candidateIds];
-  const [rows, rels, links, dismissedRows] = await Promise.all([
+  const [rows, rels, links, dismissedRows, lineal] = await Promise.all([
     prisma.person.findMany({ where: { id: { in: ids } }, select: DUP_SELECT }),
     prisma.relationship.findMany({
       where: { OR: [{ fromPersonId: { in: ids } }, { toPersonId: { in: ids } }] },
@@ -255,6 +258,7 @@ export async function listDuplicatesOfPerson(scope: Scope, personId: string, opt
       where: { OR: [{ personAId: personId }, { personBId: personId }] },
       select: { personAId: true, personBId: true },
     }),
+    linealRelatives(scope, personId, [...candidateIds]),
   ]);
   const rowOf = new Map(rows.filter((r) => canEditPerson(scope, r.families.map((f) => f.familyId))).map((r) => [r.id, r]));
   if (!rowOf.has(personId)) return NO_DUPLICATES;
@@ -296,6 +300,8 @@ export async function listDuplicatesOfPerson(scope: Scope, personId: string, opt
   // Treffer auf vielen Seiten steht. Strenger als die Liste, nie lockerer.
   const pairs = findDuplicatePairs(people, {
     include: (a, b) => (a.id === personId || b.id === personId) && !dismissed.has(pairKey(a.id, b.id)),
+    // Alle Paare enthalten diese Person (include) — Abstammung aus der Abfrage oben.
+    lineage: (a, b) => lineal.has(a === personId ? b : a),
   }).filter((p) => p.confidence !== "low");
   return {
     total: pairs.length,
@@ -311,6 +317,45 @@ export async function listDuplicatesOfPerson(scope: Scope, personId: string, opt
       };
     }),
   };
+}
+
+/**
+ * Welche der `candidateIds` sind eingetragene Vorfahren oder Nachkommen von
+ * `personId` (alle Eltern-Kind-Kanten, beliebig viele Generationen)? Eine
+ * rekursive Abfrage statt des ganzen Graphen — der Hinweis lädt bewusst nur
+ * wenige Personen. Die Kette läuft wie in der Gesamtliste (lineageOf über die
+ * sichtbaren Personen) nur über Personen, die der Benutzer sehen darf: Liste
+ * und Hinweis liefern so dieselben Paare, und das Fehlen eines Kandidaten
+ * verrät keine verborgene Abstammung. `UNION` (statt `UNION ALL`) beendet die
+ * Rekursion auch bei fehlerhaften Kreisen.
+ */
+async function linealRelatives(scope: Scope, personId: string, candidateIds: string[]): Promise<Set<string>> {
+  if (candidateIds.length === 0) return new Set();
+  // Sichtbar: Administrator, sonst mindestens eine eigene Familie (wie personVisibilityFilter).
+  const visible = (column: Prisma.Sql) =>
+    scope.isAdmin
+      ? Prisma.sql`TRUE`
+      : Prisma.sql`EXISTS (SELECT 1 FROM "PersonFamily" pf WHERE pf."personId" = ${column} AND pf."familyId" = ANY(${viewableFamilyIds(scope)}::text[]))`;
+  const rows = await prisma.$queryRaw<{ id: string }[]>`
+    WITH RECURSIVE
+      up(id) AS (
+        SELECT r."fromPersonId" FROM "Relationship" r
+        WHERE r."toPersonId" = ${personId} AND r."type" = 'PARENT_OF' AND ${visible(Prisma.sql`r."fromPersonId"`)}
+        UNION
+        SELECT r."fromPersonId" FROM "Relationship" r JOIN up ON r."toPersonId" = up.id
+        WHERE r."type" = 'PARENT_OF' AND ${visible(Prisma.sql`r."fromPersonId"`)}
+      ),
+      down(id) AS (
+        SELECT r."toPersonId" FROM "Relationship" r
+        WHERE r."fromPersonId" = ${personId} AND r."type" = 'PARENT_OF' AND ${visible(Prisma.sql`r."toPersonId"`)}
+        UNION
+        SELECT r."toPersonId" FROM "Relationship" r JOIN down ON r."fromPersonId" = down.id
+        WHERE r."type" = 'PARENT_OF' AND ${visible(Prisma.sql`r."toPersonId"`)}
+      )
+    SELECT id FROM up WHERE id = ANY(${candidateIds}::text[])
+    UNION
+    SELECT id FROM down WHERE id = ANY(${candidateIds}::text[])`;
+  return new Set(rows.map((r) => r.id));
 }
 
 async function assertBothEditable(scope: Scope, aId: string, bId: string) {
