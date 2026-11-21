@@ -24,6 +24,7 @@ export * from "./merge";
 export * from "./merge-bulk";
 export * from "./families";
 export * from "./kinship";
+export * from "./reference";
 export * from "./timeline";
 export * from "./consistency";
 export * from "./sources";

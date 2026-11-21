@@ -1018,6 +1018,10 @@ async function executePlan(db: Db, scope: Scope, plan: MergePlan, input: z.infer
     });
   }
 
+  // 8b. „Das bin ich“ (User.personId) wandert mit — sonst stünde der Benutzer
+  // nach dem Löschen ohne eigene Person da (ON DELETE SET NULL).
+  await db.user.updateMany({ where: { personId: X }, data: { personId: K } });
+
   // 9. Aufgehende Person löschen — es darf nichts mehr an ihr hängen.
   const leftovers = await Promise.all([
     db.event.count({ where: { personId: X } }),

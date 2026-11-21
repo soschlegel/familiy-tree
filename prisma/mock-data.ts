@@ -163,6 +163,8 @@ export type MockUser = {
   /** KI-Recht (MCP). */
   aiAccess: "NONE" | "READ" | "WRITE";
   families: { familyKey: FamilyKey; role: "EDITOR" | "VIEWER" }[];
+  /** Eigene Person („das bin ich“, README „Bezugsperson“). */
+  personId?: string | null;
 };
 
 /**
@@ -233,6 +235,12 @@ export type MockLandmarks = {
   };
   /** Ehe des Stammvaters A — mit Beleg (PARTNERSHIP). */
   citedMarriage: string;
+  /**
+   * Eigene Person des Bearbeiters (README „Bezugsperson“): in Familie A, mit
+   * allen vier Großeltern und der tiefsten Ahnenreihe. Ein Teil ihrer
+   * Vorfahren gehört nur zu Familie D und ist für den Bearbeiter gesperrt.
+   */
+  selfEditor: string;
   /** Lebensereignisse und Namen (Erweiterung für GEDCOM-Daten). */
   genealogy: {
     /** Person mit Taufe, Beruf, Beerdigung (Stammvater A). */
@@ -877,6 +885,24 @@ export function generateMockData(seed: number = MOCK_SEED): MockData {
   const noFamily = [biologicalMother.id, unassigned1.id, unassigned2.id];
 
   // --- Benutzer -------------------------------------------------------------
+  // Eigene Person des Bearbeiters: in Familie A, alle vier Großeltern leiblich
+  // bekannt, die tiefste Ahnenreihe (Gleichstand: kleinere Kennung).
+  const bioParents = new Map<string, string[]>();
+  for (const r of relationships) {
+    if (r.type === "PARENT_OF" && r.subtype === "BIOLOGICAL") {
+      bioParents.set(r.toPersonId, [...(bioParents.get(r.toPersonId) ?? []), r.fromPersonId]);
+    }
+  }
+  const ancestryDepth = (id: string, guard = 0): number => {
+    const ps = bioParents.get(id) ?? [];
+    return ps.length === 0 || guard > 20 ? 0 : 1 + Math.max(...ps.map((p) => ancestryDepth(p, guard + 1)));
+  };
+  const selfEditor = persons
+    .filter((p) => p.familyKeys.includes("A"))
+    .filter((p) => (bioParents.get(p.id) ?? []).flatMap((x) => bioParents.get(x) ?? []).length >= 4)
+    .map((p) => ({ id: p.id, depth: ancestryDepth(p.id) }))
+    .sort((a, b) => b.depth - a.depth || a.id.localeCompare(b.id))[0].id;
+
   const users: MockUser[] = [
     { id: "mock-user-admin", email: "admin@example.test", name: "Ada Admin", role: "ADMIN", status: "ACTIVE", aiAccess: "WRITE", families: [] },
     {
@@ -890,6 +916,7 @@ export function generateMockData(seed: number = MOCK_SEED): MockData {
         { familyKey: "A", role: "EDITOR" },
         { familyKey: "B", role: "VIEWER" },
       ],
+      personId: selfEditor,
     },
     { id: "mock-user-viewer", email: "viewer@example.test", name: "Vera Viewer", role: "VIEWER", status: "ACTIVE", aiAccess: "READ", families: [{ familyKey: "A", role: "VIEWER" }] },
     { id: "mock-user-nofamily", email: "nofamily@example.test", name: "Nora Ohnefamilie", role: "VIEWER", status: "ACTIVE", aiAccess: "NONE", families: [] },
@@ -1444,6 +1471,7 @@ export function generateMockData(seed: number = MOCK_SEED): MockData {
     impreciseDates,
     sources: { churchBookA, crossFamily, onlyFamilyD: censusD, uncited },
     citedMarriage: founderAMarriage.id,
+    selfEditor,
     genealogy: {
       eventsPerson,
       rangeEvent,
