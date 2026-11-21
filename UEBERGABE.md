@@ -16,6 +16,12 @@ aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
 - Prüfstand des letzten Pakets: Typecheck, Lint, Vitest 677/677; Playwright
   auf frischem Server, zwischen read und write neu gestartet: setup 6/6,
   read 151/151, write 74/74.
+- Branch `export-dubletten` (GEDCOM-Export mit Familienauswahl, Dubletten
+  ohne Vorfahren/Nachkommen, noch nicht in `main`): Typecheck, Lint, Vitest
+  696/697 (der eine Fehlschlag: `mcp.db.test.ts` erwartet den
+  Datenbanknamen `familytree_mock`, im Worktree heißt sie anders — kein
+  Codefehler); Playwright auf frischem Server, zwischen read und write neu
+  gestartet: setup 6/6, read 156/156, write 74/74.
 
 ## Lokal einrichten
 
@@ -142,11 +148,12 @@ sie freigibt.
 - **Farbe je Linie**: Vorfahren des Vaters der Bezugsperson in einer Farbe,
   der Mutter in einer anderen, weiter aufgeteilt nach Großeltern (Vorbild:
   Baumansicht von MyHeritage). Nie nur Farbe (Barrierefreiheit).
-- **GEDCOM-Export mit Familienauswahl**: Beim Export ein Dialog, in dem man
-  die Familien für den Export ankreuzt (Ziel: wieder nach MyHeritage
-  importieren). GEDCOM-Export gibt es schon (`/api/export?format=gedcom`
-  bzw. `gedzip`, `lib/services/gedcom-export.ts`), bisher immer mit allem,
-  was der Benutzer sehen darf.
+- **GEDCOM-Export mit Familienauswahl** — erledigt (Branch
+  `export-dubletten`): Dialog auf `/admin/data` (`components/GedcomExportDialog.tsx`),
+  Prüfung und Filter in `lib/services/export-selection.ts`,
+  `buildExport(scope, selection)`. Alles angekreuzt = bisheriger Export.
+  Teil-Exporte: gültiges 5.5.1, Rundreise verlustfrei, keine hängenden
+  Zeiger (Tests). Import in MyHeritage selbst weiterhin nicht ausprobiert.
 - **Changelog** (Änderungsgeschichte in der App): (1) je Person „wer hat
   wann was geändert“; (2) Übersicht für Administratoren: Änderungen je
   Familie und Zeitraum; (3) Änderungen über eine ChangeSet-Kennung bündeln,
@@ -159,10 +166,14 @@ sie freigibt.
   vorerst.
 
 Freigabe (21.11.): „bauen und Gas geben“ — die Wünsche werden umgesetzt.
-- **Dubletten: keine Vorfahren/Nachkommen als Kandidaten** (Vorschlag, aus
-  einem Fall vom 21.11.): `scoreDuplicate` schließt nur direkte Verwandte
-  aus; ein gleichnamiger Urgroßvater ohne Lebensdaten erscheint deshalb als
-  „unklar“. Strenger, nicht lockerer — trotzdem erst nach Freigabe.
+- **Dubletten: keine Vorfahren/Nachkommen als Kandidaten** — erledigt
+  (Branch `export-dubletten`): `ScoreOptions.lineage` in `lib/duplicates.ts`
+  (alle PARENT_OF-Kanten, wie die Zyklus-Sperre beim Zusammenführen; Kette
+  nur über sichtbare Personen). Liste und MCP über `findDuplicatePairs`,
+  Hinweis über eine rekursive Abfrage (`linealRelatives`), dazu Importe
+  verbinden (Anker, Ausbreitung, Cluster) und Sammel-Zusammenführen.
+  Laufzeit im Rauschen: 11 847 erzeugte Personen Liste ~1,4 s, Hinweis
+  Median ~74 ms je Person (vorher ~73 ms); Mock ~19 ms bzw. ~6 ms.
 
 ### 4. Weitere offene Punkte
 
