@@ -196,6 +196,10 @@ async function main() {
       ),
     });
     await prisma.relationship.createMany({ data: data.relationships });
+    // Eigene Person („das bin ich“) erst, wenn die Personen da sind.
+    for (const u of data.users) {
+      if (u.personId) await prisma.user.update({ where: { id: u.id }, data: { personId: u.personId } });
+    }
     // Lebensereignisse und weitere Namen (siehe lib/events.ts).
     await prisma.event.createMany({ data: data.events as never });
     await prisma.personName.createMany({ data: data.personNames });

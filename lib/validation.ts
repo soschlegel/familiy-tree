@@ -341,6 +341,8 @@ export const userPatch = z.object({
    * angemeldet hat (prüft die Route). Kleingeschrieben wie beim Einladen.
    */
   email: z.string().trim().toLowerCase().email("Bitte eine gültige E-Mail-Adresse angeben").optional(),
+  /** Eigene Person des Benutzers („das bin ich“); null hebt die Zuordnung auf. */
+  personId: z.string().min(1).max(64).nullable().optional(),
 });
 
 // ---------------------------------------------------------------------------

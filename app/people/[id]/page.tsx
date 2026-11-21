@@ -38,6 +38,7 @@ import { LockIcon } from "@/components/PersonNode";
 import { MediaGallery } from "@/components/MediaGallery";
 import { DeletePersonButton } from "@/components/DeletePersonButton";
 import { DuplicateBanner } from "@/components/DuplicateBanner";
+import { ReferencePanel } from "@/components/ReferencePanel";
 import { MergeWithPicker } from "@/components/MergeWithPicker";
 import { PersonFamilies } from "@/components/PersonFamilies";
 import {
@@ -223,10 +224,10 @@ export default async function PersonPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ rel?: string }>;
+  searchParams: Promise<{ rel?: string; bezug?: string }>;
 }) {
   const { id } = await params;
-  const { rel: linkedRelation } = await searchParams;
+  const { rel: linkedRelation, bezug } = await searchParams;
 
   // Nicht sichtbar = nicht vorhanden. Ein eigener Hinweis würde bestätigen,
   // dass es diese Person gibt. Verwandte, die der Benutzer nicht sehen darf,
@@ -453,6 +454,8 @@ export default async function PersonPage({
           </div>
         </dl>
       </header>
+
+      <ReferencePanel scope={scope} personId={person.id} personName={name(person)} bezug={bezug} />
 
       {person.notes && (
         <section aria-labelledby="notes-h" className="card p-5">
