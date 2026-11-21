@@ -57,7 +57,17 @@ import {
   type PersonRelation,
   type RelationshipDto,
   type TimelineEvent,
+  addMedia,
+  decodeBase64Image,
+  fetchImageFromUrl,
+  linkMedia,
+  maxUploadBytes,
+  unlinkMedia,
+  MAX_MEDIA_TARGETS,
+  type AttachedImage,
+  type MediaTargets,
 } from "../lib/services";
+import type { SafeFetchOptions } from "../lib/safe-fetch";
 import { CONSISTENCY_KINDS, type ConsistencyKind } from "../lib/consistency";
 import { isPreciseDate, toFuzzyDate, toIsoPartial } from "../lib/dates";
 import { CITATION_FACT_LABEL, SOURCE_KIND_LABEL, DERIVED_SOURCE_KINDS } from "../lib/source-labels";
@@ -77,6 +87,8 @@ export type ToolContext = {
    * samt KI-Kanal fürs Audit oder einen Grund für die Ablehnung.
    */
   authorize: (need: AiLevel) => Promise<AiAuthResult>;
+  /** Nur für Tests: Abruf-Optionen für add_media(url) (Resolver/Transport ersetzen). */
+  mediaFetch?: SafeFetchOptions;
 };
 
 // ---------------------------------------------------------------------------
@@ -206,6 +218,16 @@ function compactDate(
     : dateFields(prefix, iso, precision, qualifier, extra);
 }
 
+/** Bild kompakt (Kennung für link_media, Beschriftung, Maße). */
+function imageOut(m: AttachedImage & { isMain?: boolean }) {
+  return {
+    mediaId: m.mediaId,
+    ...(m.caption ? { caption: m.caption } : {}),
+    ...(m.width && m.height ? { width: m.width, height: m.height } : {}),
+    ...(m.isMain ? { isMainScan: true } : {}),
+  };
+}
+
 /** Lebensereignis kompakt. */
 function storedEventOut(e: EventDto) {
   return {
@@ -226,6 +248,7 @@ function storedEventOut(e: EventDto) {
     ...(e.agency ? { agency: e.agency } : {}),
     ...(e.address ? { address: e.address } : {}),
     ...(e.notes ? { notes: e.notes } : {}),
+    ...(e.media?.length ? { media: e.media.map(imageOut) } : {}),
   };
 }
 
@@ -283,6 +306,8 @@ function personCitationOut(c: PersonCitation) {
     ...(c.relationshipId ? { relationshipId: c.relationshipId } : {}),
     ...(c.eventId ? { eventId: c.eventId, ...(c.eventTitle ? { event: c.eventTitle } : {}) } : {}),
     ...(c.relationship ? { relation: { role: c.relationship.role, subtype: c.relationship.subtype, with: ref(c.relationship.other) } } : {}),
+    ...(c.media?.length ? { media: c.media.map(imageOut) } : {}),
+    ...(c.sourceMedia?.length ? { sourceMedia: c.sourceMedia.map(imageOut) } : {}),
   };
 }
 
@@ -553,6 +578,10 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
         "contradicting record, NOT the main fact); partners carry their own `events` (engagement, banns …) and " +
         "`startPlace`/`endPlace` (marriage/divorce place). `otherNames`: married names, spelling variants, aliases. " +
         "Use list_events for all fields of the events. " +
+        "Images: `media` = the person's own pictures (portrait first); `events[].media` = images attached to a life " +
+        "event; `citations[].media` = images attached to that citation (the record entry); `citations[].sourceMedia` = " +
+        "images of the cited source shown here as document image (not assigned to another citation of that source). " +
+        "Each image has a `mediaId` usable with link_media. " +
         "Relatives the user may not see appear as {restricted: true} placeholders. " +
         "`subtype` on relatives: BIOLOGICAL/ADOPTIVE/STEP/FOSTER for parents/children, MARRIED/UNMARRIED/DIVORCED/PARTNER_UNKNOWN (marital status unknown) for partners.",
       inputSchema: { person_id: personId },
@@ -1042,13 +1071,15 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
         "One source with all details (incl. transcription/notes) and every fact it is cited for: persons " +
         "(fact NAME/BIRTH/DEATH/OTHER), relationships (PARTNERSHIP, PARENTAGE) and life events (fact EVENT with " +
         "`eventId` and `event` title). Citations attached to persons the user " +
-        "may not see are not listed — only counted in `hiddenCitationCount`.",
+        "may not see are not listed — only counted in `hiddenCitationCount`. `images`: pictures of the source " +
+        "(isMainScan = main scan); `citations[].media`: pictures attached to one citation.",
       inputSchema: { source_id: z.string().min(1).describe("Source ID (from search_sources or get_person citations).") },
       outputSchema: {
         source: z.object({ id: z.string(), title: z.string() }).passthrough(),
         canEdit: z.boolean(),
         citations: z.array(z.object({ id: z.string(), fact: z.string() }).passthrough()),
         hiddenCitationCount: z.number(),
+        images: z.array(z.object({ mediaId: z.string() }).passthrough()),
       },
       annotations: { title: "Quelle abrufen", ...READ_ONLY },
     },
@@ -1067,8 +1098,10 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
           ...(c.confidence ? { confidence: c.confidence } : {}),
           ...(c.eventId ? { eventId: c.eventId, ...(c.eventTitle ? { event: c.eventTitle } : {}) } : {}),
           ...citationTargetOut(c.target),
+          ...(c.media.length ? { media: c.media.map(imageOut) } : {}),
         })),
         hiddenCitationCount: d.hiddenCitationCount,
+        images: d.images.map(imageOut),
       };
     }),
   );
@@ -1728,6 +1761,147 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         notes: a.notes,
       });
       return { name: nameOut(n) };
+    }),
+  );
+
+  // --- Bilder ------------------------------------------------------------------
+  const idList = (what: string) =>
+    z.array(z.string().min(1).max(64)).max(MAX_MEDIA_TARGETS).optional().describe(what);
+  const mediaTargetsInput = {
+    person_ids: idList("Persons (picture of the person; the first picture becomes the portrait)."),
+    relationship_ids: idList("Relationships (relationshipId from get_person), e.g. a wedding photo."),
+    event_ids: idList("Life events (events[].id from get_person / list_events), e.g. the baptism record."),
+    citation_ids: idList(
+      "Citations (citations[].id from get_person / get_source): the scan of exactly the record entry that backs the fact. Preferred for record scans.",
+    ),
+    source_ids: idList(
+      "Sources: a picture of the source as a whole (title page, gravestone …); shown on every fact citing the source unless it is also attached to one citation of that source.",
+    ),
+  };
+  type TargetArgs = {
+    person_ids?: string[];
+    relationship_ids?: string[];
+    event_ids?: string[];
+    citation_ids?: string[];
+    source_ids?: string[];
+  };
+  const targetsOf = (a: TargetArgs): MediaTargets => ({
+    personIds: a.person_ids,
+    relationshipIds: a.relationship_ids,
+    eventIds: a.event_ids,
+    citationIds: a.citation_ids,
+    sourceIds: a.source_ids,
+  });
+  const maxBytes = maxUploadBytes();
+  const maxMb = Math.round(maxBytes / 1024 / 1024);
+  const mediaOut = z.object({ id: z.string() }).passthrough();
+
+  server.registerTool(
+    "add_media",
+    {
+      title: "Bild hinzufügen",
+      description:
+        "Store a new image and attach it to entries: persons, relationships, life events, citations and/or sources (at " +
+        "least one; every target must be editable for the user). Give EXACTLY ONE of: `url` — an https address the " +
+        "server downloads itself (public internet only, no internal addresses, max. " + maxMb + " MB, JPEG/PNG/WebP/GIF/AVIF/TIFF); " +
+        "or `data_base64` — the file bytes as base64 (only for clients that can read the original file, e.g. Claude Code " +
+        "reading a local file; a data: URL works too). An image you merely SEE in the chat cannot be passed on — ask the " +
+        "user for a link (url) or to upload it in the app, or attach an existing image with link_media. The type is checked " +
+        "from the bytes; `mime_type` is only a cross-check. `caption` becomes the alt text: describe what the picture shows " +
+        "in German (e.g. 'Taufeintrag Anna Becker, Kirchenbuch St. Marien 1850, S. 12'). " +
+        WRITE_NOTE,
+      inputSchema: {
+        change_set_id: changeSetIdInput,
+        url: z.string().max(2000).optional().describe("https address of the image file (not of a web page showing it)."),
+        data_base64: z
+          .string()
+          .max(Math.ceil(maxBytes / 3) * 4 + 200)
+          .optional()
+          .describe(`Image file as base64 (max. ${maxMb} MB decoded).`),
+        mime_type: z.string().max(100).optional().describe("Declared type, e.g. image/jpeg — must match the content."),
+        file_name: z.string().max(200).optional().describe("Original file name, e.g. 'taufe_1850.jpg'."),
+        caption: z.string().max(500).optional().describe("German description; used as alt text."),
+        ...mediaTargetsInput,
+      },
+      outputSchema: { media: mediaOut, linked: z.record(z.array(z.string())) },
+      annotations: {
+        title: "Bild hinzufügen",
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    runWrite(ctx, async (scope, a) => {
+      if (Boolean(a.url) === Boolean(a.data_base64)) {
+        throw validationError([{ path: "url", message: "Genau eines von url oder data_base64 angeben" }]);
+      }
+      const targets = targetsOf(a);
+      let bytes: Buffer;
+      let fileName = a.file_name ?? null;
+      let declaredMime = a.mime_type ?? null;
+      if (a.url) {
+        const res = await fetchImageFromUrl(a.url, ctx.mediaFetch);
+        bytes = res.bytes;
+        fileName ??= res.fileName;
+        // Die Inhaltsart der Antwort ist nur eine Angabe — sharp entscheidet.
+        if (!declaredMime && res.contentType.startsWith("image/")) declaredMime = res.contentType;
+      } else {
+        const decoded = decodeBase64Image(a.data_base64!, maxBytes);
+        bytes = decoded.bytes;
+        declaredMime ??= decoded.declaredMime;
+      }
+      const r = await addMedia(scope, {
+        bytes,
+        fileName,
+        caption: a.caption ?? null,
+        declaredMime,
+        targets,
+        requireTarget: true,
+        via: a.url ? "url" : "data",
+        url: a.url ?? null,
+      });
+      return { media: r.media, linked: r.linked };
+    }),
+  );
+
+  server.registerTool(
+    "link_media",
+    {
+      title: "Bild verknüpfen",
+      description:
+        "Attach an EXISTING image (media_id from get_person `media`, `events[].media`, `citations[].media`, or get_source " +
+        "`images`) to further entries, or detach it with action 'unlink'. The image must be visible to the user and every " +
+        "target editable. Unlinking never deletes an image: removing its last attachment is refused. " +
+        WRITE_NOTE,
+      inputSchema: {
+        change_set_id: changeSetIdInput,
+        media_id: z.string().min(1).max(64),
+        action: z.enum(["link", "unlink"]).optional().describe("Default link."),
+        ...mediaTargetsInput,
+      },
+      outputSchema: {
+        mediaId: z.string(),
+        action: z.string(),
+        targets: z.record(z.array(z.string())),
+        changed: z.number(),
+      },
+      annotations: {
+        title: "Bild verknüpfen",
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    runWrite(ctx, async (scope, a) => {
+      const targets = targetsOf(a);
+      if (a.action === "unlink") {
+        const r = await unlinkMedia(scope, a.media_id, targets, { deleteOrphan: false });
+        return { mediaId: a.media_id, action: "unlink", targets: r.unlinked, changed: Object.values(r.unlinked).flat().length };
+      }
+      const r = await linkMedia(scope, a.media_id, targets);
+      return { mediaId: a.media_id, action: "link", targets: r.linked, changed: r.created };
     }),
   );
 }

@@ -104,7 +104,7 @@ test("geänderter JSON-Export: Vorschau, dann Import", async ({ page }) => {
   const api = await apiAs("admin");
   const data = await exportFor(api);
   await api.dispose();
-  expect(data.version).toBe(3);
+  expect(data.version).toBe(4);
   const persons = data.persons.length;
   const relationships = data.relationships.length;
   const sources = data.sources.length;

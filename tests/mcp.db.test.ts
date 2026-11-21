@@ -128,6 +128,7 @@ const READ_TOOLS = [
 ];
 const WRITE_TOOLS = [
   "add_event",
+  "add_media",
   "add_name_variant",
   "begin_change_set",
   "cite_source",
@@ -140,6 +141,7 @@ const WRITE_TOOLS = [
   "update_event",
   "update_person",
   "update_relationship",
+  "link_media",
 ];
 
 describe.skipIf(Boolean(skipReason))("MCP-Server (stdio, Mock-Datenbank)", () => {

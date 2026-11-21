@@ -14,6 +14,7 @@ import {
   type EventTypeName,
 } from "@/lib/events";
 import { eventTypeGroups, valueCaption } from "@/lib/event-labels";
+import { AttachedMedia, type AttachedItem, type InheritedItem, type MediaCandidate } from "./AttachedMedia";
 
 /** Ereignis, wie die Personenseite es übergibt (EventDto + Träger + Belege). */
 export type EventRow = {
@@ -43,6 +44,10 @@ export type EventRow = {
   /** Bei Ereignissen einer Beziehung, z.B. „mit Margarethe Becker“. */
   ownerLabel: string | null;
   citations: { id: string; sourceId: string; sourceTitle: string; detail: string | null }[];
+  /** Bilder am Ereignis. */
+  media: AttachedItem[];
+  /** Bilder seiner Belege bzw. deren Quellen (nur angezeigt, mit Herkunft). */
+  documentImages: InheritedItem[];
 };
 
 /** Wo ein neues Ereignis hängen kann: die Person oder eine ihrer Partnerschaften. */
@@ -354,6 +359,7 @@ function EventItem({
   busy,
   onEdit,
   onDelete,
+  mediaCandidates,
   children,
 }: {
   e: EventRow;
@@ -361,6 +367,7 @@ function EventItem({
   busy: boolean;
   onEdit: () => void;
   onDelete: () => void;
+  mediaCandidates: MediaCandidate[];
   children?: React.ReactNode;
 }) {
   const altOf = e.isAlternative ? ALT_OF[e.type] : undefined;
@@ -431,6 +438,16 @@ function EventItem({
             ))}
           </ul>
         )}
+        <AttachedMedia
+          target={{ kind: "event", id: e.id }}
+          items={e.media}
+          inherited={e.documentImages}
+          canEdit={canEdit && e.canEdit}
+          candidates={mediaCandidates}
+          label={[e.title, e.dateText].filter(Boolean).join(" ")}
+          fallbackAlt={`Bild zu ${[e.title, e.dateText].filter(Boolean).join(" ")}`}
+          testId="event-media"
+        />
         {children}
       </div>
     </li>
@@ -449,11 +466,14 @@ export function EventSection({
   events,
   owners,
   canEdit,
+  mediaCandidates = [],
 }: {
   personId: string;
   events: EventRow[];
   owners: EventOwnerOption[];
   canEdit: boolean;
+  /** Bilder dieser Seite, die sich an ein Ereignis hängen lassen. */
+  mediaCandidates?: MediaCandidate[];
 }) {
   const router = useRouter();
   const headingId = useId();
@@ -537,6 +557,7 @@ export function EventSection({
       e={e}
       canEdit={canEdit}
       busy={busy}
+      mediaCandidates={mediaCandidates}
       onEdit={() => {
         setEditing(editing === e.id ? null : e.id);
         setAdding(false);

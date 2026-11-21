@@ -466,6 +466,7 @@ model Event {
   citations    Citation[]
   externalIds  ExternalId[]
   importLinks  ImportLink[]
+  media        EventMedia[]
 
   @@index([personId])
   @@index([relationshipId])
@@ -494,7 +495,13 @@ model MediaAsset {
   uploadedBy    User?               @relation("MediaUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
   persons       PersonMedia[]
   relationships RelationshipMedia[]
+  // Hauptscan einer Quelle (Source.mediaId, älteres Feld) — siehe SourceMedia.
   sources       Source[]
+  // Bilder an Quellen, Ereignissen und Belegen (README, „Bilder an Quellen,
+  // Ereignissen und Belegen“).
+  sourceLinks   SourceMedia[]
+  eventLinks    EventMedia[]
+  citationLinks CitationMedia[]
   externalIds   ExternalId[]
   importLinks   ImportLink[]
 }
@@ -523,6 +530,52 @@ model PersonMedia {
   media  MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Cascade)
 
   @@id([personId, mediaId])
+  @@index([mediaId])
+}
+
+// Bilder an einer Quelle (Scans mehrerer Seiten, Fotos eines Grabsteins …).
+// Source.mediaId bleibt der „Hauptscan“; die App liest beide Stellen
+// zusammen (lib/services/attached-media.ts), ohne Datenübernahme.
+model SourceMedia {
+  sourceId  String
+  mediaId   String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  source Source     @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  media  MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@id([sourceId, mediaId])
+  @@index([mediaId])
+}
+
+// Bilder an einem Lebensereignis (Taufschein, Foto der Konfirmation …).
+// Sichtbar und änderbar wie das Ereignis.
+model EventMedia {
+  eventId   String
+  mediaId   String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  event Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  media MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, mediaId])
+  @@index([mediaId])
+}
+
+// Bilder an einem Beleg — der Ausschnitt einer Quelle, der genau diese
+// Angabe belegt (der Eintrag im Kirchenbuch). Sichtbar und änderbar wie der Beleg.
+model CitationMedia {
+  citationId String
+  mediaId    String
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  citation Citation   @relation(fields: [citationId], references: [id], onDelete: Cascade)
+  media    MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@id([citationId, mediaId])
   @@index([mediaId])
 }
 
@@ -566,7 +619,8 @@ model Source {
   dateToPrecision DatePrecision @default(DAY)
   datePhrase      String?
   notes           String? // Abschrift, Notizen
-  mediaId         String? // Scan: ein bereits hochgeladenes Bild
+  // Hauptscan (älteres Feld); weitere Bilder der Quelle in SourceMedia.
+  mediaId         String?
   createdById     String?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
@@ -577,6 +631,7 @@ model Source {
   externalIds ExternalId[]
   rawRecords  ImportRawRecord[]
   importLinks ImportLink[]
+  images      SourceMedia[]
 
   @@index([title])
 }
@@ -621,6 +676,7 @@ model Citation {
   relationship Relationship? @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
   event        Event?        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   importLinks  ImportLink[]
+  media        CitationMedia[]
 
   @@index([sourceId])
   @@index([personId])

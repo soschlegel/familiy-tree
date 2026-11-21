@@ -35,3 +35,5 @@ export * from "./imports";
 export * from "./import-apply";
 export { loadGraph, type GraphPerson, type GraphRelationship, type LoadedGraph } from "./graph-data";
 export * from "./changes";
+export * from "./media-links";
+export * from "./attached-media";

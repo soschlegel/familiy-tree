@@ -47,9 +47,11 @@ export async function buildExport(scope: Scope, selection: ExportSelection | nul
   const relationshipIds = new Set(relationships.map((r) => r.id));
   // Ereignisse, weitere Namen, Fremdkennungen und Rohdaten: dieselbe Grenze —
   // nur an exportierten Personen bzw. Beziehungen (bzw. Quellen, s.u.).
+  const mediaOrder = [{ sortOrder: "asc" as const }, { createdAt: "asc" as const }, { mediaId: "asc" as const }];
   const events = await prisma.event.findMany({
     where: { OR: [{ personId: { in: [...personIds] } }, { relationshipId: { in: [...relationshipIds] } }] },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    include: { media: { orderBy: mediaOrder } },
   });
   const eventIds = new Set(events.map((e) => e.id));
   const personNames = await prisma.personName.findMany({
@@ -61,6 +63,7 @@ export async function buildExport(scope: Scope, selection: ExportSelection | nul
       OR: [{ personId: { in: [...personIds] } }, { relationshipId: { in: [...relationshipIds] } }],
     },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    include: { media: { orderBy: mediaOrder } },
   });
   const sources = await prisma.source.findMany({
     where: selection
@@ -74,7 +77,13 @@ export async function buildExport(scope: Scope, selection: ExportSelection | nul
           ],
         },
     orderBy: [{ title: "asc" }, { id: "asc" }],
+    include: { images: { orderBy: mediaOrder } },
   });
+  // Bilder an exportierten Ereignissen, Belegen und Quellen reisen mit: was an
+  // etwas Sichtbarem hängt, ist sichtbar (lib/media-scope.ts).
+  for (const e of events) for (const m of e.media) referenced.add(m.mediaId);
+  for (const c of citations) for (const m of c.media) referenced.add(m.mediaId);
+  for (const s of sources) for (const m of s.images) referenced.add(m.mediaId);
   // Scans gehören mit ins Archiv, sofern der Benutzer sie sehen darf.
   const sourceIds = new Set(sources.map((s) => s.id));
   const externalIds = (
@@ -191,6 +200,7 @@ export async function buildExport(scope: Scope, selection: ExportSelection | nul
       ...exportDateFields("date", s),
       notes: s.notes,
       mediaId: sourceMedia.get(s.id) ?? null,
+      media: s.images.map((m) => ({ mediaId: m.mediaId, sortOrder: m.sortOrder })),
     })),
     citations: citations.map((c) => ({
       id: c.id,
@@ -203,6 +213,7 @@ export async function buildExport(scope: Scope, selection: ExportSelection | nul
       url: c.url,
       confidence: c.confidence,
       text: c.text,
+      media: c.media.map((m) => ({ mediaId: m.mediaId, sortOrder: m.sortOrder })),
     })),
     events: events.map((e) => ({
       id: e.id,
@@ -220,6 +231,7 @@ export async function buildExport(scope: Scope, selection: ExportSelection | nul
       agency: e.agency,
       notes: e.notes,
       sortOrder: e.sortOrder,
+      media: e.media.map((m) => ({ mediaId: m.mediaId, sortOrder: m.sortOrder })),
     })),
     personNames: personNames.map((n) => ({
       id: n.id,

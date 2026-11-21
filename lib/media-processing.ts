@@ -20,6 +20,35 @@ export class ImageFormatError extends Error {
   }
 }
 
+/**
+ * Bildformat anhand der Bytes (sharp), nicht anhand einer Angabe. Wirft
+ * ImageFormatError, wenn die Datei kein erlaubtes Bild ist.
+ */
+export async function detectImageFormat(input: Buffer): Promise<string> {
+  let format: string | undefined;
+  try {
+    format = (await sharp(input).metadata()).format;
+  } catch {
+    throw new ImageFormatError("Datei ist kein lesbares Bild");
+  }
+  if (!format || !ALLOWED_IMAGE_FORMATS.has(format)) {
+    throw new ImageFormatError(`Bildformat nicht erlaubt: ${format ?? "unbekannt"}`);
+  }
+  return format;
+}
+
+/** Inhaltsart (MIME) → sharp-Format; nur die Bildtypen, die der Upload annimmt. */
+export const IMAGE_MIME_FORMAT: Record<string, string> = {
+  "image/jpeg": "jpeg",
+  "image/jpg": "jpeg",
+  "image/pjpeg": "jpeg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "image/avif": "avif",
+  "image/tiff": "tiff",
+};
+
 export type StoredImage = {
   storageKey: string;
   thumbnailKey: string;
@@ -44,17 +73,7 @@ export async function processAndStoreImage(
   input: Buffer,
   options: { checkFormat?: boolean; keyBase?: string } = {},
 ): Promise<StoredImage> {
-  if (options.checkFormat !== false) {
-    let format: string | undefined;
-    try {
-      format = (await sharp(input).metadata()).format;
-    } catch {
-      throw new ImageFormatError("Datei ist kein lesbares Bild");
-    }
-    if (!format || !ALLOWED_IMAGE_FORMATS.has(format)) {
-      throw new ImageFormatError(`Bildformat nicht erlaubt: ${format ?? "unbekannt"}`);
-    }
-  }
+  if (options.checkFormat !== false) await detectImageFormat(input);
 
   const id = options.keyBase ?? randomUUID();
   const storageKey = `${MEDIA_SUBDIRS.originals}/${id}.webp`;

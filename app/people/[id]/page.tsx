@@ -36,6 +36,7 @@ import { lifeSpan, formatDateOf } from "@/lib/tree-layout";
 import { Avatar } from "@/components/Avatar";
 import { LockIcon } from "@/components/PersonNode";
 import { MediaGallery } from "@/components/MediaGallery";
+import type { InheritedItem, MediaCandidate } from "@/components/AttachedMedia";
 import { DeletePersonButton } from "@/components/DeletePersonButton";
 import { DuplicateBanner } from "@/components/DuplicateBanner";
 import { ReferencePanel } from "@/components/ReferencePanel";
@@ -134,6 +135,57 @@ function AltFacts({ events, prefix = "" }: { events: EventDto[]; prefix?: string
         </a>
       ))}
     </span>
+  );
+}
+
+/**
+ * Belegbilder: Scans und Fotos an Ereignissen, Belegen und zitierten Quellen
+ * — getrennt von den Porträt- und Familienbildern der Galerie. Antippen
+ * öffnet das Bild groß (wie in der Galerie).
+ */
+function DocumentImages({ items }: { items: { mediaId: string; caption: string | null; where: string[] }[] }) {
+  return (
+    <section aria-labelledby="document-images-h" className="card space-y-3 p-5" data-testid="document-images">
+      <div>
+        <h2 id="document-images-h" className="section-title">
+          Belegbilder{" "}
+          <span className="font-sans text-sm font-normal muted">({items.length})</span>
+        </h2>
+        <p className="text-sm muted">Scans und Fotos zu Ereignissen, Belegen und Quellen.</p>
+      </div>
+      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+        {items.map((m) => (
+          <li key={m.mediaId} data-testid="document-image">
+            <figure>
+              <a
+                href={`/api/media/${m.mediaId}`}
+                target="_blank"
+                rel="noreferrer"
+                className="block overflow-hidden rounded-xl"
+                aria-label={`${m.caption ?? `Belegbild ${m.where[0] ?? ""}`.trim()} in voller Größe öffnen`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/api/media/${m.mediaId}?variant=thumb`}
+                  alt={m.caption ?? `Belegbild: ${m.where[0] ?? ""}`.trim()}
+                  loading="lazy"
+                  decoding="async"
+                  className="aspect-square w-full rounded-xl object-cover"
+                />
+              </a>
+              <figcaption className="mt-1 space-y-0.5 text-xs">
+                {m.caption && <span className="block truncate font-medium">{m.caption}</span>}
+                {m.where.map((w) => (
+                  <span key={w} className="block truncate muted" title={w}>
+                    {w}
+                  </span>
+                ))}
+              </figcaption>
+            </figure>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -287,13 +339,64 @@ export default async function PersonPage({
     ...detail.relations.flatMap((r) => r.events.map((e) => ({ ...e, ownerKey: r.relationshipId }))),
   ].sort(compareEvents);
   const eventLabelOf = new Map(allEvents.map((e) => [e.id, [e.title, e.dateText].filter(Boolean).join(" ")]));
+  // Belegbilder (README, „Bilder an Quellen, Ereignissen und Belegen“):
+  // Bilder an Ereignissen, an Belegen und — nach der Regel in
+  // lib/services/attached-media.ts — Bilder der zitierten Quellen.
+  const citationWhere = (c: PersonCitation) =>
+    [c.source.title, c.detail].filter(Boolean).join(", ");
+  const documentImagesOf = (eventId: string, own: Set<string>) => {
+    const seen = new Set(own);
+    const out: InheritedItem[] = [];
+    for (const c of detail.citations.filter((x) => x.eventId === eventId)) {
+      for (const m of c.media ?? []) {
+        if (seen.has(m.mediaId)) continue;
+        seen.add(m.mediaId);
+        out.push({ mediaId: m.mediaId, caption: m.caption, note: `Beleg: ${citationWhere(c)}` });
+      }
+      for (const m of c.sourceMedia ?? []) {
+        if (seen.has(m.mediaId)) continue;
+        seen.add(m.mediaId);
+        out.push({ mediaId: m.mediaId, caption: m.caption, note: `Quelle: ${c.source.title}` });
+      }
+    }
+    return out;
+  };
   const eventRows: EventRow[] = allEvents.map((e) => ({
     ...e,
     ownerLabel: e.ownerKey === "person" ? null : (ownerLabelOf.get(e.ownerKey) ?? null),
     citations: detail.citations
       .filter((c) => c.eventId === e.id)
       .map((c) => ({ id: c.id, sourceId: c.source.id, sourceTitle: c.source.title, detail: c.detail })),
+    media: (e.media ?? []).map((m) => ({ mediaId: m.mediaId, caption: m.caption })),
+    documentImages: documentImagesOf(e.id, new Set((e.media ?? []).map((m) => m.mediaId))),
   }));
+
+  // Alle Belegbilder der Seite in einer Übersicht, je Bild mit Herkunft.
+  const documentImages = new Map<string, { mediaId: string; caption: string | null; where: string[] }>();
+  const addDoc = (m: { mediaId: string; caption: string | null }, where: string) => {
+    const entry = documentImages.get(m.mediaId) ?? { mediaId: m.mediaId, caption: m.caption, where: [] };
+    if (!entry.where.includes(where)) entry.where.push(where);
+    documentImages.set(m.mediaId, entry);
+  };
+  for (const e of allEvents) for (const m of e.media ?? []) addDoc(m, eventLabelOf.get(e.id) ?? e.title);
+  for (const c of detail.citations) {
+    const about = c.eventId ? (eventLabelOf.get(c.eventId) ?? c.eventTitle) : c.relationship ? relationLabel(c.relationship) : null;
+    const where = [about, citationWhere(c)].filter(Boolean).join(" · ");
+    for (const m of c.media ?? []) addDoc(m, where);
+    for (const m of c.sourceMedia ?? []) addDoc(m, `${about ? `${about} · ` : ""}Quelle ${c.source.title}`);
+  }
+
+  // Vorhandene Bilder dieser Seite, die sich an Ereignisse und Belege hängen lassen.
+  const candidateMap = new Map<string, MediaCandidate>();
+  const addCandidate = (m: { mediaId: string; caption: string | null }, where: string) => {
+    if (!candidateMap.has(m.mediaId)) candidateMap.set(m.mediaId, { mediaId: m.mediaId, label: `${m.caption ?? "Bild ohne Beschriftung"} — ${where}` });
+  };
+  if (canEdit) {
+    for (const m of detail.media) addCandidate(m, name(person));
+    for (const r of detail.relations) if (!r.other.restricted) for (const m of r.media) addCandidate(m, relationLabel(r));
+    for (const d of documentImages.values()) addCandidate(d, d.where[0] ?? "Beleg");
+  }
+  const mediaCandidates = [...candidateMap.values()];
   const eventOwners: EventOwnerOption[] = [
     { key: "person", label: name(person), owner: { kind: "person" } },
     ...detail.partners
@@ -325,6 +428,8 @@ export default async function PersonPage({
     relationLabel: c.relationship ? relationLabel(c.relationship) : null,
     eventId: c.eventId,
     eventLabel: c.eventId ? eventLabelOf.get(c.eventId) ?? c.eventTitle ?? null : null,
+    media: (c.media ?? []).map((m) => ({ mediaId: m.mediaId, caption: m.caption })),
+    sourceMedia: (c.sourceMedia ?? []).map((m) => ({ mediaId: m.mediaId, caption: m.caption })),
   }));
   const citationTargets: CitationTargetOption[] = [
     { value: "person", label: name(person), facts: [...PERSON_FACTS] },
@@ -467,7 +572,13 @@ export default async function PersonPage({
         </section>
       )}
 
-      <EventSection personId={person.id} events={eventRows} owners={eventOwners} canEdit={canEdit} />
+      <EventSection
+        personId={person.id}
+        events={eventRows}
+        owners={eventOwners}
+        canEdit={canEdit}
+        mediaCandidates={mediaCandidates}
+      />
 
       <NameVariants personId={person.id} names={detail.names} canEdit={canEdit} />
 
@@ -566,7 +677,10 @@ export default async function PersonPage({
         sources={sourceOptions}
         canEdit={canEdit}
         canCreateSource={canCreateSources(scope)}
+        mediaCandidates={mediaCandidates}
       />
+
+      {documentImages.size > 0 && <DocumentImages items={[...documentImages.values()]} />}
 
       <div className="card p-5">
         <MediaGallery

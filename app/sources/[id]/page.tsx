@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 
 import { requireScope } from "@/lib/session";
-import { getSource, type CitationTarget, type PersonRef, type SourceDetail } from "@/lib/services";
+import { getSource, listScanCandidates, type CitationTarget, type PersonRef, type SourceDetail } from "@/lib/services";
+import { AttachedMedia, type MediaCandidate } from "@/components/AttachedMedia";
 import { CITATION_FACT_LABEL, CONFIDENCE_LABEL, DERIVED_SOURCE_KINDS, SOURCE_KIND_HINT, SOURCE_KIND_LABEL } from "@/lib/source-labels";
 import { CitationLink } from "@/components/CitationLink";
 import { formatDateOf, lifeSpan } from "@/lib/tree-layout";
@@ -21,7 +22,10 @@ const name = (p: { givenName: string; familyName: string | null }) =>
 
 const loadDetail = cache(async (id: string) => {
   const { scope } = await requireScope();
-  return getSource(scope, id);
+  const detail = await getSource(scope, id);
+  // Vorhandene Bilder, die sich an die Quelle hängen lassen (nur für Bearbeiter).
+  const candidates = detail?.canEdit ? await listScanCandidates(scope, id) : [];
+  return detail ? { ...detail, candidates } : null;
 });
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -96,7 +100,8 @@ export default async function SourcePage({
 }) {
   const { id } = await params;
   const { saved, seite } = await searchParams;
-  const detail: SourceDetail | null = await loadDetail(id);
+  const detail: (SourceDetail & { candidates: { mediaId: string; caption: string | null; owner: string }[] }) | null =
+    await loadDetail(id);
   // Unsichtbar = nicht vorhanden (wie bei Personen).
   if (!detail) notFound();
   const { source: s, citations } = detail;
@@ -113,6 +118,19 @@ export default async function SourcePage({
   const page = Math.min(pageCount, Math.max(1, Number(seite ?? 1) || 1));
   const shown = groupList.slice((page - 1) * GROUPS_PER_PAGE, page * GROUPS_PER_PAGE);
   const derived = DERIVED_SOURCE_KINDS.includes(s.kind);
+  const moreImages = detail.images.filter((m) => !m.isMain);
+  const candidateMap = new Map<string, MediaCandidate>();
+  for (const c of detail.candidates) {
+    candidateMap.set(c.mediaId, { mediaId: c.mediaId, label: `${c.caption ?? "Bild ohne Beschriftung"} — ${c.owner}` });
+  }
+  for (const c of citations) {
+    for (const m of c.media) {
+      if (!candidateMap.has(m.mediaId)) {
+        candidateMap.set(m.mediaId, { mediaId: m.mediaId, label: `${m.caption ?? "Bild ohne Beschriftung"} — Beleg ${c.detail ?? ""}`.trim() });
+      }
+    }
+  }
+  const mediaCandidates = detail.canEdit ? [...candidateMap.values()].filter((c) => c.mediaId !== s.mediaId) : [];
 
   return (
     <div className="space-y-8">
@@ -191,13 +209,35 @@ export default async function SourcePage({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={`/api/media/${s.mediaId}?variant=thumb`}
-                  alt={`Scan zu ${s.title}`}
+                  alt={detail.images.find((m) => m.isMain)?.caption ?? `Scan zu ${s.title}`}
                   className="w-full rounded-lg border border-stone-200 object-cover dark:border-stone-800"
                 />
               </a>
               <figcaption className="mt-1 text-xs muted">Scan — antippen für volle Größe</figcaption>
             </figure>
           )}
+        </section>
+      )}
+
+      {(moreImages.length > 0 || detail.canEdit) && (
+        <section aria-labelledby="images-h" className="card space-y-2 p-5" data-testid="source-images">
+          <h2 id="images-h" className="section-title">
+            {s.mediaId ? "Weitere Bilder zur Quelle" : "Bilder zur Quelle"}{" "}
+            <span className="font-sans text-sm font-normal muted">({moreImages.length})</span>
+          </h2>
+          <p className="text-sm muted">
+            Erscheinen als Belegbild bei allen Angaben, die diese Quelle belegt — außer ein Bild hängt zugleich an einem
+            einzelnen Beleg, dann nur dort.
+          </p>
+          <AttachedMedia
+            target={{ kind: "source", id: s.id }}
+            items={moreImages.map((m) => ({ mediaId: m.mediaId, caption: m.caption }))}
+            canEdit={detail.canEdit}
+            candidates={mediaCandidates}
+            label={s.title}
+            fallbackAlt={`Bild zu ${s.title}`}
+            testId="source-media"
+          />
         </section>
       )}
 
@@ -235,6 +275,18 @@ export default async function SourcePage({
                             nicht bewertet
                           </span>
                         )
+                      )}
+                      {c.media.length > 0 && (
+                        <span className="basis-full">
+                          <AttachedMedia
+                            target={{ kind: "citation", id: c.id }}
+                            items={c.media.map((m) => ({ mediaId: m.mediaId, caption: m.caption }))}
+                            canEdit={false}
+                            label={`Beleg ${c.detail ?? CITATION_FACT_LABEL[c.fact]}`}
+                            fallbackAlt={`Belegbild: ${s.title}${c.detail ? `, ${c.detail}` : ""}`}
+                            testId="source-citation-media"
+                          />
+                        </span>
                       )}
                     </li>
                   ))}

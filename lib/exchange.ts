@@ -27,8 +27,17 @@ import { EVENT_TYPES, PERSON_NAME_TYPES } from "./events";
  * Alle neuen Felder sind optional — Dateien der Versionen 1 und 2 lassen sich
  * unverändert importieren (Daten gelten dann als tagesgenau, fehlende
  * Abschnitte als leer).
+ *
+ * Version 4: Bilder an Quellen (`sources[].media`, zusätzlich zum Hauptscan
+ * `mediaId`), an Ereignissen (`events[].media`) und an Belegen
+ * (`citations[].media`) — je `{ mediaId, sortOrder }`, Verweis auf `media`.
  */
-export const EXCHANGE_VERSION = 3;
+export const EXCHANGE_VERSION = 4;
+
+/** Verweis auf ein Bild in `media` (ab Version 4 an Quellen, Ereignissen, Belegen). */
+const mediaLinks = z
+  .array(z.object({ mediaId: z.string(), sortOrder: z.number().int().default(0) }))
+  .default([]);
 
 const isoDate = z.string().datetime().nullable().optional();
 const precision = z.enum(["DAY", "MONTH", "YEAR"]).optional();
@@ -133,8 +142,10 @@ export const sourceSchema = z.object({
   dateQualifier: qualifier,
   ...dateExtras("date"),
   notes: text,
-  /** Scan: Verweis auf einen Eintrag in `media`. */
+  /** Hauptscan: Verweis auf einen Eintrag in `media`. */
   mediaId: text,
+  /** Ab Version 4: weitere Bilder der Quelle. */
+  media: mediaLinks,
 });
 
 export const citationSchema = z.object({
@@ -150,6 +161,8 @@ export const citationSchema = z.object({
   url: text,
   confidence: z.enum(["HIGH", "MEDIUM", "LOW"]).nullable().optional(),
   text,
+  /** Ab Version 4: Bilder am Beleg. */
+  media: mediaLinks,
 });
 
 /** Ab Version 3. */
@@ -172,6 +185,8 @@ export const eventSchema = z.object({
   agency: text,
   notes: text,
   sortOrder: z.number().int().default(0),
+  /** Ab Version 4: Bilder am Ereignis. */
+  media: mediaLinks,
 });
 
 /** Ab Version 3. */

@@ -172,9 +172,23 @@ async function derivedPersons(db: Db, input: AuditInput): Promise<string[]> {
           select: { relationship: { select: { fromPersonId: true, toPersonId: true } } },
         }),
       ]);
+      // Bilder an Ereignissen und Belegen: deren Träger (Person bzw. beide
+      // Seiten der Beziehung). Bilder an Quellen führen die belegten Personen
+      // die Dienste ausdrücklich mit (lib/services/media-links.ts).
+      const carrier = { personId: true, relationship: { select: { fromPersonId: true, toPersonId: true } } } as const;
+      const [events, cites] = await Promise.all([
+        db.eventMedia.findMany({ where: { mediaId: id }, select: { event: { select: carrier } } }),
+        db.citationMedia.findMany({ where: { mediaId: id }, select: { citation: { select: carrier } } }),
+      ]);
+      const ofCarrier = (c: { personId: string | null; relationship: { fromPersonId: string; toPersonId: string } | null }) => [
+        ...(c.personId ? [c.personId] : []),
+        ...(c.relationship ? [c.relationship.fromPersonId, c.relationship.toPersonId] : []),
+      ];
       const out = [
         ...persons.map((p) => p.personId),
         ...rels.flatMap((r) => [r.relationship.fromPersonId, r.relationship.toPersonId]),
+        ...events.flatMap((e) => ofCarrier(e.event)),
+        ...cites.flatMap((c) => ofCarrier(c.citation)),
       ];
       return out.length ? out : personsFromFields(db, d);
     }

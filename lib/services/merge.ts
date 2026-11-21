@@ -840,6 +840,21 @@ async function moveExternalIds(
 type EventBundle = PersonBundle["events"][number];
 type CitationBundle = PersonBundle["citations"][number];
 
+/**
+ * Bilder eines wegfallenden Belegs bzw. Ereignisses an den bleibenden hängen
+ * (README, „Bilder an Quellen, Ereignissen und Belegen“) — sonst nähme das
+ * Löschen des Doppels die Zuordnung per Cascade mit.
+ */
+async function moveAttachedMedia(db: Db, kind: "citation" | "event", fromId: string, toId: string) {
+  if (kind === "citation") {
+    const rows = await db.citationMedia.findMany({ where: { citationId: fromId } });
+    if (rows.length) await db.citationMedia.createMany({ data: rows.map((r) => ({ ...r, citationId: toId })), skipDuplicates: true });
+  } else {
+    const rows = await db.eventMedia.findMany({ where: { eventId: fromId } });
+    if (rows.length) await db.eventMedia.createMany({ data: rows.map((r) => ({ ...r, eventId: toId })), skipDuplicates: true });
+  }
+}
+
 /** Belege an einen neuen Träger hängen; gleiche fallen mit den vorhandenen zusammen. */
 async function moveCitations(
   db: Db,
@@ -854,6 +869,7 @@ async function moveCitations(
     const same = byKey.get(citationKey(after));
     if (same) {
       await moveLinks(db, "CITATION", c, same.id, target, c.importLinks, now);
+      await moveAttachedMedia(db, "citation", c.id, same.id);
       await db.citation.delete({ where: { id: c.id } });
     } else {
       await db.citation.update({ where: { id: c.id }, data: target });
@@ -880,6 +896,7 @@ async function moveEvents(
       await moveCitations(db, e.citations, { ...owner, eventId: same.id }, same.citations, now);
       await moveExternalIds(db, e.externalIds, { eventId: same.id }, same.externalIds);
       await moveLinks(db, "EVENT", e, same.id, owner, e.importLinks, now);
+      await moveAttachedMedia(db, "event", e.id, same.id);
       await db.event.delete({ where: { id: e.id } });
     } else {
       await db.event.update({ where: { id: e.id }, data: owner });
