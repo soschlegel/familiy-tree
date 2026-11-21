@@ -27,6 +27,7 @@ const PAGES: { name: string; url: string; heading: string | RegExp }[] = [
   { name: "Importe verbinden", url: "/research/connect", heading: /.+/ },
   { name: "Benutzer", url: "/admin/users", heading: "Benutzer" },
   { name: "Familien und Zugriffe", url: "/admin/families", heading: "Familien und Zugriffe" },
+  { name: "Änderungen", url: "/admin/changes", heading: "Änderungen" },
   { name: "Daten", url: "/admin/data", heading: /.+/ },
   { name: "KI-Zugang", url: "/ai-access", heading: /.+/ },
 ];

@@ -35,6 +35,7 @@ const PAGES = [
   "/ai-access",
   "/admin/users",
   "/admin/families",
+  "/admin/changes",
 ];
 
 async function settle(page: import("@playwright/test").Page, url: string) {
