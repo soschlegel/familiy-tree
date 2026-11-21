@@ -1,4 +1,4 @@
-# Übergabe (Stand 20.11.2026)
+# Übergabe (Stand 21.11.2026)
 
 Arbeitsnotiz für die Fortsetzung auf einem anderen Rechner. Beim Weiterarbeiten
 aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
@@ -10,27 +10,23 @@ aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
   Portainer aktualisiert den Stack von dort. **Ein Merge ist ein
   Produktiv-Deployment auf echte Daten.**
 - `optimierung` = Arbeitsbranch, zum Zeitpunkt der Übergabe gleich `main`.
-- Zuletzt ausgerollt: Dubletten-Hinweis auf der Personenseite (erster Schritt
-  aus Paket 1) und die Überarbeitung für das Telefon. Keine offene Migration;
-  letzter Migrationsordner `20261121000000_quellen_einordnen`.
-- Prüfstand des letzten Pakets: Typecheck, Lint, Vitest 677/677; Playwright
+- Zuletzt ausgerollt (21.11.): Bezugsperson mit Verwandtschaftsgrad und
+  Linienfarben, Changelog (Verlauf je Person, `/admin/changes`, Pakete auch
+  über MCP), GEDCOM-Export mit Familienauswahl, Dubletten ohne Vorfahren/
+  Nachkommen, Familien-Sperre gegen Selbstaussperren. Zwei neue, rein
+  ergänzende Migrationen: `20261122000000_changelog` und
+  `20261122000001_bezugsperson` (letzter Migrationsordner).
+- Prüfstand des letzten Pakets (alle drei Branches zusammengeführt):
+  Typecheck, Lint, Vitest 725/725; `prisma migrate diff` Migrationen ↔ Schema
+  ohne Abweichung; schema-diff-check beide Migrationen ergänzend; Playwright
   auf frischem Server, zwischen read und write neu gestartet: setup 6/6,
-  read 151/151, write 74/74.
-- Branch `bezugsperson` (Bezugsperson, Linien): Vitest 687/688 — der eine
-  Fehlschlag (`mcp.db.test.ts`, erwartet den Datenbanknamen
-  `familytree_mock`) kommt nur von der eigenen Mock-Datenbank des Worktrees;
-  Playwright read 159/159, write 78/78 (je mit setup 6/6).
-- Branch `export-dubletten` (GEDCOM-Export mit Familienauswahl, Dubletten
-  ohne Vorfahren/Nachkommen, noch nicht in `main`): Typecheck, Lint, Vitest
-  696/697 (der eine Fehlschlag: `mcp.db.test.ts` erwartet den
-  Datenbanknamen `familytree_mock`, im Worktree heißt sie anders — kein
-  Codefehler); Playwright auf frischem Server, zwischen read und write neu
-  gestartet: setup 6/6, read 156/156, write 74/74.
-- Prüfstand Branch `changelog` (21.11.): Typecheck, Lint, Vitest 693/694
-  (der eine Fehler ist umgebungsbedingt: `tests/mcp.db.test.ts` erwartet den
-  Datenbanknamen `familytree_mock`, im Worktree heißt sie
-  `familytree_changelog_mock`); Playwright auf frischem Server, zwischen
-  read und write neu gestartet: setup 6/6, read 154/154, write 79/79.
+  read 167/167, write 83/83.
+- Parallel in Worktrees arbeiten: je Worktree eigene `.env` mit
+  `MOCK_DATABASE_URL=…/familytree_<name>_mock`; den Port nur in der Shell
+  setzen (`$env:MOCK_PORT`, `scripts/mock.mjs` liest ihn vor der `.env`).
+  `tests/mcp.db.test.ts` erwartet den Namen `familytree_mock` und schlägt in
+  solchen Worktrees deshalb immer fehl. Achtung: `npx prisma db push` ohne
+  Mock-Skript nimmt `DATABASE_URL` (die normale Dev-Datenbank).
 
 ## Lokal einrichten
 
@@ -149,7 +145,7 @@ Der Eigentümer schickt weitere Wünsche nach; umgesetzt wird erst, wenn er
 sie freigibt.
 
 - **Bezugsperson („in Scope“)** und **Farbe je Linie** — erledigt auf Branch
-  `bezugsperson` (noch nicht nach `main`). Migration
+  `bezugsperson` (ausgerollt 21.11.). Migration
   `20261122000001_bezugsperson` (`User.personId`, rein ergänzend, `ON DELETE
   SET NULL`, wandert beim Zusammenführen mit). „Das bin ich“ auf der
   Personenseite bzw. durch Admins in der Benutzerverwaltung; vorübergehend
@@ -182,7 +178,7 @@ sie freigibt.
   `buildExport(scope, selection)`. Alles angekreuzt = bisheriger Export.
   Teil-Exporte: gültiges 5.5.1, Rundreise verlustfrei, keine hängenden
   Zeiger (Tests). Import in MyHeritage selbst weiterhin nicht ausprobiert.
-- **Changelog** — erledigt auf Branch `changelog` (noch nicht nach `main`).
+- **Changelog** — erledigt auf Branch `changelog` (ausgerollt 21.11.).
   Migration `20261122000000_changelog` (rein ergänzend): Tabelle
   `ChangeSet`, im `AuditLog` `changeSetId`, `personIds`, `familyIds`
   (GIN). `lib/change-sets.ts`: Paket je API-Anfrage (`lib/api.ts`), eigene
