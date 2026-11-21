@@ -4,7 +4,7 @@ import { prisma } from "../prisma";
 import { displayCitation, displaySourceKind, findUrls, plainText, safeHttpUrl } from "../source-classify";
 
 const findUrlsIn = (text: string | null) => findUrls(text)[0] ?? null;
-import { audit, auditActor } from "../audit";
+import { audit, auditActor, auditRefs, fieldChanges } from "../audit";
 import { canViewMedia } from "../media-scope";
 import {
   canEditPerson,
@@ -542,13 +542,16 @@ export async function updateSource(scope: Scope, id: string, patch: unknown): Pr
   const columns = { ...sourceColumns(withoutPhrase), ...phraseColumns(access.source, data, ["date"]) };
   const source = await prisma.source.update({ where: { id }, data: columns });
 
-  await audit({
-    ...auditActor(scope),
-    action: "UPDATE",
-    entityType: "Source",
-    entityId: id,
-    diff: columns,
-  });
+  const changes = fieldChanges(access.source, columns);
+  if (Object.keys(changes).length > 0) {
+    await audit({
+      ...auditActor(scope),
+      action: "UPDATE",
+      entityType: "Source",
+      entityId: id,
+      diff: { subject: source.title, changes },
+    });
+  }
   return toSourceDto(scope, source);
 }
 
@@ -565,6 +568,8 @@ export async function deleteSource(
     );
   }
 
+  // Belegte Personen vor dem Löschen merken — die Belege gehen mit.
+  const refs = await auditRefs({ action: "DELETE", entityType: "Source", entityId: id });
   await prisma.source.delete({ where: { id } });
   await audit({
     ...auditActor(scope),
@@ -572,6 +577,7 @@ export async function deleteSource(
     entityType: "Source",
     entityId: id,
     diff: { title: access.source.title, kind: access.source.kind, citationCount: access.rated.length },
+    ...refs,
   });
   return { ok: true, citationCount: access.rated.length };
 }
@@ -727,13 +733,16 @@ export async function updateCitation(scope: Scope, id: string, patch: unknown): 
   }
 
   const citation = await prisma.citation.update({ where: { id }, data });
-  await audit({
-    ...auditActor(scope),
-    action: "UPDATE",
-    entityType: "Citation",
-    entityId: id,
-    diff: data,
-  });
+  const changes = fieldChanges(existing, data);
+  if (Object.keys(changes).length > 0) {
+    await audit({
+      ...auditActor(scope),
+      action: "UPDATE",
+      entityType: "Citation",
+      entityId: id,
+      diff: { sourceId: existing.sourceId, changes },
+    });
+  }
   return toCitationDto(citation, true);
 }
 
@@ -749,6 +758,7 @@ export async function deleteCitation(scope: Scope, id: string): Promise<{ ok: tr
       sourceId: existing.sourceId,
       personId: existing.personId,
       relationshipId: existing.relationshipId,
+      eventId: existing.eventId,
       fact: existing.fact,
       detail: existing.detail,
     },

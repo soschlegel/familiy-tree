@@ -129,6 +129,7 @@ const READ_TOOLS = [
 const WRITE_TOOLS = [
   "add_event",
   "add_name_variant",
+  "begin_change_set",
   "cite_source",
   "create_person",
   "create_relationship",

@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { route, badRequest } from "@/lib/api";
-import { audit } from "@/lib/audit";
+import { audit, auditActor } from "@/lib/audit";
 import { listFamilies } from "@/lib/services";
 
 const familyInput = z.object({
@@ -36,7 +36,7 @@ export const POST = route("family:manage", async (ctx, req) => {
   const family = await prisma.family.create({ data: parsed.data });
 
   await audit({
-    userId: ctx.userId,
+    ...auditActor(ctx.scope),
     action: "CREATE",
     entityType: "Family",
     entityId: family.id,

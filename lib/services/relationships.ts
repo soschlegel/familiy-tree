@@ -1,5 +1,5 @@
 import { prisma } from "../prisma";
-import { audit, auditActor } from "../audit";
+import { audit, auditActor, fieldChanges } from "../audit";
 import { canEditRelationshipBetween, canViewPerson, familyIdsOf, type Scope } from "../scope";
 import {
   MAX_BIOLOGICAL_PARENTS,
@@ -245,13 +245,16 @@ export async function updateRelationship(
     data: columns,
   });
 
-  await audit({
-    ...auditActor(scope),
-    action: "UPDATE",
-    entityType: "Relationship",
-    entityId: id,
-    diff: columns,
-  });
+  const changes = fieldChanges(existing, columns);
+  if (Object.keys(changes).length > 0) {
+    await audit({
+      ...auditActor(scope),
+      action: "UPDATE",
+      entityType: "Relationship",
+      entityId: id,
+      diff: { changes },
+    });
+  }
 
   return toRelationshipDto(relationship);
 }

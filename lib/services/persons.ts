@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
 import { prisma } from "../prisma";
-import { audit, auditActor } from "../audit";
+import { audit, auditActor, fieldChanges } from "../audit";
 import {
   canEditPerson,
   canEditRelationshipBetween,
@@ -741,13 +741,16 @@ export async function updatePerson(
   };
   await prisma.person.update({ where: { id }, data: columns });
 
-  await audit({
-    ...auditActor(scope),
-    action: "UPDATE",
-    entityType: "Person",
-    entityId: id,
-    diff: columns,
-  });
+  const changes = fieldChanges(existing, columns);
+  if (Object.keys(changes).length > 0) {
+    await audit({
+      ...auditActor(scope),
+      action: "UPDATE",
+      entityType: "Person",
+      entityId: id,
+      diff: { changes },
+    });
+  }
 
   return summaryById(scope, id);
 }
@@ -763,8 +766,8 @@ export async function deletePerson(
   options: { force?: boolean } = {},
 ): Promise<{ ok: true; relationCount: number }> {
   const familyIds = await familyIdsOfPerson(id);
-  const exists = await prisma.person.count({ where: { id } });
-  if (!exists || !canViewPerson(scope, familyIds)) throw notFoundError("Person");
+  const existing = await prisma.person.findUnique({ where: { id }, select: { givenName: true, familyName: true } });
+  if (!existing || !canViewPerson(scope, familyIds)) throw notFoundError("Person");
   if (!canEditPerson(scope, familyIds)) throw forbiddenError("diese Person zu löschen");
 
   const relationCount = await prisma.relationship.count({
@@ -801,7 +804,9 @@ export async function deletePerson(
     action: "DELETE",
     entityType: "Person",
     entityId: id,
-    diff: { relationCount, removedMedia },
+    diff: { subject: [existing.givenName, existing.familyName].filter(Boolean).join(" "), relationCount, removedMedia },
+    // Die Familienzuordnung ist mit der Person gelöscht — für die Übersicht je Familie.
+    familyIds,
   });
 
   return { ok: true, relationCount };
@@ -877,7 +882,9 @@ export async function setPersonFamilies(
     action: "UPDATE",
     entityType: "Person",
     entityId: id,
-    diff: { families: next },
+    diff: { families: next, changes: fieldChanges({ families: [...current].sort() }, { families: [...next].sort() }) },
+    // Auch die verlassenen Familien sehen die Änderung in ihrer Übersicht.
+    familyIds: [...current, ...next],
   });
 
   return { ok: true, familyIds: next.filter((f) => scope.isAdmin || scope.families.has(f)) };

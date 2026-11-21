@@ -34,3 +34,4 @@ export * from "./names";
 export * from "./imports";
 export * from "./import-apply";
 export { loadGraph, type GraphPerson, type GraphRelationship, type LoadedGraph } from "./graph-data";
+export * from "./changes";

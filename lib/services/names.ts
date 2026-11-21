@@ -1,7 +1,7 @@
 import type { PersonName } from "@prisma/client";
 
 import { prisma } from "../prisma";
-import { audit, auditActor } from "../audit";
+import { audit, auditActor, fieldChanges } from "../audit";
 import { canEditPerson, canViewPerson, familyIdsOfPerson, type Scope } from "../scope";
 import { personNameInput, personNamePatch } from "../validation";
 import { PERSON_NAME_TYPE_LABEL, type PersonNameTypeName } from "../events";
@@ -93,7 +93,16 @@ export async function updatePersonName(scope: Scope, id: string, patch: unknown)
     throw validationError([{ path: "givenName", message: "Bitte mindestens Vorname, Nachname oder Rufname angeben" }]);
   }
   const row = await prisma.personName.update({ where: { id }, data });
-  await audit({ ...auditActor(scope), action: "UPDATE", entityType: "PersonName", entityId: id, diff: data });
+  const changes = fieldChanges(existing, data);
+  if (Object.keys(changes).length > 0) {
+    await audit({
+      ...auditActor(scope),
+      action: "UPDATE",
+      entityType: "PersonName",
+      entityId: id,
+      diff: { subject: toPersonNameDto(row).display, changes },
+    });
+  }
   return toPersonNameDto(row);
 }
 
