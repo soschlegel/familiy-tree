@@ -813,7 +813,8 @@ export async function deletePerson(
  * Nicht-Admins dürfen nur Familien hinzufügen oder entfernen, in denen sie
  * selbst EDITOR sind. Familien, die sie gar nicht kennen, bleiben in jedem
  * Fall unverändert erhalten — sie bekommen sie ja auch nicht angezeigt und
- * können sie folglich nicht mitschicken.
+ * können sie folglich nicht mitschicken. Eine Familie mit ihrem
+ * Bearbeitungsrecht muss bleiben (sonst sperrten sie sich selbst aus).
  */
 export async function setPersonFamilies(
   scope: Scope,
@@ -839,6 +840,20 @@ export async function setPersonFamilies(
     ];
     if (touched.some((f) => !editable.has(f))) {
       throw forbiddenError("Familien zu ändern, in denen du keine Bearbeitungsrechte hast");
+    }
+    // Nicht selbst aussperren: Ohne eine Familie mit Bearbeitungsrecht könnte
+    // der Benutzer die Person danach weder ändern noch löschen (ohne jede
+    // Familie sähe er sie gar nicht mehr) — und sie bliebe z.B. als
+    // Elternteil eingetragen. Administratoren betrifft das nicht: Sie sehen
+    // und bearbeiten jede Person, auch eine ohne Familie.
+    if (!canEditPerson(scope, next)) {
+      throw validationError([
+        {
+          path: "familyIds",
+          message:
+            "Mindestens eine Familie, in der du Bearbeitungsrechte hast, muss zugeordnet bleiben — sonst könntest du die Person nicht mehr bearbeiten.",
+        },
+      ]);
     }
   }
 

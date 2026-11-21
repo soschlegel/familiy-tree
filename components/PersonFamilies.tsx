@@ -18,12 +18,14 @@ export function PersonFamilies({
   available,
   editableFamilyIds,
   canEdit,
+  isAdmin = false,
 }: {
   personId: string;
   assigned: Family[];
   available: Family[];
   editableFamilyIds: string[];
   canEdit: boolean;
+  isAdmin?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -31,12 +33,29 @@ export function PersonFamilies({
 
   const assignedIds = new Set(assigned.map((f) => f.id));
   const editable = new Set(editableFamilyIds);
+  // Nicht-Administratoren dürfen die letzte Familie mit ihrem
+  // Bearbeitungsrecht nicht abwählen — sonst sperrten sie sich selbst aus
+  // (der Dienst lehnt das ebenfalls ab, setPersonFamilies).
+  const editableAssigned = [...assignedIds].filter((id) => editable.has(id));
+  const lastEditable = !isAdmin && editableAssigned.length === 1 ? editableAssigned[0] : null;
 
   async function toggle(familyId: string) {
     if (busy) return;
-    const next = assignedIds.has(familyId)
+    const removing = assignedIds.has(familyId);
+    if (removing && familyId === lastEditable) return;
+    const next = removing
       ? [...assignedIds].filter((id) => id !== familyId)
       : [...assignedIds, familyId];
+    if (
+      isAdmin &&
+      removing &&
+      next.length === 0 &&
+      !window.confirm(
+        "Ohne Familie ist die Person nur noch für Administratoren sichtbar — alle anderen sehen sie als „nicht freigegeben“. Trotzdem entfernen?",
+      )
+    ) {
+      return;
+    }
 
     setBusy(familyId);
     setError(null);
@@ -72,7 +91,8 @@ export function PersonFamilies({
       <div className="flex flex-wrap gap-2">
         {available.map((f) => {
           const active = assignedIds.has(f.id);
-          const mayToggle = canEdit && editable.has(f.id);
+          const locked = f.id === lastEditable;
+          const mayToggle = canEdit && editable.has(f.id) && !locked;
 
           return (
             <button
@@ -81,12 +101,15 @@ export function PersonFamilies({
               disabled={!mayToggle || busy !== null}
               aria-pressed={active}
               onClick={() => void toggle(f.id)}
+              aria-describedby={locked ? "person-families-last" : undefined}
               title={
-                mayToggle
-                  ? active
-                    ? "Zuordnung entfernen"
-                    : "Dieser Familie zuordnen"
-                  : "Keine Bearbeitungsrechte in dieser Familie"
+                locked
+                  ? "Letzte Familie, in der du bearbeiten darfst — lässt sich nicht abwählen"
+                  : mayToggle
+                    ? active
+                      ? "Zuordnung entfernen"
+                      : "Dieser Familie zuordnen"
+                    : "Keine Bearbeitungsrechte in dieser Familie"
               }
               className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition max-md:min-h-11 max-md:px-4 ${
                 active
@@ -104,6 +127,14 @@ export function PersonFamilies({
           <p className="text-sm muted">Noch keine Familien angelegt.</p>
         )}
       </div>
+
+      {canEdit && lastEditable && (
+        <p id="person-families-last" className="text-sm muted" data-testid="person-families-last">
+          Die letzte Familie, in der du bearbeiten darfst, bleibt zugeordnet —
+          sonst könntest du die Person nicht mehr bearbeiten. Zum Wechseln erst
+          die neue Familie zuordnen.
+        </p>
+      )}
 
       {error && (
         <p role="alert" className="alert-error">
