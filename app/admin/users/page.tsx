@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { loadScope } from "@/lib/scope";
+import { listPickablePersons } from "@/lib/services";
 import { requirePage } from "@/lib/session";
 import { UserAdmin } from "@/components/UserAdmin";
 
@@ -19,6 +21,8 @@ export default async function UsersPage() {
       status: true,
       lastLoginAt: true,
       aiAccess: true,
+      // Eigene Person („das bin ich“, README „Bezugsperson“).
+      person: { select: { id: true, givenName: true, familyName: true } },
       // Aktive KI-Schlüssel: nicht widerrufen, nicht abgelaufen.
       _count: {
         select: {
@@ -33,6 +37,9 @@ export default async function UsersPage() {
       },
     },
   });
+
+  // Auswahl für „Person zuordnen“ — Administratoren sehen alle Personen.
+  const people = await listPickablePersons(await loadScope(session.user.id, session.user.role));
 
   // Wie in app/api/users/[id]/route.ts: zählt nur, wer sich schon angemeldet hat.
   const activeAdmins = users.filter((u) => u.role === "ADMIN" && u.status === "ACTIVE").length;
@@ -49,8 +56,10 @@ export default async function UsersPage() {
       </div>
 
       <UserAdmin
-        users={users.map(({ _count, ...u }) => ({
+        people={people}
+        users={users.map(({ _count, person, ...u }) => ({
           ...u,
+          person: person ? { id: person.id, name: [person.givenName, person.familyName].filter(Boolean).join(" ") } : null,
           lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
           activeTokens: _count.apiTokens,
           familyCount: _count.families,

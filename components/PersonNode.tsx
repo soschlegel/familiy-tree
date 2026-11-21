@@ -19,6 +19,7 @@ import {
   partnerMarkerLabel,
   shortYear,
 } from "@/lib/partner-labels";
+import { LineCodes, LineStripe, lineTint, linesText, ReferenceContext } from "./ReferenceLines";
 
 /** Was jenseits des Ausschnitts liegt (nur Fokus-Ansicht). */
 export type HiddenKin = { parents: number; children: number };
@@ -129,6 +130,7 @@ function Card({
   hidden?: HiddenKin;
 }) {
   const nav = useContext(TreeNavContext);
+  const reference = useContext(ReferenceContext);
   const span = lifeSpan(person);
   const deceased = Boolean(person.deathDate);
 
@@ -164,6 +166,13 @@ function Card({
 
   const name = displayName(person);
   const isFocus = nav.mode === "focus" && nav.focusId === person.id;
+
+  // Bezugsperson: Verwandtschaft unter der Karte, Ahnenlinie am Rand.
+  const refView = reference.view;
+  const isRef = refView?.id === person.id;
+  const relative = refView?.relatives[person.id];
+  const kinship = isRef ? (refView.isSelf ? "ich · Bezugsperson" : "Bezugsperson") : (relative?.term ?? null);
+  const lines = reference.showLines && relative ? relative.lines : [];
   // In der Fokus-Ansicht stellt ein Klick die Person in den Mittelpunkt.
   const refocus = nav.mode === "focus" && !isFocus;
   const personHref = `/people/${person.id}`;
@@ -206,6 +215,8 @@ function Card({
       data-testid="tree-person"
       data-person-id={person.id}
       data-focus={isFocus ? "true" : undefined}
+      data-reference={isRef ? "true" : undefined}
+      data-kinship={relative?.term ?? undefined}
     >
     <Link
       href={refocus ? nav.focusHref(person.id) : personHref}
@@ -213,14 +224,18 @@ function Card({
       data-person-id={person.id}
       data-testid="tree-person-main"
       aria-current={isFocus ? "true" : undefined}
+      style={lineTint(lines)}
       className={`group/card relative flex items-center gap-2.5 rounded-2xl border bg-surface p-2.5 transition-[box-shadow,transform,opacity] duration-150 ${
         isFocus
           ? "border-accent-600 shadow-lift ring-4 ring-accent-500/30 dark:border-accent-300 dark:ring-accent-300/30"
           : highlighted
             ? "border-brass-400 shadow-lift ring-4 ring-brass-300/50 dark:border-brass-400 dark:ring-brass-500/30"
             : "border-stone-200 shadow-card hover:-translate-y-0.5 hover:border-accent-300 hover:shadow-lift dark:border-stone-700 dark:hover:border-accent-600"
-      } ${dimmed ? "opacity-25" : "opacity-100"}`}
+      } ${isRef ? "outline-dashed outline-2 outline-offset-[3px] outline-brass-500 dark:outline-brass-400" : ""} ${
+        dimmed ? "opacity-25" : "opacity-100"
+      }`}
     >
+      <LineStripe lines={lines} />
       {person.primaryMediaId ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -255,7 +270,12 @@ function Card({
           </div>
         )}
         {span && (
-          <div className="mt-0.5 truncate text-[11px] tabular-nums text-stone-500 dark:text-stone-400">
+          // Auf getönter Karte (Linien) eine Stufe dunkler — sonst reicht der Kontrast nicht.
+          <div
+            className={`mt-0.5 truncate text-[11px] tabular-nums ${
+              lines.length > 0 ? "text-stone-600 dark:text-stone-300" : "text-stone-500 dark:text-stone-400"
+            }`}
+          >
             {span}
             {deceased && !span.startsWith("†") && (
               <span aria-hidden title="verstorben" className="ml-1 font-serif text-stone-400 dark:text-stone-500">
@@ -270,6 +290,8 @@ function Card({
       <span className="sr-only">
         {refocus ? " — in den Mittelpunkt stellen" : isFocus ? " — im Mittelpunkt; Personenseite öffnen" : ""}
         {beyond.length > 0 ? ` (${beyond.join(", ")})` : ""}
+        {kinship ? ` — ${isRef ? kinship : `für ${refView!.name}: ${kinship}`}` : ""}
+        {lines.length > 0 ? ` — ${linesText(lines)}` : ""}
       </span>
 
       {isFocus && (
@@ -300,7 +322,23 @@ function Card({
           ▼ +{plural(hiddenChildren, "Kind", "Kinder")}
         </span>
       )}
+      <LineCodes lines={lines} className="absolute -top-2.5 right-8" />
     </Link>
+
+    {kinship && (
+      <span
+        aria-hidden
+        data-testid="tree-kinship"
+        title={isRef ? kinship : `Für ${refView!.name}: ${kinship}`}
+        className={`absolute left-1/2 top-full z-[1] mt-3 max-w-[176px] -translate-x-1/2 truncate rounded-full px-2 py-px text-[10.5px] font-medium leading-4 shadow-sm ring-1 ${
+          isRef
+            ? "bg-brass-100 text-brass-700 ring-brass-300 dark:bg-brass-700/40 dark:text-brass-300 dark:ring-brass-700"
+            : "bg-surface text-stone-700 ring-stone-300 dark:text-stone-200 dark:ring-stone-600"
+        } ${dimmed ? "opacity-25" : ""}`}
+      >
+        {kinship}
+      </span>
+    )}
 
     {secondary && (
       <Link
