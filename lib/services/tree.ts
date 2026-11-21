@@ -19,8 +19,8 @@ import { loadGraph, type LoadedGraph } from "./graph-data";
  * jemand steht, ist am Platzhalter ohnehin ablesbar. Art, Datum und Bild einer
  * Beziehung erscheinen aber nur, wenn wenigstens eine Seite sichtbar ist.
  */
-export async function loadTree(scope: Scope): Promise<TreeData> {
-  return maskTree(scope, await loadGraph(scope));
+export async function loadTree(scope: Scope, graph?: LoadedGraph): Promise<TreeData> {
+  return maskTree(scope, graph ?? (await loadGraph(scope)));
 }
 
 export type TreeCounts = {
@@ -53,9 +53,16 @@ export type FocusTreeResult = {
  */
 export async function loadFocusTree(
   scope: Scope,
-  options: { focusId?: string | null; up?: number; down?: number; fallback?: boolean } = {},
+  options: {
+    focusId?: string | null;
+    up?: number;
+    down?: number;
+    fallback?: boolean;
+    /** Bereits geladener Graph (z.B. für die Bezugsperson) — spart ein zweites Laden. */
+    graph?: LoadedGraph;
+  } = {},
 ): Promise<FocusTreeResult> {
-  const data = await loadTree(scope);
+  const data = await loadTree(scope, options.graph);
   const depth = {
     up: options.up ?? FOCUS_DEPTH.up,
     down: options.down ?? FOCUS_DEPTH.down,
