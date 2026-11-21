@@ -13,9 +13,9 @@ aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
 - Zuletzt ausgerollt: Dubletten-Hinweis auf der Personenseite (erster Schritt
   aus Paket 1) und die Überarbeitung für das Telefon. Keine offene Migration;
   letzter Migrationsordner `20261121000000_quellen_einordnen`.
-- Prüfstand des letzten Pakets: Typecheck, Lint, Vitest 676/676; Playwright
+- Prüfstand des letzten Pakets: Typecheck, Lint, Vitest 677/677; Playwright
   auf frischem Server, zwischen read und write neu gestartet: setup 6/6,
-  read 148/148, write 74/74.
+  read 151/151, write 74/74.
 
 ## Lokal einrichten
 
@@ -127,6 +127,30 @@ README, Abschnitt „Tests“.
   `importLinks: { none: {} }` bei `decisions.suggestions`) — für importierte
   Personen öffnen. `import-apply` legt beim Verknüpfen bereits einen
   zusätzlichen Herkunftsvermerk an.
+
+### Wünsche des Eigentümers (gesammelt, NICHT umsetzen vor Freigabe)
+
+Der Eigentümer schickt weitere Wünsche nach; umgesetzt wird erst, wenn er
+sie freigibt.
+
+- **Bezugsperson („in Scope“)**: Jeder Benutzer kann sich in seinem
+  Benutzerstamm eine Person zuordnen („das bin ich“). Zusätzlich lässt sich
+  vorübergehend eine andere Person als Bezugsperson setzen (z.B. im Gespräch
+  mit dem Sohn: „schau, dein Ururopa“). Im Baum steht dann an den Personen,
+  soweit bestimmbar, der Verwandtschaftsgrad zur Bezugsperson. Grundlage:
+  `lib/kinship.ts` (`findBloodRelation`, `describePath`), MCP `get_kinship`.
+- **Farbe je Linie**: Vorfahren des Vaters der Bezugsperson in einer Farbe,
+  der Mutter in einer anderen, weiter aufgeteilt nach Großeltern (Vorbild:
+  Baumansicht von MyHeritage). Nie nur Farbe (Barrierefreiheit).
+- **GEDCOM-Export mit Familienauswahl**: Beim Export ein Dialog, in dem man
+  die Familien für den Export ankreuzt (Ziel: wieder nach MyHeritage
+  importieren). GEDCOM-Export gibt es schon (`/api/export?format=gedcom`
+  bzw. `gedzip`, `lib/services/gedcom-export.ts`), bisher immer mit allem,
+  was der Benutzer sehen darf.
+- **Dubletten: keine Vorfahren/Nachkommen als Kandidaten** (Vorschlag, aus
+  einem Fall vom 21.11.): `scoreDuplicate` schließt nur direkte Verwandte
+  aus; ein gleichnamiger Urgroßvater ohne Lebensdaten erscheint deshalb als
+  „unklar“. Strenger, nicht lockerer — trotzdem erst nach Freigabe.
 
 ### 4. Weitere offene Punkte
 

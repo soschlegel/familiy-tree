@@ -199,7 +199,14 @@ test("Familienzuordnung: Bearbeiter nur in eigenen Familien, Admin frei", async 
   await page.goto(`/people/${main.id}`);
   const section = page.getByRole("region", { name: "Familien" });
   await expect(section.getByRole("button", { name: familyName("A") })).toHaveAttribute("aria-pressed", "true");
-  await expect(section.getByRole("button", { name: familyName("A") })).toBeEnabled();
+  // A ist die einzige zugeordnete Familie, in der der Bearbeiter bearbeiten
+  // darf — abwählen würde ihn aussperren, deshalb gesperrt und erklärt.
+  await expect(section.getByRole("button", { name: familyName("A") })).toBeDisabled();
+  await expect(section.getByRole("button", { name: familyName("A") })).toHaveAttribute(
+    "title",
+    "Letzte Familie, in der du bearbeiten darfst — lässt sich nicht abwählen",
+  );
+  await expect(section.getByTestId("person-families-last")).toBeVisible();
   // Familie B darf der Bearbeiter nur lesen.
   await expect(section.getByRole("button", { name: familyName("B") })).toBeDisabled();
   await expect(section.getByRole("button", { name: familyName("B") })).toHaveAttribute("title", "Keine Bearbeitungsrechte in dieser Familie");
