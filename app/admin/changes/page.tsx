@@ -10,6 +10,8 @@ export const metadata = { title: "Änderungen" };
 
 type Search = Record<string, string | string[] | undefined>;
 
+const DEFAULT_DAYS = 30;
+
 /**
  * Änderungsübersicht für Administratoren: eine Zeile je Paket (Anfrage in
  * der App, Import, Zusammenführen, Paket über den KI-Zugang), gefiltert nach
@@ -20,6 +22,10 @@ export default async function ChangesPage({ searchParams }: { searchParams: Prom
   const { scope } = await requireScope();
   const params = await searchParams;
   const filter = changeFilterFrom(params);
+  // Ohne Angabe die letzten 30 Tage (die Übersicht gruppiert alle Einträge des
+  // Zeitraums); ein bewusst geleertes „Von“ zeigt alles.
+  const defaultFrom = params.from === undefined;
+  if (defaultFrom) filter.from = new Date(Date.now() - DEFAULT_DAYS * 86_400_000).toISOString().slice(0, 10);
   const pageRaw = Array.isArray(params.page) ? params.page[0] : params.page;
   const page = Math.max(1, Number(pageRaw) || 1);
 
@@ -31,6 +37,7 @@ export default async function ChangesPage({ searchParams }: { searchParams: Prom
   if (filter.userId) query.set("user", filter.userId);
   if (filter.channel) query.set("channel", filter.channel);
   if (filter.from) query.set("from", filter.from);
+  else query.set("from", "");
   if (filter.to) query.set("to", filter.to);
   const pageHref = (p: number) => {
     const q = new URLSearchParams(query);
@@ -38,7 +45,7 @@ export default async function ChangesPage({ searchParams }: { searchParams: Prom
     const s = q.toString();
     return s ? `/admin/changes?${s}` : "/admin/changes";
   };
-  const filtered = query.toString() !== "";
+  const filtered = Boolean(filter.familyId || filter.userId || filter.channel || filter.to || (filter.from && !defaultFrom));
 
   return (
     <div className="space-y-4">
@@ -48,6 +55,7 @@ export default async function ChangesPage({ searchParams }: { searchParams: Prom
         <p className="mt-1 text-sm muted">
           Wer hat wann was geändert — je Paket zusammengefasst: eine Aktion in der App, ein Import, ein
           Zusammenführen oder ein Paket über den KI-Zugang.
+          {defaultFrom && ` Ohne Angabe: die letzten ${DEFAULT_DAYS} Tage.`}
         </p>
       </div>
 
@@ -113,7 +121,10 @@ export default async function ChangesPage({ searchParams }: { searchParams: Prom
       </form>
 
       {result.items.length === 0 ? (
-        <p className="alert-info">{filtered ? "Keine Änderungen für diese Auswahl." : "Noch keine Änderungen erfasst."}</p>
+        <p className="alert-info">
+          {filtered || defaultFrom ? "Keine Änderungen für diese Auswahl." : "Noch keine Änderungen erfasst."}
+          {defaultFrom && ` Angezeigt werden die letzten ${DEFAULT_DAYS} Tage — für ältere Änderungen „Von“ leeren oder ändern.`}
+        </p>
       ) : (
         <ChangeSetList
           sets={result.items.map((s) => ({ ...s, lastText: formatChangeTime(s.last) }))}

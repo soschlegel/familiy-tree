@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 import type { Scope } from "@/lib/scope";
 import { appChangeSet, beginMcpChangeSet, mcpChangeSet } from "@/lib/change-sets";
 import {
+  applyGenealogyImport,
   createEvent,
   createPerson,
   createRelationship,
@@ -17,6 +18,7 @@ import {
   listChangeSetEntries,
   listChangeSets,
   listPersonChanges,
+  mergePersons,
   RESTRICTED,
   scopeForEmail,
   ServiceError,
@@ -203,6 +205,58 @@ describe.skipIf(Boolean(skipReason))("Changelog (Mock-Datenbank)", () => {
     const foreign = await mcpChangeSet({ userId: "mock-user-admin", via }, opened.id);
     expect(foreign.ok).toBe(false);
     expect((await mcpChangeSet({ userId: base!.userId, via }, "gibt-es-nicht")).ok).toBe(false);
+  });
+
+  it("Import: ein Paket, je Person ein Eintrag mit Ereignissen; Wiederholung zeigt vorher → nachher", async () => {
+    const admin = await request("admin@example.test");
+    const first = await applyGenealogyImport(admin, {
+      familyIds: [FAMILY_A],
+      persons: [{ ref: "@I1@", givenName: "E2E Changelog", familyName: "Import", birthPlace: "Altdorf" }],
+      events: [
+        { ref: "@I1@/BAPM", personRef: "@I1@", type: "BAPTISM", date: { date: "1850" } },
+        { ref: "@I1@/OCCU", personRef: "@I1@", type: "OCCUPATION", value: "Müller" },
+      ],
+    });
+    const id = first.ids.persons["@I1@"];
+    created.push(id);
+    const rows = await prisma.auditLog.findMany({ where: { changeSetId: admin.changeSet!.id } });
+    expect(rows.map((r) => `${r.entityType}:${r.action}`).sort()).toEqual(["ImportBatch:CREATE", "Person:CREATE"]);
+    const own = rows.find((r) => r.entityType === "Person")!;
+    expect(own).toMatchObject({ personIds: [id], familyIds: [FAMILY_A] });
+
+    const again = await request("admin@example.test");
+    await applyGenealogyImport(again, {
+      persons: [{ ref: "@I1@", action: "update", id, givenName: "E2E Changelog", familyName: "Import", birthPlace: "Neudorf" }],
+    });
+    const page = await listPersonChanges(admin, id);
+    expect(page.items[0]).toMatchObject({
+      what: "Beim Import aktualisiert: E2E Changelog Import",
+      fields: [{ field: "birthPlace", label: "Geburtsort", from: "Altdorf", to: "Neudorf" }],
+    });
+    expect(page.items[1]).toMatchObject({ what: "Beim Import angelegt: E2E Changelog Import", note: "angelegt: 2 Ereignisse" });
+
+    const today = new Date().toISOString().slice(0, 10);
+    const sets = await listChangeSets(admin, { familyId: FAMILY_A, from: today });
+    expect(sets.items.find((s) => s.key === admin.changeSet!.id)!.summary).toBe("1 Person, 2 Ereignisse angelegt");
+  });
+
+  it("Zusammenführen: ein Paket, beide Personen und Familien im Eintrag, Verlauf der bleibenden Person", async () => {
+    const admin = await request("admin@example.test");
+    const keep = (await createPerson(admin, { givenName: "E2E Changelog", familyName: "Doppelt", familyIds: [FAMILY_A] })).id;
+    const other = (await createPerson(admin, { givenName: "E2E Changelog", familyName: "Doppelt", birthPlace: "Celle", familyIds: [FAMILY_C] })).id;
+    created.push(keep, other);
+    const merging = await request("admin@example.test");
+    await mergePersons(merging, { keepId: keep, mergeId: other });
+    const row = await prisma.auditLog.findFirstOrThrow({ where: { action: "MERGE", entityId: keep } });
+    expect(row.personIds).toEqual(expect.arrayContaining([keep, other]));
+    expect(row.familyIds.sort()).toEqual([FAMILY_A, FAMILY_C].sort());
+    expect((await prisma.changeSet.findUniqueOrThrow({ where: { id: row.changeSetId! } })).title).toBe("Personen zusammengeführt");
+    const page = await listPersonChanges(admin, keep, { limit: 1 });
+    expect(page.items[0].what).toBe("Zusammengeführt: E2E Changelog Doppelt in E2E Changelog Doppelt");
+    expect(page.items[0].fields).toEqual(expect.arrayContaining([{ field: "birthPlace", label: "Geburtsort", from: null, to: "Celle" }]));
+    // Der Bearbeiter (ohne Familie C) sieht den Namen der aufgegangenen Person nicht.
+    const editorView = await listPersonChanges(await request("editor@example.test"), keep, { limit: 1 });
+    expect(editorView.items[0].what).toBe(`Zusammengeführt: ${RESTRICTED} in E2E Changelog Doppelt`);
   });
 
   it("ältere Einträge ohne Momentaufnahme erscheinen im Verlauf (nur neue Werte)", async () => {
