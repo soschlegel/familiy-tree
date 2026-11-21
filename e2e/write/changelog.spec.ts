@@ -69,7 +69,7 @@ test.describe("als Bearbeiter", () => {
     await page.goto(`/people/${personId}`);
     const section = page.getByTestId("person-changes");
     await expect(section.getByRole("heading", { name: "Änderungen" })).toBeVisible();
-    const toggle = section.getByRole("button", { name: "Änderungen anzeigen" });
+    const toggle = section.getByRole("button", { name: /^Änderungen (anzeigen|ausblenden)$/ });
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await expect(async () => {
       if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
@@ -157,7 +157,7 @@ test.describe("als Admin", () => {
     // Auf der Personenseite gehört der Eintrag zum Paket.
     await page.goto(`/people/${personId}`);
     const section = page.getByTestId("person-changes");
-    const toggle = section.getByRole("button", { name: "Änderungen anzeigen" });
+    const toggle = section.getByRole("button", { name: /^Änderungen (anzeigen|ausblenden)$/ });
     await expect(async () => {
       if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
       await expect(section.getByTestId("change-entry").first()).toBeVisible({ timeout: 2_000 });
@@ -182,7 +182,7 @@ test.describe("als Admin", () => {
 
       await page.goto(`/people/${personId}`);
       const section = page.getByTestId("person-changes");
-      const toggle = section.getByRole("button", { name: "Änderungen anzeigen" });
+      const toggle = section.getByRole("button", { name: /^Änderungen (anzeigen|ausblenden)$/ });
       await expect(async () => {
         if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
         await expect(section.getByTestId("change-entry").first()).toBeVisible({ timeout: 2_000 });
