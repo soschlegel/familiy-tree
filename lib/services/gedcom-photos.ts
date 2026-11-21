@@ -112,7 +112,7 @@ export async function downloadImportPhotos(
         action: "CREATE",
         entityType: "MediaAsset",
         entityId: mediaId,
-        diff: { personId, label: fileName, import: args.batchId, sizeBytes: stored.sizeBytes },
+        diff: { personId, subject: fileName, import: args.batchId, sizeBytes: stored.sizeBytes },
       });
       log.push({ url: p.url, personId, status: "stored", bytes: res.bytes.byteLength, ms: Date.now() - t0, redirects: res.redirects.length });
     } catch (err) {

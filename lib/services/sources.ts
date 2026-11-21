@@ -549,7 +549,7 @@ export async function updateSource(scope: Scope, id: string, patch: unknown): Pr
       action: "UPDATE",
       entityType: "Source",
       entityId: id,
-      diff: { label: source.title, changes },
+      diff: { subject: source.title, changes },
     });
   }
   return toSourceDto(scope, source);

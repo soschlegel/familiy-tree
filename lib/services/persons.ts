@@ -804,7 +804,7 @@ export async function deletePerson(
     action: "DELETE",
     entityType: "Person",
     entityId: id,
-    diff: { label: [existing.givenName, existing.familyName].filter(Boolean).join(" "), relationCount, removedMedia },
+    diff: { subject: [existing.givenName, existing.familyName].filter(Boolean).join(" "), relationCount, removedMedia },
     // Die Familienzuordnung ist mit der Person gelöscht — für die Übersicht je Familie.
     familyIds,
   });

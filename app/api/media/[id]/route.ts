@@ -91,7 +91,7 @@ export const DELETE = route<Params>(
       action: "DELETE",
       entityType: "MediaAsset",
       entityId: id,
-      diff: { label: asset.fileName ?? asset.caption ?? null },
+      diff: { subject: asset.fileName ?? asset.caption ?? null },
       ...refs,
     });
 

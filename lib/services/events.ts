@@ -272,7 +272,7 @@ export async function updateEvent(scope: Scope, id: string, patch: unknown): Pro
       action: "UPDATE",
       entityType: "Event",
       entityId: id,
-      diff: { label: eventTitle(event), changes },
+      diff: { subject: eventTitle(event), changes },
     });
   }
   return toEventDto(event, true);
