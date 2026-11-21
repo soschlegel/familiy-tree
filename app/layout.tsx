@@ -80,6 +80,9 @@ export default async function RootLayout({
         ...(can(user.role, "user:manage")
           ? [{ href: "/admin/users", label: "Benutzer" }]
           : []),
+        ...(can(user.role, "audit:read")
+          ? [{ href: "/admin/changes", label: "Änderungen" }]
+          : []),
       ]
     : [];
 
