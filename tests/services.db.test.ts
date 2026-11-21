@@ -355,5 +355,24 @@ describe.skipIf(Boolean(skipReason))("Dienste (Mock-Datenbank)", () => {
       // B ist für den Editor nur lesbar: weglassen = entfernen = verboten.
       await expectServiceError(setPersonFamilies(editor, L.crossMarriedIntoA, [FAMILY_A]), "FORBIDDEN");
     });
+
+    it("setPersonFamilies: Bearbeiter können sich nicht selbst aussperren, Administratoren dürfen „ohne Familie“", async () => {
+      const editor = await scope("editor@example.test"); // A bearbeiten, B lesen
+      const admin = await scope("admin@example.test");
+      const onlyA = await createPerson(admin, { givenName: "Aussperren", familyName: "Testfall", familyIds: [FAMILY_A] });
+      const aAndB = await createPerson(admin, { givenName: "Aussperren", familyName: "Testfall B", familyIds: [FAMILY_A, FAMILY_B] });
+      try {
+        // Letzte Familie abwählen: abgelehnt, Zuordnung unverändert.
+        await expectServiceError(setPersonFamilies(editor, onlyA.id, []), "VALIDATION");
+        expect((await prisma.personFamily.findMany({ where: { personId: onlyA.id } })).map((f) => f.familyId)).toEqual([FAMILY_A]);
+        // A abwählen, B (nur lesbar) bliebe: auch abgelehnt — danach dürfte er nicht mehr bearbeiten.
+        await expectServiceError(setPersonFamilies(editor, aAndB.id, [FAMILY_B]), "VALIDATION");
+        // Administrator: „ohne Familie“ bleibt möglich, und er sieht die Person weiter.
+        expect((await setPersonFamilies(admin, onlyA.id, [])).familyIds).toEqual([]);
+        expect(await getPersonDetail(admin, onlyA.id)).not.toBeNull();
+      } finally {
+        await prisma.person.deleteMany({ where: { id: { in: [onlyA.id, aAndB.id] } } });
+      }
+    });
   });
 });

@@ -603,6 +603,7 @@ export default async function PersonPage({
               scope.isAdmin ? allFamilies.map((f) => f.id) : editableFamilyIds(scope)
             }
             canEdit={canEdit}
+            isAdmin={scope.isAdmin}
           />
 
           <div className="border-t border-stone-200 pt-4 dark:border-stone-800">
