@@ -578,6 +578,9 @@ function pageSize(limit: number | undefined): number {
 // Verlauf einer Person
 // ---------------------------------------------------------------------------
 
+/** Arten älterer Einträge, die zu einer Person gehören können (Index entityType, entityId). */
+const LEGACY_TYPES = ["Person", "Event", "PersonName", "Citation", "Relationship", "MediaAsset"];
+
 /**
  * Änderungen an einer Person, neueste zuerst, seitenweise (Cursor = Kennung
  * des letzten Eintrags). Nur für Bearbeiter der Person; sonst NOT_FOUND
@@ -622,7 +625,7 @@ export async function listPersonChanges(
   const rows = await prisma.$queryRaw<{ id: string }[]>`
     SELECT id FROM "AuditLog"
     WHERE ("personIds" @> ARRAY[${person.id}]::text[]
-           OR (cardinality("personIds") = 0 AND "entityId" = ANY(${legacyIds}::text[])))
+           OR (cardinality("personIds") = 0 AND "entityType" = ANY(${LEGACY_TYPES}::text[]) AND "entityId" = ANY(${legacyIds}::text[])))
       ${cursor}
     ORDER BY "createdAt" DESC, id DESC
     LIMIT ${limit + 1}`;
@@ -686,9 +689,9 @@ function summaryText(groups: { entityType: string; action: string; n: number }[]
   const byAction = new Map<string, string[]>();
   const add = (action: string, text: string) => byAction.set(action, [...(byAction.get(action) ?? []), text]);
   if (importCounts) {
-    for (const [section, c] of Object.entries(importCounts)) {
-      const noun = SECTION_NOUN[section];
-      if (!noun) continue;
+    // Feste Reihenfolge: Personen, Beziehungen, Ereignisse, Namen, Belege, Quellen.
+    for (const [section, noun] of Object.entries(SECTION_NOUN)) {
+      const c = importCounts[section];
       const created = Number(obj(c).created ?? 0);
       const updated = Number(obj(c).updated ?? 0);
       if (created) add("CREATE", count(created, noun));
