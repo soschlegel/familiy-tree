@@ -26,6 +26,11 @@ aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
   Datenbanknamen `familytree_mock`, im Worktree heißt sie anders — kein
   Codefehler); Playwright auf frischem Server, zwischen read und write neu
   gestartet: setup 6/6, read 156/156, write 74/74.
+- Prüfstand Branch `changelog` (21.11.): Typecheck, Lint, Vitest 693/694
+  (der eine Fehler ist umgebungsbedingt: `tests/mcp.db.test.ts` erwartet den
+  Datenbanknamen `familytree_mock`, im Worktree heißt sie
+  `familytree_changelog_mock`); Playwright auf frischem Server, zwischen
+  read und write neu gestartet: setup 6/6, read 154/154, write 79/79.
 
 ## Lokal einrichten
 
@@ -177,16 +182,24 @@ sie freigibt.
   `buildExport(scope, selection)`. Alles angekreuzt = bisheriger Export.
   Teil-Exporte: gültiges 5.5.1, Rundreise verlustfrei, keine hängenden
   Zeiger (Tests). Import in MyHeritage selbst weiterhin nicht ausprobiert.
-- **Changelog** (Änderungsgeschichte in der App): (1) je Person „wer hat
-  wann was geändert“; (2) Übersicht für Administratoren: Änderungen je
-  Familie und Zeitraum; (3) Änderungen über eine ChangeSet-Kennung bündeln,
-  z.B. eine große Änderung über MCP als ein Paket. Grundlage: `AuditLog`
-  (`lib/audit.ts`) speichert schon Benutzer, Zeit, Kanal (Oberfläche/MCP),
-  KI-Schlüssel und `diff`, wird aber nirgends angezeigt; `diff` enthält bei
-  Änderungen oft nur die neuen Werte, keine Familie und keinen Bezug zu einem
-  Paket. Entschieden (21.11.): Verlauf einer Person sieht, wer sie bearbeiten
-  darf; Übersicht je Familie nur Administratoren; kein „Paket rückgängig“
-  vorerst.
+- **Changelog** — erledigt auf Branch `changelog` (noch nicht nach `main`).
+  Migration `20261122000000_changelog` (rein ergänzend): Tabelle
+  `ChangeSet`, im `AuditLog` `changeSetId`, `personIds`, `familyIds`
+  (GIN). `lib/change-sets.ts`: Paket je API-Anfrage (`lib/api.ts`), eigene
+  Titel für GEDCOM-Import, Daten einspielen, Zusammenführen,
+  Sammel-Zusammenführen, Importe verbinden; MCP `begin_change_set` und
+  optional `change_set_id` an allen Schreibwerkzeugen, sonst Bündeln je
+  Benutzer und Schlüssel im 30-Minuten-Fenster (MCP ist zustandslos, keine
+  Sitzung). `lib/audit.ts`: `fieldChanges` (vorher → nachher) und
+  Momentaufnahme der Personen/Familien; alle audit-Stellen angepasst, Import
+  schreibt je betroffener Person einen Eintrag. Anzeige: Abschnitt
+  „Änderungen“ auf der Personenseite (`components/PersonChanges.tsx`, nur
+  Bearbeiter) und `/admin/changes` (nur Admins, Standard letzte 30 Tage).
+  Lesen/Rechte/Maskierung in `lib/services/changes.ts`. Kein „Paket
+  rückgängig“ (Entscheidung 21.11.). Offen zur Entscheidung: Paket-Titel aus
+  `begin_change_set` werden Bearbeitern unverändert gezeigt (die KI könnte
+  dort Namen nennen); GEDCOM-Import protokolliert gelöschte Datensätze nur
+  als Zahl, nicht je Person.
 
 Freigabe (21.11.): „bauen und Gas geben“ — die Wünsche werden umgesetzt.
 - **Dubletten: keine Vorfahren/Nachkommen als Kandidaten** — erledigt

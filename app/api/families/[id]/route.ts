@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { route, badRequest, notFound } from "@/lib/api";
-import { audit } from "@/lib/audit";
+import { audit, auditActor, fieldChanges } from "@/lib/audit";
 
 type Params = { id: string };
 
@@ -18,17 +18,19 @@ export const PATCH = route<Params>(
     const parsed = patchInput.safeParse(await req.json());
     if (!parsed.success) return badRequest(parsed.error.issues);
 
+    const before = await prisma.family.findUnique({ where: { id } });
+    if (!before) return notFound();
     const family = await prisma.family.update({
       where: { id },
       data: parsed.data,
     });
 
     await audit({
-      userId: ctx.userId,
+      ...auditActor(ctx.scope),
       action: "UPDATE",
       entityType: "Family",
       entityId: id,
-      diff: parsed.data,
+      diff: { ...parsed.data, changes: fieldChanges(before, parsed.data) },
     });
 
     return NextResponse.json(family);
@@ -66,7 +68,7 @@ export const DELETE = route<Params>(
     await prisma.family.delete({ where: { id } });
 
     await audit({
-      userId: ctx.userId,
+      ...auditActor(ctx.scope),
       action: "DELETE",
       entityType: "Family",
       entityId: id,

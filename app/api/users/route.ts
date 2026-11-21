@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { route, badRequest } from "@/lib/api";
-import { audit } from "@/lib/audit";
+import { audit, auditActor } from "@/lib/audit";
 import { userInput } from "@/lib/validation";
 
 /**
@@ -60,7 +60,7 @@ export const POST = route("user:manage", async (ctx, req) => {
   });
 
   await audit({
-    userId: ctx.userId,
+    ...auditActor(ctx.scope),
     action: "CREATE",
     entityType: "User",
     entityId: user.id,

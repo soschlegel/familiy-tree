@@ -41,6 +41,7 @@ import { DuplicateBanner } from "@/components/DuplicateBanner";
 import { ReferencePanel } from "@/components/ReferencePanel";
 import { MergeWithPicker } from "@/components/MergeWithPicker";
 import { PersonFamilies } from "@/components/PersonFamilies";
+import { PersonChanges } from "@/components/PersonChanges";
 import {
   RelationshipEditor,
   type RelationRow,
@@ -579,6 +580,9 @@ export default async function PersonPage({
           canDelete={canEdit}
         />
       </div>
+
+      {/* Changelog: Inhalt in components/PersonChanges.tsx */}
+      {canEdit && <PersonChanges personId={person.id} />}
 
       {canEdit && (
         <section aria-labelledby="manage-h" className="space-y-6 rounded-2xl border border-stone-200 bg-stone-100/50 p-5 dark:border-stone-800 dark:bg-stone-900/40">

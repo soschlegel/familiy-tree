@@ -4,6 +4,7 @@ import { Prisma, type Role } from "@prisma/client";
 import { auth } from "./auth";
 import { assertCan, ForbiddenError, type Action } from "./authz";
 import { loadScope, type Scope } from "./scope";
+import { appChangeSet } from "./change-sets";
 import { ServiceError } from "./services/errors";
 
 export type Ctx = { userId: string; role: Role; scope: Scope };
@@ -85,7 +86,9 @@ export function route<T>(
 
       if (action) assertCan(session.user.role, action);
 
-      const scope = await loadScope(session.user.id, session.user.role);
+      // Jede Anfrage bildet ein Changelog-Paket — angelegt erst mit der
+      // ersten Änderung (lib/change-sets.ts).
+      const scope: Scope = { ...(await loadScope(session.user.id, session.user.role)), changeSet: appChangeSet() };
       const params = segment?.params ? await segment.params : ({} as T);
 
       return await handler(

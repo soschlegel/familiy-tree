@@ -1,7 +1,7 @@
 import { test, expect, authFile } from "../support/fixtures";
 
 const ALL = ["Baum", "Personen", "Recherche", "Quellen", "Daten"];
-const ADMIN_ONLY = ["Familien", "Benutzer"];
+const ADMIN_ONLY = ["Familien", "Benutzer", "Änderungen"];
 
 const nav = (page: import("@playwright/test").Page) =>
   page.getByRole("navigation", { name: "Hauptnavigation" });
@@ -105,7 +105,7 @@ test.describe("als Admin", () => {
 test.describe("Zugriffsschutz für Verwaltungsseiten", () => {
   const cases = [
     { role: "viewer", urls: ["/admin/users", "/admin/families", "/people/new"] },
-    { role: "editor", urls: ["/admin/users", "/admin/families"] },
+    { role: "editor", urls: ["/admin/users", "/admin/families", "/admin/changes"] },
     { role: "nofamily", urls: ["/admin/users", "/people/new"] },
   ] as const;
   for (const { role, urls } of cases) {

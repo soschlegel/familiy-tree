@@ -269,6 +269,7 @@ export async function revokeApiToken(scope: Scope, tokenId: string): Promise<Api
       revoked: true,
       prefix: row.prefix,
       ...(row.userId !== scope.userId ? { ownerId: row.userId } : {}),
+      changes: { revokedAt: { from: null, to: iso(updated.revokedAt) } },
     },
   });
   return toTokenDto(updated);
