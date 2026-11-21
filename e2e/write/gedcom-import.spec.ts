@@ -463,17 +463,34 @@ function danglingPointers(text: string): string[] {
 }
 
 /**
- * Lädt einen Export über den Link herunter und liefert ihn zusammen mit der
- * Personenzahl laut API. Parallel laufende Tests legen Personen an und
- * löschen sie; gezählt wird deshalb vor und nach dem Download, und nur ein
- * Durchgang mit gleichem Stand zählt (höchstens 5 Versuche).
+ * GEDCOM-Export über den Auswahldialog: Knopf öffnen, optional Familien
+ * wählen (`only`: nur diese Familie ankreuzen), „Herunterladen“.
  */
-async function stableDownload(page: Page, api: APIRequestContext, link: string) {
+async function dialogDownload(page: Page, button: string, only?: string) {
+  await page.getByRole("button", { name: button, exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  if (only) {
+    await dialog.getByRole("button", { name: "Keine auswählen" }).click();
+    await dialog.getByRole("checkbox", { name: only, exact: true }).check();
+  }
+  const [download] = await Promise.all([page.waitForEvent("download"), dialog.getByRole("link", { name: "Herunterladen" }).click()]);
+  await expect(dialog).toBeHidden();
+  return { name: download.suggestedFilename(), body: await streamBuffer(await download.createReadStream()) };
+}
+
+/**
+ * Lädt einen Export über den Dialog (alles ausgewählt) herunter und liefert
+ * ihn zusammen mit der Personenzahl laut API. Parallel laufende Tests legen
+ * Personen an und löschen sie; gezählt wird deshalb vor und nach dem
+ * Download, und nur ein Durchgang mit gleichem Stand zählt (höchstens 5
+ * Versuche).
+ */
+async function stableDownload(page: Page, api: APIRequestContext, button: string) {
   const total = async () => Number((await api.get("/api/persons?limit=1")).headers()["x-total-count"]);
   for (let attempt = 0; attempt < 5; attempt++) {
     const before = await total();
-    const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("link", { name: link, exact: true }).click()]);
-    const body = await streamBuffer(await download.createReadStream());
+    const { body } = await dialogDownload(page, button);
     if ((await total()) === before) return { body, persons: before };
   }
   throw new Error("Personenzahl hat sich bei jedem Versuch während des Downloads geändert");
@@ -511,6 +528,28 @@ test("GEDCOM-Exporte: Admin (GEDCOM und ZIP) mit erwarteten Zahlen, Betrachter o
   const mediaFiles = Object.values(zip.files).filter((f) => !f.dir && f.name.startsWith("media/"));
   expect(mediaFiles.length).toBeGreaterThan(0);
   for (const f of mediaFiles) expect(zipText).toContain(`FILE ${f.name}`);
+
+  // Teil-Export nur der Importfamilie (Ziel z.B. wieder MyHeritage): genau
+  // ihre Personen, die zurückgeschriebene abgelehnte Familie bleibt, kein
+  // offener Zeiger — auch nicht aus den aufbewahrten Rohdaten.
+  const families = (await (await api.get("/api/families")).json()) as { id: string; name: string }[];
+  const importFamily = families.find((f) => f.name === FAMILY_NEW)!;
+  const inImportFamily = Number((await api.get(`/api/persons?familyId=${importFamily.id}&limit=1`)).headers()["x-total-count"]);
+  await page.reload();
+  const part = await dialogDownload(page, "GEDCOM", FAMILY_NEW);
+  expect(part.name).toMatch(/^stammbaum_\d{4}-\d{2}-\d{2}_auswahl-1-familie\.ged$/);
+  const partText = part.body.toString("utf8");
+  const partDoc = parseGedcom(part.body).document;
+  expect(partDoc.persons).toHaveLength(inImportFamily);
+  expect(partText).toContain(SURNAME);
+  expect(partDoc.families.some((f) => f.events.some((e) => e.type === "MARRIAGE" && e.date?.original === "1950"))).toBe(true);
+  expect(danglingPointers(partText)).toEqual([]);
+  // Umgekehrt: nur Mock-Familie A — nichts aus dem Import.
+  const other = await dialogDownload(page, "GEDCOM mit Bildern (ZIP)", families.find((f) => f.id === "mock-family-a")!.name);
+  const otherZip = await JSZip.loadAsync(other.body);
+  const otherText = await otherZip.file("stammbaum.ged")!.async("string");
+  expect(otherText).not.toContain(SURNAME);
+  expect(danglingPointers(otherText)).toEqual([]);
 
   // Betrachter (Familie A): nur seine Personen, keine der importierten ohne Familie.
   const viewerApi = await apiAs("viewer");

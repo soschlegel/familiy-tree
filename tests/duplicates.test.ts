@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import { toFuzzyDate } from "@/lib/dates";
-import { findDuplicatePairs, scoreDuplicate, type DupPerson } from "@/lib/duplicates";
+import { findDuplicatePairs, lineageFromParents, lineageOf, scoreDuplicate, type DupPerson } from "@/lib/duplicates";
 
 const d = (iso: string, precision: "DAY" | "MONTH" | "YEAR" = "DAY", qualifier = "EXACT") => toFuzzyDate(iso, precision, qualifier)!;
 
@@ -130,5 +130,75 @@ describe("findDuplicatePairs", () => {
     const pairs = findDuplicatePairs([c, a, b]);
     expect(pairs[0]).toMatchObject({ confidence: "high", a: a.id, b: b.id });
     expect(findDuplicatePairs([a, b], { include: () => false })).toEqual([]);
+  });
+});
+
+describe("Vorfahren und Nachkommen (lineage)", () => {
+  /** Kette top → … → bottom über `depth` Zwischengenerationen; Namen wie im echten Fall: Urgroßvater ohne Daten. */
+  function chain(depth: number) {
+    const top = p({ givenName: "Ortwin", familyName: "Quellmar", gender: "MALE" });
+    const people = [top];
+    let prev = top;
+    for (let i = 0; i < depth; i++) {
+      const mid = p({ givenName: `Zwischen${i}`, familyName: "Quellmar", gender: "MALE", parents: [prev.id] });
+      prev.children.push(mid.id);
+      people.push(mid);
+      prev = mid;
+    }
+    const bottom = p({ givenName: "Ortwin", familyName: "Quellmar", gender: "MALE", birth: d("1746-03-01"), parents: [prev.id] });
+    prev.children.push(bottom.id);
+    people.push(bottom);
+    return { top, bottom, people };
+  }
+
+  it("ohne Abstammungsprüfung wäre der Urgroßvater ein „unklar“-Kandidat seines Urenkels", () => {
+    const { top, bottom } = chain(2);
+    expect(scoreDuplicate(top, bottom)?.confidence).toBe("low");
+  });
+
+  for (const depth of [1, 2, 5]) {
+    it(`findDuplicatePairs schließt Vorfahre/Nachkomme über ${depth + 1} Generationen aus — in beiden Richtungen`, () => {
+      const { top, bottom, people } = chain(depth);
+      const stranger = p({ givenName: "Ortwin", familyName: "Quellmar", gender: "MALE" });
+      const pairs = findDuplicatePairs([...people, stranger]);
+      const has = (x: DupPerson, y: DupPerson) => pairs.some((q) => (q.a === x.id && q.b === y.id) || (q.a === y.id && q.b === x.id));
+      expect(has(top, bottom)).toBe(false);
+      expect(has(top, stranger)).toBe(true);
+      expect(has(bottom, stranger)).toBe(true);
+      const lineage = lineageOf(people);
+      expect(lineage(top.id, bottom.id)).toBe(true);
+      expect(lineage(bottom.id, top.id)).toBe(true);
+      expect(lineage(top.id, stranger.id)).toBe(false);
+      expect(scoreDuplicate(top, bottom, { lineage })).toBeNull();
+    });
+  }
+
+  it("die Kette läuft nur über übergebene (sichtbare) Personen", () => {
+    const { top, bottom, people } = chain(2);
+    // Mittlere Generation fehlt (für den Benutzer unsichtbar): keine Aussage über die Abstammung.
+    const visible = people.filter((x) => x === top || x === bottom || x.givenName === "Zwischen1");
+    expect(lineageOf(visible)(top.id, bottom.id)).toBe(false);
+    const pairs = findDuplicatePairs(visible);
+    expect(pairs.some((q) => [q.a, q.b].includes(top.id) && [q.a, q.b].includes(bottom.id))).toBe(true);
+  });
+
+  it("verträgt Kreise in fehlerhaften Daten", () => {
+    const parents = new Map([
+      ["x", ["y"]],
+      ["y", ["z"]],
+      ["z", ["x"]],
+    ]);
+    const lineage = lineageFromParents((id) => parents.get(id));
+    expect(lineage("x", "z")).toBe(true);
+    expect(lineage("x", "q")).toBe(false);
+  });
+
+  it("Geschwister, Cousins und Partner sind keine Vorfahren (bleiben Kandidaten, wenn sonst passend)", () => {
+    const parent = p({ givenName: "Konrad", familyName: "Quellmar", gender: "MALE" });
+    const a = p({ givenName: "Ortwin", familyName: "Quellmar", gender: "MALE", birth: d("1800-01-01"), parents: [parent.id] });
+    const b = p({ givenName: "Ortwin", familyName: "Quellmar", gender: "MALE", birth: d("1800-01-01"), parents: [parent.id] });
+    parent.children.push(a.id, b.id);
+    expect(lineageOf([parent, a, b])(a.id, b.id)).toBe(false);
+    expect(findDuplicatePairs([parent, a, b]).some((q) => [q.a, q.b].includes(a.id) && [q.a, q.b].includes(b.id))).toBe(true);
   });
 });

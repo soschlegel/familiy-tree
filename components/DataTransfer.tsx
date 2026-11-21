@@ -3,7 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import type { ExportFamilyOverview } from "@/lib/export-selection";
+
 import { apiFetch } from "./api-client";
+import { GedcomExportDialog } from "./GedcomExportDialog";
 
 type Plan = {
   persons: { create: number; update: number };
@@ -19,7 +22,7 @@ type Plan = {
 
 const box = "card p-5";
 
-export function DataTransfer({ canImport }: { canImport: boolean }) {
+export function DataTransfer({ canImport, gedcomOverview }: { canImport: boolean; gedcomOverview: ExportFamilyOverview }) {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -92,17 +95,10 @@ export function DataTransfer({ canImport }: { canImport: boolean }) {
         </div>
         <p className="mt-4 text-sm muted">
           GEDCOM 5.5.1 für andere Stammbaumprogramme — mit Ereignissen, Namen, Quellen und Belegen; beim Import
-          aufbewahrte Zusatzangaben (z.B. von MyHeritage) werden zurückgeschrieben. Ob MyHeritage, Gramps oder Ancestry die
-          Datei vollständig übernehmen, ist noch nicht ausprobiert.
+          aufbewahrte Zusatzangaben (z.B. von MyHeritage) werden zurückgeschrieben. Vor dem Herunterladen lassen sich die
+          Familien wählen. Ob MyHeritage, Gramps oder Ancestry die Datei vollständig übernehmen, ist noch nicht ausprobiert.
         </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <a href="/api/export?format=gedcom" className="btn-secondary">
-            GEDCOM
-          </a>
-          <a href="/api/export?format=gedzip" className="btn-secondary">
-            GEDCOM mit Bildern (ZIP)
-          </a>
-        </div>
+        <GedcomExportDialog overview={gedcomOverview} />
       </section>
 
       <section className={box}>
