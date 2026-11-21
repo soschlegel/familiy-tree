@@ -100,7 +100,7 @@ export async function updatePersonName(scope: Scope, id: string, patch: unknown)
       action: "UPDATE",
       entityType: "PersonName",
       entityId: id,
-      diff: { label: toPersonNameDto(row).display, changes },
+      diff: { subject: toPersonNameDto(row).display, changes },
     });
   }
   return toPersonNameDto(row);
