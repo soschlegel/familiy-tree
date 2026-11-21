@@ -5,6 +5,7 @@ import { route } from "@/lib/api";
 import { getObjectBuffer } from "@/lib/storage";
 import { buildExport } from "@/lib/services/exchange-export";
 import { buildGedcomExport, buildGedcomZip } from "@/lib/services/gedcom-export";
+import { parseExportSelection } from "@/lib/services/export-selection";
 
 export const runtime = "nodejs";
 
@@ -14,11 +15,15 @@ export const runtime = "nodejs";
  * Export enthält denselben Bestand.
  */
 export const GET = route(null, async (ctx, req) => {
-  const format = new URL(req.url).searchParams.get("format") ?? "json";
+  const params = new URL(req.url).searchParams;
+  const format = params.get("format") ?? "json";
 
   // GEDCOM 5.5.1 (UTF-8) bzw. als ZIP mit den Bilddateien unter media/.
+  // Optional mit Familienauswahl (?families=<id>,<id>&withoutFamily=1, siehe
+  // lib/services/export-selection.ts) — ohne: alles Sichtbare wie bisher.
   if (format === "gedcom") {
-    const g = await buildGedcomExport(ctx.scope);
+    const selection = await parseExportSelection(ctx.scope, params);
+    const g = await buildGedcomExport(ctx.scope, { selection });
     return new NextResponse(new Uint8Array(g.bytes), {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
@@ -27,7 +32,8 @@ export const GET = route(null, async (ctx, req) => {
     });
   }
   if (format === "gedzip") {
-    const z = await buildGedcomZip(ctx.scope);
+    const selection = await parseExportSelection(ctx.scope, params);
+    const z = await buildGedcomZip(ctx.scope, selection);
     return new NextResponse(new Uint8Array(z.buffer), {
       headers: { "Content-Type": "application/zip", "Content-Disposition": `attachment; filename="${z.fileName}"` },
     });

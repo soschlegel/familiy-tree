@@ -10,7 +10,9 @@
  * ## Ablauf
  * 1. **Anker**: Paare aus scoreDuplicate. „sicher“ nur nach dessen strenger
  *    Regel (gleicher ganzer Name, gleiches tagesgenaues Geburts- und
- *    Sterbedatum bzw. gemeinsame Eltern, kein Widerspruch).
+ *    Sterbedatum bzw. gemeinsame Eltern, kein Widerspruch). Eingetragene
+ *    Vorfahren/Nachkommen sind nie ein Paar — auch nicht in der Ausbreitung
+ *    und beim Prüfen der Cluster (lib/duplicates.ts, lineageOf).
  * 2. **Ausbreitung**: Ist ein Paar verbunden, werden Eltern×Eltern,
  *    Partner×Partner und Kinder×Kinder Kandidaten — mit gelockerter Schwelle
  *    (gleicher ganzer Vorname bzw. ein Vorname mehr, gleiches Geschlecht,
@@ -29,7 +31,7 @@
  */
 import { datesCompatible } from "./merge-rules";
 import { minYearDistance } from "./dates";
-import { findDuplicatePairs, scoreDuplicate, type Confidence, type DupPerson } from "./duplicates";
+import { findDuplicatePairs, lineageOf, scoreDuplicate, type Confidence, type DupPerson, type Lineage } from "./duplicates";
 import { firstGivenKey, nameKey } from "./name-keys";
 
 export type LinkPerson = DupPerson & { group: string };
@@ -79,6 +81,12 @@ export type LinkOptions = {
   withinGroup?: boolean;
   /** Paare, die nie vorgeschlagen werden („kein Duplikat“). */
   dismissed?: Set<string>;
+  /**
+   * Abstammung (Vorfahre/Nachkomme schließt ein Paar aus); ohne Angabe aus
+   * den `parents` aller übergebenen Personen (lineageOf) — dieselbe Regel wie
+   * die Dublettenliste, auch für die Ausbreitung über Verwandte.
+   */
+  lineage?: Lineage;
   /** Zusätzliche Kanten des Stammbaums für die Teile (ohne diese: aus parents/partners/children). */
 };
 
@@ -142,12 +150,15 @@ export function linkImports(people: LinkPerson[], options: LinkOptions = {}): Li
   const groups = options.groups?.length ? new Set(options.groups) : null;
   const inScope = (p: LinkPerson) => !groups || groups.has(p.group);
   const dismissed = options.dismissed ?? new Set<string>();
+  // Abstammung über ALLE übergebenen Personen, nicht nur die gewählten Gruppen:
+  // Die Kette kann über Personen anderer Importe laufen.
+  const lineage = options.lineage ?? lineageOf(people);
   const allowed = (a: LinkPerson, b: LinkPerson) =>
     inScope(a) && inScope(b) && (options.withinGroup ? a.group === b.group : a.group !== b.group) && !dismissed.has(pk(a.id, b.id));
 
   // 1. Anker
   const cand = new Map<string, LinkPair>();
-  for (const p of findDuplicatePairs(people.filter(inScope), { include: (x, y) => allowed(x as LinkPerson, y as LinkPerson), minScore: 0.5 })) {
+  for (const p of findDuplicatePairs(people.filter(inScope), { include: (x, y) => allowed(x as LinkPerson, y as LinkPerson), minScore: 0.5, lineage })) {
     let confidence = p.confidence;
     const reasons = [...p.reasons];
     // „wahrscheinlich“ nur mit einem Beleg über Name und ungefähres Jahr
@@ -240,7 +251,10 @@ export function linkImports(people: LinkPerson[], options: LinkOptions = {}): Li
           if (accepted.has(key)) continue;
           const m = relaxedMatch(px, py);
           if (!m.ok) continue;
-          const s = scoreDuplicate(px, py);
+          // relaxedMatch kennt keine Verwandtschaft: Vorfahre/Nachkomme (auch
+          // direkte Eltern/Kinder) hier ausdrücklich ausschließen.
+          if (lineage(px.id, py.id)) continue;
+          const s = scoreDuplicate(px, py, { lineage });
           if (s && s.conflicts.length) continue;
           const sure = base.confidence === "high" && m.fullGiven && m.birthBoth && !(s && s.conflicts.length);
           const [ia, ib] = px.id < py.id ? [px.id, py.id] : [py.id, px.id];
@@ -296,7 +310,7 @@ export function linkImports(people: LinkPerson[], options: LinkOptions = {}): Li
       }
       for (let i = 0; i < list.length && !bad; i++) {
         for (let j = i + 1; j < list.length && !bad; j++) {
-          const s2 = scoreDuplicate(byId.get(list[i])!, byId.get(list[j])!);
+          const s2 = scoreDuplicate(byId.get(list[i])!, byId.get(list[j])!, { lineage });
           if (!s2 || s2.conflicts.length) bad = true;
         }
       }

@@ -2,18 +2,26 @@ import { prisma } from "../prisma";
 import { personVisibilityFilter, type Scope } from "../scope";
 import { canViewMedia } from "../media-scope";
 import { EXCHANGE_VERSION, exportDateFields, mediaFileName, type ExchangeFile } from "../exchange";
+import type { ExportSelection } from "../export-selection";
+import { selectionPersonFilter } from "./export-selection";
 
 /**
  * Baut den Export — beschränkt auf die für diesen Benutzer sichtbaren
  * Personen. Ohne diese Einschränkung wäre der Export ein Weg, das gesamte
  * Rechtekonzept mit einem Klick zu umgehen.
+ *
+ * Mit `selection` (Familienauswahl des GEDCOM-Exports) zusätzlich nur die
+ * Personen der gewählten Familien; alles Weitere folgt daraus wie gehabt
+ * (Beziehungen nur zwischen exportierten Personen, Ereignisse, Namen, Belege,
+ * Rohdaten, Bilder nur an Exportiertem). Quellen dann nur die zitierten —
+ * unbelegte Quellen gehören zu keiner Familie.
  */
-export async function buildExport(scope: Scope): Promise<{
+export async function buildExport(scope: Scope, selection: ExportSelection | null = null): Promise<{
   data: ExchangeFile;
   keyByFileName: Map<string, string>;
 }> {
   const persons = await prisma.person.findMany({
-    where: personVisibilityFilter(scope),
+    where: selection ? { AND: [personVisibilityFilter(scope), selectionPersonFilter(selection)] } : personVisibilityFilter(scope),
     orderBy: [{ familyName: "asc" }, { givenName: "asc" }],
     include: { media: { orderBy: { sortOrder: "asc" } } },
   });
@@ -55,7 +63,9 @@ export async function buildExport(scope: Scope): Promise<{
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
   const sources = await prisma.source.findMany({
-    where: scope.isAdmin
+    where: selection
+      ? { id: { in: [...new Set(citations.map((c) => c.sourceId))] } }
+      : scope.isAdmin
       ? {}
       : {
           OR: [

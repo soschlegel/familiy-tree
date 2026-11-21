@@ -24,6 +24,15 @@
  *   vollständige Elternpaare ohne gemeinsamen Namen: −0,2 und Widerspruch.
  * - Direkt verbunden (Eltern/Kind/Partner) oder verschiedenes Geschlecht:
  *   nie ein Kandidat (Vater und Sohn gleichen Namens).
+ * - Eingetragene Vorfahren bzw. Nachkommen über beliebig viele Generationen
+ *   (`ScoreOptions.lineage`, Standard in findDuplicatePairs: aus den
+ *   `parents` der übergebenen Personen): nie ein Kandidat — der gleichnamige
+ *   Urgroßvater ohne Lebensdaten ist nicht sein Urenkel. Es zählen alle
+ *   Eltern-Kind-Kanten, auch Adoptiv-, Stief- und Pflegeeltern: Wer als
+ *   (irgendein) Elternteil in der Vorfahrenkette des anderen steht, ist laut
+ *   Eintrag eine andere Person; zusammenführen ließe sich das Paar ohnehin
+ *   nicht (Zyklus-Sperre in lib/services/merge.ts, die ebenfalls alle
+ *   PARENT_OF-Kanten nimmt).
  *
  * ## Klassen
  * - `high` („sicher“): gleicher ganzer Vor- und Nachname (auch über Geburts-
@@ -77,7 +86,54 @@ export type DupScore = {
   crossTree: boolean;
 };
 
-export type ScoreOptions = { maxYearDiff?: number };
+/**
+ * Abstammung: true, wenn eine der beiden Personen eingetragener Vorfahre der
+ * anderen ist (beliebig viele Generationen). Siehe lineageFromParents.
+ */
+export type Lineage = (a: string, b: string) => boolean;
+
+export type ScoreOptions = { maxYearDiff?: number; lineage?: Lineage };
+
+/**
+ * Abstammungsprüfung aus einer Eltern-Abfrage. Vorfahrenmengen werden nur für
+ * Personen gebildet, die tatsächlich geprüft werden (also nur für Kandidaten,
+ * die alle übrigen Regeln schon bestanden haben), und dann gemerkt.
+ * Kreise in fehlerhaften Daten sind unschädlich (besuchte Personen merken).
+ */
+export function lineageFromParents(parentsOf: (id: string) => readonly string[] | undefined): Lineage {
+  const memo = new Map<string, Set<string>>();
+  const ancestors = (id: string): Set<string> => {
+    let seen = memo.get(id);
+    if (seen) return seen;
+    seen = new Set<string>();
+    const stack = [...(parentsOf(id) ?? [])];
+    while (stack.length) {
+      const cur = stack.pop()!;
+      if (seen.has(cur)) continue;
+      seen.add(cur);
+      const known = memo.get(cur);
+      if (known) {
+        for (const x of known) seen.add(x);
+        continue;
+      }
+      for (const p of parentsOf(cur) ?? []) if (!seen.has(p)) stack.push(p);
+    }
+    memo.set(id, seen);
+    return seen;
+  };
+  return (a, b) => ancestors(a).has(b) || ancestors(b).has(a);
+}
+
+/**
+ * Abstammung nur über die übergebenen Personen und ihre `parents`: Eine Kette
+ * läuft nur über Personen der Liste — bei den Diensten sind das die für den
+ * Benutzer sichtbaren. Über unsichtbare Personen wird bewusst nicht geprüft,
+ * sonst verriete das Fehlen eines Paares eine verborgene Abstammung.
+ */
+export function lineageOf(people: DupPerson[]): Lineage {
+  const byId = new Map(people.map((p) => [p.id, p]));
+  return lineageFromParents((id) => byId.get(id)?.parents);
+}
 
 const fullName = (given: string | null | undefined, family: string | null | undefined) => `${nameKey(given)} ${nameKey(family)}`.trim();
 
@@ -279,6 +335,10 @@ export function scoreDuplicate(a: DupPerson, b: DupPerson, options: ScoreOptions
     reasons.push("dasselbe Kind eingetragen");
   }
 
+  // Vorfahre/Nachkomme über mehrere Generationen — erst hier geprüft, damit
+  // die Vorfahrenmengen nur für echte Kandidaten entstehen.
+  if (options.lineage?.(a.id, b.id)) return null;
+
   const crossTree = a.trees.length > 0 && b.trees.length > 0 && !a.trees.some((t) => b.trees.includes(t));
   if (crossTree) reasons.push("aus verschiedenen Importen");
 
@@ -296,13 +356,15 @@ export type DupPair = DupScore & { a: string; b: string };
 /**
  * Alle Kandidatenpaare (a < b nach ID) ab `minScore`, nach Klasse und Punkten
  * sortiert. `include(a, b)` filtert vorab (z.B. nur Paare über zwei Bäume,
- * ohne „kein Duplikat“-Markierungen).
+ * ohne „kein Duplikat“-Markierungen). Ohne `lineage` gilt die Abstammung über
+ * die übergebenen Personen (lineageOf).
  */
 export function findDuplicatePairs(
   people: DupPerson[],
   options: ScoreOptions & { minScore?: number; include?: (a: DupPerson, b: DupPerson) => boolean } = {},
 ): DupPair[] {
   const minScore = options.minScore ?? 0.5;
+  const scoreOptions: ScoreOptions = { maxYearDiff: options.maxYearDiff, lineage: options.lineage ?? lineageOf(people) };
   const blocks = new Map<string, DupPerson[]>();
   for (const p of people) {
     for (const k of blockKeys(p)) {
@@ -320,7 +382,7 @@ export function findDuplicatePairs(
     if (seen.has(key)) return;
     seen.add(key);
     if (options.include && !options.include(a, b)) return;
-    const s = scoreDuplicate(a, b, options);
+    const s = scoreDuplicate(a, b, scoreOptions);
     if (s && s.score >= minScore) out.push({ ...s, a: a.id, b: b.id });
   };
   for (const group of blocks.values()) {
