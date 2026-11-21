@@ -25,6 +25,9 @@ Bildarchiv und rollenbasierter Benutzerverwaltung.
   Einstieg, dazu der ganze Baum nach Generationen oder als Zeitstrahl mit
   Jahresachse, bei dem früher Geborene weiter oben stehen und Hochzeiten als
   eigene Ereignisse einsortiert werden
+- **Bezugsperson** — „Das bin ich“ oder vorübergehend eine andere Person; der
+  Baum zeigt an jeder Karte den Verwandtschaftsgrad zu ihr und färbt auf
+  Wunsch die vier Großeltern-Linien ([Bezugsperson](#bezugsperson))
 - **Bilder** — Upload pro Person, frei wählbares Primärbild (erscheint im
   Stammbaum), eigene Bilder an Hochzeiten, automatische Vorschaubilder;
   abgelegt als WebP-Dateien in einem Ordner (`MEDIA_DIR`), ausgeliefert nur
@@ -153,8 +156,8 @@ chromium`.
 |---|---|---|
 | `npm run test:e2e` | alles: setup → read → write | ca. 9–10 min |
 | `npm run test:e2e:setup` | nur Ausgangszustand: Mock-Daten neu, Anmeldungen, Vorwärmen | ca. 1–2 min (Kaltstart des Dev-Servers: länger) |
-| `npm run test:e2e:read` | setup + lesende Tests (`e2e/read/`, 151 Tests, 4 parallel) | ca. 3:10–3:20 min ohne Setup |
-| `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 74 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 4–5 min ohne Setup |
+| `npm run test:e2e:read` | setup + lesende Tests (`e2e/read/`, 159 Tests, 4 parallel) | ca. 3:10–3:20 min ohne Setup |
+| `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 78 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 4–5 min ohne Setup |
 | `npm run test:e2e:headed` | alles mit sichtbarem Browser, ein Test nach dem anderen | |
 | `npm run test:e2e:ui` | Playwright-Oberfläche: Tests einzeln starten, Schritte ansehen | |
 | `npm run test:e2e:report` | HTML-Bericht des letzten Laufs öffnen | |
@@ -311,6 +314,11 @@ Die IDs dieser Sonderfälle liefert `generateMockData().landmarks`
 | `nofamily@example.test` | Betrachter | keine | kein Zugang |
 | `blocked@example.test` | gesperrt | (A lesen) — Anmeldung schlägt fehl | (lesen) |
 
+Der Bearbeiter hat eine eigene Person (`landmarks.selfEditor`, in Familie A,
+alle vier Großeltern bekannt; die Großeltern mütterlicherseits gehören nur zu
+Familie D und sind für ihn gesperrt) — damit zeigt sein Baum gleich
+Verwandtschaftsgrade und Linien.
+
 **Feste KI-Schlüssel** für Tests und Entwicklung, ebenfalls deterministisch
 (`npm run -s mcp:key <name>` gibt den Schlüssel aus, Standard `editor-read`):
 `admin-write`, `editor-write`, `editor-read`, `viewer-read`, `viewer-write`
@@ -350,8 +358,8 @@ Nachkommen — für die Startperson der Mock-Daten 23 Personen auf rund
 - **Einstieg** — ohne `focus` die zuletzt fokussierte Person (Cookie
   `tree-focus`, wird serverseitig auf Sichtbarkeit geprüft), sonst die
   sichtbare Person, deren Ausschnitt die meisten Generationen und darin die
-  meisten sichtbaren Verwandten zeigt. Eine Verknüpfung „dieser Benutzer ist
-  diese Person“ gibt es im Datenmodell nicht.
+  meisten sichtbaren Verwandten zeigt. Ohne gemerkte Person steht die
+  [Bezugsperson](#bezugsperson) im Mittelpunkt.
 - **Suche** — durchsucht in der Fokus-Ansicht den ganzen sichtbaren Bestand
   (`/api/persons?q=`) und stellt den Treffer in den Mittelpunkt.
 - **Gesperrte Personen** erscheinen wie im ganzen Baum als Platzhalter (ohne
@@ -369,6 +377,66 @@ Graphen von `loadTree`; Auswahl und Layout in
 beim Wechsel auf „Generationen“ oder „Zeitstrahl“. Das Layout ist dasselbe wie
 in der Generationenansicht, nur mit fest vorgegebenen Ebenen (Abstand zur
 Fokusperson) und engerem Zeilenabstand.
+
+## Bezugsperson
+
+Jeder Benutzer kann sich eine Person zuordnen („das bin ich“): auf der
+Personenseite mit **„Das bin ich“** (nur für Personen, die er sehen darf),
+oder ein Administrator tut es in der Benutzerverwaltung („Person:
+zuordnen“). Gespeichert in `User.personId` (Migration
+`20261122000001_bezugsperson`, `ON DELETE SET NULL`; beim Zusammenführen
+wandert der Verweis auf die bleibende Person).
+
+Daneben lässt sich **vorübergehend eine andere Person** als Bezugsperson
+wählen — etwa im Gespräch mit dem Sohn, um den Baum aus seiner Sicht zu
+zeigen: „Baum aus dieser Sicht“ auf seiner Personenseite bzw.
+`/tree?bezug=<id>` (auch `/people/<id>?bezug=<id>`). Der Browser merkt sie
+sich im Cookie `tree-bezug`; oben steht dann deutlich „Sicht von: <Name> ·
+zurück zu mir“ (ohne eigene Person: „aufheben“), `?bezug=ich` führt ebenfalls
+zurück. Vorrang: Adresse vor Cookie vor eigener Person.
+
+- **Baum** (alle drei Ansichten) — unter jeder Karte der Verwandtschaftsgrad
+  zur Bezugsperson („Urgroßvater väterlicherseits“, „Cousine 1. Grades,
+  eine Generation darüber“, „Schwägerin“, „angeheirateter Onkel …“), auch für
+  Screenreader. Die Bezugsperson selbst ist gestrichelt umrandet und trägt
+  „Bezugsperson“ bzw. „ich · Bezugsperson“. Ohne `focus` steht sie in der
+  Fokus-Ansicht im Mittelpunkt.
+- **Linien** (Schalter in der Werkzeugleiste, im Cookie `tree-lines` gemerkt)
+  — Vorfahren nach den vier Großeltern getönt, wie bei MyHeritage: väterlich
+  Blau (Vater des Vaters, „VV“) und Grün („VM“), mütterlich Rot („MV“) und
+  Gelb („MM“). Nie nur Farbe: jede Karte trägt zusätzlich Streifen und
+  Kurzzeichen, die Legende nennt die vier Großeltern. Vater und Mutter
+  gehören zu beiden Linien ihrer Seite, Vorfahren mit Ahnenschwund zu
+  mehreren; alle anderen bleiben neutral. Farben als CSS-Variablen
+  (`--line-ff` …) in [app/globals.css](app/globals.css), je eigene Werte für
+  das dunkle Farbschema.
+- **Personenseite** — „Für dich (…) ist X: Großonkel väterlicherseits“, dazu
+  „Das bin ich“ und „Baum aus dieser Sicht“.
+
+**Berechnung** ([lib/reference.ts](lib/reference.ts)): ein Durchgang von der
+Bezugsperson aus statt einer Abfrage je Paar — erst ihre Vorfahren
+(`ancestorDistances`), dann von allen Vorfahren gleichzeitig abwärts,
+geordnet nach (Abstand gesamt, Abstand hinauf); das ergibt für jede Person
+den nächsten gemeinsamen Vorfahren wie `findBloodRelation`, samt Halb-,
+Adoptiv- und väterlicher-/mütterlicherseits. Wer nicht blutsverwandt ist,
+bekommt den Begriff des kürzesten Wegs über Eltern- und Partnerkanten
+(`describePath`, dieselben Wege wie `shortestPath`); passt kein Begriff,
+bleibt die Karte ohne Angabe. `tests/reference.test.ts` vergleicht das
+Ergebnis für alle Paare der Mock-Daten und erzeugter Bäume mit
+`kinshipInGraph`. Linien: Vater/Mutter (leiblich vor adoptiv, je
+Geschlecht), deren Eltern als die vier Großeltern, und deren Vorfahren.
+Gemessen: rund 1 ms auf den Mock-Daten, rund 50 ms für 10 000 erzeugte
+Personen mit 23 000 Kanten.
+
+**Datenschutz**: gerechnet wird nur auf dem Graphen der Personen, die der
+Benutzer sehen darf (Kanten zwischen zwei sichtbaren Personen,
+`visibleIndex` in [lib/services/reference.ts](lib/services/reference.ts)).
+Gesperrte Platzhalter bekommen keine Angabe und keine Linie, kein Weg führt
+über sie (ein sichtbarer Urgroßvater hinter einem gesperrten Großvater bleibt
+ohne Bezeichnung), eine gesperrte Person kann nicht Bezugsperson sein
+(unbekannt und gesperrt sehen gleich aus), und die Legende nennt nur
+sichtbare Großeltern („nicht erfasst“ sonst). Das ist strenger als die
+MCP-Abfrage `get_kinship`, die Wege durch Platzhalter zulässt.
 
 ## Ungenaue Daten
 
@@ -1816,6 +1884,7 @@ Person | Relationship ──< Event      Taufe, Beruf, Wohnort, Beerdigung, … 
 Person ──< PersonName                weitere Namen (Ehename, Schreibvariante, auch bekannt als …)
 ImportBatch ──< ImportLink | ExternalId | ImportRawRecord   Herkunft importierter Daten (nur Admin)
 User (= Allowlist) ──< AuditLog     über den KI-Zugang: channel = MCP, apiTokenId
+User >── Person (personId, optional)  „das bin ich“ (Bezugsperson)
 User ──< ApiToken                    KI-Schlüssel (nur der Hash), aiAccess am User
 ```
 
@@ -1952,6 +2021,8 @@ selbst (samt Anmeldekonten, Sitzungen und KI-Schlüsseln); was der Benutzer
 angelegt hat, bleibt; seine Einträge im Änderungsprotokoll bleiben ebenfalls,
 verlieren aber den Bezug zu ihm. Den eigenen Zugang kann niemand löschen,
 herabstufen oder sperren, ebenso wenig den letzten aktiven Administrator.
+Unter der E-Mail-Adresse ordnet er jedem Benutzer seine eigene Person zu
+(„Person: zuordnen“, siehe [Bezugsperson](#bezugsperson)).
 
 Eine **vertippte E-Mail-Adresse** lässt sich korrigieren, solange sich der
 Benutzer noch nie angemeldet hat. Danach hängt an der Adresse ein
