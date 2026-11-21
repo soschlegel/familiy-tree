@@ -147,6 +147,18 @@ sie freigibt.
   importieren). GEDCOM-Export gibt es schon (`/api/export?format=gedcom`
   bzw. `gedzip`, `lib/services/gedcom-export.ts`), bisher immer mit allem,
   was der Benutzer sehen darf.
+- **Changelog** (Änderungsgeschichte in der App): (1) je Person „wer hat
+  wann was geändert“; (2) Übersicht für Administratoren: Änderungen je
+  Familie und Zeitraum; (3) Änderungen über eine ChangeSet-Kennung bündeln,
+  z.B. eine große Änderung über MCP als ein Paket. Grundlage: `AuditLog`
+  (`lib/audit.ts`) speichert schon Benutzer, Zeit, Kanal (Oberfläche/MCP),
+  KI-Schlüssel und `diff`, wird aber nirgends angezeigt; `diff` enthält bei
+  Änderungen oft nur die neuen Werte, keine Familie und keinen Bezug zu einem
+  Paket. Entschieden (21.11.): Verlauf einer Person sieht, wer sie bearbeiten
+  darf; Übersicht je Familie nur Administratoren; kein „Paket rückgängig“
+  vorerst.
+
+Freigabe (21.11.): „bauen und Gas geben“ — die Wünsche werden umgesetzt.
 - **Dubletten: keine Vorfahren/Nachkommen als Kandidaten** (Vorschlag, aus
   einem Fall vom 21.11.): `scoreDuplicate` schließt nur direkte Verwandte
   aus; ein gleichnamiger Urgroßvater ohne Lebensdaten erscheint deshalb als
