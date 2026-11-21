@@ -38,6 +38,11 @@ model User {
   // KI-Zugang (MCP): nur ausdrücklich von einem Admin vergeben — auch die
   // Rolle ADMIN schließt ihn nicht ein (lib/services/ai-access.ts).
   aiAccess      AiAccess   @default(NONE)
+  // Bezugsperson „das bin ich“ (README, „Bezugsperson“). Verschwindet die
+  // Person, bleibt der Benutzer ohne Zuordnung; beim Zusammenführen wandert
+  // der Verweis auf die bleibende Person (lib/services/merge.ts).
+  personId      String?
+  person        Person?    @relation("UserSelf", fields: [personId], references: [id], onDelete: SetNull)
 
   accounts Account[]
   sessions Session[]
@@ -49,6 +54,8 @@ model User {
   apiTokens      ApiToken[]
   importBatches  ImportBatch[]        @relation("ImportUser")
   dismissals     DuplicateDismissal[]
+
+  @@index([personId])
 }
 
 // ---------------------------------------------------------------------------
@@ -266,6 +273,8 @@ model Person {
   // Als „kein Duplikat“ markierte Paare (lib/services/duplicates.ts).
   dismissedAsA DuplicateDismissal[] @relation("DismissalA")
   dismissedAsB DuplicateDismissal[] @relation("DismissalB")
+  // Benutzer, die diese Person als „das bin ich“ gewählt haben.
+  selfOfUsers  User[]               @relation("UserSelf")
 
   @@index([familyName, givenName])
 }

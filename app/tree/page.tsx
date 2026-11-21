@@ -4,10 +4,20 @@ import { cookies } from "next/headers";
 
 import { requireScope } from "@/lib/session";
 import { editableFamilyIds } from "@/lib/scope";
-import { listFamilies, loadFocusTree, loadTree, type TreeCounts } from "@/lib/services";
+import {
+  listFamilies,
+  loadFocusTree,
+  loadGraph,
+  loadTree,
+  referenceView,
+  resolveReference,
+  type TreeCounts,
+} from "@/lib/services";
+import { LINES_COOKIE, REFERENCE_COOKIE, type ReferenceView } from "@/lib/reference";
 import { FOCUS_COOKIE, FOCUS_DEPTH, parseDepth, type TreeView } from "@/lib/focus-tree";
 import { FamilyTree } from "@/components/FamilyTree";
 import { BrandMark } from "@/components/NavBar";
+import { ReferenceChip } from "@/components/ReferenceChip";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Baum" };
@@ -17,6 +27,9 @@ export const metadata = { title: "Baum" };
  * - `view=generations|timeline` — ganzer Baum (`focus` zentriert nur darauf)
  * - sonst Fokus-Ansicht: `focus` (sonst die zuletzt fokussierte Person aus
  *   dem Cookie, sonst eine Startperson), Tiefe über `up` und `down`.
+ * - `bezug` — vorübergehende Bezugsperson (README, „Bezugsperson“); ohne
+ *   `focus` steht sie auch im Mittelpunkt. `bezug=ich` kehrt zur eigenen
+ *   Person zurück.
  */
 function parseView(view: string | undefined): TreeView {
   return view === "generations" || view === "timeline" ? view : "focus";
@@ -33,6 +46,7 @@ export default async function TreePage({
     view?: string;
     up?: string;
     down?: string;
+    bezug?: string;
   }>;
 }) {
   const { scope } = await requireScope();
@@ -45,6 +59,19 @@ export default async function TreePage({
   let counts: TreeCounts = { visible: 0, hidden: 0, relationships: 0 };
   let content: ReactNode = null;
 
+  // Ein Graph für Baum und Bezugsperson. Verwandtschaft und Linien nur über
+  // sichtbare Personen (lib/services/reference.ts).
+  const jar = await cookies();
+  const graph = noAccess ? null : await loadGraph(scope);
+  const choice = await resolveReference(
+    scope,
+    { param: params.bezug ?? null, cookie: jar.get(REFERENCE_COOKIE)?.value ?? null },
+    (id) => graph?.persons.get(id)?.visible ?? false,
+  );
+  const bezugParam = params.bezug && choice.source === "param" ? choice.id : null;
+  const initialLines = jar.get(LINES_COOKIE)?.value === "1";
+  let reference: ReferenceView | null = null;
+
   // Ohne freigegebene Familie gäbe es nur Platzhalter — dann gar nicht erst
   // laden (und auch keine Zahlen über fremde Familien nennen).
   const familyList = noAccess ? [] : await listFamilies(scope);
@@ -52,9 +79,15 @@ export default async function TreePage({
   const families = familyList.map(({ id, name }) => ({ id, name }));
 
   if (!noAccess && view === "focus") {
-    const remembered = (await cookies()).get(FOCUS_COOKIE)?.value;
+    const remembered = jar.get(FOCUS_COOKIE)?.value;
     const result = await loadFocusTree(scope, {
-      focusId: requested ?? (remembered && ID_PATTERN.test(remembered) ? remembered : null),
+      graph: graph ?? undefined,
+      // Ohne Vorgabe und ohne gemerkte Person: die Bezugsperson in die Mitte.
+      focusId:
+        requested ??
+        bezugParam ??
+        (remembered && ID_PATTERN.test(remembered) ? remembered : null) ??
+        choice.id,
       // Eine gemerkte Person darf verschwunden sein; eine angefragte nicht.
       fallback: !requested,
       up: parseDepth(params.up, FOCUS_DEPTH.up),
@@ -80,10 +113,22 @@ export default async function TreePage({
         </div>
       );
     } else if (result.tree) {
-      content = <FamilyTree key="focus" view="focus" data={result.tree} families={families} />;
+      // Nur der Ausschnitt verlässt den Server — berechnet wird trotzdem in
+      // einem Durchgang von der Bezugsperson aus.
+      reference = graph ? referenceView(graph, choice, result.tree.persons.map((p) => p.id)) : null;
+      content = (
+        <FamilyTree
+          key="focus"
+          view="focus"
+          data={result.tree}
+          families={families}
+          reference={reference}
+          initialLines={initialLines}
+        />
+      );
     }
   } else if (!noAccess) {
-    const data = await loadTree(scope);
+    const data = await loadTree(scope, graph ?? undefined);
     const visible = data.persons.filter((p) => !p.restricted).length;
     counts = {
       visible,
@@ -91,13 +136,16 @@ export default async function TreePage({
       relationships: data.relationships.length,
     };
     if (visible > 0) {
+      reference = graph ? referenceView(graph, choice) : null;
       content = (
         <FamilyTree
           key="full"
           view={view}
           data={data}
           families={families}
-          focusId={requested ?? undefined}
+          focusId={requested ?? bezugParam ?? undefined}
+          reference={reference}
+          initialLines={initialLines}
         />
       );
     }
@@ -128,6 +176,20 @@ export default async function TreePage({
             </p>
           )}
         </div>
+        {reference ? (
+          <div className="min-w-0 max-sm:order-last max-sm:w-full sm:ml-auto">
+            <ReferenceChip
+              id={reference.id}
+              name={reference.name}
+              source={reference.source}
+              hasSelf={reference.hasSelf}
+              param={params.bezug ?? null}
+            />
+          </div>
+        ) : (
+          // Ohne wirksame Bezugsperson nur, um `?bezug=ich` ein gemerktes Cookie vergessen zu lassen.
+          params.bezug && <ReferenceChip id={null} name={null} source={null} hasSelf={false} param={params.bezug} />
+        )}
         {canCreate && (
           <Link href="/people/new" className="btn-primary">
             Person anlegen

@@ -52,6 +52,12 @@ export const PATCH = route<Params>("user:manage", async (ctx, req, { id }) => {
     }
   }
 
+  // Eigene Person: muss es geben (Administratoren sehen alle Personen).
+  if (parsed.data.personId) {
+    const exists = await prisma.person.count({ where: { id: parsed.data.personId } });
+    if (!exists) return notFound();
+  }
+
   const losesAdmin =
     target.role === "ADMIN" &&
     ((parsed.data.role !== undefined && parsed.data.role !== "ADMIN") ||
@@ -84,7 +90,7 @@ export const PATCH = route<Params>("user:manage", async (ctx, req, { id }) => {
   const user = await prisma.user.update({
     where: { id },
     data: parsed.data,
-    select: { id: true, email: true, name: true, role: true, status: true },
+    select: { id: true, email: true, name: true, role: true, status: true, personId: true },
   });
 
   await audit({

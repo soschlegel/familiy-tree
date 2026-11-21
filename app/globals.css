@@ -38,6 +38,35 @@
   }
 }
 
+/* Ahnenlinien der Bezugsperson (components/ReferenceLines.tsx): väterlich
+   Blau/Grün, mütterlich Rot/Gelb wie bei MyHeritage, angelehnt an die
+   farbfehlsichtigen-freundliche Okabe-Ito-Palette. Nie allein: jede Linie
+   trägt zusätzlich ihr Kurzzeichen (VV, VM, MV, MM). --line-*-fg ist die
+   Schriftfarbe auf der Linienfarbe. */
+:root {
+  --line-ff: #0072b2;
+  --line-ff-fg: #ffffff;
+  --line-fm: #00866a;
+  --line-fm-fg: #ffffff;
+  --line-mf: #c43c1e;
+  --line-mf-fg: #ffffff;
+  --line-mm: #e0b000;
+  --line-mm-fg: #1c1917;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --line-ff: #56b4e9;
+    --line-ff-fg: #0c0a09;
+    --line-fm: #3ccb9a;
+    --line-fm-fg: #0c0a09;
+    --line-mf: #f0846a;
+    --line-mf-fg: #0c0a09;
+    --line-mm: #f2d04b;
+    --line-mm-fg: #0c0a09;
+  }
+}
+
 /* Auch <html> in Papierfarbe: Was der Browser beim Überziehen des
    Bildlaufs oder beim Ein- und Ausblenden der Adressleiste außerhalb von
    <body> zeigt, ist dann kein schwarzer oder weißer Streifen. */

@@ -40,6 +40,7 @@ import {
   type MarriageNodeData,
 } from "./MarriageNode";
 import { MarriageEdge } from "./MarriageEdge";
+import { LineLegend, ReferenceContext, type TreeReference } from "./ReferenceLines";
 import { ParentEdge, PARENT_EDGE_STYLE, type ParentSubtype } from "./ParentEdge";
 import {
   displayName,
@@ -58,6 +59,7 @@ import {
   type FocusTreeData,
   type TreeView,
 } from "@/lib/focus-tree";
+import { LINES_COOKIE, type ReferenceView } from "@/lib/reference";
 
 // Außerhalb der Komponente: React Flow warnt (und rendert neu), wenn sich die
 // Objekte bei jedem Render ändern.
@@ -191,6 +193,10 @@ export function FamilyTree(props: {
   view: TreeView;
   families?: { id: string; name: string }[];
   focusId?: string;
+  /** Bezugsperson samt Verwandtschaft (nur sichtbare Personen). */
+  reference?: ReferenceView | null;
+  /** Schalter „Linien“ beim Laden (Cookie). */
+  initialLines?: boolean;
 }) {
   return (
     <ReactFlowProvider>
@@ -204,11 +210,15 @@ function TreeCanvas({
   view,
   families = [],
   focusId,
+  reference = null,
+  initialLines = false,
 }: {
   data: TreeData | FocusTreeData;
   view: TreeView;
   families?: { id: string; name: string }[];
   focusId?: string;
+  reference?: ReferenceView | null;
+  initialLines?: boolean;
 }) {
   const focusData = view === "focus" && "members" in data ? data : null;
   const router = useRouter();
@@ -220,6 +230,25 @@ function TreeCanvas({
   const [showMarriages, setShowMarriages] = useState(true);
   const [familyMenuOpen, setFamilyMenuOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
+  const [showLines, setShowLines] = useState(initialLines);
+  const referenceCtx = useMemo<TreeReference>(
+    () => ({ view: reference, showLines: showLines && reference !== null }),
+    [reference, showLines],
+  );
+
+  /** Linien ein/aus — im Cookie gemerkt, damit der Server beim nächsten Mal gleich richtig zeichnet. */
+  function toggleLines(on: boolean) {
+    setShowLines(on);
+    // Die Legende nennt die Großeltern zu den Farben — beim Einschalten zeigen.
+    if (on) setLegendOpen(true);
+    try {
+      document.cookie = on
+        ? `${LINES_COOKIE}=1; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`
+        : `${LINES_COOKIE}=; path=/; max-age=0; samesite=lax`;
+    } catch {
+      // ohne Cookie gilt der Schalter nur bis zum Neuladen
+    }
+  }
   const [cursor, setCursor] = useState(0);
   const [focused, setFocused] = useState<string | null>(focusId ?? null);
   const dark = useMediaQuery("(prefers-color-scheme: dark)");
@@ -236,7 +265,9 @@ function TreeCanvas({
   // dort nähme sie zu viel Fläche weg. In der Fokus-Ansicht zunächst zu: dort
   // ist der Ausschnitt eingepasst, und sie verdeckte seine linke untere Ecke.
   useEffect(() => {
-    setLegendOpen(view !== "focus" && window.matchMedia("(min-width: 768px)").matches);
+    // Mit eingefärbten Linien auch in der Fokus-Ansicht: erst die Legende
+    // nennt die Großeltern zu den Farben.
+    setLegendOpen((view !== "focus" || (initialLines && reference !== null)) && window.matchMedia("(min-width: 768px)").matches);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -977,6 +1008,7 @@ function TreeCanvas({
 
   return (
     <TreeNavContext.Provider value={nav}>
+    <ReferenceContext.Provider value={referenceCtx}>
     <div className="flex flex-1 flex-col gap-2">
       <div className="flex flex-wrap items-start gap-2" role="toolbar" aria-label="Baumansicht">
         <div className="relative w-full sm:w-64" ref={searchBoxRef}>
@@ -1162,6 +1194,22 @@ function TreeCanvas({
           />
           Ehen zeigen
         </label>
+
+        {reference && (
+          <label
+            title={`Vorfahren von ${reference.name} nach den vier Großeltern einfärben (mit Kurzzeichen VV, VM, MV, MM)`}
+            className={`${toolbarBox} flex cursor-pointer items-center gap-2 px-3 py-1.5 max-md:min-h-11 ${focusData ? "max-sm:order-2" : ""}`}
+          >
+            <input
+              type="checkbox"
+              data-testid="tree-lines-toggle"
+              checked={showLines}
+              onChange={(e) => toggleLines(e.target.checked)}
+              className="accent-sky-600"
+            />
+            Linien
+          </label>
+        )}
 
         {/* Fokus-Ansicht auf dem Telefon: Ansicht zuerst, „Ehen zeigen“ und die
             Tiefe teilen sich die nächste Zeile — sonst vier Zeilen bei 360 px. */}
@@ -1349,9 +1397,16 @@ function TreeCanvas({
           </div>
         )}
 
-        <Legend open={legendOpen} onToggle={() => setLegendOpen((o) => !o)} timeline={activeView === "timeline"} focus={Boolean(focusData)} />
+        <Legend
+          open={legendOpen}
+          onToggle={() => setLegendOpen((o) => !o)}
+          timeline={activeView === "timeline"}
+          focus={Boolean(focusData)}
+          lines={showLines ? reference : null}
+        />
       </div>
     </div>
+    </ReferenceContext.Provider>
     </TreeNavContext.Provider>
   );
 }
@@ -1412,11 +1467,14 @@ function Legend({
   onToggle,
   timeline,
   focus,
+  lines,
 }: {
   open: boolean;
   onToggle: () => void;
   timeline: boolean;
   focus: boolean;
+  /** Bezugsperson, deren Ahnenlinien gerade eingefärbt sind. */
+  lines: ReferenceView | null;
 }) {
   return (
     <div
@@ -1436,8 +1494,13 @@ function Legend({
         Legende
         <span aria-hidden className="text-[10px]">{open ? "▾" : "▸"}</span>
       </button>
+      {open && lines && (
+        <div className="max-h-[40vh] overflow-y-auto border-b border-stone-200 px-3 pb-2 dark:border-stone-800">
+          <LineLegend view={lines} />
+        </div>
+      )}
       {open && (
-        <ul id="tree-legend" className="space-y-1 px-3 pb-2">
+        <ul id="tree-legend" className={`space-y-1 px-3 pb-2 ${lines ? "pt-2 max-md:hidden" : ""}`}>
           <LegendLine subtype="BIOLOGICAL" label="leibliche Abstammung" />
           <LegendLine subtype="ADOPTIVE" label="Adoption" />
           <LegendLine subtype="STEP" label="Stiefkind" />

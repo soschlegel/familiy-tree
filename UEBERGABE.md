@@ -16,6 +16,10 @@ aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
 - Prüfstand des letzten Pakets: Typecheck, Lint, Vitest 677/677; Playwright
   auf frischem Server, zwischen read und write neu gestartet: setup 6/6,
   read 151/151, write 74/74.
+- Branch `bezugsperson` (Bezugsperson, Linien): Vitest 687/688 — der eine
+  Fehlschlag (`mcp.db.test.ts`, erwartet den Datenbanknamen
+  `familytree_mock`) kommt nur von der eigenen Mock-Datenbank des Worktrees;
+  Playwright read 159/159, write 78/78 (je mit setup 6/6).
 
 ## Lokal einrichten
 
@@ -133,15 +137,20 @@ README, Abschnitt „Tests“.
 Der Eigentümer schickt weitere Wünsche nach; umgesetzt wird erst, wenn er
 sie freigibt.
 
-- **Bezugsperson („in Scope“)**: Jeder Benutzer kann sich in seinem
-  Benutzerstamm eine Person zuordnen („das bin ich“). Zusätzlich lässt sich
-  vorübergehend eine andere Person als Bezugsperson setzen (z.B. im Gespräch
-  mit dem Sohn: „schau, dein Ururopa“). Im Baum steht dann an den Personen,
-  soweit bestimmbar, der Verwandtschaftsgrad zur Bezugsperson. Grundlage:
-  `lib/kinship.ts` (`findBloodRelation`, `describePath`), MCP `get_kinship`.
-- **Farbe je Linie**: Vorfahren des Vaters der Bezugsperson in einer Farbe,
-  der Mutter in einer anderen, weiter aufgeteilt nach Großeltern (Vorbild:
-  Baumansicht von MyHeritage). Nie nur Farbe (Barrierefreiheit).
+- **Bezugsperson („in Scope“)** und **Farbe je Linie** — erledigt auf Branch
+  `bezugsperson` (noch nicht nach `main`). Migration
+  `20261122000001_bezugsperson` (`User.personId`, rein ergänzend, `ON DELETE
+  SET NULL`, wandert beim Zusammenführen mit). „Das bin ich“ auf der
+  Personenseite bzw. durch Admins in der Benutzerverwaltung; vorübergehend
+  per `?bezug=<id>` / „Baum aus dieser Sicht“ (Cookie `tree-bezug`, Hinweis
+  „Sicht von … · zurück zu mir“). Verwandtschaftsgrad unter jeder Karte (alle
+  drei Ansichten) und auf der Personenseite, berechnet in einem Durchgang
+  (`lib/reference.ts`, gleiches Ergebnis wie `kinshipInGraph`, ~50 ms für
+  10 000 erzeugte Personen). Schalter „Linien“: Tönung, Streifen und
+  Kurzzeichen VV/VM/MV/MM, Legende mit den Großeltern. Nur über sichtbare
+  Personen gerechnet (strenger als `get_kinship`). Details README,
+  „Bezugsperson“. Offen: Gestaltungsfragen siehe Bericht (z.B. Kanten
+  einfärben, MCP-Werkzeug für „ich“).
 - **GEDCOM-Export mit Familienauswahl**: Beim Export ein Dialog, in dem man
   die Familien für den Export ankreuzt (Ziel: wieder nach MyHeritage
   importieren). GEDCOM-Export gibt es schon (`/api/export?format=gedcom`
