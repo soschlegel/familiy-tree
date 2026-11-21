@@ -36,7 +36,9 @@ const input = await new Promise((resolve) => {
 function statements(sql) {
   const withoutComments = sql
     .replace(/\/\*[\s\S]*?\*\//g, "")
-    .split("\n")
+    // \r?\n: Auf Windows-Checkouts (CRLF) blieb sonst das \r stehen, `--.*$`
+    // griff nicht, und jede Anweisung galt wegen des Kommentars als „unsicher“.
+    .split(/\r?\n/)
     .map((line) => line.replace(/--.*$/, ""))
     .join("\n");
   return withoutComments
