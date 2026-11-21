@@ -153,7 +153,7 @@ chromium`.
 |---|---|---|
 | `npm run test:e2e` | alles: setup → read → write | ca. 9–10 min |
 | `npm run test:e2e:setup` | nur Ausgangszustand: Mock-Daten neu, Anmeldungen, Vorwärmen | ca. 1–2 min (Kaltstart des Dev-Servers: länger) |
-| `npm run test:e2e:read` | setup + lesende Tests (`e2e/read/`, 151 Tests, 4 parallel) | ca. 3:10–3:20 min ohne Setup |
+| `npm run test:e2e:read` | setup + lesende Tests (`e2e/read/`, 156 Tests, 4 parallel) | ca. 3:10–3:20 min ohne Setup |
 | `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 74 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 4–5 min ohne Setup |
 | `npm run test:e2e:headed` | alles mit sichtbarem Browser, ein Test nach dem anderen | |
 | `npm run test:e2e:ui` | Playwright-Oberfläche: Tests einzeln starten, Schritte ansehen | |
@@ -1610,6 +1610,18 @@ er sehen darf — verborgene Personen fehlen samt aller Verweise auf sie:
   `media/`; Porträts, Hochzeitsbilder und Quellenbilder sind in der
   `.ged`-Datei mit ihrem Pfad verknüpft.
 
+Beide Knöpfe öffnen einen Dialog mit den Familien, die der Benutzer sehen
+darf (alle vorausgewählt, „Alle“/„Keine“, für Administratoren zusätzlich
+„Personen ohne Familie“) und der Personenzahl der Auswahl. Eine Person mit
+mehreren Familien ist dabei, sobald eine davon gewählt ist; Beziehungen nur
+zwischen exportierten Personen, Ereignisse, Namen, Belege, Rohdaten und
+Bilder nur an Exportiertem, Quellen nur die zitierten. Ist alles angekreuzt,
+ist es derselbe Export wie bisher (auch mit noch unbelegten Quellen). Über
+die Schnittstelle: `/api/export?format=gedcom&families=<id>,<id>` bzw.
+`&withoutFamily=1` (nur Administratoren); fremde oder unbekannte Familien
+lehnt der Server mit 403 ab. Der Dateiname nennt nur die Anzahl
+(`stammbaum_<Datum>_auswahl-2-familien.ged`).
+
 Ob MyHeritage, Ancestry, Gramps & Co. den Export vollständig übernehmen, ist
 **nicht ausprobiert**; die Tests lesen ihn mit der eigenen Bibliothek zurück
 (Zählungen, keine offenen Verweise).
@@ -1654,8 +1666,13 @@ Sekundenbruchteilen); bewertet nach Vor- und Nachname (auch Geburtsname und
 weitere Namen — „Anna Müller geb. Schmidt“ und „Anna Schmidt“ passen),
 Geburts- und Sterbedatum (auch ungenaue: „um 1760“ passt zu „12.03.1760“),
 Geburtsort und Verwandten (dieselben oder gleichnamige Eltern bzw. Partner).
-Direkt verbundene Personen (Vater und Sohn gleichen Namens) und Personen
-verschiedenen Geschlechts kommen nie in Frage. Drei Klassen:
+Direkt verbundene Personen (Vater und Sohn gleichen Namens), eingetragene
+Vorfahren und Nachkommen über beliebig viele Generationen (auch über
+Adoptiv-, Stief- und Pflegeeltern — der gleichnamige Urgroßvater ist nicht
+sein Urenkel) und Personen verschiedenen Geschlechts kommen nie in Frage.
+Die Abstammungskette zählt nur über Personen, die der Benutzer sehen darf;
+das Fehlen eines Paares verrät so nichts über verborgene Personen (das
+Zusammenführen selbst sperrt Zyklen ohnehin über alle Kanten). Drei Klassen:
 
 | Klasse | Bedeutung |
 |---|---|
