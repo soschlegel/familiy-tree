@@ -6,6 +6,7 @@ import { Fragment, useState } from "react";
 
 import { apiFetch, jsonBody } from "./api-client";
 import { ApiTokenList } from "./ApiTokenList";
+import { PersonPicker, type PickerPerson } from "./PersonPicker";
 import {
   AI_ACCESS_LABEL,
   aiRank,
@@ -30,6 +31,8 @@ type Row = {
   neverSignedIn: boolean;
   /** Einziger aktiver Admin — darf weder gelöscht noch herabgestuft werden. */
   lastAdmin: boolean;
+  /** Eigene Person („das bin ich“, README „Bezugsperson“). */
+  person: { id: string; name: string } | null;
 };
 
 /** Was beim Löschen mitgeht — nach den onDelete-Regeln in prisma/schema.prisma. */
@@ -76,9 +79,12 @@ const STATUS_CLASS: Record<Row["status"], string> = {
 export function UserAdmin({
   users,
   currentUserId,
+  people = [],
 }: {
   users: Row[];
   currentUserId: string;
+  /** Auswahl für „Person zuordnen“. */
+  people?: PickerPerson[];
 }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -129,6 +135,22 @@ export function UserAdmin({
       `E-Mail-Adresse von ${u.email} in ${newEmail.trim().toLowerCase()} geändert.`,
     );
     if (ok) setEditingEmail(null);
+  }
+
+  // --- Eigene Person („das bin ich“) ---------------------------------------
+  const [editingPerson, setEditingPerson] = useState<string | null>(null);
+  const [pickedPerson, setPickedPerson] = useState("");
+
+  async function savePerson(u: Row, personId: string | null) {
+    const name = personId ? (people.find((p) => p.id === personId) ?? null) : null;
+    const ok = await call(
+      `/api/users/${u.id}`,
+      jsonBody("PATCH", { personId }),
+      personId
+        ? `${u.email} ist jetzt ${name ? [name.givenName, name.familyName].filter(Boolean).join(" ") : "zugeordnet"}.`
+        : `Zuordnung von ${u.email} aufgehoben.`,
+    );
+    if (ok) setEditingPerson(null);
   }
 
   // --- KI-Zugang -----------------------------------------------------------
@@ -269,6 +291,31 @@ export function UserAdmin({
                   <td className="whitespace-nowrap px-3 py-2 max-md:basis-full max-md:whitespace-normal max-md:break-all max-md:p-0 max-md:font-medium">
                     {u.email}
                     {self && <span className="ml-2 text-xs muted">(du)</span>}
+                    <span className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-xs font-normal" data-testid="user-person">
+                      <span className="muted">Person:</span>
+                      {u.person ? (
+                        <Link href={`/people/${u.person.id}`} className="underline underline-offset-2">
+                          {u.person.name}
+                        </Link>
+                      ) : (
+                        <span className="muted">keine</span>
+                      )}
+                      <button
+                        type="button"
+                        disabled={busy}
+                        className="btn-link"
+                        aria-expanded={editingPerson === u.id}
+                        aria-controls={`person-edit-${u.id}`}
+                        data-testid="user-person-edit"
+                        onClick={() => {
+                          setEditingPerson(editingPerson === u.id ? null : u.id);
+                          setPickedPerson(u.person?.id ?? "");
+                        }}
+                      >
+                        {u.person ? "ändern" : "zuordnen"}
+                        <span className="sr-only"> (Person von {u.email})</span>
+                      </button>
+                    </span>
                   </td>
                   <td className="px-2 max-md:px-0">
                     <select
@@ -412,6 +459,47 @@ export function UserAdmin({
                         </button>
                         <p className="basis-full text-xs muted">
                           Möglich, solange sich der Benutzer noch nie angemeldet hat. Familien, Rolle und KI-Zugang bleiben.
+                        </p>
+                      </form>
+                    </td>
+                  </tr>
+                )}
+                {editingPerson === u.id && (
+                  <tr id={`person-edit-${u.id}`} data-testid="user-person-form" className="max-md:block">
+                    <td colSpan={6} className="bg-stone-50/70 px-3 py-3 max-md:block dark:bg-stone-900/40">
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          if (pickedPerson) void savePerson(u, pickedPerson);
+                        }}
+                        aria-label={`Person von ${u.email} zuordnen`}
+                        className="sticky left-3 flex w-[min(40rem,calc(100vw-4.5rem))] flex-wrap items-end gap-2"
+                      >
+                        <div className="min-w-0 flex-1 basis-56">
+                          <span id={`person-label-${u.id}`} className="field-label">
+                            Das ist {u.email}
+                          </span>
+                          <PersonPicker
+                            people={people}
+                            value={pickedPerson}
+                            onChange={setPickedPerson}
+                            labelledBy={`person-label-${u.id}`}
+                          />
+                        </div>
+                        <button disabled={busy || !pickedPerson} className="btn-primary">
+                          {busy ? "Speichert…" : "Speichern"}
+                        </button>
+                        {u.person && (
+                          <button type="button" disabled={busy} className="btn-secondary" onClick={() => void savePerson(u, null)}>
+                            Zuordnung aufheben
+                          </button>
+                        )}
+                        <button type="button" disabled={busy} className="btn-secondary" onClick={() => setEditingPerson(null)}>
+                          Abbrechen
+                        </button>
+                        <p className="basis-full text-xs muted">
+                          Bezugsperson des Benutzers: Baum und Personenseiten zeigen den Verwandtschaftsgrad zu ihr.
+                          Jeder kann das auf einer Personenseite auch selbst mit „Das bin ich“ festlegen.
                         </p>
                       </form>
                     </td>
