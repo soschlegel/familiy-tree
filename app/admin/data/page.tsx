@@ -1,6 +1,7 @@
 import { requireScope } from "@/lib/session";
 import { can } from "@/lib/authz";
 import { listFamilies } from "@/lib/services";
+import { exportFamilyOverview } from "@/lib/services/export-selection";
 import { DataTransfer } from "@/components/DataTransfer";
 import { GedcomImport } from "@/components/GedcomImport";
 import { ImportHistory } from "@/components/ImportHistory";
@@ -11,7 +12,11 @@ export const metadata = { title: "Daten" };
 export default async function DataPage() {
   const { session, scope } = await requireScope();
   const canImport = can(session.user.role, "data:import");
-  const families = canImport ? (await listFamilies(scope)).map((f) => ({ id: f.id, name: f.name })) : [];
+  const [families, gedcomOverview] = await Promise.all([
+    canImport ? listFamilies(scope).then((list) => list.map((f) => ({ id: f.id, name: f.name }))) : Promise.resolve([]),
+    // Familien und Personenzahlen für den Auswahldialog des GEDCOM-Exports.
+    exportFamilyOverview(scope),
+  ]);
 
   return (
     <div className="space-y-4">
@@ -23,7 +28,7 @@ export default async function DataPage() {
         </p>
       </div>
 
-      <DataTransfer canImport={canImport} />
+      <DataTransfer canImport={canImport} gedcomOverview={gedcomOverview} />
       {canImport && <GedcomImport families={families} />}
       {canImport && <ImportHistory />}
     </div>

@@ -38,6 +38,7 @@ import {
 } from "../gedcom-import/mapping";
 import type { EventTypeName } from "../events";
 import { buildExport } from "./exchange-export";
+import { selectionFileSuffix, type ExportSelection } from "../export-selection";
 import { REJECTED_RAW_SUFFIX } from "./import-apply";
 
 /**
@@ -51,6 +52,12 @@ import { REJECTED_RAW_SUFFIX } from "./import-apply";
  * Datensätze werden entfernt (sonst zeigten sie ins Leere bzw. verrieten sie).
  * Notizen werden als Text geschrieben (HTML des Originals nur, wenn der Text
  * in der App unverändert ist).
+ *
+ * Teil-Export (`selection`, Familienauswahl im Dialog auf /admin/data):
+ * dieselbe Grenze, nur enger — Verweise entstehen nur auf mitexportierte
+ * Datensätze (FAMC/FAMS aus Beziehungen zwischen exportierten Personen, SOUR
+ * nur auf zitierte und damit exportierte Quellen, Rohdaten-Zeiger wie oben
+ * umgeschrieben bzw. entfernt).
  */
 
 type Row = Record<string, unknown>;
@@ -255,8 +262,11 @@ export type GedcomExportResult = {
   warnings: number;
 };
 
-export async function buildGedcomExport(scope: Scope, options: { mediaPrefix?: string } = {}): Promise<GedcomExportResult> {
-  const { data, keyByFileName } = await buildExport(scope);
+export async function buildGedcomExport(
+  scope: Scope,
+  options: { mediaPrefix?: string; selection?: ExportSelection | null } = {},
+): Promise<GedcomExportResult> {
+  const { data, keyByFileName } = await buildExport(scope, options.selection ?? null);
   const d = data as unknown as {
     persons: (Row & { id: string; media: { mediaId: string; isPrimary: boolean }[] })[];
     relationships: (Row & { id: string; type: string; subtype: string; fromPersonId: string; toPersonId: string; media?: { mediaId: string; isPrimary: boolean }[] })[];
@@ -758,7 +768,7 @@ export async function buildGedcomExport(scope: Scope, options: { mediaPrefix?: s
   return {
     text: result.text,
     bytes: result.bytes,
-    fileName: `stammbaum_${stamp}.ged`,
+    fileName: `stammbaum_${stamp}${selectionFileSuffix(options.selection ?? null)}.ged`,
     mediaFiles,
     stats: {
       persons: persons.length,
@@ -775,8 +785,8 @@ export async function buildGedcomExport(scope: Scope, options: { mediaPrefix?: s
 }
 
 /** ZIP: stammbaum.ged + media/<Datei> (wie der ZIP-Export). */
-export async function buildGedcomZip(scope: Scope): Promise<{ buffer: Buffer; fileName: string; missing: number }> {
-  const g = await buildGedcomExport(scope, { mediaPrefix: "media/" });
+export async function buildGedcomZip(scope: Scope, selection: ExportSelection | null = null): Promise<{ buffer: Buffer; fileName: string; missing: number }> {
+  const g = await buildGedcomExport(scope, { mediaPrefix: "media/", selection });
   const zip = new JSZip();
   zip.file("stammbaum.ged", g.bytes);
   const folder = zip.folder("media")!;
