@@ -37,6 +37,8 @@ import {
   type RelationTypeName,
 } from "../validation";
 import { forbiddenError, notFoundError, parseOrThrow, validationError } from "./errors";
+import { auditActor, auditData, fieldChanges } from "../audit";
+import { changeSetIdOf } from "../change-sets";
 import { importLinkColumn, loadRowsForFingerprint, MAX_RAW_RECORD_BYTES, newId } from "./imports";
 
 /**
@@ -1007,22 +1009,151 @@ async function applyInTx(
     for (const [r, o] of Object.entries(outcomes[s])) if (o === "invalid") delete ids[s][r];
   }
 
-  // Ein Audit-Eintrag je Aufruf — in derselben Transaktion.
-  if (write) await db.auditLog.create({
-    data: {
-      userId: scope.userId,
-      action: "CREATE",
-      entityType: "ImportBatch",
-      entityId: data.batchId ?? "bulk",
-      diff: { counts: result.counts, invalid: invalid.length } as Prisma.InputJsonValue,
-      channel: scope.via?.channel ?? null,
-      apiTokenId: scope.via?.tokenId ?? null,
-    },
-  });
+  // Audit in derselben Transaktion: ein Eintrag je Aufruf mit den Zählungen,
+  // dazu je betroffener Person einer für ihren Verlauf (Changelog).
+  if (write) {
+    await db.auditLog.create({
+      data: await auditData(
+        {
+          ...auditActor(scope),
+          action: "CREATE",
+          entityType: "ImportBatch",
+          entityId: data.batchId ?? "bulk",
+          diff: { counts: result.counts, invalid: invalid.length } as Prisma.InputJsonValue,
+          familyIds: allFamilyIds,
+        },
+        db,
+      ),
+    });
+    await writePersonAudit();
+  }
 
   return result;
 
   // --- Hilfsfunktionen (Closures) -------------------------------------------
+
+  /**
+   * Je betroffener Person ein Eintrag für ihren Verlauf: Person angelegt bzw.
+   * welche Felder sich geändert haben (vorher → nachher), dazu die Zahl der
+   * angelegten bzw. geänderten Namen, Beziehungen, Ereignisse und Belege.
+   */
+  async function writePersonAudit() {
+    type Tally = {
+      person?: "created" | "updated";
+      changes?: Record<string, unknown>;
+      created: Record<string, number>;
+      updated: Record<string, number>;
+    };
+    const per = new Map<string, Tally>();
+    const tally = (personId: string): Tally => {
+      let t = per.get(personId);
+      if (!t) per.set(personId, (t = { created: {}, updated: {} }));
+      return t;
+    };
+    const isUpdated = (section: Section, r: string) => outcomes[section][r] === "updated";
+    for (const c of personCreates) if (outcomes.persons[c.item.ref] === "created") tally(c.id).person = "created";
+    for (const u of personUpdates) {
+      if (!isUpdated("persons", u.item.ref)) continue;
+      const t = tally(u.id);
+      t.person = "updated";
+      const current = existing.persons.rows.get(u.id);
+      if (current) t.changes = fieldChanges(current, u.row);
+    }
+    // Personen der Beziehungen und Träger der Ereignisse: aus diesem Lauf,
+    // sonst aus der Datenbank.
+    const relPersons = new Map<string, string[]>();
+    for (const r of [...relCreates, ...relUpdates]) relPersons.set(r.id, [r.row.fromPersonId as string, r.row.toPersonId as string]);
+    const eventOwner = new Map<string, { personId: string | null; relationshipId: string | null }>();
+    for (const e of [...eventCreates, ...eventUpdates]) {
+      eventOwner.set(e.id, {
+        personId: (e.row.personId as string | null | undefined) ?? null,
+        relationshipId: (e.row.relationshipId as string | null | undefined) ?? null,
+      });
+    }
+    const missingEvents = [...citationCreates, ...citationUpdates]
+      .map((c) => c.row.eventId as string | null | undefined)
+      .filter((id): id is string => typeof id === "string" && id.length > 0 && !eventOwner.has(id));
+    if (missingEvents.length) {
+      const evs = await db.event.findMany({ where: { id: { in: missingEvents } }, select: { id: true, personId: true, relationshipId: true } });
+      for (const e of evs) eventOwner.set(e.id, { personId: e.personId, relationshipId: e.relationshipId });
+    }
+    const missingRels = new Set<string>();
+    for (const row of [...eventCreates, ...eventUpdates, ...citationCreates, ...citationUpdates].map((x) => x.row)) {
+      const rid = row.relationshipId as string | null | undefined;
+      if (rid && !relPersons.has(rid)) missingRels.add(rid);
+    }
+    for (const o of eventOwner.values()) if (o.relationshipId && !relPersons.has(o.relationshipId)) missingRels.add(o.relationshipId);
+    if (missingRels.size) {
+      const rels = await db.relationship.findMany({ where: { id: { in: [...missingRels] } }, select: { id: true, fromPersonId: true, toPersonId: true } });
+      for (const r of rels) relPersons.set(r.id, [r.fromPersonId, r.toPersonId]);
+    }
+    const personsOf = (row: Record<string, unknown>): string[] => {
+      if (row.personId) return [row.personId as string];
+      if (row.fromPersonId) return [row.fromPersonId as string, row.toPersonId as string];
+      if (row.relationshipId) return relPersons.get(row.relationshipId as string) ?? [];
+      if (row.eventId) {
+        const o = eventOwner.get(row.eventId as string);
+        return o ? personsOf({ personId: o.personId, relationshipId: o.relationshipId }) : [];
+      }
+      return [];
+    };
+    for (const [section, creates, updates] of [
+      ["relationships", relCreates, relUpdates],
+      ["names", nameCreates, nameUpdates],
+      ["events", eventCreates, eventUpdates],
+      ["citations", citationCreates, citationUpdates],
+    ] as const) {
+      for (const c of creates as Pending<{ ref: string }>[]) {
+        if (outcomes[section][c.item.ref] !== "created") continue;
+        for (const p of personsOf(c.row)) {
+          const t = tally(p);
+          t.created[section] = (t.created[section] ?? 0) + 1;
+        }
+      }
+      for (const u of updates as Pending<{ ref: string }>[]) {
+        if (!isUpdated(section, u.item.ref)) continue;
+        for (const p of personsOf(u.row)) {
+          const t = tally(p);
+          t.updated[section] = (t.updated[section] ?? 0) + 1;
+        }
+      }
+    }
+    if (!per.size) return;
+    const personIds = [...per.keys()];
+    const fams = new Map<string, string[]>();
+    for (let i = 0; i < personIds.length; i += 5000) {
+      const pf = await db.personFamily.findMany({
+        where: { personId: { in: personIds.slice(i, i + 5000) } },
+        select: { personId: true, familyId: true },
+      });
+      for (const r of pf) fams.set(r.personId, [...(fams.get(r.personId) ?? []), r.familyId]);
+    }
+    const changeSetId = await changeSetIdOf(scope, "Import");
+    const actor = auditActor(scope);
+    const auditRows: Prisma.AuditLogCreateManyInput[] = personIds.map((personId) => {
+      const t = per.get(personId)!;
+      return {
+        userId: actor.userId ?? null,
+        action: t.person === "created" ? "CREATE" : "UPDATE",
+        entityType: "Person",
+        entityId: personId,
+        diff: {
+          import: data.batchId ?? true,
+          ...(t.person ? { person: t.person } : {}),
+          ...(t.changes && Object.keys(t.changes).length ? { changes: t.changes } : {}),
+          ...(Object.keys(t.created).length ? { created: t.created } : {}),
+          ...(Object.keys(t.updated).length ? { updated: t.updated } : {}),
+        } as Prisma.InputJsonValue,
+        channel: actor.channel ?? null,
+        apiTokenId: actor.apiTokenId ?? null,
+        changeSetId,
+        personIds: [personId],
+        familyIds: fams.get(personId) ?? [],
+        createdAt: now,
+      };
+    });
+    for (let i = 0; i < auditRows.length; i += 2000) await db.auditLog.createMany({ data: auditRows.slice(i, i + 2000) });
+  }
 
   function queue<T extends { ref: string; action: ImportAction }>(
     section: Section,

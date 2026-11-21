@@ -1,6 +1,7 @@
 import type { FamilyRole, Role } from "@prisma/client";
 
 import { prisma } from "./prisma";
+import type { ChangeSetHandle } from "./change-sets";
 
 /**
  * Familienbezogene Rechte. Bewusst eine einzige Stelle: die Frage „darf dieser
@@ -27,6 +28,12 @@ export type Scope = {
    * Familienrechte oben gelten unverändert zusätzlich.
    */
   via?: ScopeVia;
+  /**
+   * Changelog-Paket dieses Aufrufs (lib/change-sets.ts). Die Web-API setzt
+   * es je Anfrage (lib/api.ts), der KI-Zugang je Werkzeugaufruf (mcp/tools.ts).
+   * Ein Verweis — Kopien des Scopes (`{ ...scope }`) teilen dasselbe Paket.
+   */
+  changeSet?: ChangeSetHandle;
 };
 
 export type ScopeVia = {

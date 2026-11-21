@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { route, notFound, forbidden } from "@/lib/api";
-import { audit } from "@/lib/audit";
+import { audit, auditActor, auditRefs } from "@/lib/audit";
 import { openObject, deleteObject } from "@/lib/storage";
 import { canViewMedia, canDeleteMedia } from "@/lib/media-scope";
 
@@ -74,6 +74,8 @@ export const DELETE = route<Params>(
       return forbidden("dieses Bild zu löschen");
     }
 
+    // Betroffene Personen vor dem Löschen merken (die Zuordnungen gehen mit).
+    const refs = await auditRefs({ action: "DELETE", entityType: "MediaAsset", entityId: id });
     await prisma.mediaAsset.delete({ where: { id } });
 
     // Dateien nach der DB aufräumen: schlägt das fehl, bleibt eine
@@ -85,10 +87,12 @@ export const DELETE = route<Params>(
     );
 
     await audit({
-      userId: ctx.userId,
+      ...auditActor(ctx.scope),
       action: "DELETE",
       entityType: "MediaAsset",
       entityId: id,
+      diff: { label: asset.fileName ?? asset.caption ?? null },
+      ...refs,
     });
 
     return NextResponse.json({ ok: true });

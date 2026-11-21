@@ -178,8 +178,8 @@ export async function finishImportBatch(
   result: { status: "COMPLETED" | "FAILED"; counts?: unknown; warnings?: unknown; notes?: string | null },
 ): Promise<ImportBatchDto> {
   assertAdmin(scope, "Importläufe zu ändern");
-  const exists = await prisma.importBatch.count({ where: { id } });
-  if (!exists) throw notFoundError("Importlauf");
+  const before = await prisma.importBatch.findUnique({ where: { id }, select: { status: true } });
+  if (!before) throw notFoundError("Importlauf");
   const batch = await prisma.importBatch.update({
     where: { id },
     data: {
@@ -190,7 +190,7 @@ export async function finishImportBatch(
       finishedAt: new Date(),
     },
   });
-  await audit({ ...auditActor(scope), action: "UPDATE", entityType: "ImportBatch", entityId: id, diff: { status: result.status } });
+  await audit({ ...auditActor(scope), action: "UPDATE", entityType: "ImportBatch", entityId: id, diff: { status: result.status, changes: { status: { from: before.status, to: result.status } } } });
   return toBatchDto(batch);
 }
 
@@ -235,7 +235,7 @@ export async function deleteImportBatchFile(scope: Scope, id: string): Promise<{
   if (b.storageKey) {
     await deleteObject(b.storageKey);
     await prisma.importBatch.update({ where: { id }, data: { storageKey: null } });
-    await audit({ ...auditActor(scope), action: "UPDATE", entityType: "ImportBatch", entityId: id, diff: { fileDeleted: true } });
+    await audit({ ...auditActor(scope), action: "UPDATE", entityType: "ImportBatch", entityId: id, diff: { fileDeleted: true, changes: { storageKey: { from: b.storageKey, to: null } } } });
   }
   return { ok: true };
 }

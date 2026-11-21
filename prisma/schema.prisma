@@ -44,6 +44,7 @@ model User {
 
   uploadedMedia  MediaAsset[]         @relation("MediaUploader")
   auditLogs      AuditLog[]
+  changeSets     ChangeSet[]
   families       UserFamily[]
   createdSources Source[]             @relation("SourceCreator")
   apiTokens      ApiToken[]
@@ -835,9 +836,11 @@ enum AuditChannel {
 model AuditLog {
   id         String        @id @default(cuid())
   userId     String?
-  action     String // CREATE | UPDATE | DELETE
-  entityType String // Person | Relationship | MediaAsset | User | Family | Source | Citation | ApiToken
+  action     String // CREATE | UPDATE | DELETE | MERGE | CONNECT
+  entityType String // Person | Relationship | MediaAsset | User | Family | Source | Citation | ApiToken | Event | PersonName | ImportBatch | ImportRawRecord
   entityId   String
+  // UPDATE seit dem Changelog: { changes: { feld: { from, to } } } (lib/audit.ts,
+  // fieldChanges); ältere Einträge enthalten meist nur die neuen Werte.
   diff       Json?
   // Kanal und Schlüssel (ApiToken.id, nie das Geheimnis). Bewusst ohne
   // Fremdschlüssel: der Verweis bleibt auch nach dem Löschen des Benutzers
@@ -845,10 +848,46 @@ model AuditLog {
   channel    AuditChannel?
   apiTokenId String?
   createdAt  DateTime      @default(now())
+  // Changelog: Paket, zu dem die Änderung gehört (null bei älteren Einträgen),
+  // und Momentaufnahme der betroffenen Personen und Familien zum Zeitpunkt
+  // der Änderung — damit Verlauf je Person und Übersicht je Familie ohne
+  // Rekonstruktion auskommen, auch wenn der Datensatz später gelöscht wird.
+  changeSetId String?
+  personIds   String[]  @default([])
+  familyIds   String[]  @default([])
 
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user      User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  changeSet ChangeSet? @relation(fields: [changeSetId], references: [id], onDelete: SetNull)
 
   @@index([entityType, entityId])
   @@index([createdAt])
   @@index([apiTokenId])
+  @@index([changeSetId])
+  @@index([personIds], type: Gin)
+  @@index([familyIds], type: Gin)
+}
+
+// Changelog: Paket zusammengehöriger Änderungen. In der App bildet jede
+// Anfrage (bzw. ein Import, ein Zusammenführen, ein Sammel-Zusammenführen)
+// ein Paket; über den KI-Zugang öffnet begin_change_set eines mit Titel,
+// sonst bündelt der Server je Schlüssel innerhalb eines Zeitfensters
+// (lib/change-sets.ts). Angelegt wird ein Paket erst mit dem ersten Eintrag.
+model ChangeSet {
+  id             String        @id @default(cuid())
+  title          String
+  // APP | IMPORT | MERGE | CONNECT | MCP (über begin_change_set) | MCP_AUTO
+  kind           String        @default("APP")
+  userId         String?
+  channel        AuditChannel?
+  // Wie AuditLog.apiTokenId bewusst ohne Fremdschlüssel.
+  apiTokenId     String?
+  createdAt      DateTime      @default(now())
+  // Letzter Eintrag — für das Bündeln über den KI-Zugang ohne Kennung.
+  lastActivityAt DateTime      @default(now())
+
+  user    User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  entries AuditLog[]
+
+  @@index([createdAt])
+  @@index([userId, kind, lastActivityAt])
 }

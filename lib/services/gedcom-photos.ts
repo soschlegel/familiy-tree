@@ -6,6 +6,7 @@ import { deleteObject } from "../storage";
 import { SafeFetchError, safeFetch, withConcurrency, type SafeFetchOptions } from "../safe-fetch";
 import type { PhotoRef } from "../gedcom-import/mapping";
 import { forbiddenError } from "./errors";
+import { audit, auditActor } from "../audit";
 
 /**
  * Fotos eines GEDCOM-Imports herunterladen (nur auf ausdrücklichen Wunsch,
@@ -73,7 +74,7 @@ export async function downloadImportPhotos(
       const res = await safeFetch(p.url, { maxBytes, ...args.fetchOptions });
       stored = await processAndStoreImage(res.bytes);
       const fileName = decodeURIComponent(new URL(res.finalUrl).pathname.split("/").pop() || "foto").slice(0, 200);
-      await prisma.$transaction(async (tx) => {
+      const mediaId = await prisma.$transaction(async (tx) => {
         const hasPrimary = await tx.personMedia.count({ where: { personId, isPrimary: true } });
         const order = await tx.personMedia.count({ where: { personId } });
         const media = await tx.mediaAsset.create({
@@ -104,6 +105,14 @@ export async function downloadImportPhotos(
         const ids = [{ system: "MEDIA_URL", value: p.url.slice(0, 500) }];
         if (p.key.startsWith("PHOTO:")) ids.push({ system: "PHOTO_RIN", value: p.key.slice(6, 506) });
         await tx.externalId.createMany({ data: ids.map((x) => ({ ...x, mediaId: media.id, batchId: args.batchId })) });
+        return media.id;
+      });
+      await audit({
+        ...auditActor(scope),
+        action: "CREATE",
+        entityType: "MediaAsset",
+        entityId: mediaId,
+        diff: { personId, label: fileName, import: args.batchId, sizeBytes: stored.sizeBytes },
       });
       log.push({ url: p.url, personId, status: "stored", bytes: res.bytes.byteLength, ms: Date.now() - t0, redirects: res.redirects.length });
     } catch (err) {
