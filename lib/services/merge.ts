@@ -31,6 +31,8 @@ import { personDateIssues, MAX_BIOLOGICAL_PARENTS, PARENT_SUBTYPES, PARTNER_SUBT
 import { conflictError, forbiddenError, notFoundError, parseOrThrow, validationError } from "./errors";
 import { newId } from "./imports";
 import { importLabel } from "./dto";
+import { auditActor, auditData, fieldChanges } from "../audit";
+import { nameChangeSet } from "../change-sets";
 
 /**
  * Dubletten zusammenführen: Die Person `mergeId` geht in `keepId` auf.
@@ -1038,15 +1040,21 @@ async function executePlan(db: Db, scope: Scope, plan: MergePlan, input: z.infer
     Object.entries(other).filter(([, v]) => v === null || typeof v !== "object" || v instanceof Date),
   );
   const result: MergeResult = { keepId: K, mergedId: X, alreadyMerged: false, summary, auditId };
+  // Betroffen: beide Personen und die Verwandten, deren Beziehung umgehängt
+  // oder zusammengelegt wurde; Familien auch die der aufgegangenen Person.
+  const relatives = plan.snapshot.relationships
+    .filter((r) => r.fromPersonId === X || r.toPersonId === X)
+    .map((r) => (r.fromPersonId === X ? r.toPersonId : r.fromPersonId));
   await db.auditLog.create({
-    data: {
+    data: await auditData(
+      {
       id: auditId,
-      userId: scope.userId,
+      ...auditActor(scope),
       action: "MERGE",
       entityType: "Person",
       entityId: K,
-      channel: scope.via?.channel ?? null,
-      apiTokenId: scope.via?.tokenId ?? null,
+      personIds: [K, X, ...relatives],
+      familyIds: other.families.map((f) => f.familyId),
       diff: JSON.parse(
         JSON.stringify({
           keepId: K,
@@ -1054,6 +1062,8 @@ async function executePlan(db: Db, scope: Scope, plan: MergePlan, input: z.infer
           choices: plan.resolved.choices,
           relationshipSubtypes: input.relationshipSubtypes,
           keepBefore,
+          // Für den Verlauf: Hauptangaben der bleibenden Person vorher → nachher.
+          changes: fieldChanges(keep, plan.resolved.columns as Record<string, unknown>),
           merged: {
             person: otherRow,
             familyIds: other.families.map((f) => f.familyId),
@@ -1070,7 +1080,9 @@ async function executePlan(db: Db, scope: Scope, plan: MergePlan, input: z.infer
           result: { moves: summary.moves, collapses: summary.collapses, alternates: summary.alternates, newNames: summary.newNames, dropped: summary.dropped },
         }),
       ) as Prisma.InputJsonValue,
-    },
+      },
+      db,
+    ),
   });
   return result;
 }
@@ -1114,6 +1126,7 @@ export async function lockPersons(db: Db, ids: string[]) {
 export async function mergePersons(scope: Scope, inputRaw: unknown, options: { tx?: Db; now?: Date; parentEdges?: { from: string; to: string }[] } = {}): Promise<MergeResult> {
   const input = parseOrThrow(mergeInputSchema.safeParse(inputRaw));
   if (input.keepId === input.mergeId) throw validationError([{ path: "mergeId", message: "Eine Person lässt sich nicht mit sich selbst zusammenführen" }]);
+  nameChangeSet(scope, "Personen zusammengeführt", "MERGE");
   const run = async (db: Db): Promise<MergeResult> => {
     await lockPersons(db, [input.keepId, input.mergeId]);
     const stillThere = await db.person.count({ where: { id: input.mergeId } });

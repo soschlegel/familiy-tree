@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { route, badRequest, notFound } from "@/lib/api";
-import { audit } from "@/lib/audit";
+import { audit, auditActor } from "@/lib/audit";
 
 type Params = { id: string };
 
@@ -27,6 +27,10 @@ export const POST = route<Params>(
       prisma.user.findUnique({ where: { id: userId }, select: { id: true } }),
     ]);
     if (!family || !user) return notFound();
+    const before = await prisma.userFamily.findUnique({
+      where: { userId_familyId: { userId, familyId } },
+      select: { role: true },
+    });
 
     if (role === null) {
       await prisma.userFamily.deleteMany({ where: { userId, familyId } });
@@ -39,11 +43,11 @@ export const POST = route<Params>(
     }
 
     await audit({
-      userId: ctx.userId,
+      ...auditActor(ctx.scope),
       action: "UPDATE",
       entityType: "User",
       entityId: userId,
-      diff: { familyId, role },
+      diff: { familyId, role, changes: { role: { from: before?.role ?? null, to: role } } },
     });
 
     return NextResponse.json({ ok: true });

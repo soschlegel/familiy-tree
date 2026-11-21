@@ -64,6 +64,7 @@ import { CITATION_FACT_LABEL, SOURCE_KIND_LABEL, DERIVED_SOURCE_KINDS } from "..
 import { CITATION_CONFIDENCES, CITATION_FACTS, SOURCE_KINDS } from "../lib/validation";
 import { ALTERNATIVE_ONLY_TYPES, EVENT_TYPES, PERSON_NAME_TYPES } from "../lib/events";
 import { appendResearchNote, dateFields, isoDay, ref, type PersonLike } from "./format";
+import { beginMcpChangeSet, CHANGE_SET_TITLE_MAX, mcpChangeSet } from "../lib/change-sets";
 
 export type ToolContext = {
   /** Wer zugreift — nur für Meldungen (E-Mail bzw. Schlüssel-Präfix). */
@@ -124,10 +125,34 @@ function run<A>(ctx: ToolContext, fn: (scope: Scope, args: A) => Promise<Data>, 
   };
 }
 
-/** Wie run, verlangt aber die Stufe WRITE. */
+/**
+ * Wie run, verlangt aber die Stufe WRITE und ordnet die Änderungen einem
+ * Changelog-Paket zu (lib/change-sets.ts): dem mit `change_set_id`
+ * angegebenen (geprüft, bevor etwas geändert wird) oder automatisch dem
+ * laufenden Paket dieses Schlüssels.
+ */
 function runWrite<A>(ctx: ToolContext, fn: (scope: Scope, args: A) => Promise<Data>) {
-  return run(ctx, fn, "WRITE");
+  return run<A>(
+    ctx,
+    async (scope, args) => {
+      const requested = (args as { change_set_id?: string } | undefined)?.change_set_id;
+      const cs = await mcpChangeSet(scope, requested);
+      if (!cs.ok) throw validationError([{ path: "change_set_id", message: cs.message }]);
+      return fn({ ...scope, changeSet: cs.handle }, args);
+    },
+    "WRITE",
+  );
 }
+
+/** Optionale Paket-Kennung für jedes schreibende Werkzeug. */
+const changeSetIdInput = z
+  .string()
+  .min(1)
+  .max(64)
+  .optional()
+  .describe(
+    "Change set from begin_change_set. Optional: without it, writes of this key within 30 minutes are bundled into the most recent change set.",
+  );
 
 const READ_ONLY = {
   readOnlyHint: true,
@@ -1128,9 +1153,40 @@ const summaryOut = (p: PersonLike & Record<string, unknown>) => ({
 });
 
 const WRITE_NOTE =
-  "Acts with the configured user's permissions; every change is written to the audit log.";
+  "Acts with the configured user's permissions; every change is written to the audit log (optionally into a change set, see begin_change_set).";
 
 export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
+  server.registerTool(
+    "begin_change_set",
+    {
+      title: "Änderungspaket öffnen",
+      description:
+        "Open a change set: a titled bundle that groups the following writes in the app's change history (e.g. " +
+        "'Taufbuch St. Marien 1850–1870 ausgewertet'). Pass the returned change_set_id to every write tool of this task. " +
+        "Without change_set_id, writes of the same key within 30 minutes join the most recent change set (this one, once " +
+        "opened), otherwise an automatic one. A change set accepts writes for 24 hours. Title in German, describing the task.",
+      inputSchema: {
+        title: z.string().trim().min(3).max(CHANGE_SET_TITLE_MAX).describe("Short German description of the task."),
+      },
+      outputSchema: { change_set_id: z.string(), title: z.string(), created_at: z.string() },
+      annotations: {
+        title: "Änderungspaket öffnen",
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    run(
+      ctx,
+      async (scope, a: { title: string }) => {
+        const cs = await beginMcpChangeSet(scope, a.title);
+        return { change_set_id: cs.id, title: cs.title, created_at: cs.createdAt.toISOString() };
+      },
+      "WRITE",
+    ),
+  );
+
   server.registerTool(
     "create_person",
     {
@@ -1140,6 +1196,7 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         "`note` becomes a dated research note (with optional `source`). Without family_ids a non-admin's person goes " +
         `into the first family they can edit. Link relatives afterwards with create_relationship. ${WRITE_NOTE}`,
       inputSchema: {
+        change_set_id: changeSetIdInput,
         given_name: z.string().min(1).max(120),
         ...personFieldsInput,
         family_ids: z.array(z.string()).max(50).optional(),
@@ -1181,6 +1238,7 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         "existing notes. When a finding comes from a document, ALSO record it as a citation (search_sources / create_source, " +
         `then cite_source) so it shows up in the person's sources. ${WRITE_NOTE}`,
       inputSchema: {
+        change_set_id: changeSetIdInput,
         person_id: personId,
         given_name: z.string().min(1).max(120).optional(),
         ...personFieldsInput,
@@ -1223,6 +1281,7 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         "Cycles and duplicates are rejected. " +
         WRITE_NOTE,
       inputSchema: {
+        change_set_id: changeSetIdInput,
         type: z.enum(["PARENT_OF", "PARTNER_OF"]),
         from_person_id: z.string().min(1),
         to_person_id: z.string().min(1),
@@ -1269,6 +1328,7 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         "changed — to fix a wrong link, delete it (delete_relationship) and create the correct one. null clears a field; " +
         `notes replace the relationship's notes. ${WRITE_NOTE}`,
       inputSchema: {
+        change_set_id: changeSetIdInput,
         relationship_id: z.string().min(1),
         subtype: z.enum(["BIOLOGICAL", "ADOPTIVE", "STEP", "FOSTER", "MARRIED", "UNMARRIED", "DIVORCED", "PARTNER_UNKNOWN"]).optional(),
         start_date: dateInput.nullable().optional(),
@@ -1313,7 +1373,7 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         "Remove ONE wrong link between two persons (e.g. a child attached to the wrong parent). Persons themselves are " +
         "never deleted by this server. Only use for correcting clear mistakes; the deleted link is kept in the audit log. " +
         WRITE_NOTE,
-      inputSchema: { relationship_id: z.string().min(1) },
+      inputSchema: { relationship_id: z.string().min(1), change_set_id: changeSetIdInput },
       outputSchema: { deleted: z.boolean(), relationshipId: z.string() },
       annotations: {
         title: "Beziehung löschen",
@@ -1338,6 +1398,7 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         "know are kept automatically; non-admins can only add/remove families they edit. Note: removing a family hides the " +
         `person from users of that family. ${WRITE_NOTE}`,
       inputSchema: {
+        change_set_id: changeSetIdInput,
         person_id: personId,
         family_ids: z.array(z.string().min(1)).max(50),
       },
@@ -1366,6 +1427,7 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         "kind: CHURCH_BOOK, CIVIL_REGISTRY, CENSUS, GRAVESTONE, FAMILY_DOCUMENT, ORAL, WEBSITE, OTHER. Until it is cited, " +
         `only the configured user and admins can see it. ${WRITE_NOTE}`,
       inputSchema: {
+        change_set_id: changeSetIdInput,
         title: z.string().min(1).max(300).describe("E.g. 'Kirchenbuch St. Marien Celle, Taufen 1850–1870'."),
         kind: z.enum(SOURCE_KINDS).optional().describe("Default OTHER."),
         author: z.string().max(2000).optional().describe("Author or origin (e.g. parish priest, informant)."),
@@ -1410,6 +1472,7 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         "`detail` = exact place in the source (page, entry number). confidence: HIGH (original record), MEDIUM (derived/" +
         `index), LOW (hearsay, unclear reading). Requires edit rights on the person/relationship. ${WRITE_NOTE}`,
       inputSchema: {
+        change_set_id: changeSetIdInput,
         source_id: z.string().min(1),
         person_id: z.string().min(1).optional(),
         relationship_id: z.string().min(1).optional(),
@@ -1530,6 +1593,7 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         "Store dates exactly as precise as the evidence (see date). Then cite the source with cite_source(event_id). " +
         WRITE_NOTE,
       inputSchema: {
+        change_set_id: changeSetIdInput,
         person_id: z.string().min(1).optional(),
         relationship_id: z.string().min(1).optional(),
         type: z.enum(EVENT_TYPES),
@@ -1569,6 +1633,7 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         "clears a field. Changing the date without date_phrase drops an old wording that described the previous date. " +
         `The owner (person/relationship) cannot be changed. ${WRITE_NOTE}`,
       inputSchema: {
+        change_set_id: changeSetIdInput,
         event_id: z.string().min(1),
         type: z.enum(EVENT_TYPES).optional(),
         is_alternative: z.boolean().optional(),
@@ -1604,7 +1669,7 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
       description:
         "Remove ONE wrongly recorded life event together with its citations (the sources themselves stay). Only for " +
         `correcting clear mistakes; the deleted event is kept in the audit log. ${WRITE_NOTE}`,
-      inputSchema: { event_id: z.string().min(1) },
+      inputSchema: { event_id: z.string().min(1), change_set_id: changeSetIdInput },
       outputSchema: { deleted: z.boolean(), eventId: z.string() },
       annotations: {
         title: "Ereignis löschen",
@@ -1630,6 +1695,7 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         "source), OTHER (with label). At least one of given_name, family_name, nickname. The main name stays on the " +
         `person (update_person). ${WRITE_NOTE}`,
       inputSchema: {
+        change_set_id: changeSetIdInput,
         person_id: personId,
         type: z.enum(PERSON_NAME_TYPES),
         given_name: z.string().max(200).optional(),

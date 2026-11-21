@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { route, forbidden, notFound } from "@/lib/api";
-import { audit } from "@/lib/audit";
+import { audit, auditActor } from "@/lib/audit";
 import { ImageFormatError, processAndStoreImage } from "@/lib/media-processing";
 import {
   canUploadForPerson,
@@ -121,7 +121,7 @@ export const POST = route(null, async (ctx, req) => {
   }
 
   await audit({
-    userId: ctx.userId,
+    ...auditActor(ctx.scope),
     action: "CREATE",
     entityType: "MediaAsset",
     entityId: asset.id,

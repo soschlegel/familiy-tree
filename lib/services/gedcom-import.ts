@@ -6,6 +6,7 @@ import { z } from "zod";
 import { prisma } from "../prisma";
 import type { Scope } from "../scope";
 import { audit, auditActor } from "../audit";
+import { nameChangeSet } from "../change-sets";
 import { deleteObject, getObjectBuffer, putObject } from "../storage";
 import { EVENT_TYPE_LABEL, PERSON_NAME_TYPE_LABEL, type EventTypeName, type PersonNameTypeName } from "../events";
 import { diagnoseGedcom, parseGedcom, verifyLossless, type GedcomHeader, type ParseResultWithTrace } from "../gedcom";
@@ -978,6 +979,7 @@ export async function applyGedcomImport(
   const b = await pendingBatch(batchId);
   if (b.status === "COMPLETED") return { ...(b.counts as unknown as GedcomApplyResult), alreadyApplied: true };
   if (b.status !== "PENDING") throw conflictError("Dieser Import ist fehlgeschlagen — bitte die Datei erneut hochladen");
+  nameChangeSet(scope, `GEDCOM-Import „${b.fileName}“`, "IMPORT");
   const plan = await loadPlan(batchId);
   const sourceTreeId = plan.sourceTreeId;
 
@@ -1127,6 +1129,9 @@ export async function applyGedcomImport(
     counts: result,
     warnings: { invalid: r.invalid.slice(0, 500), photoErrors: photos?.failed.slice(0, 500) ?? [] },
   });
+  if (familyId) {
+    await audit({ ...auditActor(scope), action: "CREATE", entityType: "Family", entityId: familyId, diff: { name: decisions.family.mode === "new" ? decisions.family.name : null, import: batchId } });
+  }
   await audit({ ...auditActor(scope), action: "CREATE", entityType: "ImportBatch", entityId: batchId, diff: { gedcom: true, invalid: r.invalid.length, deleted: toDelete.length } });
   return result;
 }

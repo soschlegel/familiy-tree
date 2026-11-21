@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { route, badRequest, forbidden } from "@/lib/api";
-import { audit } from "@/lib/audit";
+import { audit, auditActor } from "@/lib/audit";
 import {
   canUploadForPerson,
   canUploadForRelationship,
@@ -95,7 +95,7 @@ export const POST = route<Params>(
     }
 
     await audit({
-      userId: ctx.userId,
+      ...auditActor(ctx.scope),
       action: "UPDATE",
       entityType: "MediaAsset",
       entityId: mediaId,

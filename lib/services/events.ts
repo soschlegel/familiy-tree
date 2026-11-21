@@ -1,7 +1,7 @@
 import type { Event as EventRow, Prisma } from "@prisma/client";
 
 import { prisma } from "../prisma";
-import { audit, auditActor } from "../audit";
+import { audit, auditActor, fieldChanges } from "../audit";
 import {
   canEditPerson,
   canEditRelationshipBetween,
@@ -265,7 +265,16 @@ export async function updateEvent(scope: Scope, id: string, patch: unknown): Pro
   };
   const event = await prisma.event.update({ where: { id }, data: columns });
 
-  await audit({ ...auditActor(scope), action: "UPDATE", entityType: "Event", entityId: id, diff: columns });
+  const changes = fieldChanges(existing, columns);
+  if (Object.keys(changes).length > 0) {
+    await audit({
+      ...auditActor(scope),
+      action: "UPDATE",
+      entityType: "Event",
+      entityId: id,
+      diff: { label: eventTitle(event), changes },
+    });
+  }
   return toEventDto(event, true);
 }
 

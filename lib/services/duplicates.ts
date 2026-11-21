@@ -330,7 +330,7 @@ export async function dismissDuplicate(scope: Scope, aId: string, bId: string): 
     create: { personAId, personBId, userId: scope.userId },
     update: {},
   });
-  await audit({ ...auditActor(scope), action: "UPDATE", entityType: "Person", entityId: personAId, diff: { notDuplicateOf: personBId } });
+  await audit({ ...auditActor(scope), action: "UPDATE", entityType: "Person", entityId: personAId, diff: { notDuplicateOf: personBId }, personIds: [personBId] });
   return { ok: true };
 }
 
@@ -339,6 +339,6 @@ export async function undismissDuplicate(scope: Scope, aId: string, bId: string)
   await assertBothEditable(scope, aId, bId);
   const [personAId, personBId] = aId < bId ? [aId, bId] : [bId, aId];
   await prisma.duplicateDismissal.deleteMany({ where: { personAId, personBId } });
-  await audit({ ...auditActor(scope), action: "UPDATE", entityType: "Person", entityId: personAId, diff: { notDuplicateOfRemoved: personBId } });
+  await audit({ ...auditActor(scope), action: "UPDATE", entityType: "Person", entityId: personAId, diff: { notDuplicateOfRemoved: personBId }, personIds: [personBId] });
   return { ok: true };
 }

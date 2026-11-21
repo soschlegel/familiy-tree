@@ -5,6 +5,7 @@ import { canEditPerson, canViewPerson, type Scope } from "../scope";
 import { scoreDuplicate } from "../duplicates";
 import { formatFuzzyYear, fuzzyField } from "../dates";
 import { forbiddenError, parseOrThrow, ServiceError } from "./errors";
+import { nameChangeSet } from "../change-sets";
 import { loadDuplicatePeople } from "./duplicates";
 import { loadMergeSnapshot, mergePersons, planMerge, summarizePlan, type MergeBlocker, type MergeSummary } from "./merge";
 
@@ -160,6 +161,8 @@ export async function previewBulkMerge(scope: Scope, raw: unknown): Promise<Bulk
 /** Ausführen: Paar für Paar (Eltern zuerst), jedes in eigener Transaktion. */
 export async function bulkMerge(scope: Scope, raw: unknown): Promise<BulkResult> {
   const { ok, skipped, graph } = await preparePairs(scope, raw);
+  // Ein Paket für alle Paare (die einzelnen Zusammenführungen benennen es nicht um).
+  nameChangeSet(scope, `Sammel-Zusammenführen (${ok.length} ${ok.length === 1 ? "Paar" : "Paare"})`, "MERGE");
   const merged: BulkResult["merged"] = [];
   const failed: BulkResult["failed"] = [];
   for (const p of ok) {

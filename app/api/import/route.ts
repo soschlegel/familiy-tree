@@ -4,7 +4,8 @@ import { safeHttpUrl } from "@/lib/source-classify";
 
 import { prisma } from "@/lib/prisma";
 import { route } from "@/lib/api";
-import { audit } from "@/lib/audit";
+import { audit, auditActor } from "@/lib/audit";
+import { nameChangeSet } from "@/lib/change-sets";
 import { processAndStoreImage } from "@/lib/media-processing";
 import type { Prisma } from "@prisma/client";
 
@@ -326,6 +327,7 @@ export const POST = route("data:import", async (ctx, req) => {
   }
 
   // --- Ausführung -----------------------------------------------------------
+  nameChangeSet(ctx.scope, `Daten eingespielt („${file.name || "Datei"}“)`, "IMPORT");
   // Alte Exporte (Version 1/2) kennen weder Genauigkeit noch Bereichsende
   // bzw. Wortlaut: dann tagesgenau, genau, ohne Ende (exchangeDateColumns).
   const dates = (key: string, r: object) => exchangeDateColumns(key, r as Record<string, unknown>);
@@ -619,11 +621,15 @@ export const POST = route("data:import", async (ctx, req) => {
   }
 
   await audit({
-    userId: ctx.userId,
+    ...auditActor(ctx.scope),
     action: "CREATE",
-    entityType: "Person",
-    entityId: "import",
-    diff: plan,
+    // Bis zum Changelog „Person“/„import“; der Lauf ist keine Person.
+    entityType: "ImportBatch",
+    entityId: "exchange",
+    diff: { exchange: true, ...plan },
+    // Für den Verlauf der Personen: alle Personen der Datei (eingespielt
+    // oder aktualisiert), samt ihren Familien.
+    personIds: data.persons.map((p) => p.id),
   });
 
   return NextResponse.json({ preview: false, plan });

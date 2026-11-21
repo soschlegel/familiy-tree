@@ -11,6 +11,8 @@ import { getObjectBuffer, putObject } from "../storage";
 import { conflictError, forbiddenError, notFoundError, parseOrThrow, ServiceError } from "./errors";
 import { loadDuplicatePeople } from "./duplicates";
 import { loadMergeSnapshot, mergePersons, planMerge, summarizePlan } from "./merge";
+import { audit, auditActor } from "../audit";
+import { nameChangeSet } from "../change-sets";
 
 /**
  * Importe verbinden (Recherche → „Importe verbinden“, nur Administratoren):
@@ -270,6 +272,9 @@ export async function decideConnectPairs(scope: Scope, id: string, input: unknow
       .filter((x) => x.length === 2)
       .map(([a, b]) => (a < b ? { personAId: a, personBId: b, userId: scope.userId } : { personAId: b, personBId: a, userId: scope.userId }));
     await prisma.duplicateDismissal.createMany({ data: rows, skipDuplicates: true });
+    for (const r of rows) {
+      await audit({ ...auditActor(scope), action: "UPDATE", entityType: "Person", entityId: r.personAId, diff: { notDuplicateOf: r.personBId }, personIds: [r.personBId] });
+    }
   }
   if (run.status === "previewed") run.status = "ready";
   run.preview = undefined;
@@ -407,6 +412,8 @@ export async function startConnectApply(scope: Scope, id: string): Promise<Conne
   run.status = "applying";
   run.interrupted = false;
   await save(run);
+  // Alle Zusammenführungen dieses Laufs bilden ein Paket.
+  nameChangeSet(scope, `Importe verbinden (${run.apply.clusters.length} Gruppen)`, "CONNECT");
   background(id, () => apply(scope, run));
   return run;
 }
@@ -440,14 +447,13 @@ async function apply(scope: Scope, run: ConnectRun) {
   const next = await startConnectRun(scope, run.selection);
   run.followUpId = next.id;
   await save(run);
-  await prisma.auditLog.create({
-    data: {
-      userId: scope.userId,
-      action: "CONNECT",
-      entityType: "Person",
-      entityId: run.id,
-      diff: { clusters: a.clusters, merged: a.merged, failed: a.failed } as unknown as Prisma.InputJsonValue,
-    },
+  await audit({
+    ...auditActor(scope),
+    action: "CONNECT",
+    entityType: "Person",
+    entityId: run.id,
+    diff: { clusters: a.clusters, merged: a.merged, failed: a.failed } as unknown as Prisma.InputJsonValue,
+    personIds: a.clusters.map((c) => c.keep),
   });
 }
 

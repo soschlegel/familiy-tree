@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { route, badRequest, notFound } from "@/lib/api";
-import { audit } from "@/lib/audit";
+import { audit, auditActor, fieldChanges } from "@/lib/audit";
 import { userPatch } from "@/lib/validation";
 
 type Params = { id: string };
@@ -88,13 +88,16 @@ export const PATCH = route<Params>("user:manage", async (ctx, req, { id }) => {
   });
 
   await audit({
-    userId: ctx.userId,
+    ...auditActor(ctx.scope),
     action: "UPDATE",
     entityType: "User",
     entityId: id,
-    diff: parsed.data.email && parsed.data.email !== target.email
-      ? { ...parsed.data, previousEmail: target.email }
-      : parsed.data,
+    diff: {
+      ...(parsed.data.email && parsed.data.email !== target.email
+        ? { ...parsed.data, previousEmail: target.email }
+        : parsed.data),
+      changes: fieldChanges(target, parsed.data),
+    },
   });
 
   return NextResponse.json(user);
@@ -125,7 +128,7 @@ export const DELETE = route<Params>(
     await prisma.user.delete({ where: { id } });
 
     await audit({
-      userId: ctx.userId,
+      ...auditActor(ctx.scope),
       action: "DELETE",
       entityType: "User",
       entityId: id,
