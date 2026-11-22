@@ -445,8 +445,6 @@ export interface GedcomPerson {
  */
 export type GedcomPartnerStatus = "MARRIED" | "DIVORCED" | "UNMARRIED" | "UNKNOWN";
 
-export const GEDCOM_PARTNER_STATUSES: readonly GedcomPartnerStatus[] = ["MARRIED", "DIVORCED", "UNMARRIED", "UNKNOWN"];
-
 /** Art der Eltern-Kind-Beziehung je Elternteil (entspricht den App-Untertypen). */
 export type GedcomChildKind = "BIOLOGICAL" | "ADOPTIVE" | "FOSTER" | "STEP" | "OTHER";
 

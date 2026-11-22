@@ -704,17 +704,6 @@ function side(scope: Scope, p: PersonBundle, rels: RelBundle[]): MergePersonSide
   };
 }
 
-const SUBTYPE_LABEL: Record<string, string> = {
-  BIOLOGICAL: "leiblich",
-  ADOPTIVE: "Adoption",
-  STEP: "Stief",
-  FOSTER: "Pflege",
-  MARRIED: "verheiratet",
-  UNMARRIED: "unverheiratet",
-  DIVORCED: "geschieden",
-  PARTNER_UNKNOWN: "Ehestand unbekannt",
-};
-
 function toPreview(scope: Scope, plan: MergePlan): MergePreview {
   const { keep, other, relationships } = plan.snapshot;
   return {
@@ -737,8 +726,6 @@ function toPreview(scope: Scope, plan: MergePlan): MergePreview {
     token: plan.token,
   };
 }
-
-export { SUBTYPE_LABEL as MERGE_SUBTYPE_LABEL };
 
 /** Was beim Zusammenführen geschähe — schreibt nichts. */
 export async function previewPersonMerge(

@@ -7,7 +7,7 @@
  * Vergleichsform eines Namens: klein, ohne Akzente, ä→ae (wie „Mueller“ =
  * „Müller“), ß→ss, ph→f, th→t, Doppelbuchstaben einfach, nur Buchstaben und
  * Leerzeichen. „Müller“, „Mueller“ und „Muller“ ergeben nicht alle dasselbe —
- * „Muller“ bleibt bewusst verschieden (siehe nameDistance für Ähnlichkeit).
+ * „Muller“ bleibt bewusst verschieden (Ähnlichkeit: editDistance).
  */
 export function nameKey(name: string | null | undefined): string {
   if (!name) return "";
@@ -27,12 +27,6 @@ export function nameKey(name: string | null | undefined): string {
 /** Erster Vorname in Vergleichsform („Anna Maria“ → „ana“). */
 export function firstGivenKey(given: string | null | undefined): string {
   return nameKey(given).split(" ")[0] ?? "";
-}
-
-/** Gleicher Name in Vergleichsform (leer ist nie gleich). */
-export function sameName(a: string | null | undefined, b: string | null | undefined): boolean {
-  const x = nameKey(a);
-  return Boolean(x) && x === nameKey(b);
 }
 
 /** Vergleichsform eines Ortes: nur der erste Teil vor dem Komma („Probstadt, Kreis X“ → „probstadt“). */
@@ -60,13 +54,4 @@ export function editDistance(a: string, b: string): number {
     prev = cur;
   }
   return prev[b.length];
-}
-
-/** Ähnliche Schreibweise: Vergleichsformen höchstens 1 (ab 7 Zeichen 2) Zeichen auseinander. */
-export function similarName(a: string | null | undefined, b: string | null | undefined): boolean {
-  const x = nameKey(a);
-  const y = nameKey(b);
-  if (!x || !y) return false;
-  if (x === y) return true;
-  return editDistance(x, y) <= (Math.min(x.length, y.length) >= 7 ? 2 : 1);
 }

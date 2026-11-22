@@ -22,13 +22,6 @@ export const isMarriage = (subtype: string) => subtype === "MARRIED" || subtype 
 /** „Ehe“ bzw. „Partnerschaft“. */
 export const partnershipNoun = (subtype: string) => (isMarriage(subtype) ? "Ehe" : "Partnerschaft");
 
-/** Bezeichnung des Beginns: „Hochzeit“ bzw. „Beginn der Partnerschaft“. */
-export const partnerStartLabel = (subtype: string) =>
-  isMarriage(subtype) ? "Hochzeit" : "Beginn der Partnerschaft";
-
-/** Bezeichnung des Endes: „Scheidung“ bzw. „Ende der Partnerschaft“. */
-export const partnerEndLabel = (subtype: string) => (subtype === "DIVORCED" ? "Scheidung" : "Ende der Partnerschaft");
-
 /** Symbol am Ehe-/Partnerschaftsmarker im Baum. */
 export const PARTNER_SYMBOL: Record<string, string> = {
   MARRIED: "♥",

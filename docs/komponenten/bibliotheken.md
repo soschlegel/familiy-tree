@@ -51,8 +51,9 @@ Entwicklungsmodus Warnungen und Fehler, sonst nur Fehler.
 E-Mails, die in der Tabelle `User` stehen, kommen hinein.
 
 **Wichtige Funktionen/Typen:** `handlers`, `auth`, `signIn`, `signOut` (aus
-`NextAuth`); `requireSession` (wirft ohne Sitzung). Erweitert den
-Sitzungstyp um `user.id` und `user.role`.
+`NextAuth`). Erweitert den Sitzungstyp um `user.id` und `user.role`.
+Seiten holen die Sitzung über `lib/session.ts`, API-Routen über `route()` in
+`lib/api.ts`.
 
 **Regeln und Algorithmen:**
 - Anbieter nur, wenn konfiguriert: GitHub (`AUTH_GITHUB_ID`), Google
@@ -72,7 +73,7 @@ Sitzungstyp um `user.id` und `user.role`.
 `app/login/page.tsx`, `lib/api.ts`, `lib/session.ts`.
 
 **Tests:** keine direkten Tests (Ablauf wird in Playwright über den
-Dev-Login genutzt). `requireSession` wird nirgends aufgerufen (toter Code).
+Dev-Login genutzt).
 
 ### lib/authz.ts
 **Zweck:** **Globale** Verwaltungsrechte. Inhaltliche Rechte (Personen,
@@ -340,9 +341,9 @@ Personen und Quellen.
 Bezeichnungen, Regeln „wo steht welche Angabe“.
 
 **Wichtige Funktionen/Typen:** `EVENT_TYPES`, `EVENT_TYPE_LABEL`,
-`EVENT_TYPE_GEDCOM_TAG`, `ALTERNATIVE_ONLY_TYPES`,
+`ALTERNATIVE_ONLY_TYPES`,
 `PARTNERSHIP_EVENT_TYPES`, `POSTHUMOUS_EVENT_TYPES` (Beerdigung,
-Einäscherung, Testamentseröffnung), `VALUE_EVENT_TYPES`, `EventOwner`,
+Einäscherung, Testamentseröffnung), `EventOwner`,
 `eventTypeAllowed`, `eventTypesFor`, `eventIssues`, `eventTitle`,
 `PERSON_NAME_TYPES`, `PERSON_NAME_TYPE_LABEL`.
 
@@ -366,8 +367,7 @@ Einäscherung, Testamentseröffnung), `VALUE_EVENT_TYPES`, `EventOwner`,
 Personen, Quellen, Import, Export, Zusammenführen, Zeitleiste;
 `mcp/tools.ts`; Personenseite, `EventSection`, `NameVariants`.
 
-**Tests:** `tests/genealogy.test.ts`. `EVENT_TYPE_GEDCOM_TAG` und
-`VALUE_EVENT_TYPES` werden außerhalb der Datei nirgends verwendet.
+**Tests:** `tests/genealogy.test.ts`.
 
 ### lib/event-labels.ts
 **Zweck:** Oberflächentexte zu Ereignissen: Reihenfolge der Auswahlliste
@@ -453,8 +453,7 @@ werden ignoriert. Sortiert nach Schwere.
 nur bei MARRIED/DIVORCED; sonst neutral „Partnerschaft“.
 
 **Wichtige Funktionen:** `PARTNER_SUBTYPE_LABEL`, `isMarriage`,
-`partnershipNoun`, `partnerStartLabel`, `partnerEndLabel`,
-`PARTNER_SYMBOL`, `partnerLineStyle` (durchgezogen rosé, geschieden grau
+`partnershipNoun`, `PARTNER_SYMBOL`, `partnerLineStyle` (durchgezogen rosé, geschieden grau
 gestrichelt, Ehestand unbekannt gepunktet), `partnerMarkerLabel`,
 `shortYear` (kurze Jahresangabe, Bereiche im selben Jahrhundert verkürzt),
 `since`, `partnerCardDescription`, `partnerPlaces`.
@@ -463,8 +462,7 @@ gestrichelt, Ehestand unbekannt gepunktet), `partnerMarkerLabel`,
 `MarriageNode`, `PersonNode`, `RelationshipEditor`,
 `lib/services/changes.ts`.
 
-**Tests:** keine. `partnerStartLabel` und `partnerEndLabel` werden nirgends
-verwendet.
+**Tests:** keine.
 
 ### lib/source-labels.ts
 **Zweck:** Deutsche Bezeichnungen für Quellenarten, Beleg-Fakten und
@@ -709,9 +707,8 @@ Dublettensuche, Zusammenführen und Importvorschläge.
 
 **Wichtige Funktionen:** `nameKey` (klein, ohne Akzente, Umlaut → „e“-
 Schreibung, ß → ss, ph → f, th → t, Doppelbuchstaben einfach, nur
-Buchstaben), `firstGivenKey`, `sameName`, `placeKey` (nur der Teil vor dem
-ersten Komma), `samePlace`, `editDistance` (Levenshtein), `similarName`
-(Abstand ≤ 1, ab 7 Zeichen ≤ 2).
+Buchstaben), `firstGivenKey`, `placeKey` (nur der Teil vor dem
+ersten Komma), `samePlace`, `editDistance` (Levenshtein).
 
 **Achtung:** `placeKey` hier ist eine **andere** Funktion als `placeKey` in
 `lib/places/normalize.ts` (Schlüssel der Tabelle `Place`).
@@ -720,8 +717,7 @@ ersten Komma), `samePlace`, `editDistance` (Levenshtein), `similarName`
 `lib/services/duplicates.ts`.
 
 **Tests:** keine eigenen (indirekt über Dubletten- und
-Zusammenführungstests). `sameName` und `similarName` werden nirgends
-verwendet.
+Zusammenführungstests).
 
 ### lib/duplicates.ts
 **Zweck:** Erkennung möglicher Dubletten — rein, gemeinsam für die
@@ -952,7 +948,7 @@ Medien, Ereignisse (`GEDCOM_EVENT_TYPES`), Namen, Person, Familie mit
 Partnerstatus und Kindern samt Art, Quelle, Archiv, Einsender, Dialekt,
 Kopf, Dokument, Warnungscodes.
 **Benutzt von:** allen `lib/gedcom/*`, `lib/gedcom-import/*`.
-**Tests:** Gedcom-Tests. `GEDCOM_PARTNER_STATUSES` wird nirgends verwendet.
+**Tests:** Gedcom-Tests.
 
 #### lib/gedcom/encoding.ts
 **Zweck:** Zeichensatz erkennen und Bytes dekodieren.
@@ -1040,8 +1036,7 @@ App-Form mit nur vier Zusätzen und `lossy`), `fromAppDate`.
 **Hinweis:** Der App-Import nutzt nicht `toAppDate`, sondern die
 vollständige Umsetzung in `lib/gedcom-import/dates.ts`; `toAppDate` dient
 nur noch den Diagnosen. `fromAppDate` wird außerhalb der Bibliothek nicht
-verwendet. Der Kommentar zu `AppDate` verweist noch auf eine künftige
-Bereichsunterstützung („G1“) — veraltet.
+verwendet.
 **Benutzt von:** `diagnostics`, `interpret`, `writer`, `index`.
 **Tests:** `tests/gedcom-dates.test.ts`.
 

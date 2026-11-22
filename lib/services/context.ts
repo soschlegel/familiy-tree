@@ -15,13 +15,3 @@ export async function scopeForEmail(email: string): Promise<Scope | null> {
   if (!user || user.status === "BLOCKED") return null;
   return loadScope(user.id, user.role);
 }
-
-/** Wie scopeForEmail, aber über die Benutzer-ID. */
-export async function scopeForUserId(userId: string): Promise<Scope | null> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { id: true, role: true, status: true },
-  });
-  if (!user || user.status === "BLOCKED") return null;
-  return loadScope(user.id, user.role);
-}

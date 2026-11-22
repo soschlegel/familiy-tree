@@ -42,18 +42,6 @@ export function JunctionNode({ data }: NodeProps<{ dimmed: boolean }>) {
   );
 }
 
-/** Jahreszahl auf der Zeitachse. Als Knoten, damit sie mitzoomt und -wandert. */
-export function YearNode({ data }: NodeProps<{ year: number }>) {
-  return (
-    <div className="pointer-events-none flex items-center gap-2">
-      <span className="text-xs font-medium tabular-nums text-stone-400">
-        {data.year}
-      </span>
-      <span className="h-px w-8 bg-stone-200 dark:bg-stone-800" />
-    </div>
-  );
-}
-
 /**
  * Hochzeit als eigenständiges Ereignis auf der Zeitachse — bewusst rund und
  * deutlich kleiner als eine Personenkarte, damit auf einen Blick klar ist,

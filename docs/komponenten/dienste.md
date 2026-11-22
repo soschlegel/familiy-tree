@@ -223,7 +223,6 @@ Komponenten, `mcp/format.ts`, `mcp/tools.ts` und mehreren `lib/*`-Modulen.
 **Wichtige Funktionen:**
 - `scopeForEmail(email)` — sucht den Benutzer (E-Mail getrimmt, klein) und
   lädt seinen Scope.
-- `scopeForUserId(id)` — dasselbe über die Benutzer-ID.
 
 **Regeln und Entscheidungen:** Unbekannte und gesperrte (`BLOCKED`) Benutzer
 ergeben `null` — dieselbe Regel wie bei der Anmeldung.
@@ -234,7 +233,7 @@ Protokoll als Kanal „App“.
 **Protokoll:** —
 
 **Benutzt von:** ausschließlich Tests (`scopeForEmail` in fast allen
-`tests/*.db.test.ts`). `scopeForUserId` wird nirgends benutzt. Der MCP-Server
+`tests/*.db.test.ts`). Der MCP-Server
 nutzt stattdessen `authorizeAiCall` (`ai-access.ts`).
 
 **Tests:** Hilfsfunktion der Tests, nicht selbst getestet.
@@ -788,10 +787,6 @@ Baum).
 `tests/genealogy.db.test.ts`, `tests/sources.db.test.ts`,
 `tests/import-linking.db.test.ts`, MCP-Tests; `e2e/read/research.spec.ts`.
 
-**Auffällig:** `normalizeName` wird nirgends benutzt (die Namensvergleiche
-laufen über `lib/name-keys.ts` bzw. eine eigene Funktion in
-`lib/gedcom-import/suggest.ts`); `RELATIONSHIP_GAP_LABEL` ebenso.
-
 ### lib/services/kinship.ts
 
 **Zweck:** Verwandtschaft zweier Personen mit deutscher Bezeichnung
@@ -967,7 +962,7 @@ Hauptangaben in `lib/merge-rules.ts`.
   Sammel-Zusammenführen und „Importe verbinden“.
 - `lockPersons(db, ids)` — Advisory-Lock je Person (sortiert), damit zwei
   Zusammenführungen derselben Person aufeinander warten.
-- `entryTag`, `mergeInputSchema`, `MERGE_SUBTYPE_LABEL` — Hilfen.
+- `entryTag`, `mergeInputSchema` — Hilfen.
 
 **Regeln und Entscheidungen (Zusammenführen-Regeln):**
 - **Anreichern statt streiten:** Leeres wird ergänzt, das genauere Datum
@@ -1329,9 +1324,8 @@ eigentliche Schreiben der Daten liegt in `import-apply.ts`.
   speichert SHA-256 und Größe.
 - `finishImportBatch(scope, id, {status, counts, warnings, notes})` — Lauf
   abschließen.
-- `listImportBatches`, `getImportBatch`, `readImportBatchFile`,
-  `deleteImportBatchFile` — Läufe lesen, Originaldatei lesen bzw. bewusst
-  löschen (Lauf und Herkunft bleiben).
+- `listImportBatches`, `getImportBatch`, `readImportBatchFile` — Läufe
+  bzw. die Originaldatei lesen.
 - `listImportLinks(scope, {sourceTreeId, batchId, entityTypes})` — Herkunft
   mit heutigem Fingerabdruck und `editedSinceImport`.
 - `markMissingInSource(scope, batchId, linkIds)` — vermerkt, dass Datensätze
@@ -1371,7 +1365,8 @@ Einschränkung).
 `tests/gedcom-writer.test.ts` (`newId`); `e2e/write/import.spec.ts`.
 `listImportBatches`, `listImportLinks`, `markMissingInSource`,
 `findExternalIds` und `listRawRecords` werden außerhalb der Tests nicht
-benutzt; `deleteImportBatchFile` gar nicht.
+benutzt (bleiben bewusst: fachlich sinnvolle Lesezugriffe, die die Tests
+zur Prüfung der Herkunft brauchen).
 
 ### lib/services/import-apply.ts
 
@@ -1564,8 +1559,6 @@ Node-Prozesses; die Oberfläche fragt den Stand ab.
 - `importJobState(scope, batchId)` — `idle`, `running`, `done` (Ergebnis)
   oder `error` (Meldung); ohne laufenden Auftrag aus dem Lauf in der
   Datenbank (abgeschlossen → `done` mit `alreadyApplied`).
-- `waitForImportJob(scope, batchId, timeout)` — auf das Ende warten (für Tests
-  und Skripte gedacht).
 
 **Regeln und Entscheidungen:** Der Zustand liegt in einer prozessweiten Map
 (`globalThis`), übersteht also Hot-Reload, aber keinen Neustart. Doppelte
@@ -1583,7 +1576,7 @@ gemeldet.
 verhindern.
 
 **Tests:** kein Dienst-Test; `e2e/write/gedcom-import.spec.ts` über die
-Oberfläche. `waitForImportJob` wird nirgends benutzt.
+Oberfläche.
 
 ### lib/services/import-linking.ts
 

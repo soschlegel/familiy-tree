@@ -130,55 +130,6 @@ export const EVENT_TYPE_LABEL: Record<EventTypeName, string> = {
   CUSTOM: "Sonstiges Ereignis",
 };
 
-/** GEDCOM-5.5.1-Tag je Art (Hilfe für Import/Export; CUSTOM = EVEN). */
-export const EVENT_TYPE_GEDCOM_TAG: Record<EventTypeName, string> = {
-  BIRTH: "BIRT",
-  DEATH: "DEAT",
-  BAPTISM: "BAPM",
-  CHRISTENING: "CHR",
-  ADULT_CHRISTENING: "CHRA",
-  BURIAL: "BURI",
-  CREMATION: "CREM",
-  ADOPTION: "ADOP",
-  CONFIRMATION: "CONF",
-  FIRST_COMMUNION: "FCOM",
-  BAR_MITZVAH: "BARM",
-  BAS_MITZVAH: "BASM",
-  BLESSING: "BLES",
-  ORDINATION: "ORDN",
-  GRADUATION: "GRAD",
-  EDUCATION: "EDUC",
-  OCCUPATION: "OCCU",
-  RETIREMENT: "RETI",
-  RESIDENCE: "RESI",
-  CENSUS: "CENS",
-  EMIGRATION: "EMIG",
-  IMMIGRATION: "IMMI",
-  NATURALIZATION: "NATU",
-  MILITARY_SERVICE: "_MILT",
-  RELIGION: "RELI",
-  NATIONALITY: "NATI",
-  TITLE: "TITL",
-  PROPERTY: "PROP",
-  PHYSICAL_DESCRIPTION: "DSCR",
-  ID_NUMBER: "IDNO",
-  CASTE: "CAST",
-  CHILDREN_COUNT: "NCHI",
-  MARRIAGE_COUNT: "NMR",
-  WILL: "WILL",
-  PROBATE: "PROB",
-  MARRIAGE: "MARR",
-  DIVORCE: "DIV",
-  ENGAGEMENT: "ENGA",
-  MARRIAGE_BANNS: "MARB",
-  MARRIAGE_CONTRACT: "MARC",
-  MARRIAGE_LICENSE: "MARL",
-  MARRIAGE_SETTLEMENT: "MARS",
-  DIVORCE_FILED: "DIVF",
-  ANNULMENT: "ANUL",
-  CUSTOM: "EVEN",
-};
-
 /** Arten, deren Hauptangabe anderswo steht — nur als Alternative erlaubt. */
 export const ALTERNATIVE_ONLY_TYPES: readonly EventTypeName[] = ["BIRTH", "DEATH", "MARRIAGE", "DIVORCE"];
 
@@ -200,23 +151,6 @@ const SHARED_EVENT_TYPES: readonly EventTypeName[] = ["CENSUS", "RESIDENCE", "CU
 
 /** Nach dem Tod üblich — gelten nicht als „Ereignis nach dem Tod“. */
 export const POSTHUMOUS_EVENT_TYPES: readonly EventTypeName[] = ["BURIAL", "CREMATION", "PROBATE"];
-
-/** Arten, die einen Wert tragen (Beruf, Religion …) statt nur Datum/Ort. */
-export const VALUE_EVENT_TYPES: readonly EventTypeName[] = [
-  "OCCUPATION",
-  "EDUCATION",
-  "RELIGION",
-  "NATIONALITY",
-  "TITLE",
-  "PROPERTY",
-  "PHYSICAL_DESCRIPTION",
-  "ID_NUMBER",
-  "CASTE",
-  "CHILDREN_COUNT",
-  "MARRIAGE_COUNT",
-  "RESIDENCE",
-  "GRADUATION",
-];
 
 export type EventOwner =
   | { kind: "person" }

@@ -15,7 +15,6 @@ const INITIALS_BG: Record<Gender, string> = {
 };
 
 const SIZE = {
-  sm: "h-9 w-9 text-xs",
   md: "h-12 w-12 text-sm",
   lg: "h-28 w-28 text-3xl sm:h-36 sm:w-36 sm:text-4xl",
 } as const;
@@ -28,7 +27,6 @@ const SIZE = {
 export function Avatar({
   person,
   size = "md",
-  variant = "thumb",
 }: {
   person: {
     givenName: string;
@@ -38,14 +36,13 @@ export function Avatar({
     deathDate?: string | null;
   };
   size?: keyof typeof SIZE;
-  variant?: "thumb" | "full";
 }) {
   const base = `${SIZE[size]} shrink-0 rounded-full ring-2 ring-offset-2 ring-offset-surface ${RING[person.gender]}`;
   if (person.primaryMediaId) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={`/api/media/${person.primaryMediaId}${variant === "thumb" ? "?variant=thumb" : ""}`}
+        src={`/api/media/${person.primaryMediaId}?variant=thumb`}
         alt=""
         loading="lazy"
         decoding="async"

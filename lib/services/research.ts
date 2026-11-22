@@ -327,11 +327,6 @@ export type RelationshipGapKind = "marriageWithoutPlace" | "partnershipUnknownSt
 
 export const RELATIONSHIP_GAP_KINDS: RelationshipGapKind[] = ["marriageWithoutPlace", "partnershipUnknownStatus"];
 
-export const RELATIONSHIP_GAP_LABEL: Record<RelationshipGapKind, string> = {
-  marriageWithoutPlace: "Ehe ohne Ort",
-  partnershipUnknownStatus: "Partnerschaft mit unbekanntem Ehestand",
-};
-
 export type RelationshipGapItem = {
   relationshipId: string;
   /** Beide Partner; nicht sichtbare als Platzhalter. */
@@ -517,20 +512,6 @@ export async function findDataGaps(
 // ---------------------------------------------------------------------------
 // Mögliche Dubletten
 // ---------------------------------------------------------------------------
-
-/** Vereinheitlicht Schreibweisen: Umlaute, ß, ph/f, th/t, Doppelbuchstaben. */
-export function normalizeName(name: string | null | undefined): string {
-  if (!name) return "";
-  return name
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, (m) => (m === "̈" ? "e" : ""))
-    .replace(/ß/g, "ss")
-    .replace(/ph/g, "f")
-    .replace(/th/g, "t")
-    .replace(/[^a-z]/g, "")
-    .replace(/(.)\1+/g, "$1");
-}
 
 /**
  * Paare sichtbarer Personen, die vermutlich doppelt erfasst sind — nach

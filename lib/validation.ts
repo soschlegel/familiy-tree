@@ -474,7 +474,6 @@ export const citationPatch = z.object(citationFields).partial();
 // ---------------------------------------------------------------------------
 
 export const AI_ACCESS_LEVELS = ["NONE", "READ", "WRITE"] as const;
-export type AiAccessName = (typeof AI_ACCESS_LEVELS)[number];
 
 export const API_TOKEN_LEVELS = ["READ", "WRITE"] as const;
 export type ApiTokenLevelName = (typeof API_TOKEN_LEVELS)[number];

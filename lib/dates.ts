@@ -52,8 +52,6 @@ export const DATE_QUALIFIERS: readonly DateQualifier[] = [
   "UNTIL",
 ];
 
-/** Zusätze mit Bereichsende (`to`). BETWEEN braucht es, PERIOD nicht (= ab …). */
-export const RANGE_QUALIFIERS: readonly DateQualifier[] = ["BETWEEN", "PERIOD"];
 export const isRangeQualifier = (q: DateQualifier) => q === "BETWEEN" || q === "PERIOD";
 
 /** Ende eines Bereichs: Anker (Anfang des Zeitraums) und Genauigkeit. */
@@ -131,18 +129,6 @@ const QUALIFIER_PREFIX: Record<DateQualifier, string> = {
   BETWEEN: "zwischen ",
   PERIOD: "ab ",
   UNTIL: "bis ",
-};
-
-export const QUALIFIER_LABEL: Record<DateQualifier, string> = {
-  EXACT: "genau",
-  ABOUT: "um (ungefähr)",
-  BEFORE: "vor",
-  AFTER: "nach",
-  ESTIMATED: "geschätzt",
-  CALCULATED: "errechnet",
-  BETWEEN: "zwischen … und …",
-  PERIOD: "von … bis …",
-  UNTIL: "bis",
 };
 
 export const PRECISION_LABEL: Record<DatePrecision, string> = {

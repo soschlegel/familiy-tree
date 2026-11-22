@@ -141,10 +141,3 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
 });
-
-/** Session holen oder Fehler werfen. Für Route-Handler und Server-Actions. */
-export async function requireSession() {
-  const session = await auth();
-  if (!session?.user) throw new Error("UNAUTHENTICATED");
-  return session;
-}

@@ -227,22 +227,6 @@ export async function readImportBatchFile(scope: Scope, id: string): Promise<Buf
   return b.storageKey ? getObjectBuffer(b.storageKey) : null;
 }
 
-/**
- * Originaldatei eines Laufs löschen (bewusste Entscheidung des Admins, z.B.
- * um Platz zu sparen). Der Lauf selbst und die Herkunftsangaben bleiben.
- */
-export async function deleteImportBatchFile(scope: Scope, id: string): Promise<{ ok: true }> {
-  assertAdmin(scope, "Importdateien zu löschen");
-  const b = await prisma.importBatch.findUnique({ where: { id }, select: { storageKey: true } });
-  if (!b) throw notFoundError("Importlauf");
-  if (b.storageKey) {
-    await deleteObject(b.storageKey);
-    await prisma.importBatch.update({ where: { id }, data: { storageKey: null } });
-    await audit({ ...auditActor(scope), action: "UPDATE", entityType: "ImportBatch", entityId: id, diff: { fileDeleted: true, changes: { storageKey: { from: b.storageKey, to: null } } } });
-  }
-  return { ok: true };
-}
-
 // ---------------------------------------------------------------------------
 // Herkunft (ImportLink) — Grundlage der Vorschau eines erneuten Imports
 // ---------------------------------------------------------------------------
