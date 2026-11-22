@@ -192,6 +192,21 @@ describe.skipIf(Boolean(skipReason))("Quellen und Belege (Mock-Datenbank)", () =
       expect((await getSource(viewer, src.id))!.citations.map((c) => c.id)).toEqual([citation.id]);
 
       // Regeln: Angabe passend zum Bezug, Rechte am Bezug.
+      // Ohne Bezug: Eingabefehler mit passender Meldung, nicht „Ereignis nicht gefunden“.
+      await expect(createCitation(editor, { sourceId: src.id, fact: "BIRTH" })).rejects.toThrow(
+        /Person, einer Beziehung oder einem Ereignis/,
+      );
+      const orphan = await prisma.event.create({ data: { type: "OCCUPATION", value: "Vitest ohne Träger" } });
+      try {
+        await expect(createCitation(editor, { sourceId: src.id, eventId: orphan.id })).rejects.toMatchObject({
+          code: "VALIDATION",
+        });
+        await expect(createCitation(editor, { sourceId: src.id, eventId: orphan.id })).rejects.toThrow(
+          /braucht eine Person oder eine Beziehung/,
+        );
+      } finally {
+        await prisma.event.delete({ where: { id: orphan.id } });
+      }
       await expectServiceError(
         createCitation(editor, { sourceId: src.id, personId: person.id, fact: "PARTNERSHIP" }),
         "VALIDATION",

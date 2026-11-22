@@ -146,6 +146,28 @@ describe("layoutTimeline", () => {
     expect(t.axis.ticks.length).toBeGreaterThan(5);
     expect(t.events.length).toBeGreaterThan(0);
   });
+
+  it("liest Jahre in UTC — auch in einer Zeitzone westlich von Greenwich", () => {
+    // Daten liegen als Mitternacht UTC vor; lokal gelesen wäre der 1.1.1900
+    // in New York noch Silvester 1899 und die Karte säße ein Jahr zu früh.
+    const before = process.env.TZ;
+    process.env.TZ = "America/New_York";
+    try {
+      expect(new Date("1900-01-01T00:00:00.000Z").getFullYear()).toBe(1899); // Voraussetzung
+      const data: TreeData = {
+        persons: [person("alt", 1900), person("jung", 1950)],
+        relationships: [rel("r1", "PARENT_OF", "alt", "jung")],
+      };
+      const t = layoutTimeline(data);
+      const y = (id: string) => t.nodes.find((n) => n.person.id === id)!.y;
+      expect(y("alt")).toBe(t.axis.toY(1900));
+      expect(y("jung")).toBe(t.axis.toY(1950));
+      expect(t.axis.toY(1899)).toBe(t.axis.toY(1900)); // 1899 liegt vor der Achse
+    } finally {
+      if (before === undefined) delete process.env.TZ;
+      else process.env.TZ = before;
+    }
+  });
 });
 
 describe("layoutTimeline — Hochzeiten", () => {

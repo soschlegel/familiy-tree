@@ -566,6 +566,9 @@ MCP: `list_families`.
   „Sonstiges“ wird umgedeutet, alles andere ist `VALIDATION`).
 - Sonst muss die Angabe zum Bezug passen (`PERSON_FACTS` bzw.
   `relationshipFacts` je Beziehungstyp), mit Meldung der möglichen Angaben.
+- Ohne Träger — keine Person, keine Beziehung bzw. ein Ereignis, das an
+  nichts hängt — ist das ein `VALIDATION`-Fehler mit passender Meldung (nicht
+  „Ereignis nicht gefunden“).
 - Ein Bild als Scan (`mediaId`) muss existieren und für den Benutzer sichtbar
   sein.
 - Zur Anzeige werden ältere Importe aufbereitet (Adresse aus der Fundstelle,
@@ -1346,8 +1349,8 @@ eigentliche Schreiben der Daten liegt in `import-apply.ts`.
 **Regeln und Entscheidungen:** Mehrere Stände desselben Baums liegen
 nebeneinander. Scheitert das Anlegen des Laufs, wird die gespeicherte Datei
 wieder entfernt. `pruneRawRecords` verlangt immer eine Einschränkung (Lauf
-oder „überholt“); ohne → `FORBIDDEN`. Eine zu große Datei wird ebenfalls mit
-`FORBIDDEN` abgelehnt (nicht `VALIDATION`).
+oder „überholt“); ohne → `FORBIDDEN`. Eine zu große Datei ist ein Eingabefehler
+(`VALIDATION`, Feld `file`), keine Rechtefrage.
 
 **Rechte/Datenschutz:** Alles nur für Administratoren — mit einer Ausnahme:
 `listRawRecords` liefert die Rohdaten eines Trägers jedem, der ihn sehen darf

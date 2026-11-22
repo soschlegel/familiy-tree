@@ -646,7 +646,7 @@ Benutzer bekommt keinen gespeicherten Zustand.
 - **`navigation.spec.ts`** — Navigation und Untermenü „Verwaltung“ je Rolle
   und Breite.
 - **`people-list.spec.ts`** — Personenliste: Suche, Familienfilter,
-  Sortierung, Seiten, Zählung.
+  Sortierung, Seiten, Zählung; Seite jenseits des Endes behält den Ortsfilter.
 - **`permissions.spec.ts`** — keine Information über fremde Familien, weder
   im Text noch im ausgelieferten HTML, über direkte Adressen oder die API.
 - **`person-families.spec.ts`** — letzte bearbeitbare Familie lässt sich
@@ -656,6 +656,8 @@ Benutzer bekommt keinen gespeicherten Zustand.
 - **`reference.spec.ts`** — Bezugsperson und Ahnenlinien, keine
   Durchsickerung, Telefon.
 - **`research.spec.ts`** — Recherche-Seite als Admin und Betrachter.
+- **`sources-list.spec.ts`** — Quellenliste: eine Seite jenseits des Endes
+  zeigt die letzte Seite mit Einträgen.
 - **`tree-focus.spec.ts`** — Fokus-Ansicht ab fester Person, Startperson.
 - **`tree-whole.spec.ts`** — Gesamtansichten Generationen und Zeitstrahl.
 
@@ -693,7 +695,8 @@ zum nächsten Setup).
 - **`merge.spec.ts`** — Dubletten zusammenführen als Bearbeiter, „kein
   Duplikat“, sichere Paare, Blockade, Betrachter ohne Zugriff.
 - **`person-lifecycle.spec.ts`** — Person anlegen, bearbeiten, Beziehungen,
-  Familien, löschen.
+  Familien, löschen; als Administrator im Personenwähler angelegte Person
+  landet in der Familie der Ausgangsperson.
 - **`places.spec.ts`** — Orte zuordnen (nicht zuordenbar, zurücksetzen,
   automatisch, aus Verzeichnis, von Hand, Protokoll), stellt den
   Ausgangszustand wieder her.

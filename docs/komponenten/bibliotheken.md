@@ -642,6 +642,9 @@ auf 24 Zeichen gekürzt).
 **Wichtige Funktionen/Typen:** `layoutGenerations(data, options)` (Knoten,
 Kanten, Treffpunkte; Optionen: Paare zusammenfassen, feste Ebenen,
 Zeilenabstand), `layoutTimeline(data)`, `EVENT_BOX`, `MAX_COLUMN_GAP`.
+Jahre werden überall in UTC gelesen (`getUTCFullYear`) — Daten liegen als
+Mitternacht UTC vor; lokal gelesen säße eine Karte westlich von Greenwich
+ein Jahr zu früh.
 
 **Regeln und Algorithmen:**
 - **Ebenen:** Ausgangspunkt ist der längste Weg von einer elternlosen

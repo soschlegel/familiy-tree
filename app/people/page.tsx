@@ -42,12 +42,10 @@ export default async function PeoplePage({
   const requestedPage = Math.max(1, Math.floor(Number(params.page) || 1));
   const canCreate = scope.isAdmin || editableFamilyIds(scope).length > 0;
 
+  // Dieselben Filter für beide Abfragen — auch beim Nachladen der letzten Seite.
+  const query = { q: needle, place: placeNeedle, familyId, sort, limit: PAGE_SIZE };
   let { items: persons, total } = await searchPersons(scope, {
-    q: needle,
-    place: placeNeedle,
-    familyId,
-    sort,
-    limit: PAGE_SIZE,
+    ...query,
     offset: (requestedPage - 1) * PAGE_SIZE,
   });
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -55,10 +53,7 @@ export default async function PeoplePage({
   // Seitenzahl jenseits des Endes (z.B. nach dem Löschen): letzte Seite zeigen.
   if (page !== requestedPage) {
     ({ items: persons, total } = await searchPersons(scope, {
-      q: needle,
-      familyId,
-      sort,
-      limit: PAGE_SIZE,
+      ...query,
       offset: (page - 1) * PAGE_SIZE,
     }));
   }

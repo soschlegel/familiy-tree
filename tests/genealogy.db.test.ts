@@ -33,6 +33,7 @@ import {
   listPersonEvents,
   listRawRecords,
   listRelationshipEvents,
+  MAX_IMPORT_FILE_BYTES,
   markMissingInSource,
   pruneRawRecords,
   readImportBatchFile,
@@ -334,6 +335,11 @@ describe.skipIf(Boolean(skipReason))("Genealogie-Erweiterung (Mock-Datenbank)", 
       await expectServiceError(createImportBatch(editor, { format: "GEDCOM", fileName: "x.ged" }, Buffer.from("0 HEAD")), "FORBIDDEN");
 
       const admin = await scope("admin@example.test");
+      // Zu große Datei: Eingabefehler, keine Rechtefrage (ohne 200 MB anzulegen —
+      // geprüft wird nur die Länge, bevor irgendetwas gelesen wird).
+      const huge = { byteLength: MAX_IMPORT_FILE_BYTES + 1 } as Uint8Array;
+      await expectServiceError(createImportBatch(admin, { format: "GEDCOM", fileName: "riesig.ged" }, huge), "VALIDATION");
+
       const content = Buffer.from("0 HEAD\n1 SOUR TEST\n0 TRLR\n");
       const batch = await createImportBatch(admin, { format: "GEDCOM", fileName: "stand1.ged", sourceTreeId: "gen-test-tree", sourceSystem: "TEST" }, content);
       createdBatches.push(batch.id);

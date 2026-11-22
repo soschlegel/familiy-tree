@@ -119,7 +119,7 @@ function computeGenerations(data: TreeData): Map<string, number> {
   const yearOfBirth = (id: string): number | null => {
     const person = idx.byId.get(id);
     if (!person?.birthDate) return null;
-    const y = new Date(person.birthDate).getFullYear();
+    const y = new Date(person.birthDate).getUTCFullYear();
     return Number.isFinite(y) ? y : null;
   };
 
@@ -1049,7 +1049,7 @@ const TIMELINE_TOP = 60;
 
 const yearOf = (iso: string | null | undefined): number | null => {
   if (!iso) return null;
-  const y = new Date(iso).getFullYear();
+  const y = new Date(iso).getUTCFullYear();
   return Number.isFinite(y) ? y : null;
 };
 

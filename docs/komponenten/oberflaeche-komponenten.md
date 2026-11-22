@@ -681,8 +681,10 @@ Ansicht der Verwandten als Karten steht davon getrennt auf der Seite.
 **Props/Daten:** `personId`; `relations` (Rolle der anderen Seite, Untertyp,
 Start-/Enddatum mit Genauigkeit, Zusatz, Bereichsende und Wortlaut, Orte,
 andere Person mit Name, Flag „nicht freigegeben“, Zahl der Belege);
-`people` (Auswahl für den `PersonPicker`); `canEdit`. Exportiert
-`RelationRow`.
+`people` (Auswahl für den `PersonPicker`); `canEdit`;
+`newPersonFamilies` (die für den Benutzer bearbeitbaren Familien der
+Ausgangsperson — dorthin kommt eine im Wähler neu angelegte Person).
+Exportiert `RelationRow`.
 
 **Verhalten:**
 - Zeile: Rolle, Name (Link; bei nicht freigegebener Person kursiv ohne Link),
@@ -700,7 +702,11 @@ andere Person mit Name, Flag „nicht freigegeben“, Zahl der Belege);
   geleert. Speichern gesperrt, solange ein Datum ungültig ist.
 - Hinzufügen: Art (Kind/Elternteil/Partner – Wechsel setzt Untertyp und
   Formular zurück), Person per `PersonPicker` (inkl. Neuanlage; neue Personen
-  werden lokal in die Auswahl übernommen), Untertyp, Daten und Orte. Die
+  kommen in die Familien der Ausgangsperson — der Anlege-Eintrag nennt sie,
+  bei einer familienlosen Ausgangsperson steht dort „ohne Familie – danach nur
+  für Administratoren sichtbar“ — und werden lokal in die Auswahl
+  übernommen), Untertyp, Daten und Orte. Vorher bekamen Administratoren hier
+  Personen ganz ohne Familie, die danach nur Administratoren sahen. Die
   Richtung wird aufgelöst: `PARENT_OF` zeigt immer vom Elternteil zum Kind.
   Erfolgsmeldung nennt die Person.
 - Telefon: Formularfelder unter `sm` volle Breite.
@@ -755,8 +761,11 @@ zuordnen).
 
 **Props/Daten:** `people` (Name und Lebensdaten in allen Teilen), `value`
 (gewählte ID), `onChange`, optional `onCreated` (schaltet Neuanlage frei),
-`placeholder`, `labelledBy` (ID der sichtbaren Beschriftung). Exportiert
-`PickerPerson`.
+`createFamilyIds` (Familien der neuen Person; ohne Angabe entscheidet
+`createPerson`: Bearbeiter → erste bearbeitbare Familie, Administratoren →
+keine), `createNote` (Hinweis im Anlege-Eintrag, Testkennung
+`picker-create-note`), `placeholder`, `labelledBy` (ID der sichtbaren
+Beschriftung). Exportiert `PickerPerson`.
 
 **Verhalten:**
 - Gewählt: Anzeige von Name und Lebensdaten mit Knopf „ändern“ (hebt die

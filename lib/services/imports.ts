@@ -8,7 +8,7 @@ import { audit, auditActor } from "../audit";
 import { canViewPerson, type Scope } from "../scope";
 import { deleteObject, getObjectBuffer, putObject } from "../storage";
 import { importFingerprint, type ImportEntity } from "../import-fingerprint";
-import { forbiddenError, notFoundError, parseOrThrow } from "./errors";
+import { forbiddenError, notFoundError, parseOrThrow, validationError } from "./errors";
 import { getSource } from "./sources";
 
 /**
@@ -129,7 +129,10 @@ export async function createImportBatch(
   assertAdmin(scope, "Daten zu importieren");
   const data = parseOrThrow(batchInput.safeParse(input));
   if (content.byteLength > MAX_IMPORT_FILE_BYTES) {
-    throw forbiddenError(`Dateien über ${MAX_IMPORT_FILE_BYTES / 1024 / 1024} MB zu importieren`);
+    // Eine zu große Datei ist ein Eingabefehler, keine Rechtefrage.
+    throw validationError([
+      { path: "file", message: `Die Datei ist zu groß (höchstens ${MAX_IMPORT_FILE_BYTES / 1024 / 1024} MB)` },
+    ]);
   }
   const id = newId();
   const sha = createHash("sha256").update(content).digest("hex");

@@ -242,11 +242,18 @@ export function RelationshipEditor({
   relations,
   people,
   canEdit,
+  newPersonFamilies = [],
 }: {
   personId: string;
   relations: RelationRow[];
   people: PickerPerson[];
   canEdit: boolean;
+  /**
+   * Familien, in die eine im Wähler neu angelegte Person kommt: die
+   * (bearbeitbaren) Familien der Ausgangsperson. Leer nur bei einer
+   * familienlosen Ausgangsperson (sieht nur ein Administrator).
+   */
+  newPersonFamilies?: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const [kind, setKind] = useState<"PARENT" | "CHILD" | "PARTNER">("CHILD");
@@ -472,6 +479,12 @@ export function RelationshipEditor({
               value={otherId}
               onChange={setOtherId}
               onCreated={(p) => setExtraPeople((prev) => [...prev, p])}
+              createFamilyIds={newPersonFamilies.map((f) => f.id)}
+              createNote={
+                newPersonFamilies.length > 0
+                  ? `in ${newPersonFamilies.map((f) => f.name).join(", ")}`
+                  : "ohne Familie – danach nur für Administratoren sichtbar"
+              }
               placeholder="Suchen oder neu anlegen…"
               labelledBy={pickerLabel}
             />

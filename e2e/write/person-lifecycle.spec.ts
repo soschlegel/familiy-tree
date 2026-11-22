@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 
 import { test, expect, authFile, acceptDialogs, httpError } from "../support/fixtures";
 import { apiAs, createPerson, deletePerson, uniq, type CreatedPerson } from "../support/api";
-import { familyName } from "../support/mock";
+import { FAMILY, familyName } from "../support/mock";
 
 /**
  * Lebenszyklus einer Person als Bearbeiter: anlegen (mit Prüfung am Feld),
@@ -222,6 +222,31 @@ test("Familienzuordnung: Bearbeiter nur in eigenen Familien, Admin frei", async 
   await C.click();
   await expect(C).toHaveAttribute("aria-pressed", "false");
   await expect(admin.locator(".badge-accent").filter({ hasText: familyName("C") })).toHaveCount(0);
+});
+
+test.describe("als Administrator", () => {
+  test.use({ storageState: authFile("admin") });
+
+  test("im Personenwähler angelegte Person kommt in die Familie der Ausgangsperson", async ({ page }) => {
+    // Früher legte der Wähler für Administratoren Personen ohne Familie an —
+    // danach nur noch für Administratoren sichtbar.
+    await page.goto(`/people/${helpers.partner.id}`);
+    const form = page.getByRole("form", { name: "Beziehung hinzufügen" });
+    await form.getByLabel("Art").selectOption({ label: "Kind" });
+    await form.getByRole("combobox", { name: "Person" }).fill(`E2E Neu${tag}admin`);
+    await expect(form.getByTestId("picker-create-note")).toHaveText(`in ${familyName("A")}`);
+    await form.getByRole("button", { name: new RegExp(`Neu anlegen: E2E Neu${tag}admin`) }).click();
+    await expect(form.getByRole("group", { name: "Person" })).toContainText(`E2E Neu${tag}admin`);
+
+    const api = await apiAs("admin");
+    const found = (await (await api.get(`/api/persons?q=${encodeURIComponent(`Neu${tag}admin`)}`)).json()) as {
+      id: string;
+      familyIds: string[];
+    }[];
+    expect(found).toHaveLength(1);
+    expect(found[0].familyIds).toEqual([FAMILY.A]);
+    await api.dispose();
+  });
 });
 
 test("löschen mit Bestätigung", async ({ page, consoleGuard }) => {
