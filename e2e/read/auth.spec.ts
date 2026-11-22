@@ -1,4 +1,4 @@
-import { test, expect, devLogin } from "../support/fixtures";
+import { test, expect, devLogin, waitForTree } from "../support/fixtures";
 import { USERS } from "../support/mock";
 
 /**
@@ -55,6 +55,10 @@ test("ohne Anmeldung leiten Seiten auf /login, die API antwortet 401", async ({ 
 test("Abmelden beendet die Sitzung", async ({ page }) => {
   await devLogin(page, USERS.viewer);
   await page.waitForURL(/\/tree/);
+  // Erst abmelden, wenn der Baum seine Daten geladen hat — sonst antworten
+  // dessen noch laufende Anfragen nach dem Abmelden mit 401 (gegen den
+  // schnellen Produktions-Build gesehen).
+  await waitForTree(page);
   await page.getByRole("button", { name: "Abmelden" }).click();
   await expect(page).toHaveURL(/\/login/);
   await page.goto("/people");
