@@ -84,9 +84,11 @@ test("Bild an die Quelle — Belegbild bei allen Belegen der Quelle", async ({ p
 
   await page.goto(`/people/${p.id}`);
   await expect(citationMedia(page, birthCitation).getByTestId("inherited-image")).toHaveCount(1);
-  await expect(citationMedia(page, eventCitation).getByTestId("inherited-image")).toHaveCount(1);
-  // Am Ereignis als Bild seines Belegs (neben dem eigenen Ereignisbild)
+  // Beleg eines Ereignisses: das Bild steht nur in der Ereigniszeile, im
+  // Abschnitt „Quellen“ nur ein Hinweis darauf (nie an beiden Stellen).
   await expect(eventRow(page).getByTestId("inherited-image")).toHaveCount(1);
+  await expect(citationMedia(page, eventCitation).getByRole("img")).toHaveCount(0);
+  await expect(page.getByTestId("citation-images-at-event")).toHaveText("1 Bild beim Ereignis");
   await expect(page.getByTestId("document-image")).toHaveCount(2);
 });
 
@@ -108,6 +110,27 @@ test("Vorhandenes Bild an einen Beleg verknüpfen — dann nur noch dort", async
   // Auf der Seite der Quelle: beim Beleg
   await page.goto(`/sources/${sourceId}`);
   await expect(page.getByTestId("source-citation-media").getByRole("img")).toHaveCount(1);
+});
+
+test("Bild am Beleg eines Ereignisses: nur in der Ereigniszeile, dort auch zu entfernen", async ({ page }) => {
+  acceptDialogs(page);
+  await page.goto(`/people/${p.id}`);
+  const cite = citationMedia(page, eventCitation);
+  await cite.getByText("Bild hinzufügen").click();
+  await cite.getByLabel("Datei hochladen").setInputFiles({ name: `eintrag-${tag}.png`, mimeType: "image/png", buffer: tinyPng([60, 30, 160]) });
+  await expect(cite.getByText("Bild hinzugefügt.")).toBeVisible();
+  const row = eventRow(page);
+  await expect(row.getByTestId("inherited-image")).toHaveCount(1);
+  await expect(cite.getByRole("img")).toHaveCount(0);
+  await expect(page.getByTestId("citation-images-at-event")).toHaveText("1 Bild beim Ereignis");
+  // Jedes Bild genau einmal in „Belegbilder“
+  await expect(page.getByTestId("document-image")).toHaveCount(3);
+
+  await row.getByRole("button", { name: /von Beleg: .* entfernen/ }).click();
+  await expect(row.getByText("Bild entfernt und gelöscht (es hing sonst nirgends).")).toBeVisible();
+  await expect(row.getByTestId("inherited-image")).toHaveCount(0);
+  await expect(page.getByTestId("citation-images-at-event")).toHaveCount(0);
+  await expect(page.getByTestId("document-image")).toHaveCount(2);
 });
 
 test("Betrachter sieht die Bilder ohne Bedienelemente", async ({ loginAs }) => {

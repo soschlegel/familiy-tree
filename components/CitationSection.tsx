@@ -44,6 +44,8 @@ export type CitationRow = {
   media?: AttachedItem[];
   /** Bilder der Quelle, die hier als Belegbild erscheinen (nur angezeigt). */
   sourceMedia?: AttachedItem[];
+  /** Beleg eines Ereignisses: Zahl seiner Bilder, die in der Ereigniszeile stehen. */
+  imagesAtEvent?: number;
 };
 
 /**
@@ -388,6 +390,11 @@ export function CitationSection({
                         </span>
                       )}
                     </div>
+                    {row.eventId && (row.imagesAtEvent ?? 0) > 0 && (
+                      <a href={`#ereignis-${row.eventId}`} className="mt-1 block text-xs muted hover:underline" data-testid="citation-images-at-event">
+                        {row.imagesAtEvent === 1 ? "1 Bild" : `${row.imagesAtEvent} Bilder`} beim Ereignis
+                      </a>
+                    )}
                     <AttachedMedia
                       target={{ kind: "citation", id: row.id }}
                       items={row.media ?? []}

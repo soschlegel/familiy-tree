@@ -166,7 +166,7 @@ chromium`.
 | `npm run test:e2e` | alles: setup → read → write | ca. 9–10 min |
 | `npm run test:e2e:setup` | nur Ausgangszustand: Mock-Daten neu, Anmeldungen, Vorwärmen | ca. 1–2 min (Kaltstart des Dev-Servers: länger) |
 | `npm run test:e2e:read` | setup + lesende Tests (`e2e/read/`, 180 Tests, 4 parallel) | ca. 3:10–3:20 min ohne Setup |
-| `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 93 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 4–5 min ohne Setup |
+| `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 94 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 4–5 min ohne Setup |
 | `npm run test:e2e:headed` | alles mit sichtbarem Browser, ein Test nach dem anderen | |
 | `npm run test:e2e:ui` | Playwright-Oberfläche: Tests einzeln starten, Schritte ansehen | |
 | `npm run test:e2e:report` | HTML-Bericht des letzten Laufs öffnen | |
@@ -732,7 +732,7 @@ weiteren Bildern zusammen gelesen, [lib/services/attached-media.ts](lib/services
 | Bild hängt an | erscheint |
 |---|---|
 | Ereignis | in der Zeile des Ereignisses auf der Personenseite (Ereignisse einer Beziehung auf beiden Personenseiten) und unter „Belegbilder“ |
-| Beleg | beim Beleg (Abschnitt „Quellen“ der Personenseite), am belegten Ereignis, unter „Belegbilder“ und auf der Seite der Quelle beim Beleg |
+| Beleg | beim Eintrag, den er belegt: bei einem Ereignis-Beleg in der Ereigniszeile (im Abschnitt „Quellen“ steht dann nur „1 Bild beim Ereignis“), bei Belegen zu Geburt/Tod, Namen oder Beziehungen am Beleg im Abschnitt „Quellen“; dazu einmal unter „Belegbilder“ und auf der Seite der Quelle beim Beleg. Kein Bild steht zugleich in der Ereigniszeile und im Abschnitt „Quellen“ (Entscheidung des Eigentümers: nur am Eintrag + Sammlung) |
 | Quelle (Hauptscan oder weiteres Bild) | auf der Seite der Quelle und als **Belegbild bei jedem Beleg dieser Quelle** — **außer** das Bild hängt zugleich an mindestens einem Beleg derselben Quelle: dann gehört es erkennbar zu diesem Beleg und erscheint nur dort |
 
 Beispiel: Am „Taufbuch St. Marien“ hängen ein Titelblatt und der Scan von
