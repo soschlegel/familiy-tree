@@ -20,8 +20,8 @@ describe("normalize", () => {
   });
 
   it("normalizeForLookup entfernt Akzente und Sonderzeichen", () => {
-    expect(normalizeForLookup("Timișoara")).toBe("varias");
-    expect(normalizeForLookup("Timişoara")).toBe("varias");
+    expect(normalizeForLookup("Timișoara")).toBe("timisoara");
+    expect(normalizeForLookup("Timişoara")).toBe("timisoara");
     expect(normalizeForLookup("Wrocław")).toBe("wroclaw");
     expect(normalizeForLookup("Straße")).toBe("strasse");
     expect(normalizeForLookup("Halle (Saale)")).toBe("halle saale");
@@ -131,9 +131,9 @@ describe("matchPlace mit dem mitgelieferten Ortsverzeichnis", () => {
     ["Breslau", { label: /^Wrocław/, precision: "PLACE", lat: 51.1, lon: 17.03 }],
     ["Breslau, Schlesien, Preußen", { label: /^Wrocław/, precision: "PLACE", lat: 51.1, lon: 17.03 }],
     ["Aix-la-Chapelle", { label: /^Aachen, Nordrhein-Westfalen/, precision: "PLACE", lat: 50.78, lon: 6.08 }],
-    ["Temeswar", { label: /^Timișoara/, precision: "PLACE", lat: 46.02, lon: 20.95 }],
-    ["Temeswar, Banat", { label: /^Timișoara/, precision: "PLACE", lat: 46.02, lon: 20.95 }],
-    ["Timișoara, Timiș, Romania", { label: /^Timișoara/, precision: "PLACE", lat: 46.02, lon: 20.95 }],
+    ["Temeswar", { label: /^Timișoara/, precision: "PLACE", lat: 45.75, lon: 21.23 }],
+    ["Temeswar, Banat", { label: /^Timișoara/, precision: "PLACE", lat: 45.75, lon: 21.23 }],
+    ["Timișoara, Timiș, Romania", { label: /^Timișoara/, precision: "PLACE", lat: 45.75, lon: 21.23 }],
     ["Danzig, Westpreußen", { label: /Polen$/, precision: "PLACE", lat: 54.35, lon: 18.65 }],
     ["Königsberg, Ostpreußen", { label: /^Kaliningrad/, precision: "PLACE", lat: 54.71, lon: 20.51 }],
     ["Lemberg, Galizien", { label: /Ukraine$/, precision: "PLACE", lat: 49.84, lon: 24.02 }],
@@ -194,8 +194,9 @@ describe("Anzeigename: heutiger Name, in Klammern der alte bzw. deutsche", () =>
   });
 
   it("keine Klammer, wenn der Name gleich ist oder es keinen anderen gibt", () => {
-    expect(label("Timișoara, Timiș, Romania")).toBe("Timișoara, Rumänien");
-    expect(label("Timişoara")).toBe("Timișoara, Rumänien"); // nur andere Schreibweise (ş/ș)
+    expect(label("Ploiești, Prahova, Romania")).toBe("Ploiești, Rumänien");
+    expect(label("Ploieşti")).toBe("Ploiești, Rumänien"); // nur andere Schreibweise (ş/ș)
+    expect(label("Timişoara")).toBe("Timișoara (Temeswar), Rumänien"); // ş/ș ist kein alter Name
     expect(label("Wroclaw")).toBe("Wrocław (Breslau), Polen");
   });
 

@@ -226,8 +226,8 @@ chromium`.
 |---|---|---|
 | `npm run test:e2e` | **alles mit einem Befehl:** Build prüfen (nur bei geänderten Quellen neu), Server starten, setup → read → write, Server beenden | ca. 1,5–3 min, mit Neubau 1–2 min mehr (früher gegen den Dev-Server 9–10 min) |
 | `npm run test:e2e:setup` | nur Ausgangszustand: Mock-Daten neu, Anmeldungen | ca. 10 s |
-| `npm run test:e2e:read` | setup + lesende Tests (`e2e/read/`, 186 Tests, 6 parallel) | ca. 1 min (früher 3:10–3:20 min) |
-| `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 100 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 1:10 min (früher 4–5 min) |
+| `npm run test:e2e:read` | setup + lesende Tests (`e2e/read/`, 209 Tests, 6 parallel) | ca. 1 min (früher 3:10–3:20 min) |
+| `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 103 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 1:10 min (früher 4–5 min) |
 | `npm run mock:build` / `npm run mock:start` | Build von Hand erzeugen bzw. den Server von Hand starten (z.B. für mehrere Terminals) | |
 | `npm run test:e2e:headed` | alles mit sichtbarem Browser, ein Test nach dem anderen | |
 | `npm run test:e2e:ui` | Playwright-Oberfläche: Tests einzeln starten, Schritte ansehen | |
@@ -608,13 +608,59 @@ Heirat, Scheidung, Ereignisse) mit Häufigkeit, Zuordnung und Vorschlag
 („mehrdeutig“, wenn es einen ähnlich großen gleichnamigen Ort anderswo gibt).
 Von Hand: Vorschlag übernehmen bzw. bestätigen, im Verzeichnis suchen (auch
 alte Namen), Koordinaten eingeben, „nicht zuordenbar“, zurücksetzen.
-**Automatisch zuordnen** ordnet alle nicht von Hand bestätigten Texte neu zu;
-von Hand Bestätigtes wird nie überschrieben. Jede Änderung steht im
+**Neue Ortstexte ordnet die App selbst zu** (Migration
+`20261124000001_orte_ki`): nach dem Speichern einer Person, eines Ereignisses
+oder einer Beziehung und nach GEDCOM- bzw. Austausch-Import, im Hintergrund —
+das Speichern wartet nicht darauf und scheitert nie daran; nur Texte ohne
+Zuordnung, ohne Treffer bleiben sie offen. Der Knopf **Automatisch zuordnen**
+ordnet den Altbestand neu zu (alle Texte, die weder von Hand bestätigt noch
+von der KI gesetzt sind); von Hand Bestätigtes wird nie überschrieben.
+**Zuordnungen des KI-Assistenten** (MCP `assign_place`, siehe
+[KI-Zugang](#ki-zugang-mcp)) stehen als „von KI“ mit eigenem Filter, ggf.
+„unsicher“ und der Begründung der KI; sie gelten sofort für die Karte, die
+Automatik überschreibt sie nie, der Admin **bestätigt** sie (→ von Hand) oder
+ändert sie. Mit eigenen Koordinaten angelegte Orte (Wüstung, Hof, Weiler)
+sind **eigene Orte** und werden bei späteren Texten wieder vorgeschlagen.
+
+**Ortsseiten** (`/places/<Kennung>`, für alle Angemeldeten): Jeder
+zugeordnete Ort hat eine Seite mit heutigem Namen (früherer/deutscher Name),
+Region, Land, Koordinaten und kleiner Lagekarte, Herkunft der Zuordnung
+(Begründung nur für Admins), den Freitexten, die auf ihn zeigen, weiteren
+Namen aus dem Verzeichnis und den Personen mit Angaben dort (Geburt, Tod,
+Heirat, Scheidung, Ereignisse — mit Art und Jahr), 50 je Seite. Ein Ort sind
+alle Zuordnungen mit demselben Verzeichniseintrag bzw. bei eigenen Orten
+denselben Koordinaten. Es erscheinen nur Personen, die der Benutzer sehen
+darf; Freitexte nur gesperrter Personen fehlen, ein Ort ohne sichtbare
+Angabe gilt als nicht vorhanden. Auf der **Personenseite** wird jeder
+zugeordnete Ort zum Link, angezeigt bleibt der Freitext, dazu dezent der
+erkannte Ort, wenn er anders heißt („Breslau → Wrocław, Polen“).
+
+**Echte Orte auswählen:** Unter jedem Ortsfeld öffnet „Ort wählen …“ die
+Kandidaten (Verzeichnis und eigene Orte). Die Wahl wird nach dem Speichern
+als Zuordnung „von Hand“ genau für diesen Freitext gespeichert
+(`POST /api/places/choose`, für jeden, der den Eintrag bearbeiten darf);
+der Text bleibt wie eingegeben. Ohne Auswahl ordnet die App automatisch zu.
+Es gibt keinen Fremdschlüssel an Person oder Ereignis — die Verbindung läuft
+über den normalisierten Ortstext. Eine von Hand bestätigte, andere
+Zuordnung desselben Texts ändert nur ein Admin.
+
+**Vorschlag am Ortsfeld:** Unter Geburts- und Sterbeort, dem Ort eines
+Ereignisses und den Orten einer Ehe/Beziehung zeigt die App beim Tippen
+dezent, welcher Ort erkannt wird — dieselbe Regel wie die automatische
+Zuordnung: „→ Wrocław (Breslau), Polen · früherer bzw. deutscher Name:
+Breslau“, „mehrdeutig“ (weitere Orte gleichen Namens — ein Zusatz wie Kreis
+oder Land hilft) oder „Ort nicht gefunden“. Der eingegebene Text bleibt, wie
+er ist. Für Administratoren und Bearbeiter (`GET /api/places/suggest?q=`,
+nur Verzeichnisdaten und eigene Orte, nichts über Personen); das erste
+Ortsfeld einer Seite lädt das Verzeichnis vorab (rund 0,9 s), danach dauert
+ein Vorschlag wenige Millisekunden. Jede Änderung steht im
 `AuditLog` (`entityType` „Place“, vorher → nachher), die automatische
 Zuordnung als ein Paket „Orte automatisch zugeordnet“ (unter „Änderungen“).
 Die Ortstexte sieht nur der Admin — sie enthalten auch Angaben gesperrter
 Personen (`GET/PUT /api/places`, `POST /api/places/auto`,
-`GET /api/places/search?q=`, sonst 403). Der Mock-Seed ordnet alle
+`GET /api/places/search?q=`, sonst 403).
+Zeitabhängige Staatszugehörigkeit (Breslau 1900 = Deutsches Reich) zeigt die
+App nicht — die Bezeichnung nennt immer das heutige Land. Der Mock-Seed ordnet alle
 Ortstexte automatisch zu.
 
 **Automatische Zuordnung** ([lib/places/match.ts](lib/places/match.ts)):
@@ -942,6 +988,9 @@ vorbei direkt zur Datenbank gibt es nicht.
 | `get_timeline` | Zeitleiste einer Person (mit Alter und fehlenden Daten) oder einer Familie |
 | `search_sources` | Quellen suchen (Titel, Verfasser, Archiv, Signatur; Art) mit Zahl der sichtbaren Belege |
 | `get_source` | Quelle mit Abschrift und allem, wofür sie zitiert wird (verborgene Belege nur gezählt), dazu `images` (Bilder der Quelle) und `citations[].media` |
+| `suggest_place` | Kandidaten für einen Ortstext („A, B oder C“): Wahl der automatischen Zuordnung, gleichnamige Orte mit Land, Einwohnerzahl, Entfernung, welcher Name gepasst hat (früherer/deutscher Name wie „Breslau“), eigene Orte; nur Verzeichnisdaten |
+| `get_place` | Ein zugeordneter Ort wie auf seiner Seite (Name, Region, Land, Koordinaten, weitere Namen, Freitexte, Personen mit Angaben dort — nur sichtbare); `get_person` und `list_events` nennen zu jedem Ortstext den zugeordneten Ort (`places`) |
+| `list_places` | Nur Administratoren: alle Ortstexte mit Anzahl, Status (offen, automatisch, von KI, von Hand, nicht zuordenbar) und Kontext (Feldarten, Jahre — ohne Personen), 50 je Seite |
 
 Nur mit der Stufe „lesen und schreiben“ (siehe unten) kommen hinzu:
 
@@ -958,6 +1007,7 @@ Nur mit der Stufe „lesen und schreiben“ (siehe unten) kommen hinzu:
 | `set_person_families` | Familienzuordnung setzen |
 | `add_media` | Neues Bild an Personen, Beziehungen, Ereignisse, Belege und/oder Quellen hängen (`person_ids`, `relationship_ids`, `event_ids`, `citation_ids`, `source_ids`; mindestens ein Ziel), Bild **entweder** per `url` (https-Adresse der Bilddatei; der Server lädt sie selbst über [lib/safe-fetch.ts](lib/safe-fetch.ts)) **oder** als `data_base64` (Dateiinhalt, auch als `data:`-Adresse; `mime_type` und `file_name` optional), dazu `caption` (wird Alt-Text) |
 | `link_media` | Vorhandenes Bild (`media_id`) an weitere Einträge hängen oder mit `action: "unlink"` davon lösen; die letzte Zuordnung lässt sich nicht lösen (die KI löscht keine Bilder) |
+| `assign_place` | Nur Administratoren: Ortstexten Koordinaten zuordnen — einzeln oder bis 50 je Aufruf, aus dem Verzeichnis (`gazetteer_id`), als eigener Ort (Koordinaten + Bezeichnung) oder „nicht zuordenbar“, mit `uncertain` und Begründung (`note`); erscheint als „von KI“, nie über von Hand Bestätigtes |
 | `begin_change_set` | Änderungspaket mit Titel öffnen (z.B. „Taufbuch St. Marien 1850–1870 ausgewertet“); die Kennung geht als `change_set_id` an die folgenden Schreibwerkzeuge, siehe [Änderungsgeschichte](#änderungsgeschichte) |
 
 Personen, Quellen oder Bilder löschen kann die KI bewusst nicht.
@@ -982,7 +1032,8 @@ dem Dekodieren geprüft, der Typ anhand der Bytes (eine abweichende
 das schon in der App ist (z.B. nach dem Hochladen in der App). Ein nur im
 Chat gezeigtes Bild braucht Weg 1 oder 3; der Server-Hinweis an das Modell
 sagt das ausdrücklich. Dazu kommen
-zwei Prompt-Vorlagen (`research_person`, `review_data_quality`) und die
+drei Prompt-Vorlagen (`research_person`, `review_data_quality`,
+`orte_zuordnen` — offene Ortstexte stapelweise zuordnen) und die
 Ressource `familytree://person/{id}`. Die Ergebnisse sind kompaktes JSON;
 Daten stehen in ihrer echten Genauigkeit (`1850`, `um 1850`, `vor 1900` —
 siehe [Ungenaue Daten](#ungenaue-daten)), und Eingaben akzeptieren dieselben
@@ -1656,6 +1707,7 @@ Das Schema liegt in `prisma/schema.prisma`, die Migrationen in
 | `20261122000001_bezugsperson` | Bezugsperson: `User.personId` (Fremdschlüssel, `ON DELETE SET NULL`) — rein ergänzend |
 | `20261123000000_medien_an_eintraegen` | Bilder an Quellen, Ereignissen und Belegen: Tabellen `SourceMedia`, `EventMedia`, `CitationMedia` (Muster `PersonMedia`, `sortOrder`, `CASCADE` an beiden Seiten) — rein ergänzend, ohne Datenänderung; `Source.mediaId` bleibt der Hauptscan und wird nicht kopiert (die App liest beide Stellen) |
 | `20261123000001_orte` | Ortszuordnung für die Karte: Tabelle `Place` (normalisierter Ortstext → Koordinaten, Herkunft automatisch/von Hand, Genauigkeit, „nicht zuordenbar“), Enums `PlaceSource` und `PlacePrecision` — rein ergänzend |
+| `20261124000001_orte_ki` | Ortszuordnung durch die KI: `PlaceSource` um `AI` (`ALTER TYPE … ADD VALUE`), `Place.note` (Begründung) und `Place.uncertain` (Standard `false`) — rein ergänzend |
 
 Schemaänderungen künftig mit `npm run db:migrate` (`prisma migrate dev`) als
 Migration anlegen und mit einchecken. Vor dem Commit prüfen, ob sie rein
@@ -2005,6 +2057,16 @@ er sehen darf — verborgene Personen fehlen samt aller Verweise auf sie:
   dem Ereignis (`EVENT_DETAIL`) und unter dem Beleg (`SOURCE_CITATION`), wie
   GEDCOM 5.5.1 es an diesen Stellen erlaubt. Bilder am Beleg einer
   Eltern-Kind-Beziehung stehen am Beleg beim Kind.
+- **Orte im GEDCOM** (Entscheidung des Eigentümers, immer): Ein zugeordneter
+  Ortstext steht als heutige Form „Ort, Region, Land“ im `PLAC` (Namen aus
+  dem Ortsverzeichnis, z.B. „Wrocław, Województwo dolnośląskie, Polen“),
+  darunter `MAP`/`LATI`/`LONG` und — wenn er abweicht — der Originaltext als
+  `NOTE Originaltext: Breslau`. Nicht zugeordnete Orte bleiben Freitext. Der
+  eigene GEDCOM-Import liest den Originaltext zurück; eine wieder
+  eingespielte eigene Datei ändert die Ortsangaben deshalb nicht. Das
+  Austauschformat (JSON/ZIP, Version 5) behält den Freitext und nimmt die
+  Zuordnungen zusätzlich mit; beim Einspielen werden nur Ortstexte ohne
+  vorhandene Zuordnung übernommen.
 
 Beide Knöpfe öffnen einen Dialog mit den Familien, die der Benutzer sehen
 darf (alle vorausgewählt, „Alle“/„Keine“, für Administratoren zusätzlich

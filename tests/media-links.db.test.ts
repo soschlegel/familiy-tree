@@ -371,7 +371,7 @@ describe.skipIf(!dbReady)("Bilder an Ereignissen, Belegen und Quellen", () => {
     media.push(ev.media.id, ci.media.id, so.media.id, evB.media.id);
 
     const { data: full } = await buildExport(admin);
-    expect(full.version).toBe(4);
+    expect(full.version).toBe(5);
     const mediaIds = new Set(full.media.map((m) => m.id));
     expect(full.events.find((e) => e.id === eA)?.media.map((m) => m.mediaId)).toContain(ev.media.id);
     expect(full.citations.find((c) => c.id === cA1)?.media.map((m) => m.mediaId)).toContain(ci.media.id);

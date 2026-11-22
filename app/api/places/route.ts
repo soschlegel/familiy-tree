@@ -3,11 +3,11 @@ import { NextResponse } from "next/server";
 import { badRequest, route } from "@/lib/api";
 import { assignPlace, listPlaces, placeAssignSchema, type PlaceStatus } from "@/lib/services/places";
 
-const STATUSES: (PlaceStatus | "all")[] = ["all", "open", "auto", "manual", "unresolvable"];
+const STATUSES: (PlaceStatus | "all")[] = ["all", "open", "auto", "ai", "manual", "unresolvable"];
 
 /**
  * Ortszuordnung (nur Administratoren, README „Karte und Orte“).
- * GET ?status=all|open|auto|manual|unresolvable&q=&page= — vorkommende
+ * GET ?status=all|open|auto|ai|manual|unresolvable&q=&page= — vorkommende
  * Ortstexte mit Häufigkeit, Zuordnung und Vorschlag.
  */
 export const GET = route("place:manage", async (ctx, req) => {

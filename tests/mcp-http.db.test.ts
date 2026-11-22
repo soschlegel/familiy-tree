@@ -49,16 +49,20 @@ const READ_TOOLS = [
   "get_descendants",
   "get_kinship",
   "get_person",
+  "get_place",
   "get_source",
   "get_statistics",
   "get_timeline",
   "list_events",
   "list_families",
+  "list_places",
   "search_persons",
   "search_sources",
+  "suggest_place",
 ];
 const WRITE_TOOLS = [
   "add_event",
+  "assign_place",
   "add_media",
   "add_name_variant",
   "begin_change_set",
@@ -212,7 +216,7 @@ describe.skipIf(Boolean(skipReason))("MCP-Endpunkt /api/mcp (HTTP, Mock-Datenban
     expect(stats.text).toContain("persons");
 
     const prompts = (await s.client.listPrompts()).prompts.map((p) => p.name).sort();
-    expect(prompts).toEqual(["research_person", "review_data_quality"]);
+    expect(prompts).toEqual(["orte_zuordnen", "research_person", "review_data_quality"]);
   });
 
   it("Lese-Schlüssel: Schreibwerkzeuge fehlen und lassen sich nicht aufrufen", async () => {

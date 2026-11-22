@@ -1,6 +1,7 @@
 import { prisma } from "../prisma";
 import { personVisibilityFilter, type Scope } from "../scope";
 import { canViewMedia } from "../media-scope";
+import { exchangePlacesFor } from "./place-export";
 import { EXCHANGE_VERSION, exportDateFields, mediaFileName, type ExchangeFile } from "../exchange";
 import type { ExportSelection } from "../export-selection";
 import { selectionPersonFilter } from "./export-selection";
@@ -258,6 +259,14 @@ export async function buildExport(scope: Scope, selection: ExportSelection | nul
         sourceId: x.sourceId,
         mediaId: x.mediaId,
       })),
+    places: await exchangePlacesFor(
+      [
+        ...persons.flatMap((p) => [p.birthPlace, p.deathPlace]),
+        ...relationships.flatMap((r) => [r.startPlace, r.endPlace]),
+        ...events.map((e) => e.place),
+      ],
+      scope.isAdmin,
+    ),
     rawRecords: rawRecords.map((r) => ({
       id: r.id,
       personId: r.personId,

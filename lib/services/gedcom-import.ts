@@ -26,6 +26,7 @@ import { deleteEvent } from "./events";
 import { deletePersonName } from "./names";
 import { deletePerson } from "./persons";
 import { deleteRelationship } from "./relationships";
+import { queuePlaceAutoAssign } from "./places";
 import { downloadImportPhotos, type PhotoDownloadReport } from "./gedcom-photos";
 import type { SafeFetchOptions } from "../safe-fetch";
 
@@ -1124,6 +1125,8 @@ export async function applyGedcomImport(
     familyId,
     photos,
   };
+  // Neue Ortstexte des Imports im Hintergrund zuordnen (alle offenen).
+  queuePlaceAutoAssign(scope);
   await finishImportBatch(scope, batchId, {
     status: "COMPLETED",
     counts: result,

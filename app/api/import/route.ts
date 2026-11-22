@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { route } from "@/lib/api";
 import { audit, auditActor } from "@/lib/audit";
 import { nameChangeSet } from "@/lib/change-sets";
+import { queuePlaceAutoAssign } from "@/lib/services/places";
+import { placeKey } from "@/lib/places/normalize";
 import { processAndStoreImage } from "@/lib/media-processing";
 import type { Prisma } from "@prisma/client";
 
@@ -642,6 +644,36 @@ export const POST = route("data:import", async (ctx, req) => {
     await prisma.importRawRecord.upsert({ where: { id: r.id }, update: fields, create: { id: r.id, ...fields } });
   }
 
+  // Ortszuordnungen (ab Version 5): nur für Texte ohne vorhandene Zuordnung —
+  // was hier schon zugeordnet ist (automatisch, KI, von Hand), bleibt.
+  for (const pl of data.places) {
+    const key = placeKey(pl.text);
+    if (!key || (await prisma.place.findUnique({ where: { key }, select: { id: true } }))) continue;
+    const created = await prisma.place.create({
+      data: {
+        key,
+        text: pl.text.trim(),
+        source: pl.source,
+        unresolvable: pl.unresolvable,
+        precision: pl.precision ?? null,
+        latitude: pl.latitude ?? null,
+        longitude: pl.longitude ?? null,
+        label: pl.label ?? null,
+        countryCode: pl.countryCode ?? null,
+        gazetteerId: pl.gazetteerId ?? null,
+        note: pl.note ?? null,
+        uncertain: pl.uncertain ?? false,
+      },
+    });
+    await audit({
+      ...auditActor(ctx.scope),
+      action: "CREATE",
+      entityType: "Place",
+      entityId: created.id,
+      diff: { subject: created.text, source: created.source, label: created.label, latitude: created.latitude, longitude: created.longitude },
+    });
+  }
+
   await audit({
     ...auditActor(ctx.scope),
     action: "CREATE",
@@ -653,6 +685,8 @@ export const POST = route("data:import", async (ctx, req) => {
     // oder aktualisiert), samt ihren Familien.
     personIds: data.persons.map((p) => p.id),
   });
+  // Neue Ortstexte im Hintergrund zuordnen (alle offenen).
+  queuePlaceAutoAssign(ctx.scope);
 
   return NextResponse.json({ preview: false, plan });
 });

@@ -8,10 +8,15 @@ const nextConfig = {
   // sharp läuft im Route-Handler und darf nicht mitgebundelt werden.
   serverExternalPackages: ["sharp"],
   // Das Ortsverzeichnis wird zur Laufzeit von der Platte gelesen
-  // (lib/places/gazetteer-file.ts) und muss deshalb ins Standalone-Image.
+  // (lib/places/gazetteer-file.ts) und muss deshalb ins Standalone-Image —
+  // für alle API-Routen: neben /api/places/** (Admin-Seite, Vorschlag am
+  // Eingabefeld /api/places/suggest) ordnen auch Speichern, Importe und der
+  // MCP-Server neue Ortstexte automatisch zu.
   outputFileTracingIncludes: {
-    "/api/places/**": ["./geo/gazetteer.tsv.gz"],
+    "/api/**": ["./geo/gazetteer.tsv.gz"],
     "/admin/places": ["./geo/gazetteer.tsv.gz"],
+    // Ortsseite (Namen, Region, Land aus dem Verzeichnis).
+    "/places/**": ["./geo/gazetteer.tsv.gz"],
     // Anwender-Hilfe: Markdown wird zur Laufzeit gelesen (lib/help/content.ts).
     "/hilfe": ["./docs/anwender/*.md"],
     "/hilfe/**": ["./docs/anwender/*.md"],

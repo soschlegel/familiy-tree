@@ -6,6 +6,9 @@ import { useEffect, useId, useState } from "react";
 
 import { apiFetch, jsonBody } from "./api-client";
 import { DateInput, dateFieldFrom, dateInputError, datePayload } from "./DateInput";
+import { PlaceHint, savePlaceChoices, type PlaceChoice } from "./PlaceHint";
+import { PlaceText } from "./PlaceText";
+import type { PlaceLinkDto } from "@/lib/services/place-pages";
 import { toDateInput, toFuzzyDate, type DatePrecision, type DateQualifier } from "@/lib/dates";
 import {
   ALTERNATIVE_ONLY_TYPES,
@@ -77,6 +80,8 @@ type FormValues = {
   agency: string;
   address: string;
   notes: string;
+  /** Im Ortsfeld ausgewählter Ort (nicht Teil der Ereignisdaten, gespeichert danach). */
+  placeChoice?: PlaceChoice | null;
 };
 
 function valuesOf(e: EventRow): FormValues {
@@ -180,6 +185,7 @@ function EventForm({
         aria-invalid={err(k) ? true : undefined}
         onChange={(e) => set(k, e.target.value)}
       />
+      {k === "place" && <PlaceHint text={v.place} chosen={v.placeChoice} onChoose={(c) => set("placeChoice", c)} />}
       {err(k) && <span className="field-error">{err(k)}</span>}
     </div>
   );
@@ -360,6 +366,7 @@ function EventItem({
   onEdit,
   onDelete,
   mediaCandidates,
+  placeLinks,
   children,
 }: {
   e: EventRow;
@@ -368,6 +375,7 @@ function EventItem({
   onEdit: () => void;
   onDelete: () => void;
   mediaCandidates: MediaCandidate[];
+  placeLinks?: Record<string, PlaceLinkDto>;
   children?: React.ReactNode;
 }) {
   const altOf = e.isAlternative ? ALT_OF[e.type] : undefined;
@@ -417,7 +425,11 @@ function EventItem({
         </div>
         {(e.place || e.address || e.cause || e.age || e.agency) && (
           <p className="mt-0.5 text-sm">
-            {e.place && <Detail label="Ort">{e.place}</Detail>}
+            {e.place && (
+              <Detail label="Ort">
+                <PlaceText text={e.place} links={placeLinks} />
+              </Detail>
+            )}
             {e.address && <Detail label="Anschrift">{e.address}</Detail>}
             {e.cause && <Detail label="Ursache">{e.cause}</Detail>}
             {e.age && <Detail label="Alter">{e.age}</Detail>}
@@ -467,6 +479,7 @@ export function EventSection({
   owners,
   canEdit,
   mediaCandidates = [],
+  placeLinks,
 }: {
   personId: string;
   events: EventRow[];
@@ -474,6 +487,8 @@ export function EventSection({
   canEdit: boolean;
   /** Bilder dieser Seite, die sich an ein Ereignis hängen lassen. */
   mediaCandidates?: MediaCandidate[];
+  /** Ortsverweise der Seite (placeLinksFor), Schlüssel = placeKey. */
+  placeLinks?: Record<string, PlaceLinkDto>;
 }) {
   const router = useRouter();
   const headingId = useId();
@@ -508,16 +523,18 @@ export function EventSection({
     begin();
     const url =
       v.ownerKey === "person" ? `/api/persons/${personId}/events` : `/api/relationships/${v.ownerKey}/events`;
-    const res = await apiFetch(url, jsonBody("POST", payloadOf(v)));
-    setBusy(false);
+    const res = await apiFetch<{ id: string }>(url, jsonBody("POST", payloadOf(v)));
     if (!res.ok) {
+      setBusy(false);
       setError(res.message);
       setFields(res.fields);
       return;
     }
+    const choiceErrors = await savePlaceChoices({ eventId: res.data.id }, [v.placeChoice]);
+    setBusy(false);
     setAdding(false);
     setFormKey((k) => k + 1);
-    setNotice("Ereignis gespeichert.");
+    setNotice(["Ereignis gespeichert.", ...choiceErrors].join(" "));
     router.refresh();
   }
 
@@ -525,14 +542,16 @@ export function EventSection({
     if (busy) return;
     begin();
     const res = await apiFetch(`/api/events/${id}`, jsonBody("PATCH", payloadOf(v)));
-    setBusy(false);
     if (!res.ok) {
+      setBusy(false);
       setError(res.message);
       setFields(res.fields);
       return;
     }
+    const choiceErrors = await savePlaceChoices({ eventId: id }, [v.placeChoice]);
+    setBusy(false);
     setEditing(null);
-    setNotice("Änderung gespeichert.");
+    setNotice(["Änderung gespeichert.", ...choiceErrors].join(" "));
     router.refresh();
   }
 
@@ -558,6 +577,7 @@ export function EventSection({
       canEdit={canEdit}
       busy={busy}
       mediaCandidates={mediaCandidates}
+      placeLinks={placeLinks}
       onEdit={() => {
         setEditing(editing === e.id ? null : e.id);
         setAdding(false);

@@ -45,7 +45,7 @@ test.describe("als Admin", () => {
     const data = JSON.parse(body.toString("utf8")) as ExchangeFile;
 
     // Version 3: Lebensereignisse, weitere Namen, Orte an Beziehungen, Bereiche und Wortlaute.
-    expect(data.version).toBe(4);
+    expect(data.version).toBe(5);
     expect(data.persons).toHaveLength(mock.persons.length);
     expect(data.relationships).toHaveLength(mock.relationships.length);
     expect(data.sources).toHaveLength(mock.sources.length);

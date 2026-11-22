@@ -1165,31 +1165,169 @@ aus `lib/places/`), Pflege durch Administratoren.
 - `assignPlace(scope, input)` — von Hand: Verzeichniseintrag übernehmen,
   Koordinaten eingeben, automatische Zuordnung bestätigen, „nicht
   zuordenbar“ markieren oder zurücksetzen (`placeAssignSchema`).
-- `autoAssignPlaces(scope)` — ordnet alle nicht von Hand bestätigten
-  Ortstexte neu zu.
+- `autoAssignPlaces(scope)` — Knopf „Automatisch zuordnen“ (Altbestand):
+  ordnet alle Ortstexte neu zu, die weder von Hand bestätigt noch von der KI
+  gesetzt sind (Ergebnis zählt beide getrennt: `manual`, `ai`).
+- `assignNewPlaceTexts(actor, texts?)` / `queuePlaceAutoAssign(scope,
+  texts?)` / `placeAutoAssignIdle()` — **Zuordnung ohne Knopfdruck:** nach dem
+  Speichern einer Person (Geburts-/Sterbeort), Beziehung (Orte von
+  Beginn/Ende) oder eines Ereignisses (Ort) mit den gespeicherten Texten,
+  nach dem GEDCOM-Import (`applyGedcomImport`) und dem Austausch-Import
+  (`POST /api/import`) ohne Textliste (alle offenen). Nur Texte **ohne**
+  Zuordnung, ohne Treffer bleiben sie offen. Läuft im Hintergrund des
+  Node-Prozesses in einer Warteschlange (nacheinander); das Speichern wartet
+  nicht und scheitert nie daran — Fehler nur im Server-Log („[places]“).
+  Zusammenführen und „Importe verbinden“ erzeugen keine neuen Ortstexte und
+  stoßen deshalb nichts an. Abschaltbar mit `PLACE_AUTO_ASSIGN=off` (so in
+  `vitest.config.ts`).
+- `placeHint(scope, text)` — Vorschlag am Eingabefeld: dieselbe Regel wie die
+  Automatik (`matchPlace`), dazu eigene Orte; Status gefunden / mehrdeutig /
+  nicht gefunden, Anzeigename, Genauigkeit, `formerName` (früherer bzw.
+  deutscher Name, über den erkannt wurde), `otherName`. Für Admins und
+  Bearbeiter einer Familie (sonst `FORBIDDEN`). `warmPlaceDirectory` lädt das
+  Verzeichnis vorab.
+- `suggestPlaces(scope, text)` — Kandidaten für die KI (`suggest_place`):
+  empfohlene Wahl der Automatik, die übrigen gleichnamigen Kandidaten mit
+  Art, Einwohnerzahl, Land, Namensart (`nameKindOf`) und Entfernung, eigene
+  Orte (`source: "own"`), ohne Treffer die Präfixsuche; die vorhandene
+  Zuordnung des Texts (`current`) nur für Admins.
+- `placeTextContext(scope, keys)` — nur Admins: je Ortstext Feldarten
+  (birth, death, marriage, divorce, `event:<Art>`) mit Anzahl und
+  Jahresspanne, ohne Personen (Kontext für `list_places`).
+- `choosePlaceForEntry(scope, input)` — **Auswahl im Ortsfeld**
+  (`POST /api/places/choose`): ordnet genau den Freitext eines Eintrags
+  (Person, Ereignis oder Beziehung, `placeChoiceSchema`) einem
+  Verzeichniseintrag oder eigenen Ort zu, Herkunft „von Hand“. Rechte: wer
+  den Eintrag bearbeiten darf; der Text muss an ihm stehen. Bewusst nicht
+  über die Admin-Route `/api/places` (die alle Ortstexte zeigt) — der enge
+  Fall ändert nur die Zuordnung dieses einen Texts. Eine von Hand bestätigte
+  Zuordnung desselben Texts mit anderem Ziel ändert nur ein Admin
+  (`CONFLICT`), weil sie auch für Angaben anderer Personen gilt; andere
+  Texte bleiben unberührt. Paket „Ort ausgewählt: …“.
+- `assignPlacesByAi(scope, items)` — `assign_place`: bis `AI_ASSIGN_MAX` (50)
+  Zuordnungen je Aufruf (`aiPlaceAssignSchema`: Verzeichniseintrag, eigener
+  Ort mit Koordinaten und Bezeichnung, oder „nicht zuordenbar“; optional
+  `uncertain`, `note`). Quelle `AI`; überschreibt `AUTO`/`AI`, nie `MANUAL`;
+  der Text muss in den Daten vorkommen. Ergebnis je Eintrag mit `ok`/`error`
+  — ein abgelehnter Eintrag hält die übrigen nicht auf.
 
-**Regeln und Entscheidungen:** Von Hand Bestätigtes (`MANUAL`) wird von der
-Automatik nie überschrieben oder gelöscht. Die Automatik legt neue
+**Eigene Orte:** Zuordnungen mit eigenen Koordinaten (ohne `gazetteerId`,
+von Hand oder von der KI). Sie erscheinen in `placeHint` und `suggestPlaces`
+als Kandidat, wenn ihr Text bzw. ihre Bezeichnung (erster Teil, ohne Klammer)
+zum ersten Teil eines neuen Texts passt; sie gehen dem Verzeichnis vor, wenn
+dieses nur einen allgemeineren Teil getroffen hat („Hof Lindenau, Amt
+Peine“ → der eigene Hof, nicht Peine). Die automatische Zuordnung nutzt sie
+nicht (offene Frage: Weiler gleichen Namens).
+
+**Regeln und Entscheidungen:** Von Hand Bestätigtes (`MANUAL`) und
+KI-Zuordnungen (`AI`) werden von der Automatik nie überschrieben oder
+gelöscht. Bestätigen (`confirm`) macht aus `AUTO` bzw. `AI` (bei der KI auch
+„nicht zuordenbar“) `MANUAL`, behält die Notiz und hebt „unsicher“ auf;
+eine Wahl von Hand (Verzeichnis, Koordinaten) löscht Notiz und „unsicher“. Die Automatik legt neue
 Zuordnungen an, aktualisiert geänderte Treffer und entfernt automatische
 Zuordnungen ohne Treffer bzw. zu Texten, die nirgends mehr vorkommen.
 Bestätigen ohne vorhandene Zuordnung → `CONFLICT`. Koordinaten werden auf 5
 Nachkommastellen gerundet.
 
-**Rechte/Datenschutz:** Nur Administratoren — jede Funktion prüft selbst
-`isAdmin`, zusätzlich zur Route, weil die Liste die Ortstexte **aller**
-Personen enthält, auch gesperrter.
+**Rechte/Datenschutz:** Liste, Kontext, Suche, Zuordnen nur
+Administratoren — jede Funktion prüft selbst `isAdmin`, zusätzlich zur
+Route, weil die Liste die Ortstexte **aller** Personen enthält, auch
+gesperrter. Ausnahmen: `placeHint` (Bearbeiter) und `suggestPlaces` (jeder
+Lesezugang) liefern nur Verzeichnisdaten und Bezeichnung/Koordinaten eigener
+Orte (Entscheidung des Eigentümers: eigene Orte sollen wiederverwendet
+werden), nie Personen oder Zählungen; die automatische Zuordnung prüft keine
+Rechte (Systemvorgang nach eigenem Speichern).
 
 **Protokoll:** Einträge mit `entityType` „Place“ (`CREATE`, `UPDATE` mit
 Feldänderungen, `DELETE` mit vorherigem Stand), direkt über `auditData`
 geschrieben. Paket „Ort zugeordnet: …“ bzw. ein Paket „Orte automatisch
-zugeordnet“ für alle Einträge der Automatik.
+zugeordnet“ für alle Einträge der Automatik — auch für die Zuordnung nach dem
+Speichern (eigenes Paket im Namen dessen, der gespeichert hat, mit Kanal und
+Schlüssel bei MCP). KI: Paket „Ort zugeordnet (KI): …“ bzw. „Orte zugeordnet
+(KI)“, oder das mit `change_set_id` angegebene; Kanal `MCP` und
+Schlüssel-ID. Im Changelog heißt die Herkunft `AI` „KI-Vorschlag“.
 
 **Benutzt von:** `app/admin/places/page.tsx`, `app/api/places/route.ts`,
-`app/api/places/search/route.ts`, `app/api/places/auto/route.ts`; Typen in
-`components/PlaceAdmin.tsx`.
+`app/api/places/search/route.ts`, `app/api/places/auto/route.ts`,
+`app/api/places/suggest/route.ts`, `app/api/import/route.ts`; Dienste
+`persons`, `relationships`, `events`, `gedcom-import` (Anstoß nach dem
+Speichern); `mcp/tools.ts` (`suggest_place`, `list_places`, `assign_place`);
+Typen in `components/PlaceAdmin.tsx`, `components/PlaceHint.tsx`.
 
-**Tests:** `tests/map.db.test.ts` (Regeln: `tests/places.test.ts`);
-`e2e/write/places.spec.ts`.
+**Tests:** `tests/map.db.test.ts`, `tests/places-ai.db.test.ts` (Vorschlag
+samt Route und Rechten, Automatik nach Speichern/Import ohne MANUAL/KI zu
+überschreiben, Fehler ohne Folgen, MCP-Werkzeuge, Bestätigen) (Regeln:
+`tests/places.test.ts`); `e2e/write/places.spec.ts`.
+
+---
+
+### lib/services/place-pages.ts
+
+**Zweck:** Ortsseiten (`/places/<ref>`) und Ortsverweise für die
+Personenseite und den KI-Zugang.
+
+**Wichtige Funktionen:**
+- `placeRefOf(row)` — Kennung eines Orts: `g-<gazetteerId>` bzw. bei eigenen
+  Orten `c-<Breite>_<Länge>` (5 Nachkommastellen); keine Kennung für „nicht
+  zuordenbar“ oder ohne Koordinaten. `placeRefForText(text)`.
+- `placeLinksFor(texts)` — EINE Abfrage je Seite: Schlüssel (`placeKey`) →
+  Kennung, Anzeigename, Kurzform ohne Klammer, Koordinaten und `same` (der
+  Freitext nennt den Ort schon so, dann kein Zusatz „→ …“).
+- `placeRowsOf(ref)`, `getPlacePage(scope, ref, {page})` — Ort mit heutigem
+  Namen, Region, Land (aus dem Verzeichnis), Koordinaten, Art, Einwohnerzahl,
+  Herkunft der Zuordnung(en), Begründungen (nur Admins), weiteren Namen aus
+  dem Verzeichnis (darunter der frühere/deutsche), den vorkommenden
+  Freitexten mit Anzahl und den Angaben sichtbarer Personen (Geburt, Tod,
+  Heirat/Partnerschaft, Scheidung, Ereignisse mit Art und Jahr), 50 je Seite.
+
+**Regel „ein Ort“ (Entscheidung):** Alle Zuordnungen mit demselben
+Verzeichniseintrag bilden einen Ort, eigene Orte ohne Verzeichniseintrag
+mit denselben Koordinaten (wie gespeichert, 5 Nachkommastellen). So zeigen
+„Breslau“, „Breslau, Schlesien“ und „Wrocław“ auf eine Seite.
+
+**Kein Fremdschlüssel:** Personen, Beziehungen und Ereignisse tragen nur den
+Freitext; die Verbindung zum Ort läuft über den normalisierten Text
+(`Place.key`).
+
+**Rechte/Datenschutz:** Jeder Angemeldete sieht Ortsseiten — aber nur
+Angaben sichtbarer Personen (`personVisibilityFilter`; Ehen je sichtbarem
+Partner, Ereignisse an Beziehungen je sichtbarem Partner). Gesperrte
+erscheinen weder als Eintrag noch in einer Zahl; Freitexte, die nur bei
+ihnen vorkommen, fehlen. Ohne jede sichtbare Angabe gilt der Ort für
+Nicht-Admins als nicht vorhanden (404), damit die Seite nichts über
+verborgene Personen verrät. Admins sehen alles samt Begründungen.
+
+**Benutzt von:** `app/places/[ref]/page.tsx`, `app/people/[id]/page.tsx`,
+`mcp/tools.ts` (`get_place`, `places` in `get_person`/`list_events`).
+
+**Tests:** `tests/place-pages.db.test.ts`; `e2e/write/places.spec.ts`.
+
+### lib/services/place-export.ts
+
+**Zweck:** Orte im Export.
+
+**Wichtige Funktionen:** `gedcomPlaceResolver(texts)` (Ortstext → GEDCOM-PLAC,
+eine Abfrage), `presentDayName` („Ort, Region, Land“ aus dem Verzeichnis,
+heutiger Name ohne Klammer), `ORIGINAL_TEXT_PREFIX`, `exchangePlacesFor`.
+
+**Regeln (Entscheidung des Eigentümers, immer, ohne Schalter):** Für einen
+zugeordneten Ortstext schreibt der GEDCOM-Export die heutige Form „Ort,
+Region, Land“ (Bestandteile wie im Verzeichnis, also in der Landessprache:
+„Wrocław, Województwo dolnośląskie, Polen“; eigene Orte: ihre Bezeichnung
+ohne Klammer), darunter `MAP`/`LATI`/`LONG` (N/S/E/W) und — wenn er
+abweicht — `NOTE Originaltext: …`. Nicht zugeordnete und „nicht
+zuordenbare“ Orte bleiben Freitext. Gilt für alle PLAC-Stellen (Geburt,
+Tod, Ereignisse, Heirat, Scheidung). Der eigene Import liest den
+Originaltext zurück (`originalPlaceText`). Das Austauschformat behält den
+Freitext und nimmt die Zuordnungen der exportierten Texte zusätzlich mit
+(`places`, Version 5; Begründungen nur, wenn ein Admin exportiert); beim
+Einspielen werden nur Texte ohne vorhandene Zuordnung übernommen
+(`app/api/import/route.ts`, protokolliert als „Place“).
+
+**Benutzt von:** `lib/services/gedcom-export.ts`,
+`lib/services/exchange-export.ts`.
+
+**Tests:** `tests/place-pages.db.test.ts`.
 
 ---
 
@@ -1689,6 +1827,8 @@ Typen in `components/ConnectImports.tsx`.
 
 **Zweck:** Baut den Export im Austauschformat (`lib/exchange.ts`) aus dem für
 den Benutzer sichtbaren Bestand; Grundlage auch des GEDCOM-Exports.
+Nimmt die Ortszuordnungen der exportierten Ortstexte mit (`places`,
+`exchangePlacesFor`; Begründungen nur bei Admin-Export).
 
 **Wichtige Funktionen:**
 - `buildExport(scope, auswahl?)` — Personen, Beziehungen, Ereignisse, weitere
@@ -1736,6 +1876,9 @@ oder ZIP mit Bildern.
 - `appDateToGedcom(zeile, schlüssel)` — App-Datum → GEDCOM-Datum.
 
 **Regeln und Entscheidungen:**
+- Zugeordnete Orte: PLAC in der heutigen Form „Ort, Region, Land“ mit MAP
+  und dem Originaltext als NOTE (`lib/services/place-export.ts`); ein
+  ursprünglicher PLAC aus den Rohdaten wird dann nicht darübergelegt.
 - Dieselbe Grenze wie `buildExport`; die App-Werte sind maßgeblich. Aus dem
   beim Import aufbewahrten Originaldatensatz kommt zurück, was die App nicht
   abbildet (fremde Tags, Koordinaten, strukturierte Anschriften,

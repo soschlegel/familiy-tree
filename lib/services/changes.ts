@@ -212,6 +212,8 @@ const FIELDS: Record<string, Record<string, string>> = {
     latitude: "Breite",
     longitude: "Länge",
     label: "Zugeordnet zu",
+    note: "Begründung",
+    uncertain: "Unsicher",
   },
 };
 
@@ -386,7 +388,7 @@ function enumLabel(entityType: string, field: string, v: string): string {
   if (field === "role") return ROLE[v] ?? v;
   if (field === "status") return STATUS[v] ?? v;
   if (field === "aiAccess" || field === "level") return AI[v] ?? v;
-  if (entityType === "Place" && field === "source") return v === "MANUAL" ? "von Hand" : "automatisch";
+  if (entityType === "Place" && field === "source") return v === "MANUAL" ? "von Hand" : v === "AI" ? "KI-Vorschlag" : "automatisch";
   if (entityType === "Place" && field === "precision") return PLACE_PRECISION[v] ?? v;
   return v;
 }

@@ -903,7 +903,7 @@ Gruppenpaar, Dauer), `LinkOptions`, `linkImports`, `evidenceSentence`.
 **Zweck:** Austauschformat (JSON/ZIP) für Export **und** Import in einer
 Datei, damit beide Richtungen nicht auseinanderlaufen.
 
-**Wichtige Funktionen/Typen:** `EXCHANGE_VERSION` (4), Zod-Schemata für
+**Wichtige Funktionen/Typen:** `EXCHANGE_VERSION` (5), `placeSchema`, Zod-Schemata für
 Medien, Personen, Beziehungen, Quellen, Belege, Ereignisse, Namen,
 Fremdkennungen, Rohdaten und die ganze Datei (`exchangeSchema`), Typen
 `Exchange…`, `exchangeDateColumns` (Datumsspalten aus der Datei; ältere
@@ -913,7 +913,9 @@ Kollision mit ID-Endung).
 
 **Regeln:** Versionen: 2 Genauigkeit/Zusatz, Quellen/Belege; 3 Bereiche,
 Wortlaut, Namensteile, Ereignisse, Namen, Fremdkennungen, Rohdaten; 4
-Bilder an Quellen, Ereignissen und Belegen. Neue Felder sind optional —
+Bilder an Quellen, Ereignissen und Belegen; 5 Ortszuordnungen (`places`:
+je Ortstext Herkunft, Koordinaten, Bezeichnung, Verzeichniskennung; der
+Freitext an Personen, Beziehungen und Ereignissen bleibt). Neue Felder sind optional —
 ältere Dateien bleiben importierbar. Importläufe und Herkunftsangaben
 (`ImportLink`) gehören zur Instanz und werden nicht exportiert.
 
@@ -1163,8 +1165,12 @@ Personen-/Quellen-Metadaten, Fotos, Hinweise, Eigentümer), `resolveNames`,
 `pickMain`, `pickPrimaryName`, `sourceKind`, `personKey`, `pairKey`,
 `parentKey`, `eventKeys`, `recentWithoutDeath`, `indexOriginalPerson`,
 `indexOriginalFamily`, `UNKNOWN_GIVEN_NAME` („N.N.“), `RAW_TYPES`,
-`RAW_FORMAT`, `jsonClean`.
+`RAW_FORMAT`, `jsonClean`, `originalPlaceText`.
 **Regeln:**
+- Ortstexte: Steht unter einem PLAC eine NOTE „Originaltext: …“ (so schreibt
+  der eigene GEDCOM-Export zugeordnete Orte, `lib/services/place-export.ts`),
+  gilt dieser Text statt des PLAC — die Rundreise Export → Import lässt den
+  Freitext unverändert, nichts wird als geändert gemeldet.
 - Schlüssel (`externalKey`): Person `UID:` → `RIN:` → `XREF:`; Paar
   `PAIR:a|b`; Eltern-Kind `PARENT:a>b`; Ereignis eigene `_UID`, sonst
   `<Träger>/<Art>#<n>`; Belege `…/SOUR#n`.
@@ -1404,11 +1410,17 @@ GeoNames CC BY 4.0 und Natural Earth) als Datenstruktur und Suche — kein
 Dienst im Netz, Ortsnamen verlassen den Server nie.
 
 **Wichtige Funktionen/Typen:** `GeoKind` (Ort, Region erster Ebene,
-historische Landschaft, Land), `GeoEntry`, `Gazetteer` (Einträge, Namen →
+historische Landschaft, Land), `GeoEntry` (mit `de` — deutscher bzw.
+früherer Name — und `alt`, den weiteren Namen für die Ortsseite), `Gazetteer` (Einträge, Namen →
 Einträge inkl. weiterer Namen, Regionen, Länder, sortierte Liste für
 Präfixsuche), `parseGazetteer`, `entryLabel` und `labelForText`
 (Anzeigename, siehe unten), `searchGazetteer` (Präfixsuche; genaue Treffer
-zuerst, dann Länder/Regionen, dann Einwohnerzahl), `distanceKm` (Großkreis).
+zuerst, dann Länder/Regionen, dann Einwohnerzahl), `distanceKm` (Großkreis),
+`nameKindOf` und `NameKind` (welcher Name eines Eintrags in einem Teil des
+Ortstexts steht: `official` — heutiger Name, auch in bloßer Umschrift wie
+„Wroclaw“/„Timişoara“ —, `historic` — der deutsche bzw. frühere Name aus dem
+Verzeichnis, „Breslau“ — oder `alternate`, ein weiterer Name; für den
+Vorschlag am Eingabefeld und `suggest_place`).
 
 **Regel Anzeigename** (Entscheidung des Eigentümers, 22.11.): heutiger
 offizieller Name in der Landessprache vorn, in Klammern der alte Name — der
@@ -1435,6 +1447,12 @@ Datei ist in `next.config.mjs` für den Standalone-Build eingetragen.
 **Wichtige Funktionen:** `getGazetteer`, `loadGazetteerSync`,
 `GAZETTEER_FILE`.
 
+Gebraucht wird es jetzt auch außerhalb der Admin-Seite: Vorschlag am
+Eingabefeld (`/api/places/suggest`, das erste Ortsfeld einer Seite lädt es
+vorab), automatische Zuordnung nach dem Speichern und nach Importen, MCP
+(`suggest_place`, `assign_place`). Gemessen (Mock, Entwicklungsrechner):
+Laden rund 0,9 s, danach ein Vorschlag unter 2 ms.
+
 **Benutzt von:** `lib/services/places.ts`, `prisma/seed-mock.ts`.
 
 **Tests:** `tests/places.test.ts`.
@@ -1445,7 +1463,9 @@ Ortsverzeichnisses.
 
 **Wichtige Funktionen/Typen:** `matchPlace`, `PlaceMatch` (Eintrag,
 Genauigkeit, Anzeigename, getroffener Teil, Zahl mehrdeutiger
-Kandidaten), `ANCHOR_KM` (50), `AMBIGUOUS_KM` (25), `HISTORIC_KM` (300).
+Kandidaten, `others` — die übrigen Kandidaten desselben Teils in
+Rangfolge, höchstens `MAX_OTHERS` = 9, für „A, B oder C“ in
+`suggest_place`), `ANCHOR_KM` (50), `AMBIGUOUS_KM` (25), `HISTORIC_KM` (300).
 
 **Regeln:**
 1. Letzter Teil ein Land → Länderhinweis; heutige Länder schränken ein,

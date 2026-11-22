@@ -3,12 +3,13 @@ import Link from "next/link";
 import { requirePage, requireScope } from "@/lib/session";
 import { listPlaces, PLACE_STATUS_LABEL, type PlaceStatus } from "@/lib/services/places";
 import { PlaceAutoAssign, PlaceTable } from "@/components/PlaceAdmin";
+import { HelpLink } from "@/components/HelpLink";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Orte zuordnen" };
 
 type Search = { status?: string; q?: string; page?: string };
-const FILTERS: (PlaceStatus | "all")[] = ["all", "open", "auto", "manual", "unresolvable"];
+const FILTERS: (PlaceStatus | "all")[] = ["all", "open", "auto", "ai", "manual", "unresolvable"];
 
 /**
  * Orte zuordnen (nur Administratoren, README „Karte und Orte“): alle
@@ -42,7 +43,12 @@ export default async function PlacesPage({ searchParams }: { searchParams: Promi
         <p className="mt-1 max-w-3xl text-sm muted">
           Für die <Link href="/map" className="btn-link">Karte</Link> braucht jeder Ortstext Koordinaten. Vorschläge kommen
           aus dem mitgelieferten Ortsverzeichnis (GeoNames, CC BY 4.0) — ohne Dienst im Netz, die Ortsnamen verlassen den
-          Server nicht. Von Hand Bestätigtes überschreibt die automatische Zuordnung nie.
+          Server nicht. Neue Ortstexte werden nach dem Speichern und nach Importen automatisch zugeordnet; der Knopf
+          „Automatisch zuordnen“ ordnet den Altbestand neu zu. Von Hand Bestätigtes und Zuordnungen des KI-Assistenten
+          („von KI“, gelten sofort für die Karte) überschreibt die Automatik nie — KI-Zuordnungen hier bestätigen oder ändern.
+        </p>
+        <p className="mt-1 text-sm">
+          <HelpLink to="orteZuordnen" label="Wie funktioniert das Zuordnen der Orte?" />
         </p>
       </div>
 

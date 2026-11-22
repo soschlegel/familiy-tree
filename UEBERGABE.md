@@ -22,10 +22,25 @@ aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
   `npm run test:e2e` (Produktions-Build, ein Lauf): 314 bestanden, 1
   übersprungen, 151 s; lokaler Docker-Build ok (Hilfe-Texte, Ortsverzeichnis
   und Changelog im Image).
-- In Arbeit (Branch `orte-ki`, Worktree `familiy-tree-orte-ki`): Orte —
-  Vorschlag am Eingabefeld, automatische Zuordnung, MCP-Werkzeuge
-  (suggest/list/assign, KI-Kennzeichnung, eigene Orte), Ortsseite, Links im
-  Personenblatt, Auswahl echter Orte, GEDCOM-Export „Ort, Region, Land“.
+- Paket **Orte ohne Knopfdruck und mit KI** (Branch `orte-ki`, noch nicht
+  zusammengeführt): Vorschlag am Ortsfeld (`components/PlaceHint.tsx`,
+  `GET /api/places/suggest`), automatische Zuordnung neuer Ortstexte nach
+  dem Speichern und nach Importen im Hintergrund (`queuePlaceAutoAssign`,
+  abschaltbar mit `PLACE_AUTO_ASSIGN=off`, in Vitest aus), MCP-Werkzeuge
+  `suggest_place`, `list_places`, `assign_place` (Stapel bis 50, eigene Orte,
+  Begründung, „unsicher“) und Prompt `orte_zuordnen`, KI-Zuordnungen auf
+  `/admin/places` als „von KI“ mit Bestätigen. Neue, rein ergänzende
+  Migration `20261124000001_orte_ki` (`PlaceSource.AI`, `Place.note`,
+  `Place.uncertain`). Das Ortsverzeichnis ist jetzt für alle API-Routen im
+  Standalone-Build (`next.config.mjs`, `/api/**`, `/places/**`). Dazu
+  Ortsseiten `/places/<ref>` (ein Ort = gleicher Verzeichniseintrag bzw.
+  gleiche Koordinaten), Ortslinks auf der Personenseite, „Ort wählen …“ in
+  den Ortsfeldern (`POST /api/places/choose`, Zuordnung „von Hand“ nur für
+  diesen Text), GEDCOM-Export mit heutiger Ortsform + MAP + NOTE
+  „Originaltext“ (Rundreise über den eigenen Import), Austauschformat
+  Version 5 mit `places`, MCP `get_place` und `places` in
+  `get_person`/`list_events`. Prüfstand: Vitest 877/877, Playwright
+  (Produktions-Build) 317/317, `gedcom:check` ohne Warnungen.
 - Offen: Hydration-Fehler (React #418) tritt auch im Produktions-Build bei
   wenigen Prozent der Seitenaufrufe auf (alle Seiten) — eigene Untersuchung
   nötig; Git-Verlauf umschreiben (echte Namen in alter Demofamilie,
@@ -264,6 +279,15 @@ Freigabe (21.11.): „bauen und Gas geben“ — die Wünsche werden umgesetzt.
   186/186, write 100/100. Ein erster write-Lauf unter starker Last durch
   parallele Agenten hatte 4 Zeitüberschreitungen (darunter der erste Aufruf
   von `/neuigkeiten`, inzwischen im Vorwärmen); Wiederholung grün.
+
+- **Orte: zeitabhängige Staatszugehörigkeit** (Idee aus dem Paket
+  `orte-ki`, nicht beauftragt): Breslau 1900 = Deutsches Reich, heute Polen —
+  Bezeichnung oder Karte je nach Jahr mit dem damaligen Staat. Bräuchte
+  historische Grenzen bzw. eine Zuordnung Ort × Zeitraum → Staat.
+- **Orte: eigene Orte in der Automatik** (offen): Eigene Orte (Wüstung, Hof)
+  erscheinen bei späteren Texten als Vorschlag, die automatische Zuordnung
+  nutzt sie aber nicht (gleichnamige Weiler wären riskant). Bei Bedarf
+  entscheiden.
 
 ### 4. Weitere offene Punkte
 

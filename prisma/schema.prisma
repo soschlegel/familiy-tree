@@ -969,6 +969,7 @@ model ChangeSet {
 enum PlaceSource {
   AUTO // automatisch aus dem mitgelieferten Ortsverzeichnis (geo/gazetteer.tsv.gz)
   MANUAL // von Hand bestätigt oder eingegeben — wird nie automatisch überschrieben
+  AI // vom KI-Assistenten über MCP gesetzt („KI-Vorschlag“) — die Automatik überschreibt nie, ein Admin bestätigt (→ MANUAL)
 }
 
 // Wie genau die Zuordnung ist: der Ort selbst, nur die Region (Bundesland,
@@ -1003,6 +1004,10 @@ model Place {
   // Kennung im Ortsverzeichnis (GeoNames-ID bzw. „h…“ für historische
   // Landschaften); leer bei von Hand eingegebenen Koordinaten.
   gazetteerId  String?
+  // Begründung bzw. Notiz zur Zuordnung (v.a. der KI), auf /admin/places sichtbar.
+  note         String?
+  // Als unsicher gesetzt (KI: „vermutlich“) — ein Mensch sollte prüfen.
+  uncertain    Boolean         @default(false)
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 

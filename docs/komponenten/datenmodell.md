@@ -167,7 +167,10 @@ Eintrag aus der Zeit vor dem KI-Zugang.
 ### `PlaceSource`
 Herkunft einer Ortszuordnung: `AUTO` (aus dem mitgelieferten
 Ortsverzeichnis `geo/gazetteer.tsv.gz`), `MANUAL` (von Hand bestätigt oder
-eingegeben — wird nie automatisch überschrieben).
+eingegeben — wird nie automatisch überschrieben), `AI` (vom KI-Assistenten
+über MCP gesetzt, „von KI“/„KI-Vorschlag“ — gilt sofort für die Karte, die
+Automatik überschreibt sie nie, ein Admin bestätigt sie zu `MANUAL` oder
+ändert sie; die KI überschreibt `AUTO` und `AI`, nie `MANUAL`).
 
 ### `PlacePrecision`
 Genauigkeit einer Ortszuordnung: `PLACE` (der Ort selbst), `REGION`
@@ -590,7 +593,11 @@ für die Anzeige), `source` (`AUTO`/`MANUAL`), `unresolvable` (von Hand als
 „nicht zuordenbar“ markiert, dann ohne Koordinaten), `precision`,
 `latitude`, `longitude`, `label` (Anzeigename der Zuordnung), `countryCode`,
 `gazetteerId` (GeoNames-ID bzw. `h…` für historische Landschaften; leer bei
-von Hand eingegebenen Koordinaten), `createdAt`, `updatedAt`.
+eigenen Koordinaten — solche Zeilen sind „eigene Orte“ und erscheinen in
+Vorschlägen für spätere Texte als Kandidaten), `note` (Begründung bzw.
+Notiz, v.a. der KI, auf `/admin/places` sichtbar), `uncertain` (als unsicher
+gesetzt, Standard `false`; Bestätigen setzt es zurück), `createdAt`,
+`updatedAt`.
 
 **Besonderheit:** Keine Fremdschlüssel — die Verbindung zu Personen
 entsteht nur über den normalisierten Text.
@@ -613,6 +620,7 @@ zuordnen“, von Hand Bestätigtes nie überschreiben).
 | `20261123000000_medien_an_eintraegen` | Tabellen `SourceMedia`, `EventMedia`, `CitationMedia` (Cascade beidseitig); bestehende Hauptscans werden bewusst nicht kopiert. |
 | `20261123000001_orte` | Tabelle `Place`, Enums `PlaceSource`, `PlacePrecision`. |
 | `20261124000000_neuigkeiten` | `User.lastSeenReleaseId` (Text, optional) — nur `ADD COLUMN`. |
+| `20261124000001_orte_ki` | `PlaceSource` um `AI` (`ALTER TYPE … ADD VALUE`); `Place.note` (optional) und `Place.uncertain` (Standard `false`). |
 
 `migration_lock.toml` legt den Anbieter (PostgreSQL) fest.
 

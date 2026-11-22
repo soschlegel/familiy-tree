@@ -5,11 +5,13 @@ import { auditActor, auditData, fieldChanges } from "../audit";
 import { nameChangeSet } from "../change-sets";
 import { prisma } from "../prisma";
 import type { Scope } from "../scope";
-import { labelForText, searchGazetteer } from "../places/gazetteer";
+import { distanceKm, labelForText, nameKindOf, searchGazetteer, type GeoEntry, type NameKind } from "../places/gazetteer";
 import { getGazetteer } from "../places/gazetteer-file";
 import { matchPlace } from "../places/match";
-import { placeKey } from "../places/normalize";
-import { forbiddenError, notFoundError, ServiceError } from "./errors";
+import { normalizeForLookup, placeKey, splitPlaceText } from "../places/normalize";
+import { canEditPerson, canEditRelationshipBetween, canViewPerson, editableFamilyIds, familyIdsOf } from "../scope";
+import type { ChangeSetHandle } from "../change-sets";
+import { forbiddenError, notFoundError, ServiceError, validationError } from "./errors";
 
 /**
  * Ortszuordnung (README, „Karte und Orte“): Ortstexte → Koordinaten.
@@ -19,8 +21,12 @@ import { forbiddenError, notFoundError, ServiceError } from "./errors";
  * (zusätzlich zur Route, lib/authz.ts „place:manage“).
  *
  * Grundsätze:
- * - Automatisch (Ortsverzeichnis) zugeordnet wird nur, was nicht von Hand
- *   bestätigt ist; MANUAL wird nie überschrieben oder gelöscht.
+ * - Automatisch (Ortsverzeichnis) zugeordnet wird nur, was weder von Hand
+ *   bestätigt noch von der KI gesetzt ist; MANUAL und AI werden von der
+ *   Automatik nie überschrieben oder gelöscht. Die KI (MCP, assign_place)
+ *   überschreibt AUTO und AI, nie MANUAL.
+ * - Neue Ortstexte werden nach dem Speichern bzw. Importieren im Hintergrund
+ *   automatisch zugeordnet (queuePlaceAutoAssign) — nur Texte ohne Zuordnung.
  * - Jede Änderung steht im AuditLog (entityType "Place"); die automatische
  *   Zuordnung bildet ein Paket „Orte automatisch zugeordnet“.
  */
@@ -77,17 +83,23 @@ export async function collectPlaceTexts(): Promise<Map<string, PlaceText>> {
 // Liste für die Admin-Seite
 // ---------------------------------------------------------------------------
 
-export type PlaceStatus = "open" | "auto" | "manual" | "unresolvable";
+export type PlaceStatus = "open" | "auto" | "ai" | "manual" | "unresolvable";
+export const PLACE_STATUSES: readonly PlaceStatus[] = ["open", "auto", "ai", "manual", "unresolvable"];
 export const PLACE_STATUS_LABEL: Record<PlaceStatus, string> = {
   open: "offen",
   auto: "automatisch",
+  ai: "von KI",
   manual: "bestätigt",
   unresolvable: "nicht zuordenbar",
 };
 
 export type PlaceAssignmentDto = {
-  source: "AUTO" | "MANUAL";
+  source: "AUTO" | "MANUAL" | "AI";
   unresolvable: boolean;
+  /** Begründung bzw. Notiz (v.a. der KI). */
+  note: string | null;
+  /** Als unsicher gesetzt — bitte prüfen. */
+  uncertain: boolean;
   precision: PlacePrecision | null;
   latitude: number | null;
   longitude: number | null;
@@ -122,12 +134,15 @@ export type PlaceListDto = {
   counts: Record<PlaceStatus, number> & { all: number; occurrences: number };
 };
 
+/** KI-Zuordnungen zählen immer als „von KI“ (auch „nicht zuordenbar“), bis ein Admin bestätigt. */
 const statusOf = (p: Place | undefined): PlaceStatus =>
-  !p ? "open" : p.source === "AUTO" ? "auto" : p.unresolvable ? "unresolvable" : "manual";
+  !p ? "open" : p.source === "AUTO" ? "auto" : p.source === "AI" ? "ai" : p.unresolvable ? "unresolvable" : "manual";
 
 const toAssignment = (p: Place): PlaceAssignmentDto => ({
   source: p.source,
   unresolvable: p.unresolvable,
+  note: p.note,
+  uncertain: p.uncertain,
   precision: p.precision,
   latitude: p.latitude,
   longitude: p.longitude,
@@ -146,7 +161,7 @@ export async function listPlaces(
   const [texts, places] = await Promise.all([collectPlaceTexts(), prisma.place.findMany()]);
   const byKey = new Map(places.map((p) => [p.key, p]));
 
-  const counts = { open: 0, auto: 0, manual: 0, unresolvable: 0, all: texts.size, occurrences: 0 };
+  const counts = { open: 0, auto: 0, ai: 0, manual: 0, unresolvable: 0, all: texts.size, occurrences: 0 };
   for (const t of texts.values()) {
     counts[statusOf(byKey.get(t.key))]++;
     counts.occurrences += t.count;
@@ -245,7 +260,18 @@ export const placeAssignSchema = z.discriminatedUnion("action", [
 export type PlaceAssignInput = z.infer<typeof placeAssignSchema>;
 
 /** Felder einer Zeile, die das Audit vorher → nachher vergleicht. */
-const AUDIT_FIELDS = ["source", "unresolvable", "precision", "latitude", "longitude", "label", "countryCode", "gazetteerId"] as const;
+const AUDIT_FIELDS = [
+  "source",
+  "unresolvable",
+  "precision",
+  "latitude",
+  "longitude",
+  "label",
+  "countryCode",
+  "gazetteerId",
+  "note",
+  "uncertain",
+] as const;
 type PlaceFields = Pick<Place, (typeof AUDIT_FIELDS)[number]>;
 
 const EMPTY: PlaceFields = {
@@ -257,6 +283,8 @@ const EMPTY: PlaceFields = {
   label: null,
   countryCode: null,
   gazetteerId: null,
+  note: null,
+  uncertain: false,
 };
 
 function pick(p: Place | PlaceFields): PlaceFields {
@@ -301,6 +329,8 @@ export async function assignPlace(scope: Scope, input: PlaceAssignInput): Promis
         label: labelForText(gaz, e, input.text),
         countryCode: e.cc || null,
         gazetteerId: e.id,
+        note: null,
+        uncertain: false,
       };
       break;
     }
@@ -314,13 +344,17 @@ export async function assignPlace(scope: Scope, input: PlaceAssignInput): Promis
         label: input.label?.trim() || input.text.trim(),
         countryCode: null,
         gazetteerId: null,
+        note: null,
+        uncertain: false,
       };
       break;
     case "confirm":
-      if (!existing || existing.unresolvable || existing.latitude === null) {
+      // Bestätigen übernimmt eine automatische oder KI-Zuordnung als von Hand
+      // bestätigt; bei der KI auch ein „nicht zuordenbar“. Die Notiz bleibt.
+      if (!existing || (existing.source !== "AI" && (existing.unresolvable || existing.latitude === null))) {
         throw new ServiceError("CONFLICT", "Keine Zuordnung zum Bestätigen — bitte einen Ort wählen.");
       }
-      next = { ...pick(existing), source: "MANUAL" };
+      next = { ...pick(existing), source: "MANUAL", uncertain: false };
       break;
     case "unresolvable":
       next = { ...EMPTY, source: "MANUAL", unresolvable: true };
@@ -374,6 +408,8 @@ export type AutoAssignResult = {
   unmatched: number;
   /** Von Hand bestätigt bzw. „nicht zuordenbar“ — nicht angefasst. */
   manual: number;
+  /** Von der KI gesetzt — nicht angefasst (ein Admin bestätigt oder ändert). */
+  ai: number;
   ms: number;
 };
 
@@ -392,7 +428,7 @@ export async function autoAssignPlaces(scope: Scope): Promise<AutoAssignResult> 
   const byKey = new Map(places.map((p) => [p.key, p]));
   nameChangeSet(scope, "Orte automatisch zugeordnet");
 
-  const result: AutoAssignResult = { created: 0, updated: 0, removed: 0, unchanged: 0, unmatched: 0, manual: 0, ms: 0 };
+  const result: AutoAssignResult = { created: 0, updated: 0, removed: 0, unchanged: 0, unmatched: 0, manual: 0, ai: 0, ms: 0 };
   const creates: Prisma.PlaceCreateManyInput[] = [];
   const updates: { existing: Place; text: string; next: PlaceFields }[] = [];
   const removals: Place[] = [];
@@ -403,22 +439,17 @@ export async function autoAssignPlaces(scope: Scope): Promise<AutoAssignResult> 
       result.manual++;
       continue;
     }
+    if (existing?.source === "AI") {
+      result.ai++;
+      continue;
+    }
     const m = matchPlace(gaz, t.text);
     if (!m) {
       result.unmatched++;
       if (existing) removals.push(existing);
       continue;
     }
-    const next: PlaceFields = {
-      source: "AUTO",
-      unresolvable: false,
-      precision: m.precision,
-      latitude: m.entry.lat,
-      longitude: m.entry.lon,
-      label: m.label,
-      countryCode: m.entry.cc || null,
-      gazetteerId: m.entry.id,
-    };
+    const next = autoFields(m);
     if (!existing) creates.push({ key: t.key, text: t.text, ...next });
     else if (!sameFields(pick(existing), next)) updates.push({ existing, text: t.text, next });
     else result.unchanged++;
@@ -471,8 +502,659 @@ export async function autoAssignPlaces(scope: Scope): Promise<AutoAssignResult> 
   return result;
 }
 
+const autoFields = (m: NonNullable<ReturnType<typeof matchPlace>>): PlaceFields => ({
+  source: "AUTO",
+  unresolvable: false,
+  precision: m.precision,
+  latitude: m.entry.lat,
+  longitude: m.entry.lon,
+  label: m.label,
+  countryCode: m.entry.cc || null,
+  gazetteerId: m.entry.id,
+  note: null,
+  uncertain: false,
+});
+
 function chunks<T>(list: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Neue Ortstexte nach dem Speichern automatisch zuordnen (im Hintergrund)
+// ---------------------------------------------------------------------------
+
+export type NewPlaceTextsResult = { checked: number; created: number; unmatched: number };
+
+/**
+ * Ordnet Ortstexte OHNE vorhandene Zuordnung aus dem Ortsverzeichnis zu —
+ * `texts` angegeben: nur diese (nach Speichern einer Person, Beziehung,
+ * eines Ereignisses), sonst alle offenen (nach einem Import). Vorhandene
+ * Zuordnungen (automatisch, KI, von Hand) bleiben unberührt; Texte ohne
+ * Treffer bleiben offen. Protokoll: Paket „Orte automatisch zugeordnet“ im
+ * Namen dessen, der gespeichert hat (mit Kanal/Schlüssel bei MCP).
+ *
+ * Keine Rechteprüfung: Der Aufrufer hat gerade selbst gespeichert, und die
+ * Zuordnung gibt niemandem etwas preis (die Tabelle sehen nur Admins).
+ */
+export async function assignNewPlaceTexts(
+  actor: Pick<Scope, "userId" | "via">,
+  texts?: string[],
+): Promise<NewPlaceTextsResult> {
+  const started = new Date();
+  const wanted = new Map<string, string>();
+  if (texts) {
+    for (const t of texts) {
+      const key = placeKey(t);
+      if (key && !wanted.has(key)) wanted.set(key, t.trim());
+    }
+  } else {
+    for (const t of (await collectPlaceTexts()).values()) wanted.set(t.key, t.text);
+  }
+  const result: NewPlaceTextsResult = { checked: 0, created: 0, unmatched: 0 };
+  if (!wanted.size) return result;
+
+  const existing = await prisma.place.findMany({
+    where: texts ? { key: { in: [...wanted.keys()] } } : undefined,
+    select: { key: true },
+  });
+  for (const p of existing) wanted.delete(p.key);
+  result.checked = wanted.size;
+  if (!wanted.size) return result;
+
+  const gaz = await getGazetteer();
+  const creates: Prisma.PlaceCreateManyInput[] = [];
+  for (const [key, text] of wanted) {
+    const m = matchPlace(gaz, text);
+    if (m) creates.push({ key, text, ...autoFields(m) });
+    else result.unmatched++;
+  }
+  if (!creates.length) return result;
+
+  await prisma.place.createMany({ data: creates, skipDuplicates: true });
+  // Nur selbst angelegte Zeilen protokollieren (ein paralleler Lauf kann
+  // denselben Text schon angelegt haben).
+  const createdRows = await prisma.place.findMany({
+    where: { key: { in: creates.map((c) => c.key) }, source: "AUTO", createdAt: { gte: started } },
+  });
+  result.created = createdRows.length;
+
+  const handle: ChangeSetHandle = { kind: "APP", title: "Orte automatisch zugeordnet" };
+  const actorFields = auditActor({ userId: actor.userId, via: actor.via, changeSet: handle });
+  const entries: Prisma.AuditLogUncheckedCreateInput[] = [];
+  for (const p of createdRows) {
+    entries.push(
+      await auditData({ ...actorFields, action: "CREATE", entityType: "Place", entityId: p.id, diff: { subject: p.text, ...pick(p) } }),
+    );
+  }
+  for (const chunk of chunks(entries, 1000)) await prisma.auditLog.createMany({ data: chunk });
+  return result;
+}
+
+const queue = ((globalThis as unknown as { __placeAutoAssign?: { tail: Promise<void> } }).__placeAutoAssign ??= {
+  tail: Promise.resolve(),
+});
+
+/** Abschaltbar für Tests (vitest.config.ts setzt PLACE_AUTO_ASSIGN=off). */
+export const placeAutoAssignEnabled = () => process.env.PLACE_AUTO_ASSIGN !== "off";
+
+/**
+ * Stößt die automatische Zuordnung neuer Ortstexte im Hintergrund an und
+ * kehrt sofort zurück — das Speichern wartet nicht darauf, und ein Fehler
+ * hier landet nur im Server-Log. Läufe werden nacheinander ausgeführt.
+ * `texts` weggelassen: alle offenen Ortstexte (nach Importen).
+ */
+export function queuePlaceAutoAssign(scope: Pick<Scope, "userId" | "via">, texts?: (string | null | undefined)[]): void {
+  try {
+    if (!placeAutoAssignEnabled()) return;
+    const list = texts?.map((t) => t?.trim()).filter((t): t is string => Boolean(t));
+    if (list && list.length === 0) return;
+    const actor = { userId: scope.userId, via: scope.via };
+    queue.tail = queue.tail
+      .then(() => assignNewPlaceTexts(actor, list))
+      .then(
+        () => undefined,
+        (err: unknown) => console.error("[places] Automatische Zuordnung neuer Ortstexte fehlgeschlagen:", err),
+      );
+  } catch (err) {
+    console.error("[places] Automatische Zuordnung nicht gestartet:", err);
+  }
+}
+
+/** Wartet, bis alle angestoßenen Hintergrund-Zuordnungen fertig sind (Tests). */
+export function placeAutoAssignIdle(): Promise<void> {
+  return queue.tail;
+}
+
+// ---------------------------------------------------------------------------
+// Eigene Orte (von Hand oder von der KI mit Koordinaten angelegt)
+// ---------------------------------------------------------------------------
+
+type OwnPlace = Pick<Place, "key" | "text" | "label" | "latitude" | "longitude" | "precision" | "source">;
+
+/** Zuordnungen mit eigenen Koordinaten (nicht aus dem Verzeichnis): Wüstungen, Höfe, Weiler … */
+async function loadOwnPlaces(): Promise<OwnPlace[]> {
+  return prisma.place.findMany({
+    where: { gazetteerId: null, unresolvable: false, latitude: { not: null }, longitude: { not: null } },
+    select: { key: true, text: true, label: true, latitude: true, longitude: true, precision: true, source: true },
+  });
+}
+
+/**
+ * Hat das Verzeichnis den ersten (spezifischsten) Teil als Ort getroffen?
+ * Sonst geht ein eigener Ort, der zu diesem Teil passt, vor („Hof Lindenau,
+ * Amt Peine“: nicht Peine, sondern der eigene Hof).
+ */
+function matchesFirstPart(m: NonNullable<ReturnType<typeof matchPlace>>, text: string): boolean {
+  return m.precision === "PLACE" && m.matchedPart === splitPlaceText(text)[0]?.raw;
+}
+
+const firstNameKey = (s: string) => normalizeForLookup(s.split(/[,;]/)[0].replace(/\([^)]*\)/g, " "));
+
+/** Eigene Orte, deren Text bzw. Bezeichnung (erster Teil) zum ersten Teil des Ortstexts passt; gleicher Text zuerst. */
+function matchOwnPlaces(own: OwnPlace[], text: string): { place: OwnPlace; exact: boolean }[] {
+  const key = placeKey(text);
+  const first = splitPlaceText(text)[0];
+  const lookups = new Set([firstNameKey(text), ...(first ? [...first.lookups, ...first.fallbacks] : [])].filter(Boolean));
+  return own
+    .map((place) => ({ place, exact: place.key === key }))
+    .filter(({ place, exact }) => exact || lookups.has(firstNameKey(place.text)) || (place.label ? lookups.has(firstNameKey(place.label)) : false))
+    .sort((a, b) => Number(b.exact) - Number(a.exact));
+}
+
+// ---------------------------------------------------------------------------
+// Vorschlag am Eingabefeld (Person, Ereignis, Beziehung)
+// ---------------------------------------------------------------------------
+
+export type PlaceHintDto = {
+  /** found: ein Ort erkannt; ambiguous: erkannt, aber es gibt weitere gleichen Namens; none: nichts gefunden. */
+  status: "found" | "ambiguous" | "none";
+  /** Erkannt als eigener Ort (von Hand bzw. von der KI angelegt), nicht aus dem Verzeichnis. */
+  own: boolean;
+  label: string | null;
+  precision: PlacePrecision | null;
+  /** Teil des Texts, der erkannt wurde. */
+  matchedPart: string | null;
+  /** Erkannt über den früheren bzw. deutschen Namen („Breslau“ für Wrocław). */
+  formerName: string | null;
+  /** Erkannt über einen weiteren Namen (z.B. in anderer Sprache). */
+  otherName: string | null;
+  /** Zahl weiterer Orte gleichen Namens. */
+  ambiguous: number;
+};
+
+const NONE: PlaceHintDto = {
+  status: "none",
+  own: false,
+  label: null,
+  precision: null,
+  matchedPart: null,
+  formerName: null,
+  otherName: null,
+  ambiguous: 0,
+};
+
+/** Wer irgendwo bearbeiten darf (Admin oder Bearbeiter einer Familie). */
+function requireEditor(scope: Scope) {
+  if (!scope.isAdmin && editableFamilyIds(scope).length === 0) throw forbiddenError("Ortsvorschläge");
+}
+
+/**
+ * Welcher Ort zu einem eingegebenen Ortstext erkannt wird — dieselbe Regel
+ * wie die automatische Zuordnung (matchPlace), dazu eigene Orte. Liefert nur
+ * Daten des Verzeichnisses bzw. Bezeichnung und Genauigkeit eigener Orte,
+ * nichts über Personen. Für Admins und Bearbeiter.
+ */
+export async function placeHint(scope: Scope, text: string): Promise<PlaceHintDto> {
+  requireEditor(scope);
+  const t = text.trim().slice(0, 500);
+  if (normalizeForLookup(t).length < 2) return NONE;
+  const [gaz, own] = await Promise.all([getGazetteer(), loadOwnPlaces()]);
+  const owns = matchOwnPlaces(own, t);
+  const ownHint = (o: OwnPlace, n: number): PlaceHintDto => ({
+    ...NONE,
+    status: n > 1 ? "ambiguous" : "found",
+    own: true,
+    label: o.label ?? o.text,
+    precision: o.precision,
+    matchedPart: t.split(/[,;]/)[0].trim(),
+    ambiguous: n - 1,
+  });
+  if (owns[0]?.exact) return ownHint(owns[0].place, 1);
+  const m = matchPlace(gaz, t);
+  if (!m) return owns.length ? ownHint(owns[0].place, owns.length) : NONE;
+  if (owns.length && !matchesFirstPart(m, t)) return ownHint(owns[0].place, owns.length);
+  const name = nameKindOf(m.entry, m.matchedPart);
+  const ambiguous = m.ambiguous + owns.length;
+  return {
+    status: ambiguous > 0 ? "ambiguous" : "found",
+    own: false,
+    label: m.label,
+    precision: m.precision,
+    matchedPart: m.matchedPart,
+    formerName: name.kind === "historic" ? name.name : null,
+    otherName: name.kind === "alternate" ? name.name : null,
+    ambiguous,
+  };
+}
+
+/** Lädt das Ortsverzeichnis vorab (beim Öffnen eines Formulars), ohne zu warten. */
+export function warmPlaceDirectory(scope: Scope): void {
+  requireEditor(scope);
+  void getGazetteer().catch((err: unknown) => console.error("[places] Ortsverzeichnis nicht ladbar:", err));
+}
+
+// ---------------------------------------------------------------------------
+// KI (MCP): Kandidaten, Liste mit Kontext, Zuordnung setzen
+// ---------------------------------------------------------------------------
+
+const KIND_LABEL = { P: "Ort", A: "Region", H: "historische Landschaft", C: "Land" } as const;
+
+export type PlaceCandidateDto = {
+  /** directory: mitgeliefertes Verzeichnis; own: eigener Ort (von Hand/KI mit Koordinaten angelegt). */
+  source: "directory" | "own";
+  gazetteerId: string | null;
+  label: string;
+  kind: string;
+  precision: PlacePrecision | null;
+  latitude: number;
+  longitude: number;
+  countryCode: string | null;
+  population: number | null;
+  /** Name, über den der Kandidat gefunden wurde, und welche Art Name das ist. */
+  matchedName: string | null;
+  nameKind: NameKind | null;
+  /** Entfernung zum empfohlenen Kandidaten. */
+  distanceKm: number | null;
+  recommended: boolean;
+};
+
+export type PlaceSuggestResult = {
+  text: string;
+  recommended: PlaceCandidateDto | null;
+  /** Weitere, weit entfernte Orte gleichen Namens (wie „mehrdeutig“ auf /admin/places). */
+  ambiguous: number;
+  candidates: PlaceCandidateDto[];
+  /** Vorhandene Zuordnung dieses Texts — nur für Administratoren. */
+  current?: PlaceAssignmentDto & { status: PlaceStatus };
+};
+
+/**
+ * Kandidaten für einen Ortstext: die automatische Wahl samt den übrigen
+ * gleichnamigen Kandidaten, passende eigene Orte und — ohne Treffer — die
+ * Präfixsuche im Verzeichnis. Liest nur das Verzeichnis und die eigenen Orte
+ * (Bezeichnung, Koordinaten); die vorhandene Zuordnung des Texts nur für Admins.
+ */
+export async function suggestPlaces(scope: Scope, text: string): Promise<PlaceSuggestResult> {
+  const t = text.trim().slice(0, 500);
+  const [gaz, own] = await Promise.all([getGazetteer(), loadOwnPlaces()]);
+  const m = t ? matchPlace(gaz, t) : null;
+  const owns = t ? matchOwnPlaces(own, t) : [];
+
+  const fromEntry = (e: GeoEntry, part: string | null, recommended: boolean): PlaceCandidateDto => {
+    const name = part ? nameKindOf(e, part) : null;
+    return {
+      source: "directory",
+      gazetteerId: e.id,
+      label: part ? labelForText(gaz, e, part) : labelForText(gaz, e, ""),
+      kind: KIND_LABEL[e.kind],
+      precision: PRECISION_OF_KIND[e.kind],
+      latitude: e.lat,
+      longitude: e.lon,
+      countryCode: e.cc || null,
+      population: e.pop || null,
+      matchedName: name?.name ?? null,
+      nameKind: name?.kind ?? null,
+      distanceKm: null,
+      recommended,
+    };
+  };
+  const ownCandidates = owns.map(({ place, exact }) => ({
+    source: "own" as const,
+    gazetteerId: null,
+    label: place.label ?? place.text,
+    kind: "eigener Ort",
+    precision: place.precision,
+    latitude: place.latitude!,
+    longitude: place.longitude!,
+    countryCode: null,
+    population: null,
+    matchedName: place.text,
+    nameKind: null,
+    distanceKm: null,
+    recommended: exact,
+  }));
+
+  // Eigener Ort vor dem Verzeichnis, wenn dieses nur einen allgemeineren Teil traf.
+  if (ownCandidates.length && !ownCandidates[0].recommended && (!m || !matchesFirstPart(m, t))) {
+    ownCandidates[0].recommended = true;
+  }
+  let candidates: PlaceCandidateDto[];
+  if (ownCandidates[0]?.recommended) {
+    candidates = [...ownCandidates, ...(m ? [m.entry, ...m.others].map((e) => fromEntry(e, m.matchedPart, false)) : [])];
+  } else if (m) {
+    candidates = [fromEntry(m.entry, m.matchedPart, true), ...m.others.map((e) => fromEntry(e, m.matchedPart, false)), ...ownCandidates];
+  } else {
+    const first = splitPlaceText(t)[0]?.raw ?? t;
+    candidates = [...ownCandidates, ...searchGazetteer(gaz, first, 10).map((e) => fromEntry(e, first, false))];
+  }
+  const recommended = candidates.find((c) => c.recommended) ?? null;
+  if (recommended) {
+    const from = { lat: recommended.latitude, lon: recommended.longitude };
+    for (const c of candidates) {
+      if (c !== recommended) c.distanceKm = Math.round(distanceKm(from, { lat: c.latitude, lon: c.longitude }));
+    }
+  }
+  const result: PlaceSuggestResult = {
+    text: t,
+    recommended,
+    ambiguous: (m?.ambiguous ?? 0) + owns.filter((o) => !o.exact).length,
+    candidates,
+  };
+  if (scope.isAdmin && t) {
+    const p = await prisma.place.findUnique({ where: { key: placeKey(t) } });
+    if (p) result.current = { ...toAssignment(p), status: statusOf(p) };
+  }
+  return result;
+}
+
+export type PlaceContextDto = {
+  /** Feldart → Anzahl: birth, death, marriage (Beginn einer Partnerschaft), divorce (Ende), event:<Ereignisart>. */
+  fields: Record<string, number>;
+  fromYear: number | null;
+  toYear: number | null;
+};
+
+/**
+ * Kontext zu Ortstexten für die KI (nur Admins): in welchen Feldarten und
+ * welchem Zeitraum sie vorkommen — ohne Personen. Schlüssel = placeKey.
+ */
+export async function placeTextContext(scope: Scope, keys: string[]): Promise<Map<string, PlaceContextDto>> {
+  requireAdmin(scope);
+  const out = new Map<string, PlaceContextDto>();
+  if (!keys.length) return out;
+  const wanted = new Set(keys);
+  const rows = await prisma.$queryRaw<{ t: string; kind: string; n: number; ymin: number | null; ymax: number | null }[]>`
+    SELECT t, kind, count(*)::int AS n, min(y)::int AS ymin, max(y)::int AS ymax FROM (
+      SELECT "birthPlace" AS t, 'birth' AS kind, extract(year FROM "birthDate") AS y FROM "Person" WHERE "birthPlace" IS NOT NULL
+      UNION ALL SELECT "deathPlace", 'death', extract(year FROM "deathDate") FROM "Person" WHERE "deathPlace" IS NOT NULL
+      UNION ALL SELECT "startPlace", 'marriage', extract(year FROM "startDate") FROM "Relationship" WHERE "startPlace" IS NOT NULL
+      UNION ALL SELECT "endPlace", 'divorce', extract(year FROM "endDate") FROM "Relationship" WHERE "endPlace" IS NOT NULL
+      UNION ALL SELECT "place", 'event:' || "type"::text, extract(year FROM "date") FROM "Event" WHERE "place" IS NOT NULL
+    ) s
+    WHERE btrim(t) <> ''
+    GROUP BY t, kind`;
+  for (const r of rows) {
+    const key = placeKey(r.t);
+    if (!wanted.has(key)) continue;
+    let c = out.get(key);
+    if (!c) out.set(key, (c = { fields: {}, fromYear: null, toYear: null }));
+    c.fields[r.kind] = (c.fields[r.kind] ?? 0) + r.n;
+    if (r.ymin !== null) c.fromYear = c.fromYear === null ? r.ymin : Math.min(c.fromYear, r.ymin);
+    if (r.ymax !== null) c.toYear = c.toYear === null ? r.ymax : Math.max(c.toYear, r.ymax);
+  }
+  return out;
+}
+
+export const AI_ASSIGN_MAX = 50;
+
+export const aiPlaceAssignSchema = z
+  .object({
+    text: z.string().trim().min(1).max(500),
+    gazetteerId: z.string().min(1).max(32).optional(),
+    latitude: z.number().min(-90).max(90).optional(),
+    longitude: z.number().min(-180).max(180).optional(),
+    label: z.string().trim().min(1).max(200).optional(),
+    precision: z.enum(["PLACE", "REGION", "COUNTRY"]).optional(),
+    unresolvable: z.literal(true).optional(),
+    uncertain: z.boolean().optional(),
+    note: z.string().trim().max(1000).optional(),
+  })
+  .superRefine((v, ctx) => {
+    const coords = v.latitude !== undefined || v.longitude !== undefined;
+    const modes = [v.gazetteerId !== undefined, coords, v.unresolvable === true].filter(Boolean).length;
+    if (modes !== 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Genau eines angeben: gazetteer_id, latitude+longitude+label oder unresolvable.",
+      });
+    }
+    if (coords && (v.latitude === undefined || v.longitude === undefined || !v.label)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Eigener Ort: latitude, longitude und label angeben." });
+    }
+  });
+export type AiPlaceAssignInput = z.infer<typeof aiPlaceAssignSchema>;
+
+export type AiPlaceAssignResult = {
+  text: string;
+  ok: boolean;
+  status?: PlaceStatus;
+  label?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  /** Vorherige Herkunft, falls überschrieben (AUTO bzw. AI). */
+  replaced?: "AUTO" | "AI";
+  error?: string;
+};
+
+/**
+ * Zuordnungen des KI-Assistenten (MCP assign_place), bis AI_ASSIGN_MAX je
+ * Aufruf: Verzeichniseintrag, eigener Ort mit Koordinaten oder „nicht
+ * zuordenbar“, gekennzeichnet als Herkunft AI, optional unsicher und mit
+ * Begründung. Überschreibt AUTO und AI, nie MANUAL (Eintrag mit Fehler,
+ * die übrigen laufen weiter). Nur Administratoren, wie /admin/places.
+ */
+export async function assignPlacesByAi(scope: Scope, raw: unknown[]): Promise<AiPlaceAssignResult[]> {
+  requireAdmin(scope);
+  if (raw.length === 0 || raw.length > AI_ASSIGN_MAX) {
+    throw validationError([{ path: "assignments", message: `1 bis ${AI_ASSIGN_MAX} Zuordnungen je Aufruf.` }]);
+  }
+  const items: AiPlaceAssignInput[] = [];
+  const issues: { path: string; message: string }[] = [];
+  raw.forEach((r, i) => {
+    const parsed = aiPlaceAssignSchema.safeParse(r);
+    if (parsed.success) items.push(parsed.data);
+    else for (const is of parsed.error.issues) issues.push({ path: ["assignments", i, ...is.path].join("."), message: is.message });
+  });
+  if (issues.length) throw validationError(issues);
+
+  const texts = await collectPlaceTexts();
+  const gaz = items.some((i) => i.gazetteerId) ? await getGazetteer() : null;
+  const byId = gaz ? new Map(items.filter((i) => i.gazetteerId).map((i) => [i.gazetteerId!, gaz.entries.find((e) => e.id === i.gazetteerId) ?? null])) : null;
+  nameChangeSet(scope, items.length === 1 ? `Ort zugeordnet (KI): „${items[0].text.slice(0, 80)}“` : "Orte zugeordnet (KI)");
+
+  const results: AiPlaceAssignResult[] = [];
+  for (const it of items) {
+    const key = placeKey(it.text);
+    const existing = await prisma.place.findUnique({ where: { key } });
+    if (existing?.source === "MANUAL") {
+      results.push({ text: it.text, ok: false, status: statusOf(existing), label: existing.label, error: "Von Hand bestätigt — die KI ändert das nicht." });
+      continue;
+    }
+    const occurring = texts.get(key);
+    if (!occurring) {
+      results.push({ text: it.text, ok: false, error: "Dieser Ortstext kommt in den Daten nicht vor (siehe list_places)." });
+      continue;
+    }
+    const base = { source: "AI" as const, note: it.note || null, uncertain: it.uncertain ?? false };
+    let next: PlaceFields;
+    if (it.gazetteerId) {
+      const e = byId!.get(it.gazetteerId);
+      if (!e) {
+        results.push({ text: it.text, ok: false, error: `Unbekannte gazetteer_id „${it.gazetteerId}“.` });
+        continue;
+      }
+      next = {
+        ...base,
+        unresolvable: false,
+        precision: PRECISION_OF_KIND[e.kind],
+        latitude: e.lat,
+        longitude: e.lon,
+        label: labelForText(gaz!, e, occurring.text),
+        countryCode: e.cc || null,
+        gazetteerId: e.id,
+      };
+    } else if (it.unresolvable) {
+      next = { ...EMPTY, ...base, unresolvable: true };
+    } else {
+      next = {
+        ...base,
+        unresolvable: false,
+        precision: it.precision ?? "PLACE",
+        latitude: Math.round(it.latitude! * 1e5) / 1e5,
+        longitude: Math.round(it.longitude! * 1e5) / 1e5,
+        label: it.label!.trim(),
+        countryCode: null,
+        gazetteerId: null,
+      };
+    }
+    const saved = await upsertPlace(scope, key, occurring.text, existing, next);
+    results.push({
+      text: occurring.text,
+      ok: true,
+      status: statusOf(saved),
+      label: saved.label,
+      latitude: saved.latitude,
+      longitude: saved.longitude,
+      ...(existing ? { replaced: existing.source as "AUTO" | "AI" } : {}),
+    });
+  }
+  return results;
+}
+
+// ---------------------------------------------------------------------------
+// Ort im Eingabefeld auswählen (Bearbeiter)
+// ---------------------------------------------------------------------------
+
+export const placeChoiceSchema = z
+  .object({
+    text: z.string().trim().min(1).max(500),
+    personId: z.string().min(1).max(64).optional(),
+    eventId: z.string().min(1).max(64).optional(),
+    relationshipId: z.string().min(1).max(64).optional(),
+    gazetteerId: z.string().min(1).max(32).optional(),
+    latitude: z.number().min(-90).max(90).optional(),
+    longitude: z.number().min(-180).max(180).optional(),
+    label: z.string().trim().min(1).max(200).optional(),
+    precision: z.enum(["PLACE", "REGION", "COUNTRY"]).optional(),
+  })
+  .refine((v) => [v.personId, v.eventId, v.relationshipId].filter(Boolean).length === 1, {
+    message: "Genau einen Eintrag angeben (personId, eventId oder relationshipId).",
+  })
+  .refine((v) => Boolean(v.gazetteerId) !== (v.latitude !== undefined && v.longitude !== undefined && Boolean(v.label)), {
+    message: "Entweder gazetteerId oder latitude, longitude und label (eigener Ort).",
+  });
+export type PlaceChoiceInput = z.infer<typeof placeChoiceSchema>;
+
+/** Ortstexte eines Eintrags, wenn der Benutzer ihn bearbeiten darf (sonst Fehler). */
+async function editablePlaceTexts(scope: Scope, input: PlaceChoiceInput): Promise<string[]> {
+  if (input.personId) {
+    const p = await prisma.person.findUnique({
+      where: { id: input.personId },
+      select: { birthPlace: true, deathPlace: true, families: { select: { familyId: true } } },
+    });
+    const fam = p?.families.map((f) => f.familyId) ?? [];
+    if (!p || !canViewPerson(scope, fam)) throw notFoundError("Person");
+    if (!canEditPerson(scope, fam)) throw forbiddenError("diese Person zu ändern");
+    return [p.birthPlace, p.deathPlace].filter((t): t is string => Boolean(t));
+  }
+  const relAccess = async (fromId: string, toId: string) => {
+    const fam = await familyIdsOf([fromId, toId]);
+    const from = fam.get(fromId) ?? [];
+    const to = fam.get(toId) ?? [];
+    if (!canViewPerson(scope, from) && !canViewPerson(scope, to)) return "hidden";
+    return canEditRelationshipBetween(scope, from, to) ? "edit" : "read";
+  };
+  if (input.relationshipId) {
+    const r = await prisma.relationship.findUnique({ where: { id: input.relationshipId } });
+    if (!r) throw notFoundError("Beziehung");
+    const a = await relAccess(r.fromPersonId, r.toPersonId);
+    if (a === "hidden") throw notFoundError("Beziehung");
+    if (a === "read") throw forbiddenError("diese Beziehung zu ändern");
+    return [r.startPlace, r.endPlace].filter((t): t is string => Boolean(t));
+  }
+  const e = await prisma.event.findUnique({
+    where: { id: input.eventId! },
+    select: { place: true, personId: true, relationship: { select: { fromPersonId: true, toPersonId: true } } },
+  });
+  if (!e) throw notFoundError("Ereignis");
+  if (e.personId) {
+    const fam = (await familyIdsOf([e.personId])).get(e.personId) ?? [];
+    if (!canViewPerson(scope, fam)) throw notFoundError("Ereignis");
+    if (!canEditPerson(scope, fam)) throw forbiddenError("dieses Ereignis zu ändern");
+  } else if (e.relationship) {
+    const a = await relAccess(e.relationship.fromPersonId, e.relationship.toPersonId);
+    if (a === "hidden") throw notFoundError("Ereignis");
+    if (a === "read") throw forbiddenError("dieses Ereignis zu ändern");
+  }
+  return e.place ? [e.place] : [];
+}
+
+/**
+ * Auswahl im Ortsfeld: ordnet GENAU den Freitext dieses Eintrags dem
+ * gewählten Ort zu (Verzeichniseintrag oder eigener Ort mit Koordinaten),
+ * Herkunft „von Hand“. Der Freitext bleibt unverändert; die Verbindung läuft
+ * wie immer über den normalisierten Text (kein Fremdschlüssel).
+ *
+ * Rechte: Wer den Eintrag (Person, Ereignis, Beziehung) bearbeiten darf —
+ * bewusst nicht die Admin-Route `/api/places`, die alle Ortstexte zeigt.
+ * Der Text muss an diesem Eintrag stehen. Eine von Hand bestätigte
+ * Zuordnung desselben Texts mit anderem Ziel ändert nur ein Administrator
+ * (CONFLICT) — sie gilt auch für Angaben anderer Personen. Andere Texte
+ * werden nie berührt.
+ */
+export async function choosePlaceForEntry(scope: Scope, raw: unknown): Promise<PlaceAssignmentDto> {
+  const parsed = placeChoiceSchema.safeParse(raw);
+  if (!parsed.success) throw validationError(parsed.error.issues.map((i) => ({ path: i.path.join(".") || "text", message: i.message })));
+  const input = parsed.data;
+  const key = placeKey(input.text);
+  const texts = await editablePlaceTexts(scope, input);
+  const own = texts.find((t) => placeKey(t) === key);
+  if (!own) throw validationError([{ path: "text", message: "Dieser Ortstext steht nicht an diesem Eintrag." }]);
+
+  let next: PlaceFields;
+  if (input.gazetteerId) {
+    const gaz = await getGazetteer();
+    const e = gaz.entries.find((x) => x.id === input.gazetteerId);
+    if (!e) throw notFoundError("Ort im Verzeichnis");
+    next = {
+      source: "MANUAL",
+      unresolvable: false,
+      precision: PRECISION_OF_KIND[e.kind],
+      latitude: e.lat,
+      longitude: e.lon,
+      label: labelForText(gaz, e, own),
+      countryCode: e.cc || null,
+      gazetteerId: e.id,
+      note: null,
+      uncertain: false,
+    };
+  } else {
+    next = {
+      source: "MANUAL",
+      unresolvable: false,
+      precision: input.precision ?? "PLACE",
+      latitude: Math.round(input.latitude! * 1e5) / 1e5,
+      longitude: Math.round(input.longitude! * 1e5) / 1e5,
+      label: input.label!.trim(),
+      countryCode: null,
+      gazetteerId: null,
+      note: null,
+      uncertain: false,
+    };
+  }
+  const existing = await prisma.place.findUnique({ where: { key } });
+  if (existing?.source === "MANUAL" && !existing.unresolvable) {
+    const same = existing.gazetteerId === next.gazetteerId && existing.latitude === next.latitude && existing.longitude === next.longitude;
+    if (same) return toAssignment(existing);
+    if (!scope.isAdmin) {
+      throw new ServiceError(
+        "CONFLICT",
+        `„${existing.text}“ ist bereits von Hand ${existing.label ?? "einem Ort"} zugeordnet — das ändert nur ein Administrator (Orte zuordnen).`,
+      );
+    }
+  }
+  nameChangeSet(scope, `Ort ausgewählt: „${own.slice(0, 80)}“`);
+  return toAssignment(await upsertPlace(scope, key, own, existing, next));
 }

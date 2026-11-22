@@ -31,8 +31,12 @@ import { EVENT_TYPES, PERSON_NAME_TYPES } from "./events";
  * Version 4: Bilder an Quellen (`sources[].media`, zusätzlich zum Hauptscan
  * `mediaId`), an Ereignissen (`events[].media`) und an Belegen
  * (`citations[].media`) — je `{ mediaId, sortOrder }`, Verweis auf `media`.
+ *
+ * Version 5: Ortszuordnungen (`places`) zusätzlich zum Freitext — je
+ * Ortstext Koordinaten, Bezeichnung, Herkunft (lib/services/place-export.ts).
+ * Beim Einspielen werden nur Texte ohne vorhandene Zuordnung übernommen.
  */
-export const EXCHANGE_VERSION = 4;
+export const EXCHANGE_VERSION = 5;
 
 /** Verweis auf ein Bild in `media` (ab Version 4 an Quellen, Ereignissen, Belegen). */
 const mediaLinks = z
@@ -229,6 +233,21 @@ export const rawRecordSchema = z.object({
   superseded: z.boolean().optional(),
 });
 
+/** Ortszuordnung (ab Version 5); Schlüssel ist der normalisierte Text. */
+export const placeSchema = z.object({
+  text: z.string().min(1).max(500),
+  source: z.enum(["AUTO", "MANUAL", "AI"]),
+  unresolvable: z.boolean().default(false),
+  precision: z.enum(["PLACE", "REGION", "COUNTRY"]).nullable().optional(),
+  latitude: z.number().min(-90).max(90).nullable().optional(),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
+  label: z.string().max(500).nullable().optional(),
+  countryCode: z.string().max(8).nullable().optional(),
+  gazetteerId: z.string().max(40).nullable().optional(),
+  note: z.string().max(2000).nullable().optional(),
+  uncertain: z.boolean().optional(),
+});
+
 export const exchangeSchema = z.object({
   version: z.number(),
   exportedAt: z.string().optional(),
@@ -241,6 +260,7 @@ export const exchangeSchema = z.object({
   personNames: z.array(personNameSchema).default([]),
   externalIds: z.array(externalIdSchema).default([]),
   rawRecords: z.array(rawRecordSchema).default([]),
+  places: z.array(placeSchema).default([]),
 });
 
 export type ExchangeFile = z.infer<typeof exchangeSchema>;

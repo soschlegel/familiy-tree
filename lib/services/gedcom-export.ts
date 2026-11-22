@@ -38,6 +38,7 @@ import {
 } from "../gedcom-import/mapping";
 import type { EventTypeName } from "../events";
 import { buildExport } from "./exchange-export";
+import { gedcomPlaceResolver } from "./place-export";
 import { selectionFileSuffix, type ExportSelection } from "../export-selection";
 import { REJECTED_RAW_SUFFIX } from "./import-apply";
 
@@ -194,7 +195,9 @@ function overlayEvent(base: GedcomEvent, orig: GedcomEvent | undefined, raw: Raw
   if (orig.updated) base.updated = orig.updated;
   if (orig.preferred !== undefined) base.preferred = orig.preferred;
   if (!base.externalIds.length) base.externalIds = orig.externalIds ?? [];
-  if (orig.place && base.place && orig.place.name === base.place.name) base.place = { ...orig.place, notes: inlineNotes(orig.place.notes, raw) };
+  // Ursprünglicher PLAC (mit eigenen Zusätzen) nur, solange der Text nicht durch
+  // einen zugeordneten Ort ersetzt wurde (dann trägt base.place MAP und NOTE).
+  if (orig.place && base.place && !base.place.notes.length && orig.place.name === base.place.name) base.place = { ...orig.place, notes: inlineNotes(orig.place.notes, raw) };
   if (orig.address && base.address) {
     const emails = orig.address.emails ?? [];
     base.address = { ...orig.address, emails, phones: orig.address.phones ?? [], faxes: orig.address.faxes ?? [], urls: orig.address.urls ?? [] };
@@ -279,6 +282,13 @@ export async function buildGedcomExport(
     rawRecords: { id: string; personId: string | null; relationshipId: string | null; sourceId: string | null; recordType: string; xref: string | null; content: unknown; superseded: boolean }[];
   };
   const prefix = options.mediaPrefix ?? "media/";
+  // Zugeordnete Orte: heutige Form „Ort, Region, Land“ mit MAP und dem
+  // Originaltext als NOTE (lib/services/place-export.ts).
+  const gedPlace = await gedcomPlaceResolver([
+    ...d.persons.flatMap((p) => [p.birthPlace, p.deathPlace]),
+    ...d.relationships.flatMap((r) => [r.startPlace, r.endPlace]),
+    ...d.events.map((e) => e.place),
+  ] as (string | null | undefined)[]);
 
   // Herkunft: Schlüssel der Quelle für Personen, Beziehungen, Ereignisse, Belege
   const ids = (list: { id: string }[]) => list.map((x) => x.id);
@@ -424,7 +434,7 @@ export async function buildGedcomExport(
     if (e.value) g.value = String(e.value);
     const date = appDateToGedcom(e, "date");
     if (date) g.date = date;
-    if (e.place) g.place = { name: String(e.place), parts: String(e.place).split(",").map((s) => s.trim()), notes: [], citations: [], extensions: [] };
+    if (e.place) g.place = gedPlace(String(e.place));
     if (e.address) g.address = { text: String(e.address), phones: [], emails: [], faxes: [], urls: [] };
     if (e.cause) g.cause = String(e.cause);
     if (e.age) g.age = String(e.age);
@@ -523,7 +533,7 @@ export async function buildGedcomExport(
       if (!date && !p[place] && !(type === "DEATH" && p.deathCause) && !cites.length && !main) continue;
       const g = ev(type);
       if (date) g.date = date;
-      if (p[place]) g.place = { name: String(p[place]), parts: String(p[place]).split(",").map((s) => s.trim()), notes: [], citations: [], extensions: [] };
+      if (p[place]) g.place = gedPlace(String(p[place]));
       if (type === "DEATH" && p.deathCause) g.cause = String(p.deathCause);
       if (!date && !g.place && !g.cause) g.value = "Y";
       g.citations = cites.map((c) => citationOf(c, idx, raw));
@@ -589,7 +599,7 @@ export async function buildGedcomExport(
     if (start || r.startPlace || (married && idx?.main.MARRIAGE)) {
       const g = ev(married ? "MARRIAGE" : "CUSTOM_EVENT", married ? {} : { label: "Beginn der Partnerschaft" });
       if (start) g.date = start;
-      if (r.startPlace) g.place = { name: String(r.startPlace), parts: String(r.startPlace).split(",").map((s) => s.trim()), notes: [], citations: [], extensions: [] };
+      if (r.startPlace) g.place = gedPlace(String(r.startPlace));
       if (!start && !g.place) g.value = "Y";
       if (married) {
         g.citations = cites.filter((c) => c.fact === "PARTNERSHIP").map((c) => citationOf(c, idx, raw));
@@ -601,7 +611,7 @@ export async function buildGedcomExport(
       const div = r.subtype === "DIVORCED";
       const g = ev(div ? "DIVORCE" : "CUSTOM_EVENT", div ? {} : { label: "Ende der Partnerschaft" });
       if (end) g.date = end;
-      if (r.endPlace) g.place = { name: String(r.endPlace), parts: String(r.endPlace).split(",").map((s) => s.trim()), notes: [], citations: [], extensions: [] };
+      if (r.endPlace) g.place = gedPlace(String(r.endPlace));
       if (div && idx?.main.DIVORCE) overlayEvent(g, idx.main.DIVORCE, raw, undefined);
       events.push(g);
     }

@@ -17,6 +17,27 @@ Regeln für neue Einträge (AGENTS.md, Abschnitt 3 „Ausrollen“):
 - Geprüft von tests/release-notes.test.ts (lib/release-notes.ts).
 -->
 
+## 2026-11-22.4 — Orte: Vorschlag beim Eingeben, Ortsseiten und KI
+
+- Beim Eintippen eines Orts siehst du gleich darunter, welcher Ort gemeint
+  ist — auch bei alten Namen: „Breslau“ → „Wrocław (Breslau), Polen“. Gibt es
+  mehrere Orte dieses Namens, steht „mehrdeutig“ dabei.
+- Mit „Ort wählen …“ suchst du dir den richtigen Ort selbst aus. Dein Text
+  bleibt dabei genau so, wie du ihn eingegeben hast.
+- Neue Orte kommen jetzt von selbst auf die Karte: nach dem Speichern und
+  nach einem Import, ohne dass jemand „Automatisch zuordnen“ drücken muss.
+- Jeder Ort hat eine eigene Seite: heutiger und früherer Name, Lage auf
+  einer kleinen Karte, alle Schreibweisen und die Personen, die dort
+  geboren wurden, geheiratet haben oder gestorben sind. Auf der Personenseite
+  führt jeder erkannte Ort dorthin.
+- Der KI-Assistent kann offene Orte für Administratoren zuordnen, auch
+  fehlende Orte wie Höfe oder Wüstungen anlegen. Seine Vorschläge stehen
+  unter „Orte zuordnen“ als „von KI“ mit Begründung und lassen sich dort
+  bestätigen.
+- Im GEDCOM-Export stehen Orte jetzt mit heutigem Namen, Region, Land und
+  Koordinaten; dein ursprünglicher Text steht als Notiz dabei und kommt beim
+  Wiedereinlesen zurück.
+
 ## 2026-11-22.3 — Neuigkeiten und Hilfe in der App
 
 - Neue Seite „Hilfe“ (Link unten in der Fußzeile und im Menü „Verwaltung“):

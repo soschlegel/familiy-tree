@@ -24,6 +24,8 @@ export type GeoEntry = {
   kind: GeoKind;
   /** Deutscher bzw. historischer Name, wenn er sich vom heutigen unterscheidet („Breslau“ zu „Wrocław“). */
   de: string;
+  /** Weitere Namen wie in der Datei (durch „;“ getrennt) — für die Ortsseite. */
+  alt: string;
 };
 
 export type Gazetteer = {
@@ -71,6 +73,7 @@ export function parseGazetteer(text: string): Gazetteer {
       pop: Number(c[7]) || 0,
       kind,
       de: (c[9] ?? "").trim(),
+      alt: c[2] ?? "",
     };
     if (!Number.isFinite(entry.lat) || !Number.isFinite(entry.lon)) continue;
     const idx = entries.length;
@@ -125,6 +128,23 @@ function bracketName(gaz: Gazetteer, e: GeoEntry, dataName?: string | null): str
     if (key && key !== own && (gaz.byName.get(key) ?? []).some((i) => gaz.entries[i] === e)) return clean;
   }
   return e.de && normalizeForLookup(e.de) !== own ? e.de : null;
+}
+
+/**
+ * Welcher Name eines Eintrags in einem Teil des Ortstexts steht:
+ * `official` (heutiger Hauptname, auch in anderer Schreibweise wie
+ * „Wroclaw“/„Timişoara“), `historic` (der deutsche bzw. frühere Name aus dem
+ * Verzeichnis, „Breslau“) oder `alternate` (ein weiterer Name, z.B. in
+ * anderer Sprache). Rein, für den Vorschlag am Eingabefeld und `suggest_place`.
+ */
+export type NameKind = "official" | "historic" | "alternate";
+
+export function nameKindOf(e: GeoEntry, part: string): { name: string; kind: NameKind } {
+  const clean = stripParen(part);
+  const key = normalizeForLookup(clean);
+  if (!key || key === normalizeForLookup(e.name)) return { name: e.name, kind: "official" };
+  if (e.de && key === normalizeForLookup(e.de)) return { name: clean, kind: "historic" };
+  return { name: clean, kind: "alternate" };
 }
 
 /**

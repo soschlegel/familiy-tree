@@ -36,7 +36,14 @@ export type PlaceMatch = {
   matchedPart: string;
   /** Weitere, weit entfernte Kandidaten gleichen Namens. */
   ambiguous: number;
+  /**
+   * Die übrigen Kandidaten desselben Teils in Rangfolge (höchstens
+   * MAX_OTHERS) — für den Vorschlag an die KI („A, B oder C“).
+   */
+  others: GeoEntry[];
 };
+
+export const MAX_OTHERS = 9;
 
 export const ANCHOR_KM = 50;
 export const AMBIGUOUS_KM = 25;
@@ -85,12 +92,13 @@ type RegionHint = { entry: GeoEntry; index: number };
 export function matchPlace(gaz: Gazetteer, text: string): PlaceMatch | null {
   const parts: PlacePart[] = splitPlaceText(text);
   if (parts.length === 0) return null;
-  const result = (entry: GeoEntry, precision: MatchPrecision, part: PlacePart, ambiguous = 0): PlaceMatch => ({
+  const result = (entry: GeoEntry, precision: MatchPrecision, part: PlacePart, ambiguous = 0, others: GeoEntry[] = []): PlaceMatch => ({
     entry,
     precision,
     label: entryLabel(gaz, entry, part.raw),
     matchedPart: part.raw,
     ambiguous,
+    others,
   });
 
   // 1. Land im letzten Teil.
@@ -199,18 +207,19 @@ export function matchPlace(gaz: Gazetteer, text: string): PlaceMatch | null {
     }
     if (!cands.length) continue;
 
-    const best = [...cands].sort(
+    const sorted = [...cands].sort(
       (a, b) =>
         Number(b.cc === country?.cc) - Number(a.cc === country?.cc) ||
         rank(b) - rank(a) ||
         a.id.localeCompare(b.id),
-    )[0];
+    );
+    const best = sorted[0];
     // Mehrdeutig nur, wenn ein entfernter Kandidat ähnlich bedeutend ist — ein
     // Weiler gleichen Namens macht Göttingen nicht zweifelhaft.
     const ambiguous = cands.filter(
       (c) => c !== best && distanceKm(c, best) > AMBIGUOUS_KM && (best.pop === 0 || c.pop * 10 >= best.pop),
     ).length;
-    return result(best, "PLACE", part, ambiguous);
+    return result(best, "PLACE", part, ambiguous, sorted.slice(1, 1 + MAX_OTHERS));
   }
 
   // 4. Region, dann Land.

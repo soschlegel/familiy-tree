@@ -1,9 +1,14 @@
+import type { APIRequestContext } from "@playwright/test";
+
 import { test, expect, authFile } from "../support/fixtures";
-import { apiAs } from "../support/api";
+import { apiAs, deletePerson, uniq } from "../support/api";
+import { mock } from "../support/mock";
 
 /**
  * Orte zuordnen (nur Admins): nicht zuordenbar, zurücksetzen, automatisch
  * zuordnen, Ort aus dem Verzeichnis wählen, Koordinaten von Hand, Protokoll.
+ * Dazu der Vorschlag am Ortsfeld (ohne zu speichern) und eine Zuordnung
+ * über den KI-Zugang („von KI“, bestätigen).
  * Arbeitet an „Lüneburg“ und „Hannover (Amtsgericht)“ und stellt zum Schluss
  * die automatische Zuordnung wieder her.
  */
@@ -85,4 +90,106 @@ test("Karte übernimmt die Zuordnung", async () => {
   const view = await (await admin.get("/api/map?mode=all")).json();
   expect(view.payload.places.some((p: { label: string }) => p.label === "Amtsgericht Hannover")).toBe(true);
   await admin.dispose();
+});
+
+const secretOf = (key: string) => mock.apiTokens.find((t) => t.id === `mock-token-${key}`)!.secret;
+async function mcpCall(request: APIRequestContext, key: string, name: string, args: Record<string, unknown>) {
+  const res = await request.post("/api/mcp", {
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+      Authorization: `Bearer ${secretOf(key)}`,
+    },
+    data: { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } },
+  });
+  expect(res.status()).toBe(200);
+  return (await res.json()).result as { isError?: boolean; structuredContent?: Record<string, unknown> };
+}
+
+test.describe("Vorschlag am Ortsfeld", () => {
+  test.use({ storageState: authFile("editor") });
+  test("zeigt beim Tippen den erkannten Ort, ohne den Text zu ändern", async ({ page }) => {
+    await page.goto("/people/new");
+    const field = page.getByLabel("Geburtsort");
+    await field.fill("Breslau, Schlesien");
+    const hint = page.getByTestId("place-hint").first();
+    await expect(hint).toContainText("Wrocław (Breslau), Polen");
+    await expect(hint).toContainText("früherer bzw. deutscher Name: Breslau");
+    await expect(field).toHaveValue("Breslau, Schlesien");
+    await page.getByLabel("Sterbeort").fill("Qxzvwy Nirgendwo");
+    await expect(page.getByTestId("place-hint").nth(1)).toContainText("Ort nicht gefunden");
+  });
+});
+
+test.describe("Ort auswählen, Personenseite, Ortsseite", () => {
+  test.use({ storageState: authFile("editor") });
+  test("Auswahl im Ortsfeld wird gespeichert; Freitext bleibt, Link zur Ortsseite", async ({ page }) => {
+    const surname = `Ortswahl${uniq().replace(/[^a-z]/g, "")}`;
+    await page.goto("/people/new");
+    await page.getByLabel("Vorname").fill("E2E Ida");
+    await page.getByLabel("Nachname").fill(surname);
+    await page.getByLabel("Geburtsort").fill("Danzig");
+    const hint = page.getByTestId("place-hint").first();
+    await expect(hint).toContainText("Gdańsk (Danzig)");
+    await hint.getByTestId("place-choose").click();
+    await hint.getByTestId("place-candidates").getByRole("button", { name: /^Gdańsk/ }).first().click();
+    await expect(hint).toHaveAttribute("data-status", "chosen");
+    await page.getByRole("button", { name: "Person anlegen" }).click();
+    await expect(page).toHaveURL(/\/people\/[^/]+$/);
+    const id = page.url().split("/").pop()!;
+    try {
+      const birth = page.getByTestId("person-birth");
+      await expect(birth.getByTestId("place-link")).toHaveText("Danzig");
+      await expect(birth).toContainText("→ Gdańsk, Polen");
+      await birth.getByTestId("place-link").click();
+      await expect(page.getByTestId("place-title")).toHaveText("Gdańsk (Danzig), Polen");
+      await expect(page.getByTestId("place-entries")).toContainText(surname);
+      await expect(page.getByTestId("place-texts")).toContainText("Danzig");
+      await expect(page.getByTestId("place-sources")).toContainText("von Hand");
+    } finally {
+      const api = await apiAs("admin");
+      await deletePerson(api, id);
+      await api.put("/api/places", { data: { action: "reset", text: "Danzig" } });
+      await api.dispose();
+    }
+  });
+});
+
+test("Zuordnung über den KI-Zugang: „von KI“ mit Begründung, Admin bestätigt", async ({ page, request }) => {
+  const r0 = await mcpCall(request, "admin-write", "assign_place", {
+    text: LUENEBURG,
+    latitude: 53.25,
+    longitude: 10.41,
+    label: "Lüneburg (Altstadt), Niedersachsen, Deutschland",
+    uncertain: true,
+    note: "Lage der Altstadt",
+  });
+  expect(r0.isError, JSON.stringify(r0)).toBeFalsy();
+  // Von Hand bestätigt (erster Test) — die KI ändert das nicht.
+  expect((r0.structuredContent as { failed: number }).failed).toBe(1);
+  const admin = await apiAs("admin");
+  await admin.put("/api/places", { data: { action: "reset", text: LUENEBURG } });
+  await admin.dispose();
+  const r = await mcpCall(request, "admin-write", "assign_place", {
+    text: LUENEBURG,
+    latitude: 53.25,
+    longitude: 10.41,
+    label: "Lüneburg (Altstadt), Niedersachsen, Deutschland",
+    uncertain: true,
+    note: "Lage der Altstadt",
+  });
+  expect((r.structuredContent as { assigned: number }).assigned).toBe(1);
+
+  await page.goto("/admin/places?status=ai&q=l%C3%BCneburg");
+  const rr = row(page, "lüneburg");
+  await expect(rr).toHaveAttribute("data-status", "ai");
+  await expect(rr.getByTestId("place-status")).toHaveText("von KI");
+  await expect(rr.getByTestId("place-uncertain")).toBeVisible();
+  await expect(rr.getByTestId("place-note")).toContainText("Begründung der KI: Lage der Altstadt");
+  await rr.getByTestId("place-confirm").click();
+  // Bestätigt: verschwindet aus dem Filter „von KI“.
+  await expect(rr).toHaveCount(0);
+  await page.goto("/admin/places?q=l%C3%BCneburg");
+  await expect(rr).toHaveAttribute("data-status", "manual");
+  await expect(rr.getByTestId("place-assignment")).toContainText("Lüneburg (Altstadt)");
 });

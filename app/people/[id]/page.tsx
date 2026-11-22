@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { PlaceText } from "@/components/PlaceText";
+import { placeLinksFor } from "@/lib/services/place-pages";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 
@@ -22,6 +24,7 @@ import { ALTERNATIVE_ONLY_TYPES } from "@/lib/events";
 import {
   partnerCardDescription,
   partnerPlaces,
+  isMarriage,
   partnershipNoun,
 } from "@/lib/partner-labels";
 import { EventSection, type EventOwnerOption, type EventRow } from "@/components/EventSection";
@@ -479,8 +482,26 @@ export default async function PersonPage({
     }))
     .sort((a, b) => a.label.localeCompare(b.label));
 
-  const birth = [formatDateOf(person, "birthDate"), person.birthPlace].filter(Boolean).join(" in ");
-  const death = [formatDateOf(person, "deathDate"), person.deathPlace].filter(Boolean).join(" in ");
+  // Ortsverweise der Seite in einer Abfrage (Freitext → Ortsseite).
+  const placeLinks = await placeLinksFor([
+    person.birthPlace,
+    person.deathPlace,
+    ...detail.relations.flatMap((r) => (r.other.restricted ? [] : [r.startPlace, r.endPlace])),
+    ...allEvents.map((e) => e.place),
+  ]);
+  const fact = (key: "birthDate" | "deathDate", place: string | null) => {
+    const date = formatDateOf(person, key);
+    if (!date && !place) return null;
+    return (
+      <>
+        {date}
+        {date && place && " in "}
+        <PlaceText text={place} links={placeLinks} />
+      </>
+    );
+  };
+  const birth = fact("birthDate", person.birthPlace);
+  const death = fact("deathDate", person.deathPlace);
   const deceased = Boolean(person.deathDate || person.deathDatePhrase);
 
   return (
@@ -588,6 +609,7 @@ export default async function PersonPage({
         owners={eventOwners}
         canEdit={canEdit}
         mediaCandidates={mediaCandidates}
+        placeLinks={placeLinks}
       />
 
       <NameVariants personId={person.id} names={detail.names} canEdit={canEdit} />
@@ -630,7 +652,19 @@ export default async function PersonPage({
                     <>
                       {partnerPlaces(r.subtype, r.startPlace, r.endPlace) && (
                         <span className="block muted" data-testid="partner-places">
-                          {partnerPlaces(r.subtype, r.startPlace, r.endPlace)}
+                          {r.startPlace && (
+                            <>
+                              {isMarriage(r.subtype) ? "Hochzeit in " : "Beginn in "}
+                              <PlaceText text={r.startPlace} links={placeLinks} />
+                            </>
+                          )}
+                          {r.startPlace && r.endPlace && " · "}
+                          {r.endPlace && (
+                            <>
+                              {r.subtype === "DIVORCED" ? "Scheidung in " : "Ende in "}
+                              <PlaceText text={r.endPlace} links={placeLinks} />
+                            </>
+                          )}
                         </span>
                       )}
                       <AltFacts events={altOf(r.events, "MARRIAGE")} prefix="Heirat " />

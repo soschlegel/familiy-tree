@@ -400,7 +400,7 @@ zuordnen darf. Exportiert den Typ `PersonFormValues`.
 **Verhalten:**
 - Gruppen „Name“ (Vorname Pflicht, Nachname, Geburtsname, Geschlecht),
   „Lebensdaten“ (Geburts-/Sterbedatum über `DateInput` mit Wortlaut-Option,
-  Geburts-/Sterbeort), aufklappbare „Weitere Angaben“ (Rufname,
+  Geburts-/Sterbeort mit `PlaceHint` darunter), aufklappbare „Weitere Angaben“ (Rufname,
   Namenszusätze vorn/hinten, Todesursache – automatisch offen, wenn eines
   davon belegt ist oder einen Fehler hat), Notizen.
 - Vorabprüfung im Browser mit denselben Regeln wie der Server: Vorname
@@ -1383,11 +1383,11 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 - **Zweck:** Freitext-Ortsangaben Koordinaten zuordnen, für die Karte.
 - **Wo eingesetzt:** `app/admin/places/page.tsx`. Diese Seite liefert Filter, Suche und Seiten selbst. Verlinkt ist sie von `/admin/data` (bei Recht `place:manage`) und von `/map`; in der Navigation steht sie nicht. Die Datei selbst exportiert keine Komponente namens `PlaceAdmin`.
 - **Exporte:**
-  - `PlaceAutoAssign({ open })`: Knopf „Automatisch zuordnen“ mit der Zahl offener Ortstexte. Das Ergebnis (neu, geändert, entfernt, ohne Treffer, von Hand bestätigt) steht in einer Statuszeile.
+  - `PlaceAutoAssign({ open })`: Knopf „Automatisch zuordnen“ (für den Altbestand — neue Texte ordnet das Speichern selbst zu) mit der Zahl offener Ortstexte. Das Ergebnis (neu, geändert, entfernt, ohne Treffer, von Hand bestätigt, von KI) steht in einer Statuszeile.
   - `PlaceTable({ rows })`: Liste der Ortstexte. Ist sie leer, erscheint ein Hinweis.
 - **Verhalten:**
-  - **Je Zeile:** Text, weitere Schreibweisen, Häufigkeit, Status (offen, automatisch, bestätigt, nicht zuordenbar). Dazu die aktuelle Zuordnung (Bezeichnung, Genauigkeit, Koordinaten) und ein Vorschlag aus dem Ortsverzeichnis, gegebenenfalls mit dem Teil des Texts, der getroffen hat, und der Warnung „mehrdeutig“.
-  - **Aktionen:** Bestätigen, Vorschlag übernehmen, Anderen Ort wählen, Nicht zuordenbar, Zurücksetzen.
+  - **Je Zeile:** Text, weitere Schreibweisen, Häufigkeit, Status (offen, automatisch, von KI, bestätigt, nicht zuordenbar); KI-Zuordnungen mit eigenem Abzeichen, ggf. „unsicher“ und „Begründung der KI: …“ (`note`; nach dem Bestätigen „Notiz: …“), eine KI-Markierung „nicht zuordenbar“ als Satz. Dazu die aktuelle Zuordnung (Bezeichnung, Genauigkeit, Koordinaten) und ein Vorschlag aus dem Ortsverzeichnis, gegebenenfalls mit dem Teil des Texts, der getroffen hat, und der Warnung „mehrdeutig“.
+  - **Aktionen:** Bestätigen (automatisch bei gleichem Vorschlag; „von KI“ immer — wird `MANUAL`), Vorschlag übernehmen bzw. Anderen Ort wählen (ändern), Nicht zuordenbar, Zurücksetzen (auch für KI-Zuordnungen).
   - **Anderen Ort wählen:** öffnet einen Editor.
     - Suche im Ortsverzeichnis, verzögert um 250 ms; ältere Anfragen werden abgebrochen. Vorbelegt ist der erste Teil des Texts ohne Klammern.
     - Alternativ Koordinaten mit Genauigkeit und Bezeichnung. Prüfung im Browser: Breite −90 bis 90, Länge −180 bis 180; ein Komma als Dezimalzeichen ist erlaubt.
@@ -1399,6 +1399,27 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
   - `PUT /api/places` mit Aktion `confirm`, `directory`, `coordinates`, `unresolvable` oder `reset`
   - `GET /api/places/search` (direkt mit `fetch`, nicht über `apiFetch`; Fehler werden still verschluckt)
 - **Tests:** `e2e/write/places.spec.ts` (automatisch zuordnen, Editor, Koordinaten, Status); `e2e/read/map.spec.ts` (Link von der Karte). Die Logik prüfen `tests/places.test.ts` und `tests/map.db.test.ts`.
+
+### components/PlaceText.tsx
+
+- **Zweck:** Ortsangabe als Freitext der Person, bei zugeordnetem Ort als Link auf die Ortsseite (Titel = Anzeigename) und — wenn der Ort anders heißt — dezent „→ Wrocław, Polen“. Ohne Zuordnung reiner Text.
+- **Wo eingesetzt:** Personenseite (Geburt, Tod, Orte der Partnerschaften), `EventSection` (Ort je Ereignis).
+- **Props:** `text`, `links` (aus `placeLinksFor`, Schlüssel `placeKey`). Ohne Hooks, für Server- und Client-Komponenten.
+
+### components/PlaceMiniMap.tsx
+
+- **Zweck:** Kleine Lagekarte der Ortsseite: Ländergrenzen aus `public/geo/countries.json` (wie die große Karte, kein fremder Server), Punkt an den Koordinaten, `role="img"`.
+- **Server oder Client:** Client.
+
+### components/PlaceHint.tsx
+
+- **Zweck:** Dezenter Hinweis unter einem Ortsfeld, welcher Ort beim Tippen erkannt wird: „→ Wrocław (Breslau), Polen · früherer bzw. deutscher Name: Breslau“, mit „(nur Region)“/„(nur Land)“, „eigener Ort“, „anderer Name: …“, Abzeichen „mehrdeutig“ oder „Ort nicht gefunden“. Der eingegebene Text bleibt unverändert — reine Anzeige.
+- **Wo eingesetzt:** `PersonForm` (Geburts- und Sterbeort), `EventSection` (Ort im Ereignisformular), `RelationshipEditor` (Orte von Beginn/Ende beim Anlegen und Korrigieren einer Beziehung).
+- **Props:** `text` (aktueller Feldinhalt), optional `id`; `chosen` und `onChoose` für die **Auswahl echter Orte**: „Ort wählen …“ lädt Kandidaten (`?candidates=1`: Verzeichnis und eigene Orte) zum Anklicken; die Wahl (`PlaceChoice`, gebunden an den Text — ändert er sich, verfällt sie) zeigt „→ … · ausgewählt“ mit „Auswahl aufheben“. `savePlaceChoices(target, choices)` speichert sie nach dem Speichern des Eintrags (`POST /api/places/choose`) und liefert Meldungen zurück (z.B. bereits von Hand anders zugeordnet). Wer nichts wählt, bekommt die automatische Zuordnung.
+- **Verhalten:** ab 2 Zeichen, entprellt um 350 ms, ältere Anfragen werden abgebrochen; ein veralteter Hinweis wird nicht gezeigt. Das erste Ortsfeld einer Seite lädt das Ortsverzeichnis vorab (`GET /api/places/suggest` ohne `q`). Bei 403 (kein Bearbeitungsrecht) oder Netzfehler kein Hinweis. `aria-live="polite"`.
+- **Server oder Client:** Client.
+- **Ruft auf:** `GET /api/places/suggest` (direkt mit `fetch`).
+- **Tests:** `tests/places-ai.db.test.ts` (Dienst und Route); `e2e/write/places.spec.ts` (Hinweis im Formular).
 
 ### components/AiAccessManager.tsx
 

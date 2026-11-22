@@ -153,6 +153,8 @@ Dienst über den `Scope`.
 | `GET, PUT /api/places` | Ortstexte / von Hand zuordnen | `place:manage` |
 | `POST /api/places/auto` | Automatisch zuordnen | `place:manage` |
 | `GET /api/places/search` | Suche im Ortsverzeichnis | `place:manage` |
+| `GET /api/places/suggest` | Vorschlag am Ortsfeld | angemeldet, Admin oder Bearbeiter |
+| `POST /api/places/choose` | Ort im Ortsfeld auswählen | wer den Eintrag bearbeiten darf |
 
 ---
 
@@ -459,13 +461,28 @@ Die Personenseite.
   `ReleaseNoteList`, neueste zuerst. Nicht zu verwechseln mit
   `/admin/changes` (Änderungen an den Daten).
 
+### `/places/[ref]` — `app/places/[ref]/page.tsx`
+
+- **Rechte:** angemeldet; Daten über `getPlacePage` (nur Angaben sichtbarer
+  Personen; ohne sichtbare Angabe 404 für Nicht-Admins).
+- **Parameter:** `ref` (`g-<gazetteerId>` bzw. `c-<Breite>_<Länge>`),
+  `?page=` für die Personenliste (50 je Seite).
+- **Anzeige:** Anzeigename, früherer/deutscher Name, Lage und Zuordnung
+  (heutiger Name, Region, Land, Koordinaten, Einwohner, Herkunft;
+  Begründungen nur für Admins), kleine Lagekarte (`PlaceMiniMap`), Link zur
+  Karte und (Admin) zu „Orte zuordnen“, Schreibweisen (Freitexte mit Anzahl,
+  weitere Namen aus dem Verzeichnis), Personen mit Art und Jahr der Angabe.
+- **Verlinkt von:** Personenseite (jeder zugeordnete Ort), MCP `get_place`.
+
 ### `/admin/places` — `app/admin/places/page.tsx`
 
 - **Rechte:** `place:manage`, sonst `/tree?denied=1`.
-- **Suchparameter:** `status` (`all`, `open`, `auto`, `manual`,
-  `unresolvable`), `q`, `page`.
+- **Suchparameter:** `status` (`all`, `open`, `auto`, `ai` — „von KI“,
+  `manual`, `unresolvable`), `q`, `page`.
 - **Daten:** `listPlaces`. **Anzeige:** Zähler je Status als Filter,
-  `PlaceAutoAssign`, Suchfeld, `PlaceTable`, Seitennavigation.
+  `PlaceAutoAssign`, Suchfeld, `PlaceTable`, Seitennavigation. KI-Zuordnungen
+  stehen als „von KI“ mit eigenem Filter, Begründung und „Bestätigen“. Link
+  zur Anwender-Hilfe „Orte zuordnen“ (`HelpLink`).
 
 ### `/hilfe` und `/hilfe/[thema]` — `app/hilfe/page.tsx`, `app/hilfe/[thema]/page.tsx`
 
@@ -759,8 +776,25 @@ Fehlercodes aus den Grundregeln.
   `gazetteerId`), mit eigenen Koordinaten (`coordinates`, Genauigkeit,
   Bezeichnung), oder `confirm`, `unresolvable`, `reset`. Antwort
   `{ assignment }`.
-- **`POST /api/places/auto`**: alle nicht von Hand bestätigten Ortstexte
-  automatisch aus dem Ortsverzeichnis zuordnen.
+- **`POST /api/places/auto`**: alle Ortstexte, die weder von Hand bestätigt
+  noch von der KI gesetzt sind, automatisch aus dem Ortsverzeichnis zuordnen
+  (Altbestand; neue Texte ordnet das Speichern selbst zu).
+- **`GET /api/places/suggest?q=`** (`route(null)`, Prüfung im Dienst
+  `placeHint`): welcher Ort zu einem eingegebenen Text erkannt wird — Status
+  `found`/`ambiguous`/`none`, `label`, `precision`, `matchedPart`,
+  `formerName`, `otherName`, `own`, `ambiguous`. Nur für Admins und
+  Bearbeiter (sonst 403), `q` höchstens 500 Zeichen, `Cache-Control:
+  private, no-store`. Ohne `q`: lädt das Ortsverzeichnis vorab
+  (`{ warming: true }`). Liefert nur Verzeichnisdaten bzw. eigene Orte, nichts
+  über Personen. Mit `candidates=1` zusätzlich bis zu 10 Kandidaten zum
+  Auswählen (Verzeichnis und eigene Orte: Bezeichnung, Art, Koordinaten,
+  Einwohnerzahl, `own`, `recommended`).
+- **`POST /api/places/choose`** (`route(null)`, Dienst `choosePlaceForEntry`):
+  `{ text, personId | eventId | relationshipId, gazetteerId |
+  latitude+longitude+label(+precision) }` — Zuordnung „von Hand“ für genau
+  diesen Freitext; 403 ohne Bearbeitungsrecht, 400 wenn der Text nicht am
+  Eintrag steht, 409 bei abweichender, von Hand bestätigter Zuordnung
+  (außer Admin). Antwort `{ assignment }`.
 - **`GET /api/places/search`**: Suche im mitgelieferten Ortsverzeichnis,
   `q` höchstens 100 Zeichen.
 

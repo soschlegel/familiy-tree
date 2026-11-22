@@ -9,6 +9,7 @@ import { apiFetch, jsonBody } from "./api-client";
 const STATUS_LABEL: Record<PlaceRowDto["status"], string> = {
   open: "offen",
   auto: "automatisch",
+  ai: "von KI",
   manual: "bestätigt",
   unresolvable: "nicht zuordenbar",
 };
@@ -17,7 +18,7 @@ const PRECISION_LABEL = { PLACE: "Ort", REGION: "Region", COUNTRY: "Land" } as c
 const coords = (lat: number | null, lon: number | null) =>
   lat === null || lon === null ? "" : `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
 
-/** Knopf „Automatisch zuordnen“ — für alle nicht von Hand bestätigten Ortstexte. */
+/** Knopf „Automatisch zuordnen“ — für alle Ortstexte, die weder von Hand bestätigt noch von der KI gesetzt sind. */
 export function PlaceAutoAssign({ open }: { open: number }) {
   const router = useRouter();
   const [working, setBusy] = useState(false);
@@ -36,7 +37,7 @@ export function PlaceAutoAssign({ open }: { open: number }) {
         onClick={async () => {
           setBusy(true);
           setMessage(null);
-          const res = await apiFetch<{ created: number; updated: number; removed: number; unmatched: number; manual: number }>(
+          const res = await apiFetch<{ created: number; updated: number; removed: number; unmatched: number; manual: number; ai: number }>(
             "/api/places/auto",
             { method: "POST" },
           );
@@ -44,7 +45,7 @@ export function PlaceAutoAssign({ open }: { open: number }) {
           if (!res.ok) return setMessage(res.message);
           const r = res.data;
           setMessage(
-            `${r.created} neu, ${r.updated} geändert, ${r.removed} entfernt; ${r.unmatched} ohne Treffer, ${r.manual} von Hand bestätigt (unverändert).`,
+            `${r.created} neu, ${r.updated} geändert, ${r.removed} entfernt; ${r.unmatched} ohne Treffer, ${r.manual} von Hand bestätigt und ${r.ai} von KI (unverändert).`,
           );
           startRefresh(() => router.refresh());
         }}
@@ -103,9 +104,18 @@ function PlaceRow({ row }: { row: PlaceRowDto }) {
         </p>
         <p className="flex items-center gap-2">
           <span className="muted">{row.count}×</span>
-          <span className={row.status === "manual" ? "badge-accent" : "badge"} data-testid="place-status">
+          <span
+            className={row.status === "manual" ? "badge-accent" : row.status === "ai" ? "badge-alt" : "badge"}
+            data-testid="place-status"
+            title={row.status === "ai" ? "Vom KI-Assistenten gesetzt — gilt sofort für die Karte; bitte bestätigen oder ändern." : undefined}
+          >
             {STATUS_LABEL[row.status]}
           </span>
+          {a?.uncertain && (
+            <span className="badge-alt" data-testid="place-uncertain" title="Als unsicher gesetzt — bitte prüfen.">
+              unsicher
+            </span>
+          )}
         </p>
       </div>
 
@@ -117,6 +127,13 @@ function PlaceRow({ row }: { row: PlaceRowDto }) {
             {" "}
             · {a.precision ? PRECISION_LABEL[a.precision] : "?"} · {coords(a.latitude, a.longitude)}
           </span>
+        </p>
+      )}
+      {a?.unresolvable && row.status === "ai" && <p data-testid="place-assignment">Von der KI als nicht zuordenbar markiert.</p>}
+      {a?.note && (
+        <p className="text-xs" data-testid="place-note">
+          <span className="muted">{a.source === "AI" ? "Begründung der KI: " : "Notiz: "}</span>
+          {a.note}
         </p>
       )}
       {s && !sameAsSuggestion && (
@@ -143,8 +160,14 @@ function PlaceRow({ row }: { row: PlaceRowDto }) {
       {!a && !s && <p className="muted">Kein Treffer im Ortsverzeichnis.</p>}
 
       <div className="flex flex-wrap gap-x-4 gap-y-1">
-        {row.status === "auto" && sameAsSuggestion && (
-          <button type="button" className="btn-link" disabled={busy} onClick={() => send({ action: "confirm" })}>
+        {((row.status === "auto" && sameAsSuggestion) || row.status === "ai") && (
+          <button
+            type="button"
+            className="btn-link"
+            disabled={busy}
+            data-testid="place-confirm"
+            onClick={() => send({ action: "confirm" })}
+          >
             Bestätigen
           </button>
         )}
@@ -166,7 +189,7 @@ function PlaceRow({ row }: { row: PlaceRowDto }) {
             Nicht zuordenbar
           </button>
         )}
-        {(row.status === "manual" || row.status === "unresolvable") && (
+        {(row.status === "manual" || row.status === "unresolvable" || row.status === "ai") && (
           <button type="button" className="btn-link-danger" disabled={busy} onClick={() => send({ action: "reset" })}>
             Zurücksetzen
           </button>
@@ -300,7 +323,7 @@ function PlaceEditor({
             const la = parse(lat);
             const lo = parse(lon);
             if (!lat.trim() || !lon.trim() || !Number.isFinite(la) || !Number.isFinite(lo) || Math.abs(la) > 90 || Math.abs(lo) > 180) {
-              setCoordError("Bitte Breite (−90 bis 90) und Länge (−180 bis 180) als Zahl angeben, z.B. 49,31 und 6,75.");
+              setCoordError("Bitte Breite (−90 bis 90) und Länge (−180 bis 180) als Zahl angeben, z.B. 51,11 und 17,03.");
               return;
             }
             setCoordError(null);

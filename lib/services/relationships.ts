@@ -16,6 +16,7 @@ import {
 } from "./errors";
 import { toRelationshipDto, type RelationshipDto } from "./dto";
 import { removeOrphanedMedia } from "./media";
+import { queuePlaceAutoAssign } from "./places";
 import { phraseColumns } from "./persons";
 import { fuzzyColumns, fuzzyField, type FuzzyDate } from "../dates";
 
@@ -193,6 +194,7 @@ export async function createRelationship(
     entityId: relationship.id,
     diff: toRelationshipDto(relationship),
   });
+  queuePlaceAutoAssign(scope, [relationship.startPlace, relationship.endPlace]);
 
   return toRelationshipDto(relationship);
 }
@@ -254,6 +256,9 @@ export async function updateRelationship(
       entityId: id,
       diff: { changes },
     });
+  }
+  if (changes.startPlace || changes.endPlace) {
+    queuePlaceAutoAssign(scope, [changes.startPlace?.to as string | null, changes.endPlace?.to as string | null]);
   }
 
   return toRelationshipDto(relationship);

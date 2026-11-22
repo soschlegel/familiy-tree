@@ -311,9 +311,12 @@ Workflow nicht — die Prüfungen dort sind Handarbeit (AGENTS.md, Abschnitt 3).
   aller drei, sonst trüge `next build` sie selbst nach.
 - `output: "standalone"` für ein kleines Image.
 - `sharp` als externes Server-Paket (nicht gebündelt).
-- `outputFileTracingIncludes`: `geo/gazetteer.tsv.gz` für `/api/places/**`
-  und `/admin/places`, damit die Datei im Standalone-Bundle landet;
-  ebenso `docs/anwender/*.md` für `/hilfe` und `/hilfe/**`
+- `outputFileTracingIncludes`: `geo/gazetteer.tsv.gz` für alle API-Routen
+  (`/api/**` — Admin-Seite, Vorschlag am Ortsfeld, automatische Zuordnung
+  nach dem Speichern und nach Importen, MCP), `/admin/places` und die
+  Ortsseiten `/places/**`, damit die
+  Datei im Standalone-Bundle landet (dort einmal unter `geo/`).
+- Ebenso `docs/anwender/*.md` für `/hilfe` und `/hilfe/**`
   (Anwender-Hilfe, `lib/help/content.ts`).
 - `webpack`: Regel `resourceQuery: /raw/` → `asset/source` — `import … from
   "…?raw"` liefert den Dateiinhalt als Text. Damit ist `CHANGELOG.md`
@@ -381,7 +384,10 @@ vorhandenen Personen wird nur gemeldet, was übersprungen wurde.
 Lädt die `.env` und leitet daraus die Mock-Datenbank-URL ab (gleiche Regel
 wie `scripts/mock.mjs`, `MOCK_DATABASE_URL` hat Vorrang). Setzt für alle Tests
 `DATABASE_URL` auf diese Mock-Datenbank, `MEDIA_DIR` auf `data/media-test` und
-`NODE_ENV=test` — nie die normale Datenbank. Umgebung Node, Alias `@` auf das
+`NODE_ENV=test` — nie die normale Datenbank — und `PLACE_AUTO_ASSIGN=off`
+(die Zuordnung neuer Ortstexte im Hintergrund liefe sonst nach Testende
+gegen schon aufgeräumte Daten weiter; `tests/places-ai.db.test.ts` schaltet
+sie für sich ein). Umgebung Node, Alias `@` auf das
 Projekt, nur `tests/**/*.test.ts`, Zeitgrenzen 30 s, **Dateien nacheinander**
 (die Datenbank-Tests teilen sich eine Datenbank und zählen).
 
@@ -426,7 +432,8 @@ Namen), erzeugt von `scripts/build-geodata.mjs`. Nur der Server liest es:
 Speicher) und gibt es nach zehn Minuten ohne Benutzung wieder frei;
 `lib/places/gazetteer.ts` enthält Datenstruktur und Suche, `lib/places/match.ts`
 die automatische Zuordnung. Benutzt von `lib/services/places.ts` (Admin-Seite
-„Orte zuordnen“, `/api/places/…`) und von `prisma/seed-mock.ts`; die Karte
+„Orte zuordnen“, `/api/places/…`, Vorschlag am Ortsfeld, Zuordnung nach dem
+Speichern und nach Importen, MCP) und von `prisma/seed-mock.ts`; die Karte
 selbst liest nur die fertigen Koordinaten aus der Tabelle `Place`. Keine
 Anfrage nach außen. Über `next.config.mjs` ins Standalone-Image gebracht.
 
@@ -462,6 +469,7 @@ selbst gelesen, nicht im eigenen Code.
 | `MCP_CONNECTOR_URL` | öffentliche Adresse des MCP-Gateways, nur für die Anleitung auf `/ai-access` | `app/ai-access/page.tsx`, `components/AiConnectGuide` |
 | `MCP_ALLOWED_ORIGINS` | weitere erlaubte `Origin`-Werte für `/api/mcp` (kommagetrennt) | `mcp/http.ts` — nur lokal (`.env.example`, auskommentiert); der Stack reicht sie bewusst nicht durch |
 | `NODE_ENV` | Produktion/Entwicklung (Dev-Login, Prisma-Logging, Client-Singleton) | `lib/dev-login.ts`, `lib/prisma.ts` |
+| `PLACE_AUTO_ASSIGN` | `off` schaltet die automatische Zuordnung neuer Ortstexte nach dem Speichern/Import ab (Standard an; `vitest.config.ts` setzt `off`) | `lib/services/places.ts` |
 | `NEXT_PUBLIC_BUILD_DATE` / `NEXT_PUBLIC_BUILD_SHA` | Build-Angabe in der Fußzeile, beim Build fest eingesetzt | `lib/build-info.ts` |
 | `NEXT_DIST_DIR` | eigener Build-Ordner (Mock-Dev-Server `.next-mock`, E2E-Build `.next-e2e`) | `next.config.mjs` |
 | `PORT` / `HOSTNAME` | Port und Bind-Adresse des Servers | Next.js (implizit); im Image gesetzt |
@@ -594,6 +602,13 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
 - **`places.test.ts`** — Normalisierung, Zerlegen von Ortstexten und
   Zuordnung, mit kleinem Verzeichnis und mit dem mitgelieferten
   `geo/gazetteer.tsv.gz`.
+- **`places-ai.db.test.ts`** — Vorschlag am Ortsfeld (Dienst und Route
+  `/api/places/suggest` mit nachgebildeter Anmeldung, Rechte, früherer Name,
+  mehrdeutig, Antwortzeit), Zuordnung nach dem Speichern und nach Importen
+  (MANUAL/KI bleiben, Paket, Fehler ohne Folgen), MCP-Werkzeuge
+  `suggest_place`/`list_places`/`assign_place` über den HTTP-Endpunkt (Rechte,
+  Stapel, eigener Ort, Protokoll), Bestätigen auf der Admin-Seite. Schaltet
+  `PLACE_AUTO_ASSIGN` für sich ein.
 - **`reference.test.ts`** — Verwandtschaft aller Personen zur Bezugsperson
   (gegen die Einzelabfrage), Ahnenlinien, Linienfarben, Leistung.
 - **`release-notes.test.ts`** — Neuigkeiten: Parser von `CHANGELOG.md`,
