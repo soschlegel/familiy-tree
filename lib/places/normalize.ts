@@ -9,7 +9,7 @@
  *   und „berkum ,  peine“ teilen sich eine Zuordnung, „Vöhrum“ und
  *   „Peine-Vöhrum“ aber nicht (das entscheidet ein Mensch).
  * - `normalizeForLookup`: Vergleich mit dem Ortsverzeichnis, ohne
- *   diakritische Zeichen und Satzzeichen („Timișoara“ = „Timişoara“ = „varias“).
+ *   diakritische Zeichen und Satzzeichen („Timișoara“ = „Timişoara“ = „timisoara“).
  *   Muss mit `norm` in scripts/build-geodata.mjs übereinstimmen.
  */
 
