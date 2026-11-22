@@ -2,6 +2,7 @@
 
 import type { EdgeProps } from "reactflow";
 
+import type { LineKey } from "@/lib/reference";
 import { NODE_HEIGHT } from "@/lib/tree-layout";
 
 export type ParentSubtype = "BIOLOGICAL" | "ADOPTIVE" | "STEP" | "FOSTER";
@@ -26,6 +27,12 @@ export type ParentEdgeData = {
   /** Korridor durch übersprungene Ebenen (Linien über mehrere Generationen). */
   waypoints?: { x: number; y: number }[];
   dimmed?: boolean;
+  /**
+   * Ahnenlinie (Schalter „Linien“): Farbe der Linie statt grau. Das
+   * Strichmuster der Elternschaftsart bleibt — Farbe ist nie das einzige
+   * Merkmal (die Karten tragen zusätzlich Streifen und Kurzzeichen).
+   */
+  line?: LineKey;
 };
 
 /** Rechtwinkliger Pfad durch die Punkte, mit abgerundeten Ecken. */
@@ -134,15 +141,18 @@ export function ParentEdge({
       : orthogonalPath(corners, RADIUS);
 
   const style = PARENT_EDGE_STYLE[data?.subtype ?? "BIOLOGICAL"] ?? PARENT_EDGE_STYLE.BIOLOGICAL;
+  const line = !isEvent ? data?.line : undefined;
 
   return (
     <path
       id={id}
       d={path}
       fill="none"
-      strokeWidth={isEvent || style.dash ? 1.75 : 1.5}
+      strokeWidth={line ? 2.5 : isEvent || style.dash ? 1.75 : 1.5}
       strokeLinecap="round"
-      className={isEvent ? "stroke-rose-400" : style.className}
+      className={isEvent ? "stroke-rose-400" : line ? undefined : style.className}
+      style={line ? { stroke: `var(--line-${line.toLowerCase()})` } : undefined}
+      data-line={line}
       strokeDasharray={isEvent ? "5 4" : style.dash}
       opacity={data?.dimmed ? 0.15 : 1}
     />

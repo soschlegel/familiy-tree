@@ -1,6 +1,7 @@
 import { requireScope } from "@/lib/session";
 import { getAiAccessInfo, listApiTokens } from "@/lib/services";
 import { AiAccessManager } from "@/components/AiAccessManager";
+import { AiConnectGuide, connectorUrlFromEnv } from "@/components/AiConnectGuide";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "KI-Zugang" };
@@ -26,10 +27,14 @@ export default async function AiAccessPage() {
         <p className="mt-1 max-w-3xl text-sm muted">
           Mit einem persönlichen Schlüssel kann ein KI-Assistent wie Claude Code über die
           MCP-Schnittstelle in deinem Namen im Stammbaum recherchieren — mit genau deinen
-          Familienrechten, nie mit mehr.
+          Familienrechten, nie mit mehr. Auch Claude auf dem Handy, siehe Anleitungen unten.
         </p>
       </div>
       <AiAccessManager info={info} tokens={tokens} />
+      <AiConnectGuide
+        connectorUrl={connectorUrlFromEnv(process.env.MCP_CONNECTOR_URL)}
+        canUse={info.aiAccess !== "NONE"}
+      />
     </div>
   );
 }

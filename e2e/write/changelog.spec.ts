@@ -3,6 +3,7 @@ import type { APIRequestContext } from "@playwright/test";
 import { test, expect, authFile, expectNoA11yViolations, expectNoHorizontalOverflow, httpError } from "../support/fixtures";
 import { apiAs, createPerson, createRelationship, deletePerson, uniq } from "../support/api";
 import { mock } from "../support/mock";
+import { openAdminMenu } from "../support/nav";
 
 /**
  * Changelog: Abschnitt „Änderungen“ auf der Personenseite (nur Bearbeiter,
@@ -101,6 +102,7 @@ test.describe("als Bearbeiter", () => {
     // Umleitung auf den Baum mit Hinweis (die Fokus-Ansicht schreibt die Adresse danach um).
     await expect(page).toHaveURL(/\/tree(\?|$)/);
     await expect(page.getByRole("alert").filter({ hasText: "fehlt dir die Berechtigung" })).toBeVisible();
+    await openAdminMenu(page);
     await expect(page.getByRole("navigation", { name: "Hauptnavigation" }).getByRole("link", { name: "Änderungen" })).toHaveCount(0);
   });
 });

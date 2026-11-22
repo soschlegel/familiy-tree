@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildGraphIndex, type GraphEdge } from "@/lib/graph";
 import { findBloodRelation, type Sex } from "@/lib/kinship";
-import { bloodRelationsFrom, relationsFromReference } from "@/lib/reference";
+import { bloodRelationsFrom, edgeLine, relationsFromReference, type RelativeInfo } from "@/lib/reference";
 import { kinshipInGraph } from "@/lib/services/kinship";
 import type { GraphPerson, LoadedGraph } from "@/lib/services/graph-data";
 import { mockData, mockEdges } from "./helpers";
@@ -276,6 +276,39 @@ describe("Ahnenlinien", () => {
     expect(r.grandparents.FM).toBe("y");
     // Stiefelternteil begründet keine Linie.
     expect(r.relatives.get("stief")?.lines ?? []).toEqual([]);
+  });
+});
+
+describe("Farbe der Verbindungen (edgeLine)", () => {
+  // Bezugsperson R, Vater V (Linien VV+VM), dessen Eltern GV (VV) und GM (VM),
+  // Urgroßvater UV (VV), Großonkel O (Bruder von GV, keine Linie).
+  const relatives: Record<string, RelativeInfo> = {
+    V: { term: "Vater", lines: ["FF", "FM"] },
+    GV: { term: "Großvater väterlicherseits", lines: ["FF"] },
+    GM: { term: "Großmutter väterlicherseits", lines: ["FM"] },
+    UV: { term: "Urgroßvater väterlicherseits", lines: ["FF"] },
+    O: { term: "Großonkel väterlicherseits", lines: [] },
+  };
+
+  it("färbt die Ahnenkette einer Linie", () => {
+    expect(edgeLine(relatives, ["UV"], ["GV"])).toBe("FF");
+    expect(edgeLine(relatives, ["GV"], ["V"])).toBe("FF");
+    expect(edgeLine(relatives, ["GM"], ["V"])).toBe("FM");
+  });
+
+  it("bleibt neutral bei mehreren gemeinsamen Linien, Seitenverwandten und Unbekannten", () => {
+    // Treffpunkt beider Großeltern → Vater: zwei gemeinsame Linien.
+    expect(edgeLine(relatives, ["GV", "GM"], ["V"])).toBeNull();
+    // Vater → Bezugsperson: R hat keine Linie.
+    expect(edgeLine(relatives, ["V"], ["R"])).toBeNull();
+    // Urgroßvater → Großonkel: Großonkel ist kein Vorfahr.
+    expect(edgeLine(relatives, ["UV"], ["O"])).toBeNull();
+    expect(edgeLine(relatives, ["X"], ["Y"])).toBeNull();
+  });
+
+  it("Paarkarte als Kindseite: Linie der Eltern des einen Partners", () => {
+    // Karte „GV + GM“, Eltern von GV darüber.
+    expect(edgeLine(relatives, ["UV"], ["GV", "GM"])).toBe("FF");
   });
 });
 

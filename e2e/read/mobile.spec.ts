@@ -81,6 +81,17 @@ test.describe("Telefon (390 px), als Admin", () => {
     });
   }
 
+  test("KI-Zugang: Anleitung für Claude auf dem Handy ist aufgeklappt und passt", async ({ page }) => {
+    await page.goto("/ai-access");
+    const guide = page.getByTestId("ai-guide-mobile");
+    await expect(guide).toHaveAttribute("open", "");
+    await expect(guide).toContainText("Add custom connector");
+    // In der Mock-Umgebung ist keine Connector-Adresse hinterlegt.
+    await expect(guide.getByTestId("ai-connector-url-missing")).toBeVisible();
+    await expect(page.getByTestId("ai-guide-code")).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
+
   test("Benutzer und Zugriffe: Tabellen passen ohne seitliches Verschieben", async ({ page }) => {
     for (const url of ["/admin/users", "/admin/families"]) {
       await page.goto(url);

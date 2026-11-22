@@ -6,7 +6,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useDismiss } from "./useDismiss";
 
-export type NavItem = { href: string; label: string };
+/** `group: "admin"` = im Untermenü „Verwaltung“ statt in der Hauptzeile. */
+export type NavItem = { href: string; label: string; group?: "admin" };
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -38,6 +39,17 @@ export function NavBar({
   const close = useCallback(() => setOpen(false), []);
   useDismiss(open, close, [menuRef, toggleRef], toggleRef);
 
+  // Untermenü „Verwaltung“ (ab lg): Familien, Benutzer, Änderungen, KI-Zugang …
+  const mainItems = items.filter((i) => !i.group);
+  const adminItems = items.filter((i) => i.group === "admin");
+  const adminActive = adminItems.some((i) => isActive(pathname, i.href));
+  const [adminOpen, setAdminOpen] = useState(false);
+  const adminRef = useRef<HTMLUListElement>(null);
+  const adminToggleRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => setAdminOpen(false), [pathname]);
+  const closeAdmin = useCallback(() => setAdminOpen(false), []);
+  useDismiss(adminOpen, closeAdmin, [adminRef, adminToggleRef], adminToggleRef);
+
   const linkClass = (active: boolean) =>
     `whitespace-nowrap rounded-full px-3 py-1 text-sm font-medium transition ${
       active
@@ -59,7 +71,7 @@ export function NavBar({
         </Link>
 
         <ul className="hidden items-center gap-1 lg:flex">
-          {items.map((item) => {
+          {mainItems.map((item) => {
             const active = isActive(pathname, item.href);
             return (
               <li key={item.href}>
@@ -73,6 +85,47 @@ export function NavBar({
               </li>
             );
           })}
+          {adminItems.length > 0 && (
+            <li className="relative">
+              <button
+                ref={adminToggleRef}
+                type="button"
+                aria-expanded={adminOpen}
+                aria-controls="admin-menu"
+                data-active={adminActive || undefined}
+                className={`${linkClass(adminActive)} inline-flex items-center gap-1`}
+                onClick={() => setAdminOpen((o) => !o)}
+              >
+                Verwaltung
+                <span aria-hidden className="text-[0.65rem]">
+                  {adminOpen ? "▴" : "▾"}
+                </span>
+              </button>
+              {adminOpen && (
+                <ul
+                  ref={adminRef}
+                  id="admin-menu"
+                  aria-label="Verwaltung"
+                  className="absolute left-0 top-full z-40 mt-1.5 flex min-w-44 flex-col gap-1 rounded-xl border border-stone-200 bg-white p-1.5 shadow-lg dark:border-stone-800 dark:bg-stone-900"
+                >
+                  {adminItems.map((item) => {
+                    const active = isActive(pathname, item.href);
+                    return (
+                      <li key={item.href}>
+                        <Link
+                          href={item.href}
+                          aria-current={active ? "page" : undefined}
+                          className={`block ${linkClass(active)} py-1.5`}
+                        >
+                          {item.label}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </li>
+          )}
         </ul>
 
         {/* Bei knapper Breite (ab lg mit allen Menüpunkten) wird der Name
@@ -104,7 +157,7 @@ export function NavBar({
           className="absolute inset-x-0 top-full z-40 border-b border-stone-200 bg-white px-4 pb-4 pt-2 shadow-lg lg:hidden dark:border-stone-800 dark:bg-stone-900"
         >
           <ul className="flex flex-col gap-1">
-            {items.map((item) => {
+            {mainItems.map((item) => {
               const active = isActive(pathname, item.href);
               return (
                 <li key={item.href}>
@@ -119,6 +172,31 @@ export function NavBar({
               );
             })}
           </ul>
+          {/* Auf dem Telefon kein zweites Aufklappen: die Verwaltung als
+              beschriftete Gruppe im selben Menü. */}
+          {adminItems.length > 0 && (
+            <>
+              <p id="mobile-admin-h" className="eyebrow mt-3 px-3">
+                Verwaltung
+              </p>
+              <ul className="mt-1 flex flex-col gap-1" aria-labelledby="mobile-admin-h">
+                {adminItems.map((item) => {
+                  const active = isActive(pathname, item.href);
+                  return (
+                    <li key={item.href}>
+                      <Link
+                        href={item.href}
+                        aria-current={active ? "page" : undefined}
+                        className={`block ${linkClass(active)} py-3`}
+                      >
+                        {item.label}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
           <div className="mt-3 flex items-center justify-between gap-3 border-t border-stone-200 pt-3 text-sm dark:border-stone-800">
             <span className="muted min-w-0 truncate">{userLabel}</span>
             {signOut}

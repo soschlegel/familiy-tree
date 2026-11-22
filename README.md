@@ -158,7 +158,7 @@ chromium`.
 |---|---|---|
 | `npm run test:e2e` | alles: setup → read → write | ca. 9–10 min |
 | `npm run test:e2e:setup` | nur Ausgangszustand: Mock-Daten neu, Anmeldungen, Vorwärmen | ca. 1–2 min (Kaltstart des Dev-Servers: länger) |
-| `npm run test:e2e:read` | setup + lesende Tests (`e2e/read/`, 167 Tests, 4 parallel) | ca. 3:10–3:20 min ohne Setup |
+| `npm run test:e2e:read` | setup + lesende Tests (`e2e/read/`, 169 Tests, 4 parallel) | ca. 3:10–3:20 min ohne Setup |
 | `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 83 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 4–5 min ohne Setup |
 | `npm run test:e2e:headed` | alles mit sichtbarem Browser, ein Test nach dem anderen | |
 | `npm run test:e2e:ui` | Playwright-Oberfläche: Tests einzeln starten, Schritte ansehen | |
@@ -409,9 +409,14 @@ zurück. Vorrang: Adresse vor Cookie vor eigener Person.
   Gelb („MM“). Nie nur Farbe: jede Karte trägt zusätzlich Streifen und
   Kurzzeichen, die Legende nennt die vier Großeltern. Vater und Mutter
   gehören zu beiden Linien ihrer Seite, Vorfahren mit Ahnenschwund zu
-  mehreren; alle anderen bleiben neutral. Farben als CSS-Variablen
-  (`--line-ff` …) in [app/globals.css](app/globals.css), je eigene Werte für
-  das dunkle Farbschema.
+  mehreren; alle anderen bleiben neutral. Auch die **Verbindungen** der
+  Ahnenketten sind farbig (`edgeLine` in [lib/reference.ts](lib/reference.ts)):
+  eine Eltern-Kind-Linie bekommt die Farbe, wenn Eltern- und Kindseite genau
+  eine Linie gemeinsam haben; Verbindungen zu Vater/Mutter/Bezugsperson
+  (mehrere Linien) und zu Seitenverwandten bleiben grau, das Strichmuster der
+  Elternschaftsart bleibt. Farben als CSS-Variablen (`--line-ff` …) in
+  [app/globals.css](app/globals.css), je eigene Werte für das dunkle
+  Farbschema.
 - **Personenseite** — „Für dich (…) ist X: Großonkel väterlicherseits“, dazu
   „Das bin ich“ und „Baum aus dieser Sicht“.
 
@@ -759,12 +764,23 @@ lebenden Personen bedenken.
    `args` anhängen. Danach Claude Desktop neu starten. Der Schlüssel steht
    im Klartext in dieser Datei; zum Entfernen den Eintrag löschen und den
    Schlüssel widerrufen.
-5. **claude.ai im Browser und die Claude-App auf dem Telefon** können sich
-   **nicht** verbinden, solange der Stammbaum nur im Heimnetz erreichbar ist:
-   Ihre „Connectors“ werden von Anthropics Servern aus aufgerufen, nicht vom
-   eigenen Gerät, und erreichen die NAS deshalb nicht. Außerdem melden sie
-   sich per OAuth an, nicht mit einem festen Schlüssel. Ein Zugang dafür
-   (OAuth) ist als eigener Schritt geplant.
+5. **claude.ai im Browser, Claude Desktop und die Claude-App auf dem
+   Telefon** verbinden sich über einen „Custom Connector“. Den ruft Anthropic
+   aus der Cloud auf (öffentlich per HTTPS auf Port 443 erreichbar nötig) und
+   meldet sich per OAuth an, nicht mit einem festen Schlüssel. Dafür steht
+   ein **Gateway** (eigenes Repository) vor der App: Beim Verbinden zeigt es
+   eine Anmeldeseite, auf der man seinen persönlichen Schlüssel einträgt, und
+   reicht ihn als `Authorization: Bearer …` an `/api/mcp` weiter. Ohne
+   Gateway, nur im Heimnetz, geht es nicht.
+
+   Die Seite `/ai-access` zeigt dazu eine Schritt-für-Schritt-Anleitung
+   (Handy, Browser/Desktop, Claude Code). Die öffentliche Adresse des
+   Gateways kommt aus der Umgebungsvariablen **`MCP_CONNECTOR_URL`**
+   (Stack, `stack.env.example`) — nie fest im Repository. Ist sie leer,
+   verweist die Anleitung auf den Administrator. Eingerichtet wird der
+   Connector einmal auf claude.ai (Customize → Connectors → „+ Add“ →
+   „Add custom connector“); die Handy-App übernimmt ihn danach automatisch.
+   Im kostenlosen Claude-Tarif ist nur ein eigener Connector möglich.
 
 ### Schlüssel richtig verwenden
 

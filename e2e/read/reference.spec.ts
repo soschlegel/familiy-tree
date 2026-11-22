@@ -71,8 +71,13 @@ test.describe("Bezugsperson des Bearbeiters", () => {
     await page.goto(`/tree?focus=${SELF}&up=4`);
     await waitForTree(page);
     await expect(page.getByTestId("tree-line-codes")).toHaveCount(0);
+    await expect(page.locator(".react-flow__edge path[data-line]")).toHaveCount(0);
 
     await page.getByTestId("tree-lines-toggle").check();
+    // Verbindungen der Ahnenketten in Linienfarbe (lib/reference.ts, edgeLine);
+    // die gesperrte mütterliche Großvater-Linie bleibt ohne Farbe.
+    await expect(page.locator('.react-flow__edge path[data-line="FF"]').first()).toBeVisible();
+    await expect(page.locator('.react-flow__edge path[data-line="MF"]')).toHaveCount(0);
     await expect(card(page, FATHER).getByTestId("tree-line-codes")).toHaveAttribute("data-lines", "FF FM");
     await expect(card(page, FATHER).getByTestId("tree-line-codes")).toHaveText("VVVM");
     await expect(card(page, GRANDFATHER).getByTestId("tree-line-codes")).toHaveAttribute("data-lines", "FF");

@@ -9,6 +9,7 @@ import {
   expectNoHorizontalOverflow,
 } from "../support/fixtures";
 import { apiAs, uniq } from "../support/api";
+import { openAdminMenu } from "../support/nav";
 
 /**
  * KI-Zugang: Admin vergibt und entzieht das Recht, ein Benutzer legt
@@ -80,6 +81,7 @@ test.afterAll(async () => {
 
 test("ohne Recht: Seite erklärt die Lage, kein Menüpunkt", async ({ loginAs }) => {
   const page = await asUser(loginAs);
+  await openAdminMenu(page);
   await expect(page.getByRole("navigation", { name: "Hauptnavigation" }).getByRole("link", { name: "KI-Zugang" })).toHaveCount(0);
   await page.goto("/ai-access");
   await expect(page.getByRole("heading", { level: 1, name: "KI-Zugang" })).toBeVisible();
@@ -106,6 +108,7 @@ test("Admin vergibt Lesezugriff — gespeichert", async ({ page }) => {
 
 test("nur lesend: Schreibstufe nicht wählbar", async ({ loginAs }) => {
   const page = await asUser(loginAs);
+  await openAdminMenu(page);
   await page.getByRole("navigation", { name: "Hauptnavigation" }).getByRole("link", { name: "KI-Zugang" }).click();
   await expect(page).toHaveURL(/\/ai-access$/);
   await expect(page.getByTestId("ai-access-level")).toHaveText("lesen");
@@ -220,6 +223,7 @@ test("Herabsetzen wirkt sofort auf die wirksame Stufe", async ({ page, loginAs }
   );
   await expect(user.getByRole("form", { name: "Neuen Schlüssel anlegen" })).toHaveCount(0);
   // Mit noch nicht widerrufenen Schlüsseln bleibt der Menüpunkt, damit man sie widerrufen kann.
+  await openAdminMenu(user);
   await expect(user.getByRole("navigation", { name: "Hauptnavigation" }).getByRole("link", { name: "KI-Zugang" })).toBeVisible();
 });
 
@@ -259,6 +263,7 @@ test("Widerrufen: als Benutzer und als Admin", async ({ page, loginAs }) => {
 
   // Ohne Recht und ohne aktive Schlüssel verschwindet der Menüpunkt.
   await user.reload();
+  await openAdminMenu(user);
   await expect(user.getByRole("navigation", { name: "Hauptnavigation" }).getByRole("link", { name: "KI-Zugang" })).toHaveCount(0);
 });
 

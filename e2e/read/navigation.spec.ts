@@ -1,6 +1,8 @@
 import { test, expect, authFile } from "../support/fixtures";
+import { openAdminMenu } from "../support/nav";
 
 const ALL = ["Baum", "Personen", "Recherche", "Quellen", "Daten"];
+/** Stehen im Untermenü „Verwaltung“ (components/NavBar.tsx). */
 const ADMIN_ONLY = ["Familien", "Benutzer", "Änderungen"];
 
 const nav = (page: import("@playwright/test").Page) =>
@@ -14,6 +16,11 @@ test.describe("Navigation je Rolle", () => {
       for (const label of ALL) {
         await expect(nav(page).getByRole("link", { name: label, exact: true })).toBeVisible();
       }
+      // Verwaltungspunkte nur im Untermenü — vor dem Aufklappen nicht in der Zeile.
+      for (const label of ADMIN_ONLY) {
+        await expect(nav(page).getByRole("link", { name: label, exact: true })).toHaveCount(0);
+      }
+      await openAdminMenu(page);
       for (const label of ADMIN_ONLY) {
         await expect(nav(page).getByRole("link", { name: label, exact: true })).toHaveCount(role === "admin" ? 1 : 0);
       }
@@ -37,8 +44,27 @@ test.describe("als Admin", () => {
     await expect(nav(page).getByRole("link", { name: "Personen" })).toHaveAttribute("aria-current", "page");
 
     await page.goto("/admin/families");
+    // Der Knopf „Verwaltung“ ist markiert, solange man in einem seiner Bereiche ist.
+    await expect(nav(page).getByRole("button", { name: "Verwaltung" })).toHaveAttribute("data-active", "true");
+    await openAdminMenu(page);
     await expect(nav(page).getByRole("link", { name: "Familien" })).toHaveAttribute("aria-current", "page");
     await expect(nav(page).getByRole("link", { name: "Daten" })).not.toHaveAttribute("aria-current", /.*/);
+  });
+
+  test("Untermenü „Verwaltung“: Escape schließt und gibt den Fokus zurück, Link navigiert", async ({ page }) => {
+    await page.goto("/people");
+    const toggle = nav(page).getByRole("button", { name: "Verwaltung" });
+    await expect(toggle).not.toHaveAttribute("data-active", /.*/);
+    await openAdminMenu(page);
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#admin-menu")).toBeHidden();
+    await expect(toggle).toBeFocused();
+
+    await openAdminMenu(page);
+    await page.locator("#admin-menu").getByRole("link", { name: "Benutzer" }).click();
+    await expect(page).toHaveURL(/\/admin\/users$/);
+    await expect(page.locator("#admin-menu")).toBeHidden();
   });
 
   test.describe("schmalster Desktop (1024 px, Grenze lg)", () => {
@@ -47,13 +73,20 @@ test.describe("als Admin", () => {
     test("alle Menüpunkte und Abmelden in einer Zeile, kein Menü-Knopf", async ({ page }) => {
       await page.goto("/people");
       await expect(page.getByRole("button", { name: "Menü" })).toBeHidden();
-      const tops = new Set<number>();
-      for (const label of [...ALL, "KI-Zugang", ...ADMIN_ONLY]) {
-        const link = nav(page).getByRole("link", { name: label, exact: true });
-        await expect(link).toBeVisible();
-        tops.add(Math.round((await link.boundingBox())!.y));
+      // Mittellinien statt Oberkanten: der Knopf „Verwaltung“ (Flex) und die
+      // Links (inline) liegen um ein, zwei Pixel versetzt — eine Zeile sind
+      // sie, solange die Mitten höchstens ein paar Pixel auseinanderliegen.
+      const centers: number[] = [];
+      const entries = [
+        ...ALL.map((label) => nav(page).getByRole("link", { name: label, exact: true })),
+        nav(page).getByRole("button", { name: "Verwaltung" }),
+      ];
+      for (const entry of entries) {
+        await expect(entry).toBeVisible();
+        const box = (await entry.boundingBox())!;
+        centers.push(box.y + box.height / 2);
       }
-      expect(tops.size, "Menüpunkte auf mehreren Zeilen").toBe(1);
+      expect(Math.max(...centers) - Math.min(...centers), "Menüpunkte auf mehreren Zeilen").toBeLessThanOrEqual(4);
       // Der Name wird gekürzt statt umzubrechen — die Kopfzeile bleibt einzeilig.
       const header = (await nav(page).boundingBox())!;
       const signOut = (await nav(page).getByRole("button", { name: "Abmelden" }).boundingBox())!;

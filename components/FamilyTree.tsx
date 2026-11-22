@@ -59,7 +59,7 @@ import {
   type FocusTreeData,
   type TreeView,
 } from "@/lib/focus-tree";
-import { LINES_COOKIE, type ReferenceView } from "@/lib/reference";
+import { edgeLine, LINES_COOKIE, type ReferenceView } from "@/lib/reference";
 
 // Außerhalb der Komponente: React Flow warnt (und rendert neu), wenn sich die
 // Objekte bei jedem Render ändern.
@@ -537,6 +537,10 @@ function TreeCanvas({
   const edges = useMemo(() => {
     const dimAll = searching;
     const members = (id: string) => membersOf.get(id) ?? [id];
+    // Schalter „Linien“: Ahnenketten in der Farbe ihrer Linie (lib/reference.ts).
+    const relatives = referenceCtx.showLines ? referenceCtx.view?.relatives : undefined;
+    const lineOf = (parentIds: string[], childIds: string[]) =>
+      relatives ? (edgeLine(relatives, parentIds, childIds) ?? undefined) : undefined;
 
     const rfEdges: Edge[] = display.edges.map((e) =>
       e.kind === "partner"
@@ -562,6 +566,7 @@ function TreeCanvas({
               waypoints: e.waypoints,
               dimmed: dimAll,
               subtype: lineSubtype(members(e.sourceId), members(e.targetId), subtypeByPair),
+              line: lineOf(members(e.sourceId), members(e.targetId)),
             },
           },
     );
@@ -585,6 +590,7 @@ function TreeCanvas({
             lane: 0,
             dimmed: dimAll,
             subtype: lineSubtype(members(parent), allChildren, subtypeByPair),
+            line: lineOf(members(parent), allChildren),
           },
         });
       }
@@ -600,6 +606,7 @@ function TreeCanvas({
             lane: 0,
             dimmed: dimAll,
             subtype: lineSubtype(allParents, members(child), subtypeByPair),
+            line: lineOf(allParents, members(child)),
           },
         });
       }
@@ -635,7 +642,7 @@ function TreeCanvas({
       }
     }
     return [...withJunctions.filter((e) => !marriedPairs.has(e.id)), ...eventEdges];
-  }, [display, searching, membersOf, subtypeByPair]);
+  }, [display, searching, membersOf, subtypeByPair, referenceCtx]);
 
   /** Fokus-Ansicht: was je Person jenseits des Ausschnitts liegt. */
   const hiddenOf = useCallback(

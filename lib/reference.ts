@@ -64,6 +64,25 @@ export type RelativeInfo = {
   lines: LineKey[];
 };
 
+/**
+ * Farbe einer Eltern-Kind-Verbindung im Baum (Schalter „Linien“): die Linie,
+ * die Eltern- und Kindseite gemeinsam haben — aber nur, wenn es GENAU EINE
+ * ist. So färben sich die Ahnenketten der vier Großeltern; Verbindungen zu
+ * Vater/Mutter/Bezugsperson (mehrere Linien) und zu Seitenverwandten (keine
+ * Linie) bleiben neutral. Eine Seite kann mehrere Personen umfassen
+ * (Paarkarte, Treffpunkt beider Eltern).
+ */
+export function edgeLine(
+  relatives: Record<string, RelativeInfo>,
+  parentIds: readonly string[],
+  childIds: readonly string[],
+): LineKey | null {
+  const linesOf = (ids: readonly string[]) => new Set(ids.flatMap((id) => relatives[id]?.lines ?? []));
+  const parents = linesOf(parentIds);
+  const shared = [...linesOf(childIds)].filter((k) => parents.has(k));
+  return shared.length === 1 ? shared[0] : null;
+}
+
 /** Woher die wirksame Bezugsperson kommt. */
 export type ReferenceSource = "param" | "cookie" | "self";
 

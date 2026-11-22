@@ -1164,9 +1164,15 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         "Open a change set: a titled bundle that groups the following writes in the app's change history (e.g. " +
         "'Taufbuch St. Marien 1850–1870 ausgewertet'). Pass the returned change_set_id to every write tool of this task. " +
         "Without change_set_id, writes of the same key within 30 minutes join the most recent change set (this one, once " +
-        "opened), otherwise an automatic one. A change set accepts writes for 24 hours. Title in German, describing the task.",
+        "opened), otherwise an automatic one. A change set accepts writes for 24 hours. Title in German, describing the task " +
+        "and the record — never names of persons (the title is shown to users who may not see every person involved).",
       inputSchema: {
-        title: z.string().trim().min(3).max(CHANGE_SET_TITLE_MAX).describe("Short German description of the task."),
+        title: z
+          .string()
+          .trim()
+          .min(3)
+          .max(CHANGE_SET_TITLE_MAX)
+          .describe("Short German description of the task and record, without names of persons."),
       },
       outputSchema: { change_set_id: z.string(), title: z.string(), created_at: z.string() },
       annotations: {

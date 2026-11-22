@@ -73,15 +73,17 @@ export default async function RootLayout({
         // darf); der Import ist auf der Seite selbst Administratoren
         // vorbehalten.
         { href: "/admin/data", label: "Daten" },
-        ...(showAi ? [{ href: "/ai-access", label: "KI-Zugang" }] : []),
+        // Untermenü „Verwaltung“ (components/NavBar.tsx), damit die
+        // Kopfzeile auch bei mittlerer Breite einzeilig bleibt.
+        ...(showAi ? [{ href: "/ai-access", label: "KI-Zugang", group: "admin" as const }] : []),
         ...(can(user.role, "family:manage")
-          ? [{ href: "/admin/families", label: "Familien" }]
+          ? [{ href: "/admin/families", label: "Familien", group: "admin" as const }]
           : []),
         ...(can(user.role, "user:manage")
-          ? [{ href: "/admin/users", label: "Benutzer" }]
+          ? [{ href: "/admin/users", label: "Benutzer", group: "admin" as const }]
           : []),
         ...(can(user.role, "audit:read")
-          ? [{ href: "/admin/changes", label: "Änderungen" }]
+          ? [{ href: "/admin/changes", label: "Änderungen", group: "admin" as const }]
           : []),
       ]
     : [];
