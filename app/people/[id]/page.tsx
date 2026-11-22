@@ -351,7 +351,14 @@ export default async function PersonPage({
       for (const m of c.media ?? []) {
         if (seen.has(m.mediaId)) continue;
         seen.add(m.mediaId);
-        out.push({ mediaId: m.mediaId, caption: m.caption, note: `Beleg: ${citationWhere(c)}` });
+        // Bild am Beleg eines Ereignisses: steht nur hier (nicht zusätzlich im
+        // Abschnitt „Quellen“) und lässt sich hier lösen.
+        out.push({
+          mediaId: m.mediaId,
+          caption: m.caption,
+          note: `Beleg: ${citationWhere(c)}`,
+          unlinkTarget: { kind: "citation", id: c.id },
+        });
       }
       for (const m of c.sourceMedia ?? []) {
         if (seen.has(m.mediaId)) continue;
@@ -428,8 +435,11 @@ export default async function PersonPage({
     relationLabel: c.relationship ? relationLabel(c.relationship) : null,
     eventId: c.eventId,
     eventLabel: c.eventId ? eventLabelOf.get(c.eventId) ?? c.eventTitle ?? null : null,
-    media: (c.media ?? []).map((m) => ({ mediaId: m.mediaId, caption: m.caption })),
-    sourceMedia: (c.sourceMedia ?? []).map((m) => ({ mediaId: m.mediaId, caption: m.caption })),
+    // Entscheidung des Eigentümers: ein Bild nur am Eintrag (+ „Belegbilder“).
+    // Belegt der Beleg ein Ereignis, stehen seine Bilder in der Ereigniszeile.
+    media: c.eventId ? [] : (c.media ?? []).map((m) => ({ mediaId: m.mediaId, caption: m.caption })),
+    sourceMedia: c.eventId ? [] : (c.sourceMedia ?? []).map((m) => ({ mediaId: m.mediaId, caption: m.caption })),
+    imagesAtEvent: c.eventId ? (c.media?.length ?? 0) + (c.sourceMedia?.length ?? 0) : 0,
   }));
   const citationTargets: CitationTargetOption[] = [
     { value: "person", label: name(person), facts: [...PERSON_FACTS] },

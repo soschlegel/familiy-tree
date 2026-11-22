@@ -13,8 +13,12 @@ export type AttachedItem = {
   isMain?: boolean;
 };
 
-/** Geerbtes Bild (Belegbild) — nur angezeigt, mit Herkunft. */
-export type InheritedItem = AttachedItem & { note: string };
+/**
+ * Bild aus einem anderen Eintrag (Belegbild), mit Herkunft. Mit
+ * `unlinkTarget` lässt es sich hier von diesem Eintrag lösen (Bild eines
+ * Belegs, das nur in der Ereigniszeile steht).
+ */
+export type InheritedItem = AttachedItem & { note: string; unlinkTarget?: AttachTarget };
 
 /** Vorhandenes Bild, das sich hier verknüpfen lässt. */
 export type MediaCandidate = { mediaId: string; label: string };
@@ -106,14 +110,14 @@ export function AttachedMedia({
     router.refresh();
   }
 
-  async function remove(item: AttachedItem) {
+  async function remove(item: AttachedItem, from: AttachTarget = target) {
     if (busy) return;
     if (!confirm("Bild hier entfernen? Hängt es sonst nirgends, wird es gelöscht.")) return;
     setBusy(true);
     setError(null);
     setNotice(null);
     const res = await apiFetch<{ deleted: boolean }>(
-      `/api/media/${item.mediaId}/links?${FIELD[target.kind]}=${encodeURIComponent(target.id)}`,
+      `/api/media/${item.mediaId}/links?${FIELD[from.kind]}=${encodeURIComponent(from.id)}`,
       { method: "DELETE" },
     );
     setBusy(false);
@@ -172,6 +176,17 @@ export function AttachedMedia({
               <span className="max-w-[4rem] truncate text-[10px] muted" title={item.note}>
                 {item.note}
               </span>
+              {canEdit && item.unlinkTarget && (
+                <button
+                  type="button"
+                  className="btn-link-danger min-h-11 md:min-h-0"
+                  disabled={busy}
+                  onClick={() => void remove(item, item.unlinkTarget)}
+                  aria-label={`Bild ${item.caption ?? ""} von ${item.note} entfernen`.replace(/\s+/g, " ")}
+                >
+                  entfernen
+                </button>
+              )}
             </li>
           ))}
         </ul>
