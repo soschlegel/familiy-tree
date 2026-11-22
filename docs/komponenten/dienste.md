@@ -1180,6 +1180,7 @@ aus `lib/places/`), Pflege durch Administratoren.
   Zusammenführen und „Importe verbinden“ erzeugen keine neuen Ortstexte und
   stoßen deshalb nichts an. Abschaltbar mit `PLACE_AUTO_ASSIGN=off` (so in
   `vitest.config.ts`).
+  **Warten beim Speichern (seit 22.11.):** Mit `texts` (Speichern einer Person, Beziehung, eines Ereignisses) liefert `queuePlaceAutoAssign` ein Versprechen, das mit dem Ende dieses Laufs erfüllt ist, spätestens nach 1,5 s (`SAVE_WAIT_MS`), und nie abgelehnt wird; die Dienste warten darauf, damit die Seite nach dem Speichern den Ort gleich als Verweis zeigt. Ohne `texts` (nach Importen) kehrt es sofort zurück.
 - `placeHint(scope, text)` — Vorschlag am Eingabefeld: dieselbe Regel wie die
   Automatik (`matchPlace`), dazu eigene Orte; Status gefunden / mehrdeutig /
   nicht gefunden, Anzeigename, Genauigkeit, `formerName` (früherer bzw.

@@ -709,7 +709,7 @@ export async function createPerson(
     diff: { ...columns, familyIds },
   });
   // Neue Ortstexte im Hintergrund zuordnen (nie blockierend, nie fehlschlagend).
-  queuePlaceAutoAssign(scope, [person.birthPlace, person.deathPlace]);
+  await queuePlaceAutoAssign(scope, [person.birthPlace, person.deathPlace]);
 
   return toPersonSummary(scope, person, { familyIds, primaryMediaId: null });
 }
@@ -759,7 +759,7 @@ export async function updatePerson(
     });
   }
   if (changes.birthPlace || changes.deathPlace) {
-    queuePlaceAutoAssign(scope, [changes.birthPlace?.to as string | null, changes.deathPlace?.to as string | null]);
+    await queuePlaceAutoAssign(scope, [changes.birthPlace?.to as string | null, changes.deathPlace?.to as string | null]);
   }
 
   return summaryById(scope, id);

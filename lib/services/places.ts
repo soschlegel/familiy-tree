@@ -599,26 +599,41 @@ const queue = ((globalThis as unknown as { __placeAutoAssign?: { tail: Promise<v
 /** Abschaltbar für Tests (vitest.config.ts setzt PLACE_AUTO_ASSIGN=off). */
 export const placeAutoAssignEnabled = () => process.env.PLACE_AUTO_ASSIGN !== "off";
 
+/** So lange wartet ein einzelnes Speichern höchstens auf die Zuordnung. */
+const SAVE_WAIT_MS = 1500;
+
 /**
- * Stößt die automatische Zuordnung neuer Ortstexte im Hintergrund an und
- * kehrt sofort zurück — das Speichern wartet nicht darauf, und ein Fehler
- * hier landet nur im Server-Log. Läufe werden nacheinander ausgeführt.
- * `texts` weggelassen: alle offenen Ortstexte (nach Importen).
+ * Stößt die automatische Zuordnung neuer Ortstexte an. Ein Fehler landet nur
+ * im Server-Log und lässt das Speichern nie scheitern; Läufe werden
+ * nacheinander ausgeführt.
+ *
+ * - Mit `texts` (Speichern einer Person, Beziehung, eines Ereignisses): Das
+ *   Ergebnis ist ein Versprechen, das erfüllt ist, sobald dieser Lauf fertig
+ *   ist — spätestens nach `SAVE_WAIT_MS`. Die Dienste warten darauf, damit
+ *   die Seite nach dem Speichern den Ort gleich als Verweis zeigt (sonst
+ *   stünde dort bis zum Neuladen der reine Text). Dauert es länger (erstes
+ *   Laden des Ortsverzeichnisses), läuft die Zuordnung im Hintergrund weiter.
+ * - Ohne `texts` (nach Importen: alle offenen Ortstexte): kehrt sofort zurück.
+ *
+ * Das Versprechen wird nie abgelehnt.
  */
-export function queuePlaceAutoAssign(scope: Pick<Scope, "userId" | "via">, texts?: (string | null | undefined)[]): void {
+export function queuePlaceAutoAssign(scope: Pick<Scope, "userId" | "via">, texts?: (string | null | undefined)[]): Promise<void> {
   try {
-    if (!placeAutoAssignEnabled()) return;
+    if (!placeAutoAssignEnabled()) return Promise.resolve();
     const list = texts?.map((t) => t?.trim()).filter((t): t is string => Boolean(t));
-    if (list && list.length === 0) return;
+    if (list && list.length === 0) return Promise.resolve();
     const actor = { userId: scope.userId, via: scope.via };
-    queue.tail = queue.tail
+    const run = (queue.tail = queue.tail
       .then(() => assignNewPlaceTexts(actor, list))
       .then(
         () => undefined,
         (err: unknown) => console.error("[places] Automatische Zuordnung neuer Ortstexte fehlgeschlagen:", err),
-      );
+      ));
+    if (!list) return Promise.resolve();
+    return Promise.race([run, new Promise<void>((resolve) => setTimeout(resolve, SAVE_WAIT_MS).unref?.())]);
   } catch (err) {
     console.error("[places] Automatische Zuordnung nicht gestartet:", err);
+    return Promise.resolve();
   }
 }
 
