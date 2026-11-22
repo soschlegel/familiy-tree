@@ -12,6 +12,9 @@ const nextConfig = {
   outputFileTracingIncludes: {
     "/api/places/**": ["./geo/gazetteer.tsv.gz"],
     "/admin/places": ["./geo/gazetteer.tsv.gz"],
+    // Anwender-Hilfe: Markdown wird zur Laufzeit gelesen (lib/help/content.ts).
+    "/hilfe": ["./docs/anwender/*.md"],
+    "/hilfe/**": ["./docs/anwender/*.md"],
   },
   // `import text from "…?raw"` liefert den Dateiinhalt als Text, eingebaut
   // zur Build-Zeit — für CHANGELOG.md (lib/release-notes-data.ts). Kein

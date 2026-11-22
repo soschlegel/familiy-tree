@@ -188,8 +188,9 @@ Ein einziges Image mit App, Migrationen und Admin-Abgleich.
    Einstieg `docker/entrypoint.sh`, Befehl `node server.js`.
 
 `.dockerignore` hält u.a. `node_modules`, Build-Ordner, `data/`, `.env*`
-(außer dem Beispiel), Markdown außer der README und `CHANGELOG.md` (die
-Neuigkeiten werden beim Build eingebaut, siehe `next.config.mjs`), `tests/`, `e2e/`, die
+(außer dem Beispiel), Markdown außer der README, `CHANGELOG.md` (die
+Neuigkeiten werden beim Build eingebaut, siehe `next.config.mjs`) und der
+Anwender-Hilfe (`docs/anwender/*.md`, wird zur Laufzeit gelesen), `tests/`, `e2e/`, die
 Test-Konfigurationen (`vitest.config.ts`, `playwright.config.ts`),
 Testergebnisse, Compose-Dateien, `scripts/backup.sh`, `stack.env*` und
 `.mcp.json` aus dem Build-Kontext. Nichts davon braucht Build oder
@@ -311,7 +312,9 @@ Workflow nicht — die Prüfungen dort sind Handarbeit (AGENTS.md, Abschnitt 3).
 - `output: "standalone"` für ein kleines Image.
 - `sharp` als externes Server-Paket (nicht gebündelt).
 - `outputFileTracingIncludes`: `geo/gazetteer.tsv.gz` für `/api/places/**`
-  und `/admin/places`, damit die Datei im Standalone-Bundle landet.
+  und `/admin/places`, damit die Datei im Standalone-Bundle landet;
+  ebenso `docs/anwender/*.md` für `/hilfe` und `/hilfe/**`
+  (Anwender-Hilfe, `lib/help/content.ts`).
 - `webpack`: Regel `resourceQuery: /raw/` → `asset/source` — `import … from
   "…?raw"` liefert den Dateiinhalt als Text. Damit ist `CHANGELOG.md`
   (`lib/release-notes-data.ts`) zur Build-Zeit in den Server-Code eingebaut

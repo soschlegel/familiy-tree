@@ -85,6 +85,8 @@ Alle Seiten außer `/login` und der Weiterleitung `/` sind
 | `/admin/changes` | Änderungsübersicht | `audit:read` (Admin) |
 | `/admin/places` | Orte zuordnen | `place:manage` (Admin) |
 | `/neuigkeiten` | Neuigkeiten: alle Releases aus `CHANGELOG.md` | angemeldet |
+| `/hilfe` | Anwender-Hilfe: Themenliste | angemeldet |
+| `/hilfe/[thema]` | Ein Hilfethema aus `docs/anwender/` | angemeldet; unbekanntes Thema 404 |
 
 ## Übersicht: API-Routen
 
@@ -163,14 +165,16 @@ Dienst über den `Scope`.
   Personen, Recherche, Quellen, Daten; im Untermenü „Verwaltung“:
   KI-Zugang (nur bei KI-Recht oder noch nicht widerrufenen Schlüsseln —
   dafür eine kleine Abfrage am Benutzer), Familien, Benutzer, Änderungen
-  (je nach globalem Recht). Dazu Benutzername mit Rolle und
+  (je nach globalem Recht) und für alle zuletzt „Hilfe“ (`/hilfe`) — damit
+  hat jeder Angemeldete das Untermenü. Dazu Benutzername mit Rolle und
   Abmelde-Knopf (Server-Aktion `signOut`, danach `/login`).
 - Ohne Anmeldung keine Navigation.
 - Sprungmarke „Zum Inhalt springen“, Schriften (Fraunces, Source Sans 3
   über `next/font`), Farbe der Browserleiste je Farbschema, Fußzeile mit
   Build-Angabe (`buildInfo`/`buildLabel` aus `lib/build-info.ts`; ohne
-  Anmeldung nur das Datum) und — nur angemeldet — dem Link „Neuigkeiten“
-  (`/neuigkeiten`).
+  Anmeldung nur das Datum) und — nur angemeldet — den Links „Neuigkeiten“
+  (`/neuigkeiten`) und „Hilfe“ (`FooterHelpLink` aus
+  `components/HelpLink.tsx`; einzeilig, die Fußzeile hat eine feste Höhe).
 - **Neuigkeiten:** Die Benutzerabfrage liest auch `lastSeenReleaseId`;
   `releasesSince` (`lib/release-notes.ts`) wählt aus `releaseNotes()` die
   Releases seit dem zuletzt gesehenen. Gibt es welche, rendert das Layout
@@ -463,6 +467,29 @@ Die Personenseite.
 - **Daten:** `listPlaces`. **Anzeige:** Zähler je Status als Filter,
   `PlaceAutoAssign`, Suchfeld, `PlaceTable`, Seitennavigation.
 
+### `/hilfe` und `/hilfe/[thema]` — `app/hilfe/page.tsx`, `app/hilfe/[thema]/page.tsx`
+
+- **Zweck:** Anwender-Hilfe für Familienmitglieder; Inhalt ausschließlich
+  aus `docs/anwender/NN-thema.md` (Pflege: `docs/anwender/README.md`,
+  AGENTS.md „Anwender-Hilfe fortschreiben“).
+- **Rechte:** angemeldet (`requirePage()`), sonst `/login`. Die Texte
+  enthalten keine Stammbaumdaten; bewusst trotzdem nicht öffentlich.
+- **Daten:** `listHelpTopics` bzw. `getHelpTopic` aus `lib/help/content.ts`
+  (Dateien von der Platte, im Betrieb einmal gelesen). Das Thema muss dem
+  Muster `a-z0-9-` entsprechen und als Datei existieren, sonst 404.
+- **Anzeige:** Themenliste als Karten (Titel + erster Absatz); ein Thema
+  mit Brotkrumen „← Alle Hilfethemen“, Text über `renderHelpBlocks`
+  (`components/help-render.ts`, kein rohes HTML), unten Links zum vorigen
+  und nächsten Thema. Seitentitel „Thema · Hilfe · Stammbaum“.
+- **Build:** `next.config.mjs` nimmt `docs/anwender/*.md` per
+  `outputFileTracingIncludes` ins Standalone-Image mit; `.dockerignore`
+  lässt die Dateien ausdrücklich im Build-Kontext.
+- **Kontexthilfe** in anderen Seiten: `HelpLink` (siehe
+  oberflaeche-komponenten.md) auf `/map` („Wie wird gezählt?“ und
+  Admin-Hinweis „Orte zuordnen“), `/admin/data` (Orte zuordnen),
+  `/research/duplicates`, `/ai-access`, Personenseite (Bezugsperson,
+  Dubletten-Hinweis) und Legende der Baumlinien.
+
 ---
 
 ## API-Routen im Einzelnen
@@ -754,3 +781,4 @@ und `tests/mcp-http.db.test.ts`.
 | Quellen, Bilder | `e2e/write/sources.spec.ts`, `import-sources.spec.ts`, `media.spec.ts`, `attached-media.spec.ts` |
 | Export, Import | `e2e/read/export.spec.ts`, `gedcom-export-dialog.spec.ts`; `e2e/write/import.spec.ts`, `gedcom-import.spec.ts` |
 | Verwaltung, KI-Zugang, Änderungen | `e2e/write/admin.spec.ts`, `ai-access.spec.ts`, `changelog.spec.ts`; `e2e/read/mcp-http.spec.ts` |
+| Anwender-Hilfe, Kontexthilfe | `e2e/read/help.spec.ts`; Unit: `tests/help.test.ts` |

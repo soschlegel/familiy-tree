@@ -12,6 +12,7 @@ import { MainContainer, NavBar, type NavItem } from "@/components/NavBar";
 import { WhatsNewDialog } from "@/components/WhatsNewDialog";
 import { releaseNotes } from "@/lib/release-notes-data";
 import { releasesSince } from "@/lib/release-notes";
+import { FooterHelpLink } from "@/components/HelpLink";
 
 export const metadata: Metadata = {
   title: { default: "Stammbaum", template: "%s · Stammbaum" },
@@ -99,6 +100,8 @@ export default async function RootLayout({
         ...(can(user.role, "audit:read")
           ? [{ href: "/admin/changes", label: "Änderungen", group: "admin" as const }]
           : []),
+        // Anwender-Hilfe (docs/anwender/) — für alle, zuletzt im Untermenü.
+        { href: "/hilfe", label: "Hilfe", group: "admin" as const },
       ]
     : [];
 
@@ -145,6 +148,7 @@ export default async function RootLayout({
               Neuigkeiten
             </Link>
           )}
+          {user && <FooterHelpLink />}
         </footer>
       </body>
     </html>
