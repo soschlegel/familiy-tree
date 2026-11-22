@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, useTransition } from "react";
 
 import type { GazetteerHitDto, PlaceRowDto } from "@/lib/services/places";
 import { apiFetch, jsonBody } from "./api-client";
@@ -20,7 +20,11 @@ const coords = (lat: number | null, lon: number | null) =>
 /** Knopf „Automatisch zuordnen“ — für alle nicht von Hand bestätigten Ortstexte. */
 export function PlaceAutoAssign({ open }: { open: number }) {
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
+  const [working, setBusy] = useState(false);
+  // Bis die Seite neu geladen ist, bleibt der Knopf gesperrt — sonst
+  // überholt eine spätere Aktion die noch laufende Aktualisierung.
+  const [refreshing, startRefresh] = useTransition();
+  const busy = working || refreshing;
   const [message, setMessage] = useState<string | null>(null);
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -42,7 +46,7 @@ export function PlaceAutoAssign({ open }: { open: number }) {
           setMessage(
             `${r.created} neu, ${r.updated} geändert, ${r.removed} entfernt; ${r.unmatched} ohne Treffer, ${r.manual} von Hand bestätigt (unverändert).`,
           );
-          router.refresh();
+          startRefresh(() => router.refresh());
         }}
       >
         {busy ? "Ordne zu …" : "Automatisch zuordnen"}
@@ -70,7 +74,9 @@ export function PlaceTable({ rows }: { rows: PlaceRowDto[] }) {
 
 function PlaceRow({ row }: { row: PlaceRowDto }) {
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
+  const [working, setBusy] = useState(false);
+  const [refreshing, startRefresh] = useTransition();
+  const busy = working || refreshing;
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const a = row.assignment;
@@ -83,7 +89,7 @@ function PlaceRow({ row }: { row: PlaceRowDto }) {
     setBusy(false);
     if (!res.ok) return setError(res.message);
     setEditing(false);
-    router.refresh();
+    startRefresh(() => router.refresh());
   };
 
   const sameAsSuggestion = a && s && a.gazetteerId === s.gazetteerId && !a.unresolvable;

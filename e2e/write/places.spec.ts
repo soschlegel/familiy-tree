@@ -34,6 +34,8 @@ test("nicht zuordenbar, zurücksetzen, automatisch zuordnen", async ({ page }) =
   // Die automatische Zuordnung lässt von Hand Entschiedenes stehen.
   await page.getByTestId("places-auto").click();
   await expect(page.getByTestId("places-auto-result")).toContainText("von Hand bestätigt");
+  // Erst weiter, wenn die Seite neu geladen ist (Knopf wieder frei).
+  await expect(page.getByTestId("places-auto")).toBeEnabled();
   await expect(r).toHaveAttribute("data-status", "unresolvable");
 
   await r.getByRole("button", { name: "Zurücksetzen" }).click();
@@ -41,6 +43,7 @@ test("nicht zuordenbar, zurücksetzen, automatisch zuordnen", async ({ page }) =
   await expect(r.getByTestId("place-suggestion")).toContainText("Lüneburg, Niedersachsen");
   await page.getByTestId("places-auto").click();
   await expect(page.getByTestId("places-auto-result")).toContainText(/[1-9]\d* neu/);
+  await expect(page.getByTestId("places-auto")).toBeEnabled();
   await expect(r).toHaveAttribute("data-status", "auto");
   await r.getByRole("button", { name: "Bestätigen" }).click();
   await expect(r).toHaveAttribute("data-status", "manual");
