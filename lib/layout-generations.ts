@@ -1227,9 +1227,9 @@ export function layoutTimeline(data: TreeData) {
      * Geschwister seitlich verteilen.
      *
      * Ohne das ziehen alle Kinder eines Elternpaares auf dieselbe Zielmitte
-     * und stapeln sich in einer Spalte — bei zwei Geschwistern
-     * sichtbar, die 8 Jahre trennen und die deshalb nicht kollidieren, aber
-     * exakt untereinander landeten. Geschwister werden daher symmetrisch um
+     * und stapeln sich in einer Spalte — sichtbar bei zwei Geschwistern, die
+     * 8 Jahre trennen und die deshalb nicht kollidieren, aber exakt
+     * untereinander landeten. Geschwister werden daher symmetrisch um
      * die Elternmitte gelegt, nach Geburtsjahr sortiert.
      */
     for (const group of siblingGroups) {
