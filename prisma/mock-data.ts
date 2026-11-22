@@ -1412,6 +1412,31 @@ export function generateMockData(seed: number = MOCK_SEED): MockData {
     place: founderAMarriage.startPlace ?? null,
   });
 
+  // Für die Karte (README, „Karte und Orte“): einige Wohnorte in Ortsformen,
+  // wie GEDCOM-Programme sie schreiben, auch mit historischen Namen — nur zu
+  // Lebzeiten, damit die Plausibilitätsprüfung nichts Neues meldet.
+  const lifeYear = (p: Internal, offset: number): number | null => {
+    if (!p.birthDate) return null;
+    const y = p.birthDate.getUTCFullYear() + offset;
+    if (p.deathDate && y >= p.deathDate.getUTCFullYear()) return null;
+    return y < MOCK_REFERENCE_YEAR ? y : null;
+  };
+  const mapEvent = (p: Internal, offset: number, place: string, type: MockEvent["type"] = "RESIDENCE", qualifier: MockQualifier = "EXACT") => {
+    const y = lifeYear(p, offset);
+    if (y === null) return;
+    event({ personId: p.id, type, date: utc(y, 1, 1), datePrecision: "YEAR", dateQualifier: qualifier, place, sortOrder: 5 });
+  };
+  mapEvent(fB, 24, "Breslau, Schlesien, Preußen", "CENSUS");
+  mapEvent(byId.get(founders.C)!, 21, "Temeswar, Banat", "RESIDENCE", "ABOUT");
+  mapEvent(byId.get(founders.C)!, 27, "Berkum, Peine, Lk Peine, Saarland, Germany", "RESIDENCE", "ABOUT");
+  const emigrant = persons.find(
+    (p) => p.generation === 1 && p.familyKeys.includes("D") && p.birthDate && lifeYear(p, 30) !== null,
+  );
+  if (emigrant) {
+    mapEvent(emigrant, 22, "New York, New York, USA", "EMIGRATION");
+    mapEvent(emigrant, 28, "Kiel, Schleswig-Holstein, Germany");
+  }
+
   // Ehestand unbekannt: zwei unverheiratete Partnerschaften aus jüngeren
   // Generationen, die sonst nirgends als Sonderfall dienen.
   const special = new Set([firstMarriage.id, founderAMarriage.id, crossMarriage.id]);

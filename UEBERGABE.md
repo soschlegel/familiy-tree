@@ -241,12 +241,32 @@ Freigabe (21.11.): „bauen und Gas geben“ — die Wünsche werden umgesetzt.
 
 ### 4. Weitere offene Punkte
 
-- **Karte „Wurzeln nach Jahr“** (Wunsch für das nächste Release): Welt-/
-  Europakarte mit Jahresregler, die zeigt, wo die Vorfahren einer Person
-  wann lebten. Orte sind heute Freitext ohne Koordinaten. Entwurf liegt dem
-  Eigentümer vor, noch nicht freigegeben: Ortsverzeichnis mitliefern statt
-  Online-Dienst, eigene Karte ohne fremde Server, neue Tabelle für Orte
-  (ergänzende Migration).
+- **Karte „Wurzeln nach Jahr“** — erledigt auf Branch `karte` (freigegeben,
+  NICHT gemergt, nicht ausgerollt). Migration `20261123000001_orte` (Tabelle
+  `Place`, rein ergänzend). `/map` (Menüpunkt „Karte“) und `/admin/places`
+  „Orte zuordnen“ (nur Admins; bewusst KEIN eigener Menüpunkt — verlinkt von
+  der Karte und unter „Daten“, gehört beim Zusammenführen ins geplante
+  Verwaltungsmenü). Mitgeliefert: `geo/gazetteer.tsv.gz` (GeoNames,
+  CC BY 4.0, 4,4 MB) und `public/geo/countries.json` (Natural Earth, 337 KB),
+  erzeugt von `scripts/build-geodata.mjs`. Regeln, Datenschutz, Leistung,
+  Lizenzen: README „Karte und Orte“. Einzige Änderung an
+  `components/NavBar.tsx`: Innenabstand der Menüpunkte unter `xl`
+  (`px-2 xl:px-3`), sonst passte die Admin-Zeile mit „Karte“ bei 1024 px
+  nicht mehr (Test „schmalster Desktop“) — entfällt mit dem Verwaltungsmenü.
+  Prüfstand (22.11.): Typecheck, Lint, Vitest 776/777 (einzig
+  `tests/mcp.db.test.ts`, bekannt wegen des Datenbanknamens im Worktree);
+  schema-diff-check Exit 0, `prisma migrate diff` ohne Abweichung;
+  Playwright auf frischem Server: setup 6/6, read 177/178 (der bekannte
+  seltene Hydration-Fehler auf `/people`, „Sortierung nach Geburt“; einzeln
+  wiederholt grün, Aufzeichnung außerhalb des Repos gesichert), nach Neustart
+  write 87/87 (der erste Lauf fand eine Wettlaufsituation auf der neuen
+  Seite — behoben, Knöpfe bis zum Neuladen gesperrt).
+  Offen zur Entscheidung: Startausschnitt „Orte“ (alle Orte der Auswahl)
+  statt „Europa“; Kreise ab 70 px begrenzt; deutsche Anzeigenamen auch für
+  heute polnische Städte, wenn GeoNames den deutschen Namen nicht als
+  historisch kennzeichnet („Danzig“, aber „Wrocław“); 4,4 MB Ortsverzeichnis
+  im öffentlichen Repo; kein MCP-Werkzeug; Kartendaten für „alle“ bei 12 000
+  Personen 1,4 MB und gut 1 s auf dem Server.
 - **Stammbaum auf dem Telefon**: Kopf und Werkzeugleiste belegen bei
   360×740 gut 40 % der Höhe, die Karten sind beim Standardzoom klein.
   Braucht eine Gestaltungsentscheidung (Leiste einklappen, Vollbild, Titel

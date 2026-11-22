@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { requireScope } from "@/lib/session";
 import { can } from "@/lib/authz";
 import { listFamilies } from "@/lib/services";
@@ -31,6 +33,14 @@ export default async function DataPage() {
       <DataTransfer canImport={canImport} gedcomOverview={gedcomOverview} />
       {canImport && <GedcomImport families={families} />}
       {canImport && <ImportHistory />}
+      {can(session.user.role, "place:manage") && (
+        <p className="card p-4 text-sm" data-testid="data-places-link">
+          Ortsangaben für die Karte:{" "}
+          <Link href="/admin/places" className="btn-link">
+            Orte zuordnen
+          </Link>
+        </p>
+      )}
     </div>
   );
 }

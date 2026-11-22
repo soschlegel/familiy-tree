@@ -14,6 +14,7 @@ const [dupKeep, dupOther] = L.duplicates[0];
 const PAGES: { name: string; url: string; heading: string | RegExp }[] = [
   { name: "Baum (Fokus)", url: "/tree", heading: "Stammbaum" },
   { name: "Baum (Generationen)", url: "/tree?view=generations", heading: "Stammbaum" },
+  { name: "Karte", url: "/map", heading: "Wurzeln nach Jahr" },
   { name: "Personenliste", url: "/people", heading: "Personen" },
   { name: "Personenseite", url: `/people/${L.founders.A}`, heading: /.+/ },
   { name: "Person bearbeiten", url: `/people/${L.founders.A}/edit`, heading: /.+/ },
@@ -28,6 +29,7 @@ const PAGES: { name: string; url: string; heading: string | RegExp }[] = [
   { name: "Benutzer", url: "/admin/users", heading: "Benutzer" },
   { name: "Familien und Zugriffe", url: "/admin/families", heading: "Familien und Zugriffe" },
   { name: "Änderungen", url: "/admin/changes", heading: "Änderungen" },
+  { name: "Orte zuordnen", url: "/admin/places", heading: "Orte zuordnen" },
   { name: "Daten", url: "/admin/data", heading: /.+/ },
   { name: "KI-Zugang", url: "/ai-access", heading: /.+/ },
 ];

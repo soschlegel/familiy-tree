@@ -1,7 +1,7 @@
 import { test, expect, authFile } from "../support/fixtures";
 import { openAdminMenu } from "../support/nav";
 
-const ALL = ["Baum", "Personen", "Recherche", "Quellen", "Daten"];
+const ALL = ["Baum", "Karte", "Personen", "Recherche", "Quellen", "Daten"];
 /** Stehen im Untermenü „Verwaltung“ (components/NavBar.tsx). */
 const ADMIN_ONLY = ["Familien", "Benutzer", "Änderungen"];
 

@@ -66,6 +66,7 @@ export default async function RootLayout({
   const items: NavItem[] = user
     ? [
         { href: "/tree", label: "Baum" },
+        { href: "/map", label: "Karte" },
         { href: "/people", label: "Personen" },
         { href: "/research", label: "Recherche" },
         { href: "/sources", label: "Quellen" },
