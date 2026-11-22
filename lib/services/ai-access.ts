@@ -2,6 +2,7 @@ import type { AiAccess, ApiTokenKind, ApiTokenLevel, Role } from "@prisma/client
 
 import { prisma } from "../prisma";
 import { audit, auditActor } from "../audit";
+import { nameChangeSet } from "../change-sets";
 import { generateToken, tokenMatches, tokenPrefixOf } from "../ai-tokens";
 import { loadScope, type Scope } from "../scope";
 import {
@@ -273,6 +274,75 @@ export async function revokeApiToken(scope: Scope, tokenId: string): Promise<Api
     },
   });
   return toTokenDto(updated);
+}
+
+/**
+ * Darf ein Schlüssel endgültig gelöscht werden? Ja, wenn er widerrufen oder
+ * abgelaufen ist — oder noch nie benutzt wurde (dann ist Löschen zugleich
+ * Widerruf). Ein aktiver, schon benutzter Schlüssel muss zuerst widerrufen
+ * werden: So bleibt bewusst, dass ein Assistent ihn gerade verwenden könnte.
+ * Gleiche Regel in components/ai-access-labels.ts (canDeleteToken).
+ */
+export function apiTokenDeletable(
+  t: Pick<TokenRow, "revokedAt" | "expiresAt" | "lastUsedAt">,
+  now = new Date(),
+): boolean {
+  return tokenStatus(t, now) !== "ACTIVE" || t.lastUsedAt === null;
+}
+
+/** Prisma-Bedingung zu apiTokenDeletable — für das atomare Löschen. */
+function deletableWhere(now: Date) {
+  return { OR: [{ revokedAt: { not: null } }, { expiresAt: { lte: now } }, { lastUsedAt: null }] };
+}
+
+/**
+ * Löscht einen Schlüssel endgültig: eigene immer, fremde nur als Admin
+ * (sonst NOT_FOUND), nur wenn apiTokenDeletable — sonst CONFLICT. Protokoll
+ * und Changelog verweisen per apiTokenId ohne Fremdschlüssel auf Schlüssel;
+ * sie bleiben erhalten, die Änderungsgeschichte zeigt den Schlüssel danach
+ * als „gelöscht“ (Name aus diesem Protokolleintrag, lib/services/changes.ts).
+ */
+export async function deleteApiToken(scope: Scope, tokenId: string): Promise<ApiTokenDto> {
+  assertWebChannel(scope);
+  const row = await prisma.apiToken.findUnique({ where: { id: tokenId }, select: TOKEN_SELECT });
+  if (!row || (row.userId !== scope.userId && !scope.isAdmin)) throw notFoundError("Schlüssel");
+
+  const now = new Date();
+  const notDeletable = () =>
+    conflictError("Dieser Schlüssel ist aktiv und wurde schon benutzt — bitte zuerst widerrufen, dann löschen.", {
+      reason: "ACTIVE_AND_USED",
+    });
+  if (!apiTokenDeletable(row, now)) throw notDeletable();
+
+  // Atomar mit der Bedingung: Wird der Schlüssel zwischen Prüfung und Löschen
+  // erstmals benutzt, bleibt er stehen.
+  const { count } = await prisma.apiToken.deleteMany({ where: { id: tokenId, ...deletableWhere(now) } });
+  if (count === 0) {
+    if (await prisma.apiToken.findUnique({ where: { id: tokenId }, select: { id: true } })) throw notDeletable();
+    throw notFoundError("Schlüssel");
+  }
+
+  const status = tokenStatus(row, now);
+  nameChangeSet(scope, `KI-Schlüssel „${row.name}“ gelöscht`);
+  await audit({
+    ...auditActor(scope),
+    action: "DELETE",
+    entityType: "ApiToken",
+    entityId: tokenId,
+    diff: {
+      name: row.name,
+      prefix: row.prefix,
+      level: row.level,
+      status,
+      createdAt: iso(row.createdAt),
+      lastUsedAt: iso(row.lastUsedAt),
+      expiresAt: iso(row.expiresAt),
+      revokedAt: iso(row.revokedAt),
+      ...(status === "ACTIVE" ? { revokedByDelete: true } : {}),
+      ...(row.userId !== scope.userId ? { ownerId: row.userId } : {}),
+    },
+  });
+  return toTokenDto(row, now);
 }
 
 // ---------------------------------------------------------------------------

@@ -3,11 +3,16 @@ import { loadScope } from "@/lib/scope";
 import { listPickablePersons } from "@/lib/services";
 import { requirePage } from "@/lib/session";
 import { UserAdmin } from "@/components/UserAdmin";
+import { HISTORY_PARAM } from "@/components/ai-access-labels";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Benutzer" };
 
-export default async function UsersPage() {
+export default async function UsersPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const session = await requirePage("user:manage");
 
   const now = new Date();
@@ -56,6 +61,7 @@ export default async function UsersPage() {
       </div>
 
       <UserAdmin
+        initialShowHistory={(await searchParams)[HISTORY_PARAM] === "1"}
         people={people}
         users={users.map(({ _count, person, ...u }) => ({
           ...u,

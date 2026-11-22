@@ -14,7 +14,9 @@ import { openAdminMenu } from "../support/nav";
 /**
  * KI-Zugang: Admin vergibt und entzieht das Recht, ein Benutzer legt
  * Schlüssel an (Geheimnis genau einmal sichtbar), Herabsetzen wirkt auf die
- * angezeigte wirksame Stufe, Widerrufen durch Benutzer und Admin.
+ * angezeigte wirksame Stufe, Widerrufen durch Benutzer und Admin,
+ * Verlauf (widerrufene/abgelaufene ausgeblendet, Schalter `?verlauf=1`) und
+ * endgültiges Löschen (Verlauf und nie benutzte ja, aktiv benutzte nein).
  *
  * Alles Ändernde läuft mit einem eigens eingeladenen Benutzer, der am Ende
  * samt Schlüsseln gelöscht wird — die festen Mock-Benutzer und ihre
@@ -34,6 +36,7 @@ let secret: string;
 const userRow = (page: Page) => page.locator(`[data-testid="user-row"][data-email="${email}"]`);
 const aiSelect = (page: Page) => userRow(page).getByRole("combobox", { name: `KI-Zugang von ${email}` });
 const tokenRow = (page: Page, name: string) => page.getByTestId("ai-token").filter({ hasText: name });
+const historyToggle = (page: Page) => page.getByRole("checkbox", { name: "Widerrufene und abgelaufene anzeigen (Verlauf)" });
 
 /** Als der Wegwerf-Benutzer anmelden (eigener Browser-Kontext). */
 async function asUser(loginAs: (role: null) => Promise<{ page: Page }>) {
@@ -227,7 +230,7 @@ test("Herabsetzen wirkt sofort auf die wirksame Stufe", async ({ page, loginAs }
   await expect(user.getByRole("navigation", { name: "Hauptnavigation" }).getByRole("link", { name: "KI-Zugang" })).toBeVisible();
 });
 
-test("Widerrufen: als Benutzer und als Admin", async ({ page, loginAs }) => {
+test("Widerrufen: als Benutzer und als Admin — danach im ausgeblendeten Verlauf", async ({ page, loginAs }) => {
   const user = await asUser(loginAs);
   const userDialogs: string[] = [];
   user.on("dialog", (d) => {
@@ -235,12 +238,32 @@ test("Widerrufen: als Benutzer und als Admin", async ({ page, loginAs }) => {
     void d.accept();
   });
   await user.goto("/ai-access");
+  await expect(historyToggle(user)).toHaveCount(0); // nichts ausgeblendet
   await tokenRow(user, keyUi).getByRole("button", { name: `Schlüssel ${keyUi} widerrufen` }).click();
-  await expect(user.getByRole("status")).toHaveText(`Schlüssel „${keyUi}“ widerrufen.`);
+  await expect(user.getByRole("status")).toHaveText(
+    `Schlüssel „${keyUi}“ widerrufen. Er steht jetzt im ausgeblendeten Verlauf.`,
+  );
   expect(userDialogs[0]).toContain(`Schlüssel „${keyUi}“`);
+  // Standardmäßig ausgeblendet, mit Zähler.
+  await expect(tokenRow(user, keyUi)).toHaveCount(0);
+  await expect(user.getByTestId("ai-token-hidden-count")).toHaveText("1 ausgeblendet");
+  await expect(historyToggle(user)).not.toBeChecked();
+  await historyToggle(user).check();
+  await expect(user).toHaveURL(/[?&]verlauf=1/);
+  await expect(user.getByTestId("ai-token-hidden-count")).toHaveText("1 im Verlauf");
+  const history = user.getByRole("list", { name: "Verlauf: Deine Schlüssel" });
+  await expect(history.getByTestId("ai-token")).toHaveCount(1);
   await expect(tokenRow(user, keyUi).getByTestId("ai-token-status")).toHaveText("widerrufen");
   await expect(tokenRow(user, keyUi)).toHaveAttribute("data-status", "REVOKED");
   await expect(tokenRow(user, keyUi).getByRole("button", { name: /widerrufen/ })).toHaveCount(0);
+  await expect(tokenRow(user, keyUi).getByRole("button", { name: `Schlüssel ${keyUi} löschen` })).toBeVisible();
+  // Der Schalter überlebt das Neuladen (Adresse).
+  await user.reload();
+  await expect(historyToggle(user)).toBeChecked();
+  await expect(tokenRow(user, keyUi)).toBeVisible();
+  await historyToggle(user).uncheck();
+  await expect(user).not.toHaveURL(/verlauf=/);
+  await expect(tokenRow(user, keyUi)).toHaveCount(0);
 
   // Admin: Schlüssel des Benutzers einsehen und den zweiten widerrufen.
   page.on("dialog", (d) => void d.accept());
@@ -250,15 +273,21 @@ test("Widerrufen: als Benutzer und als Admin", async ({ page, loginAs }) => {
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
   const keys = page.getByTestId("user-ai-keys");
-  await expect(keys.getByTestId("ai-token")).toHaveCount(2);
-  await expect(tokenRow(page, keyUi).getByTestId("ai-token-status")).toHaveText("widerrufen");
+  await expect(keys.getByTestId("ai-token")).toHaveCount(1);
+  await expect(keys.getByTestId("ai-token-hidden-count")).toHaveText("1 ausgeblendet");
   await expect(tokenRow(page, keyApi).getByTestId("ai-token-effective")).toHaveText(
     "Wirkt derzeit nicht — der Benutzer hat keinen KI-Zugang.",
   );
   await keys.getByRole("button", { name: `Schlüssel ${keyApi} widerrufen` }).click();
   await expect(page.getByText(`Schlüssel „${keyApi}“ von ${email} widerrufen.`)).toBeVisible();
-  await expect(tokenRow(page, keyApi).getByTestId("ai-token-status")).toHaveText("widerrufen");
+  await expect(keys.getByTestId("ai-token-none-active")).toHaveText("Keine aktiven Schlüssel.");
+  await expect(keys.getByTestId("ai-token-hidden-count")).toHaveText("2 ausgeblendet");
   await expect(userRow(page).getByTestId("user-ai-keys-toggle")).toContainText("0 aktiv");
+  await historyToggle(page).check();
+  await expect(page).toHaveURL(/[?&]verlauf=1/);
+  await expect(keys.getByTestId("ai-token")).toHaveCount(2);
+  await expect(tokenRow(page, keyApi).getByTestId("ai-token-status")).toHaveText("widerrufen");
+  await expect(tokenRow(page, keyUi).getByTestId("ai-token-status")).toHaveText("widerrufen");
   await expectNoA11yViolations(page);
 
   // Ohne Recht und ohne aktive Schlüssel verschwindet der Menüpunkt.
@@ -267,16 +296,98 @@ test("Widerrufen: als Benutzer und als Admin", async ({ page, loginAs }) => {
   await expect(user.getByRole("navigation", { name: "Hauptnavigation" }).getByRole("link", { name: "KI-Zugang" })).toHaveCount(0);
 });
 
+test("Löschen: Verlauf und nie benutzte ja, aktiv benutzte erst nach Widerruf", async ({ page, loginAs }) => {
+  await setAiAccess("READ");
+  const user = await asUser(loginAs);
+  const dialogs: string[] = [];
+  user.on("dialog", (d) => {
+    dialogs.push(d.message());
+    void d.accept();
+  });
+
+  // Zwei neue Schlüssel: einer bleibt unbenutzt, einer wird über MCP benutzt.
+  const unused = `E2E unbenutzt ${tag}`;
+  const used = `E2E benutzt ${tag}`;
+  expect((await user.request.post("/api/ai-tokens", { data: { name: unused, level: "READ" } })).status()).toBe(201);
+  const usedRes = await user.request.post("/api/ai-tokens", { data: { name: used, level: "READ" } });
+  expect(usedRes.status()).toBe(201);
+  const usedBody = (await usedRes.json()) as { token: { id: string }; secret: string };
+  const mcp = await user.request.post("/api/mcp", {
+    headers: { Authorization: `Bearer ${usedBody.secret}`, Accept: "application/json, text/event-stream" },
+    data: { jsonrpc: "2.0", id: 1, method: "tools/list" },
+  });
+  expect(mcp.status()).toBe(200);
+
+  await user.goto("/ai-access");
+  // Nie benutzt: löschen (= zugleich widerrufen) möglich.
+  await tokenRow(user, unused).getByRole("button", { name: `Schlüssel ${unused} löschen` }).click();
+  await expect(user.getByRole("status")).toHaveText(`Schlüssel „${unused}“ gelöscht.`);
+  expect(dialogs.at(-1)).toContain(`Schlüssel „${unused}“`);
+  expect(dialogs.at(-1)).toContain("endgültig löschen?");
+  expect(dialogs.at(-1)).toContain("noch nie benutzt");
+  await expect(tokenRow(user, unused)).toHaveCount(0);
+
+  // Benutzt und aktiv: kein Löschknopf, die API lehnt ab (409).
+  const usedRow = tokenRow(user, used);
+  await expect(usedRow.getByTestId("ai-token-status")).toHaveText("aktiv");
+  await expect(usedRow.getByRole("button", { name: `Schlüssel ${used} widerrufen` })).toBeVisible();
+  await expect(usedRow.getByRole("button", { name: /löschen/ })).toHaveCount(0);
+  const refused = await user.request.delete(`/api/ai-tokens/${usedBody.token.id}?endgueltig=1`);
+  expect(refused.status()).toBe(409);
+  expect(await refused.text()).toContain("zuerst widerrufen");
+
+  // Erst widerrufen, dann im Verlauf löschen.
+  await usedRow.getByRole("button", { name: `Schlüssel ${used} widerrufen` }).click();
+  await expect(user.getByRole("status")).toContainText(`Schlüssel „${used}“ widerrufen.`);
+  await historyToggle(user).check();
+  const history = user.getByRole("list", { name: "Verlauf: Deine Schlüssel" });
+  await history.getByRole("button", { name: `Schlüssel ${used} löschen` }).click();
+  await expect(user.getByRole("status")).toHaveText(`Schlüssel „${used}“ gelöscht.`);
+  expect(dialogs.at(-1)).toContain("verschwindet damit auch aus dem Verlauf");
+  await expect(tokenRow(user, used)).toHaveCount(0);
+  await history.getByRole("button", { name: `Schlüssel ${keyUi} löschen` }).click();
+  await expect(user.getByRole("status")).toHaveText(`Schlüssel „${keyUi}“ gelöscht.`);
+  await expect(tokenRow(user, keyUi)).toHaveCount(0);
+  await expect(user.getByTestId("ai-token-hidden-count")).toHaveText("1 im Verlauf");
+
+  // Admin löscht im Verlauf des Benutzers (Schalter aus der Adresse).
+  const adminDialogs: string[] = [];
+  page.on("dialog", (d) => {
+    adminDialogs.push(d.message());
+    void d.accept();
+  });
+  await page.goto("/admin/users?verlauf=1");
+  await userRow(page).getByTestId("user-ai-keys-toggle").click();
+  const keys = page.getByTestId("user-ai-keys");
+  await expect(historyToggle(page)).toBeChecked();
+  await keys.getByRole("button", { name: `Schlüssel ${keyApi} löschen` }).click();
+  await expect(page.getByText(`Schlüssel „${keyApi}“ von ${email} gelöscht.`)).toBeVisible();
+  expect(adminDialogs.at(-1)).toContain(`von ${email} endgültig löschen?`);
+  await expect(keys.getByTestId("ai-token")).toHaveCount(0);
+  await expect(keys).toContainText("Noch keine Schlüssel angelegt.");
+
+  const api = await apiAs("admin");
+  const tokens = (await (await api.get(`/api/ai-tokens?all=1&userId=${userId}`)).json()) as { tokens: unknown[] };
+  expect(tokens.tokens).toEqual([]);
+  await api.dispose();
+});
+
 test("vorab angelegte Schlüssel: Status und gedeckelte Stufe", async ({ loginAs }) => {
   const { page } = await loginAs("editor");
   await page.goto("/ai-access");
   const byId = (id: string) => page.locator(`[data-testid="ai-token"][data-token-id="${id}"]`);
+  // Widerrufene und abgelaufene sind ausgeblendet — mit Zähler.
+  for (const id of ["mock-token-editor-revoked", "mock-token-editor-expired"]) await expect(byId(id)).toHaveCount(0);
+  await expect(page.getByTestId("ai-token-hidden-count")).toHaveText("2 ausgeblendet");
+  await historyToggle(page).check();
+  await expect(page.getByTestId("ai-token-hidden-count")).toHaveText("2 im Verlauf");
   await expect(byId("mock-token-editor-revoked").getByTestId("ai-token-status")).toHaveText("widerrufen");
   await expect(byId("mock-token-editor-revoked")).toContainText(/widerrufen\s*1\.2\.2026/);
   await expect(byId("mock-token-editor-expired").getByTestId("ai-token-status")).toHaveText("abgelaufen");
   await expect(byId("mock-token-editor-expired")).toContainText(/abgelaufen\s*1\.3\.2026/);
+  // Im Verlauf nur „löschen“ (hier nicht ausgelöst — feste Testschlüssel).
   for (const id of ["mock-token-editor-revoked", "mock-token-editor-expired"]) {
-    await expect(byId(id).getByRole("button")).toHaveCount(0);
+    await expect(byId(id).getByRole("button")).toHaveText(["löschen"]);
   }
   await expect(byId("mock-token-editor-write").getByTestId("ai-token-status")).toHaveText("aktiv");
   await expect(byId("mock-token-editor-write").getByTestId("ai-token-prefix")).toHaveText("ftk_00000000e001…");
@@ -304,8 +415,9 @@ test("Betrachter ohne Adminrolle erreicht die Verwaltung nicht", async ({ loginA
   expect((await api.get("/api/ai-tokens?all=1")).status()).toBe(403);
   expect((await api.get("/api/ai-tokens?all=1&userId=mock-user-editor")).status()).toBe(403);
   expect((await api.get("/api/users")).status()).toBe(403);
-  // Fremde Schlüssel sind für Nicht-Admins unsichtbar (404) — und bleiben aktiv.
+  // Fremde Schlüssel sind für Nicht-Admins unsichtbar (404) — und bleiben aktiv bzw. erhalten.
   expect((await api.delete("/api/ai-tokens/mock-token-editor-write")).status()).toBe(404);
+  expect((await api.delete("/api/ai-tokens/mock-token-editor-revoked?endgueltig=1")).status()).toBe(404);
   const own = (await (await api.get("/api/ai-tokens")).json()) as { info: { aiAccess: string }; tokens: { userId: string }[] };
   expect(own.info.aiAccess).toBe("READ");
   expect(new Set(own.tokens.map((t) => t.userId))).toEqual(new Set(["mock-user-viewer"]));
@@ -337,6 +449,18 @@ test.describe("Telefon (390 px)", () => {
   test("KI-Zugang ohne waagerechte Scrollleiste", async ({ page }) => {
     await page.goto("/ai-access");
     await expect(page.getByTestId("ai-token").first()).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test("Verlauf: Schalter und Löschknopf sind Tippziele, keine Scrollleiste", async ({ page }) => {
+    await page.goto("/ai-access?verlauf=1");
+    const revoked = page.locator('[data-testid="ai-token"][data-token-id="mock-token-editor-revoked"]');
+    await expect(revoked).toBeVisible();
+    const label = page.locator("label").filter({ has: historyToggle(page) });
+    expect((await label.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    const box = (await revoked.getByRole("button", { name: /löschen$/ }).boundingBox())!;
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(box.width).toBeGreaterThanOrEqual(44);
     await expectNoHorizontalOverflow(page);
   });
 });

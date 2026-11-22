@@ -40,8 +40,10 @@ export type ChangeEntryDto = {
   what: string;
   user: string | null;
   channel: "APP" | "MCP";
-  /** Name des KI-Schlüssels (nur bei MCP). */
+  /** Name des KI-Schlüssels (nur bei MCP); bei gelöschten aus dem Protokoll, sonst null. */
   tokenName: string | null;
+  /** Der Schlüssel ist inzwischen gelöscht (nur bei MCP). */
+  tokenDeleted: boolean;
   changeSet: { id: string; title: string } | null;
   fields: ChangeFieldDto[];
   /** Ergänzung, z.B. beim Import mit angelegten Ereignissen und Belegen. */
@@ -233,8 +235,43 @@ type Ctx = {
   families: Map<string, string>;
   sources: Map<string, string>;
   relationships: Map<string, { type: string; subtype: string; fromPersonId: string; toPersonId: string }>;
-  tokens: Map<string, string>;
+  tokens: Map<string, TokenLabel>;
 };
+
+type TokenLabel = { name: string | null; deleted: boolean };
+
+/**
+ * Namen der KI-Schlüssel zu apiTokenIds. Protokoll und Pakete verweisen ohne
+ * Fremdschlüssel auf Schlüssel; ein gelöschter Schlüssel (endgültig gelöscht
+ * oder mit seinem Benutzer entfernt) bekommt seinen Namen aus dem letzten
+ * eigenen Protokolleintrag (Anlegen/Löschen tragen `name`) und das Kennzeichen
+ * `deleted` — die Änderungsgeschichte bleibt so lesbar.
+ */
+async function tokenLabels(ids: Iterable<string>): Promise<Map<string, TokenLabel>> {
+  const wanted = [...new Set(ids)];
+  const out = new Map<string, TokenLabel>();
+  if (!wanted.length) return out;
+  const rows = await prisma.apiToken.findMany({ where: { id: { in: wanted } }, select: { id: true, name: true } });
+  for (const r of rows) out.set(r.id, { name: r.name, deleted: false });
+  const gone = wanted.filter((id) => !out.has(id));
+  if (gone.length) {
+    const audits = await prisma.auditLog.findMany({
+      where: { entityType: "ApiToken", entityId: { in: gone }, action: { in: ["CREATE", "DELETE"] } },
+      select: { entityId: true, diff: true },
+      orderBy: { createdAt: "desc" },
+    });
+    for (const id of gone) {
+      const named = audits.find((a) => a.entityId === id && strOf(obj(a.diff).name));
+      out.set(id, { name: named ? (obj(named.diff).name as string) : null, deleted: true });
+    }
+  }
+  return out;
+}
+
+function tokenFields(label: TokenLabel | undefined): Pick<ChangeEntryDto, "tokenName" | "tokenDeleted"> {
+  if (!label) return { tokenName: null, tokenDeleted: false };
+  return { tokenName: label.name, tokenDeleted: label.deleted };
+}
 
 const obj = (v: unknown): Record<string, unknown> =>
   v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
@@ -290,7 +327,7 @@ async function buildCtx(scope: Scope, rows: Row[]): Promise<Ctx> {
       : [],
     familyIds.size ? prisma.family.findMany({ where: { id: { in: [...familyIds] } }, select: { id: true, name: true } }) : [],
     sourceIds.size ? prisma.source.findMany({ where: { id: { in: [...sourceIds] } }, select: { id: true, title: true } }) : [],
-    tokenIds.size ? prisma.apiToken.findMany({ where: { id: { in: [...tokenIds] } }, select: { id: true, name: true } }) : [],
+    tokenLabels(tokenIds),
   ]);
   const persons = new Map(
     people.map((p) => [
@@ -307,7 +344,7 @@ async function buildCtx(scope: Scope, rows: Row[]): Promise<Ctx> {
     families: new Map(fams.map((f) => [f.id, f.name])),
     sources: new Map(sources.map((s) => [s.id, s.title])),
     relationships: new Map(rels.map((r) => [r.id, r])),
-    tokens: new Map(tokens.map((t) => [t.id, t.name])),
+    tokens,
   };
 }
 
@@ -572,7 +609,7 @@ function toEntry(ctx: Ctx, row: Row): ChangeEntryDto {
     what,
     user: userLabel(row.user),
     channel: row.channel === "MCP" ? "MCP" : "APP",
-    tokenName: row.channel === "MCP" && row.apiTokenId ? (ctx.tokens.get(row.apiTokenId) ?? "widerrufener oder gelöschter Schlüssel") : null,
+    ...tokenFields(row.channel === "MCP" && row.apiTokenId ? ctx.tokens.get(row.apiTokenId) : undefined),
     changeSet: row.changeSet ? { id: row.changeSet.id, title: row.changeSet.title } : null,
     fields: hiddenPerson ? [] : fieldsOf(ctx, row),
     note: hiddenPerson ? null : note,
@@ -679,6 +716,7 @@ export type ChangeSetSummaryDto = {
   user: string | null;
   channel: "APP" | "MCP";
   tokenName: string | null;
+  tokenDeleted: boolean;
   /** „12 Personen angelegt · 30 Belege angelegt“. */
   summary: string;
 };
@@ -785,14 +823,10 @@ export async function listChangeSets(
       where: { id: { in: [...new Set(shown.map((g) => g.userId).filter((x): x is string => Boolean(x)))] } },
       select: { id: true, name: true, email: true },
     }),
-    prisma.apiToken.findMany({
-      where: { id: { in: [...new Set(shown.map((g) => g.apiTokenId).filter((x): x is string => Boolean(x)))] } },
-      select: { id: true, name: true },
-    }),
+    tokenLabels(shown.filter((g) => g.mcp && g.apiTokenId).map((g) => g.apiTokenId as string)),
   ]);
   const titleOf = new Map(sets.map((s) => [s.id, s.title]));
   const userOf = new Map(users.map((u) => [u.id, userLabel(u)]));
-  const tokenOf = new Map(tokens.map((t) => [t.id, t.name]));
   const importOf = new Map<string, Record<string, unknown>>();
   for (const i of imports) {
     const c = obj(obj(i.diff).counts);
@@ -816,7 +850,7 @@ export async function listChangeSets(
       entries: g.n,
       user: g.userId ? (userOf.get(g.userId) ?? null) : null,
       channel: g.mcp ? "MCP" : "APP",
-      tokenName: g.mcp && g.apiTokenId ? (tokenOf.get(g.apiTokenId) ?? "widerrufener oder gelöschter Schlüssel") : null,
+      ...tokenFields(g.mcp && g.apiTokenId ? tokens.get(g.apiTokenId) : undefined),
       summary: summaryText(own, importOf.get(g.key) ?? null),
     };
   });
