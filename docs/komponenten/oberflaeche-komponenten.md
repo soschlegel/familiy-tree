@@ -1393,6 +1393,7 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
   - `connectorUrlFromEnv(value)`: liest `MCP_CONNECTOR_URL` und übernimmt nur http(s)-Adressen. Bei leerem oder ungültigem Wert ergibt sie `null`.
 - **Verhalten:**
   - Drei `<details>`-Abschnitte: Handy (anfangs offen), Browser und Desktop, Claude Code.
+  - Dazwischen der feste Block „So meldet sich die KI an“ (`ai-guide-auth`): Anmeldung über die API mit HTTP-Header `Authorization`, Wert `Bearer <Schlüssel>` (Wort „Bearer“, Leerzeichen, Schlüssel); Hinweise, dass Anführungszeichen oder ein Schlüssel in der URL abgelehnt werden (entspricht `bearerToken` in `mcp/http.ts`). Schritt 5 der Handy-Anleitung verweist darauf, falls die Anmeldeseite nach einem Header fragt.
   - Ohne Adresse nennt die Anleitung den Administrator als Ansprechpartner. Die Adresse steht nie fest im Repository.
   - Auf dem Telefon sind die Zusammenfassungszeilen höher.
 - **Server oder Client:** Server (kein `"use client"`); reine Darstellung.

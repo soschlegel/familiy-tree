@@ -72,7 +72,8 @@ export function AiConnectGuide({
             </li>
             <li>
               Auf <strong>„Add“</strong> und dann <strong>„Connect“</strong> tippen. Es öffnet sich
-              die Anmeldeseite des Stammbaums: dort deinen Schlüssel einfügen und bestätigen.
+              die Anmeldeseite des Stammbaums: dort deinen Schlüssel einfügen und bestätigen. Wird
+              stattdessen nach einem HTTP-Header gefragt: siehe „So meldet sich die KI an“ unten.
             </li>
             <li>
               Auf dem Handy die Claude-App öffnen (gleiches Konto). Im Chat über{" "}
@@ -97,6 +98,45 @@ export function AiConnectGuide({
           </ul>
         </div>
       </details>
+
+      <section className="card space-y-2 p-4 text-sm" aria-labelledby="ai-auth-title" data-testid="ai-guide-auth">
+        <h3 id="ai-auth-title" className="font-semibold">
+          So meldet sich die KI an
+        </h3>
+        <p>
+          Die Anmeldung erfolgt über die Schnittstelle (API) mit deinem persönlichen Schlüssel im
+          HTTP-Header <code className="font-mono text-xs">Authorization</code>. Vor den Schlüssel
+          gehört das Wort <strong>Bearer</strong> und ein Leerzeichen:
+        </p>
+        <dl className="grid gap-1 sm:grid-cols-[auto_1fr] sm:gap-x-3">
+          <dt className="muted">Header-Name</dt>
+          <dd>
+            <code className="rounded bg-stone-100 px-2 py-0.5 font-mono text-xs dark:bg-stone-800">
+              Authorization
+            </code>
+          </dd>
+          <dt className="muted">Header-Wert</dt>
+          <dd>
+            <code className="break-all rounded bg-stone-100 px-2 py-0.5 font-mono text-xs dark:bg-stone-800">
+              Bearer ftk_…
+            </code>{" "}
+            <span className="muted">(statt „ftk_…“ dein ganzer Schlüssel)</span>
+          </dd>
+        </dl>
+        <ul className="list-disc space-y-1 pl-5 muted">
+          <li>
+            Ohne „Bearer “ davor, mit Anführungszeichen oder mit Zeilenumbruch wird der Schlüssel
+            abgelehnt.
+          </li>
+          <li>
+            Der Schlüssel gehört nie in die Adresse (URL) — dort wird er ebenfalls abgelehnt.
+          </li>
+          <li>
+            Claude Code setzt den Header über <code className="font-mono text-xs">--header</code>{" "}
+            (siehe unten); beim Connector auf claude.ai erledigt das die Anmeldeseite.
+          </li>
+        </ul>
+      </section>
 
       <details className="card p-4" data-testid="ai-guide-web">
         <summary className="cursor-pointer font-semibold max-md:py-2">

@@ -91,6 +91,10 @@ test.describe("Telefon (390 px), als Admin", () => {
     // In der Mock-Umgebung ist keine Connector-Adresse hinterlegt.
     await expect(guide.getByTestId("ai-connector-url-missing")).toBeVisible();
     await expect(page.getByTestId("ai-guide-code")).toBeVisible();
+    // Anmeldung: Header „Authorization“, Wert „Bearer <Schlüssel>“.
+    const auth = page.getByTestId("ai-guide-auth");
+    await expect(auth).toContainText("Authorization");
+    await expect(auth).toContainText("Bearer ftk_…");
     await expectNoHorizontalOverflow(page);
   });
 
