@@ -11,6 +11,7 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/prisma";
+import { mockDbSkipReason } from "./db-ready";
 import type { Scope } from "@/lib/scope";
 import {
   applyGenealogyImport,
@@ -47,22 +48,7 @@ import {
 } from "@/lib/services";
 import { mockData } from "./helpers";
 
-async function mockDbReady(): Promise<string | null> {
-  try {
-    const admin = await Promise.race([
-      prisma.user.findUnique({ where: { id: "mock-user-admin" } }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Zeitüberschreitung")), 5000)),
-    ]);
-    if (!admin) return "Mock-Datenbank ist leer — bitte `npm run mock:setup` ausführen.";
-    if ((await prisma.event.count()) === 0) return "Mock-Datenbank ohne Ereignisse — bitte `npm run db:mock` ausführen.";
-    return null;
-  } catch (err) {
-    const detail = (err as Error).message.split("\n").map((l) => l.trim()).filter(Boolean).pop();
-    return `Mock-Datenbank nicht erreichbar (${detail}).`;
-  }
-}
-
-const skipReason = await mockDbReady();
+const skipReason = await mockDbSkipReason({ check: async () => (await prisma.event.count()) > 0, missing: "ohne Ereignisse" });
 if (skipReason) console.warn(`\n[tests] Genealogie-Tests übersprungen: ${skipReason}\n`);
 
 const data = mockData();

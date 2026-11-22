@@ -45,7 +45,7 @@
  */
 import { formatFuzzyDate, formatFuzzyYear, isPreciseDate, minYearDistance, sameFuzzyDate, type FuzzyDate } from "./dates";
 import { datesCompatible } from "./merge-rules";
-import { editDistance, firstGivenKey, nameKey, placeKey } from "./name-keys";
+import { editDistance, firstGivenKey, nameKey, placeCompareKey } from "./name-keys";
 
 export type DupPerson = {
   id: string;
@@ -297,7 +297,7 @@ export function scoreDuplicate(a: DupPerson, b: DupPerson, options: ScoreOptions
     }
   }
 
-  if (a.birthPlace && b.birthPlace && placeKey(a.birthPlace) === placeKey(b.birthPlace)) {
+  if (a.birthPlace && b.birthPlace && placeCompareKey(a.birthPlace) === placeCompareKey(b.birthPlace)) {
     score += 0.1;
     reasons.push(`gleicher Geburtsort (${a.birthPlace})`);
   }

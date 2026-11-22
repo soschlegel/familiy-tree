@@ -29,15 +29,19 @@ export function firstGivenKey(given: string | null | undefined): string {
   return nameKey(given).split(" ")[0] ?? "";
 }
 
-/** Vergleichsform eines Ortes: nur der erste Teil vor dem Komma („Probstadt, Kreis X“ → „probstadt“). */
-export function placeKey(place: string | null | undefined): string {
+/**
+ * Vergleichsform eines Ortes: nur der erste Teil vor dem Komma („Probstadt,
+ * Kreis X“ → „probstadt“). Nicht zu verwechseln mit `placeKey` in
+ * lib/places/normalize.ts (vollständiger Schlüssel der Tabelle Place).
+ */
+export function placeCompareKey(place: string | null | undefined): string {
   if (!place) return "";
   return nameKey(place.split(",")[0]);
 }
 
 export function samePlace(a: string | null | undefined, b: string | null | undefined): boolean {
-  const x = placeKey(a);
-  return Boolean(x) && x === placeKey(b);
+  const x = placeCompareKey(a);
+  return Boolean(x) && x === placeCompareKey(b);
 }
 
 /** Levenshtein-Abstand (klein gehalten: Namen sind kurz). */

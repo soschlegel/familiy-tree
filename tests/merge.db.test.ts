@@ -14,6 +14,7 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/prisma";
+import { mockDbSkipReason } from "./db-ready";
 import type { Scope } from "@/lib/scope";
 import { applyGenealogyImport, createPerson, createRelationship, scopeForEmail, ServiceError } from "@/lib/services";
 import { mergePersons, previewPersonMerge } from "@/lib/services/merge";
@@ -24,18 +25,7 @@ import { citationKey, eventKey, personNameKey } from "@/lib/merge-rules";
 import { REJECTED_RAW_SUFFIX } from "@/lib/services/import-apply";
 import { overlappingPair, randomSurname, treeWithInnerDuplicate, treeWithRejectedFamily } from "./merge-fixtures";
 
-async function dbReady(): Promise<string | null> {
-  try {
-    const admin = await Promise.race([
-      prisma.user.findUnique({ where: { id: "mock-user-admin" } }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Zeitüberschreitung")), 5000)),
-    ]);
-    return admin ? null : "Testdatenbank ist leer — bitte `npm run mock:setup` ausführen.";
-  } catch (err) {
-    return `Testdatenbank nicht erreichbar (${(err as Error).message.split("\n").pop()}).`;
-  }
-}
-const skipReason = await dbReady();
+const skipReason = await mockDbSkipReason();
 if (skipReason) console.warn(`\n[tests] Zusammenführen-Tests übersprungen: ${skipReason}\n`);
 
 const FAMILY_A = "mock-family-a";

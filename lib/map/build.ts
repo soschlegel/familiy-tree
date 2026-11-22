@@ -11,7 +11,7 @@
  *   1854“ mit der Mitte (1852), ein Zeitraum „von … bis …“ mit seinem Beginn.
  * - Lebend im Jahr J: Beginn ≤ J ≤ Ende. Beginn = Geburtsjahr, sonst das
  *   früheste datierte Ereignis (Taufe, Heirat, Wohnort …). Ende = Todesjahr,
- *   sonst das Jahr der Beerdigung, sonst geschätzt: Beginn + MAX_LIFESPAN
+ *   sonst das Jahr der Beerdigung, sonst geschätzt: Beginn + PRESUMED_LIFESPAN
  *   Jahre (mindestens das letzte datierte Ereignis, höchstens das laufende
  *   Jahr). Personen ganz ohne Datum erscheinen nicht auf der Karte, nur in
  *   der Zahl „ohne Lebensdaten“.
@@ -25,12 +25,10 @@
  *   der Karte“ — er verdrängt einen früheren Ort, weil die Person dann
  *   nicht mehr dort war.
  */
+import { PRESUMED_LIFESPAN } from "../consistency";
 import { formatFuzzyYear, type FuzzyDate } from "../dates";
 import { placeKey } from "../places/normalize";
 import { LINE_KEYS, type LineKey } from "../reference";
-
-/** Plausible Höchstlebensdauer, wenn das Ende unbekannt ist. */
-export const MAX_LIFESPAN = 100;
 
 export const LINE_BIT: Record<LineKey, number> = { FF: 1, FM: 2, MF: 4, MM: 8 };
 export const linesFromBits = (bits: number): LineKey[] => LINE_KEYS.filter((k) => bits & LINE_BIT[k]);
@@ -156,7 +154,7 @@ export function buildMapData(input: {
     else if (burials.length) y1 = Math.min(...burials);
     else {
       est = true;
-      y1 = Math.min(currentYear, Math.max(y0 + MAX_LIFESPAN, ...datedYears));
+      y1 = Math.min(currentYear, Math.max(y0 + PRESUMED_LIFESPAN, ...datedYears));
     }
     if (y1 < y0) y1 = y0;
 

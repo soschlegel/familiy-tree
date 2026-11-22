@@ -8,6 +8,7 @@
 import { describe, expect, it, beforeAll } from "vitest";
 
 import { prisma } from "@/lib/prisma";
+import { mockDbSkipReason } from "./db-ready";
 import type { Scope } from "@/lib/scope";
 import { scopeForEmail } from "@/lib/services";
 import { buildExport } from "@/lib/services/exchange-export";
@@ -18,18 +19,7 @@ import { parseGedcom } from "@/lib/gedcom";
 import { checkGedcom } from "@/lib/gedcom/cli";
 import JSZip from "jszip";
 
-async function dbReady(): Promise<string | null> {
-  try {
-    const admin = await Promise.race([
-      prisma.user.findUnique({ where: { id: "mock-user-admin" } }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Zeitüberschreitung")), 5000)),
-    ]);
-    return admin ? null : "Testdatenbank ist leer — bitte `npm run mock:setup` ausführen.";
-  } catch (err) {
-    return `Testdatenbank nicht erreichbar (${(err as Error).message.split("\n").pop()}).`;
-  }
-}
-const skipReason = await dbReady();
+const skipReason = await mockDbSkipReason();
 if (skipReason) console.warn(`\n[tests] GEDCOM-Auswahl-Tests übersprungen: ${skipReason}\n`);
 
 const A = "mock-family-a";

@@ -456,9 +456,10 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
 - **Reine Tests** (`*.test.ts` ohne `.db`) brauchen keine Datenbank und
   laufen auch in CI.
 - **Datenbank-Tests** (`*.db.test.ts`) laufen gegen die Mock-Datenbank
-  (vorher `npm run mock:setup`). Jede Datei prüft zu Beginn selbst (mit
-  Zeitgrenze), ob die Mock-Datenbank erreichbar und befüllt ist, und
-  überspringt sich sonst mit Hinweis. Lesende Tests verlassen sich auf die
+  (vorher `npm run mock:setup`). Jede Datei prüft zu Beginn über
+  `mockDbSkipReason` (`tests/db-ready.ts`, Zeitgrenze 5 s, optional eine
+  Zusatzprüfung wie „es gibt Quellen“), ob die Mock-Datenbank erreichbar und
+  befüllt ist, und überspringt sich sonst mit Hinweis. Lesende Tests verlassen sich auf die
   deterministischen Mock-Daten; schreibende legen eigene, erfundene
   Datensätze an und räumen sie (samt Audit, Paketen, Importdateien) wieder
   ab. Dateien laufen nacheinander.
@@ -725,8 +726,9 @@ zum nächsten Setup).
 - **Sperre nach Fehlversuchen** am MCP-Endpunkt: `mcp-http.spec` schickt
   abgelehnte Anfragen mit zufälliger `X-Forwarded-For`-Adresse, damit
   wiederholte Läufe gegen denselben Server nicht gesperrt werden.
-- **Worktrees mit eigener Mock-Datenbank** — `tests/mcp.db.test.ts` erwartet
-  in der Ausgabe den Namen `familytree_mock` und schlägt dort immer fehl.
+- **Worktrees mit eigener Mock-Datenbank** — `tests/mcp.db.test.ts` liest den
+  Namen der Mock-Datenbank aus der Testumgebung (`vitest.config.ts`) und
+  läuft deshalb auch mit `MOCK_DATABASE_URL=…/familytree_<paket>_mock`.
 - **Windows** — `prisma generate` scheitert mit EPERM, solange ein
   Dev-Server die Engine geladen hat. Nach `npm install` mit neueren
   npm-Versionen einmal `npx prisma generate` ausführen.

@@ -15,6 +15,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import { prisma } from "@/lib/prisma";
+import { mockDbSkipReason } from "./db-ready";
 import type { Scope } from "@/lib/scope";
 import { canViewMedia } from "@/lib/media-scope";
 import {
@@ -41,19 +42,7 @@ import { createMcpServer } from "@/mcp/register";
 import type { ResolvedAddress, Transport } from "@/lib/safe-fetch";
 import { mockData } from "./helpers";
 
-async function ready(): Promise<boolean> {
-  try {
-    return Boolean(
-      await Promise.race([
-        prisma.user.findUnique({ where: { id: "mock-user-admin" } }),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Zeitüberschreitung")), 5000)),
-      ]),
-    );
-  } catch {
-    return false;
-  }
-}
-const dbReady = await ready();
+const dbReady = !(await mockDbSkipReason());
 if (!dbReady) console.warn("\n[tests] Bilder-an-Einträgen-Tests übersprungen: Mock-Datenbank nicht erreichbar.\n");
 
 const data = mockData();

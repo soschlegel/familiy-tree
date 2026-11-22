@@ -18,7 +18,8 @@ Abschnitt 1). Seiten und API-Routen selbst stehen in
 
 - [Stammbaum und Karte](#stammbaum-und-karte) — `FamilyTree`, `PersonNode`,
   `MarriageNode`, `MarriageEdge`, `ParentEdge`, `ReferenceLines`,
-  `ReferenceChip`, `ReferencePanel`, `MapExplorer`, `MapPersonChooser`, `Avatar`
+  `ReferenceChip`, `ReferencePanel`, `MapExplorer`, `MapPersonChooser`, `Avatar`,
+  `gender-style`
 - [Gestaltungssystem: app/globals.css](#gestaltungssystem-appglobalscss)
 - [Personen, Ereignisse, Quellen und Medien](#personen-ereignisse-quellen-und-medien)
   — `PersonForm`, `DateInput`, `EventSection`, `CitationSection`,
@@ -132,7 +133,7 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 **Verhalten:**
 
-- *Karte:* Porträt (Vorschaubild, verstorbene leicht entsättigt) oder Initialen, Ring/Farbe nach Geschlecht, Vor- und Familienname, Lebensdaten (mit † bei Verstorbenen ohne Todesdatum am Anfang).
+- *Karte:* Porträt (Vorschaubild, verstorbene leicht entsättigt) oder Initialen, Ring/Farbe nach Geschlecht (`gender-style.ts`), Vor- und Familienname, Lebensdaten (mit † bei Verstorbenen ohne Todesdatum am Anfang).
 - *Klickverhalten:* Im ganzen Baum führt die Karte zur Personenseite, das Ecksymbol in die Fokus-Ansicht. In der Fokus-Ansicht stellt die Karte die Person in den Mittelpunkt, das Ecksymbol öffnet die Personenseite; die Fokuskarte selbst öffnet die Personenseite und trägt das Abzeichen „Im Fokus“.
 - *Randhinweise* (Fokus-Ansicht): „▲ Vorfahren“ oben bzw. „▼ +n Kinder“ unten, wenn Verwandte außerhalb des Ausschnitts liegen.
 - *Bezugsperson:* Verwandtschaftsbegriff als Plakette unter der Karte, Bezugsperson gestrichelt umrandet; bei „Linien“ Tönung, Streifen und Kurzzeichen.
@@ -293,13 +294,19 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 **Props/Daten:** Person (Vor-/Familienname, Geschlecht, Porträt-ID, optional Todesdatum), Größe `md`/`lg`. Geladen wird immer die Vorschau (`?variant=thumb`).
 
-**Verhalten:** Bild mit leerem `alt` (dekorativ, der Name steht daneben), verzögert geladen; Initialen sind `aria-hidden`. Große Größe wächst ab `sm`. Ringe und Initialfarben sind dieselben wie in `PersonNode` (doppelt definiert).
+**Verhalten:** Bild mit leerem `alt` (dekorativ, der Name steht daneben), verzögert geladen; Initialen sind `aria-hidden`. Große Größe wächst ab `sm`. Ringe und Initialfarben kommen wie bei `PersonNode` aus `components/gender-style.ts` (`GENDER_RING`, `GENDER_INITIALS_BG`).
 
 **Server oder Client:** ohne `"use client"` — läuft als Server-Komponente, ist aber auch im Client verwendbar (keine Hooks).
 
 **Ruft auf:** Bild über `/api/media/<id>?variant=thumb`.
 
 **Tests:** `e2e/write/media.spec.ts` („Porträt erscheint auf der Baumkarte und in der Personenliste“); sonst nur indirekt über Seitentests der Personenliste/-seite.
+
+### components/gender-style.ts
+
+**Zweck:** Gemeinsame Tailwind-Klassen für die dezente Geschlechtsmarkierung an Porträts: `GENDER_RING` (Ring) und `GENDER_INITIALS_BG` (Initialen ohne Bild), dazu der Typ `Gender`. Liegt unter `components/`, weil Tailwind nur `app/` und `components/` nach Klassen durchsucht.
+
+**Wo eingesetzt:** `Avatar`, `PersonNode` — beide Darstellungen sehen dadurch gleich aus.
 
 ## Gestaltungssystem: app/globals.css
 
@@ -1076,7 +1083,6 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 - **Wo eingesetzt:** `app/admin/data/page.tsx`, nur bei Recht `data:import`.
 - **Props / Exporte:**
   - `GedcomImport({ families })`: `families` ist die Liste der wählbaren Familien (ID und Name).
-  - Zusätzlich exportiert: Hilfsfunktion `plural`. Sie wird außerhalb nicht benutzt; `ImportHistory` und `PersonNode` haben eine eigene Kopie.
 - **Verhalten:**
   - **Datei:** Erlaubt sind `.ged`, `.gedcom` und `.zip`. Knopf „Vorschau der GEDCOM-Datei“.
   - **Kopf der Vorschau:** Dateiname, Herkunftsprogramm, Version, Zeichensatz und Zahl der Datensätze.

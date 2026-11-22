@@ -25,7 +25,7 @@ Netz nur `storage`, `media-processing`, `places/gazetteer-file`,
 | Import/Export | `exchange`, `export-selection`, `import-fingerprint`, `gedcom/*`, `gedcom-import/*` |
 | Medien | `storage`, `media-processing`, `media-scope`, `safe-fetch` |
 | Karte und Orte | `map/*`, `places/*` |
-| Sonstiges | `build-info` |
+| Sonstiges | `build-info`, `plural` |
 
 ---
 
@@ -429,7 +429,12 @@ Angaben) — ergänzt die Suche nach Lücken. Rein.
 **Wichtige Funktionen/Typen:** `findConsistencyIssues(persons, events,
 edges)`, `ConsistencyKind`, `CONSISTENCY_KINDS`, `ConsistencyIssue`,
 Grenzwerte `MIN_PARENT_AGE` (12), `MAX_FATHER_AGE` (70), `MAX_MOTHER_AGE`
-(50), `MAX_LIFESPAN` (110), `MIN_PARTNERSHIP_AGE` (14).
+(50), `MAX_LIFESPAN` (110, Prüfgrenze: darüber ist es ein Widerspruch),
+`MIN_PARTNERSHIP_AGE` (14). Dazu `PRESUMED_LIFESPAN` (100): die Annahme
+bei unbekanntem Lebensende — nach 100 Jahren gilt jemand als verstorben.
+Genutzt von der Karte (geschätztes Lebensende), der Statistik „vermutlich
+verstorben“ (`lib/services/research.ts`) und `recentWithoutDeath` im
+GEDCOM-Import. Bewusst zwei Werte: eine Schätzung ist keine Prüfgrenze.
 
 **Regeln:** Fehlt ein Datum, gibt es keine Meldung; ungenaue Daten zählen
 mit ihrem ganzen Zeitraum. Arten: Tod vor Geburt (Fehler); Lebensdauer
@@ -707,11 +712,13 @@ Dublettensuche, Zusammenführen und Importvorschläge.
 
 **Wichtige Funktionen:** `nameKey` (klein, ohne Akzente, Umlaut → „e“-
 Schreibung, ß → ss, ph → f, th → t, Doppelbuchstaben einfach, nur
-Buchstaben), `firstGivenKey`, `placeKey` (nur der Teil vor dem
-ersten Komma), `samePlace`, `editDistance` (Levenshtein).
+Buchstaben), `firstGivenKey`, `placeCompareKey` (nur der Teil vor dem
+ersten Komma), `samePlace`, `editDistance` (Levenshtein, auch von
+`lib/gedcom-import/suggest.ts` genutzt).
 
-**Achtung:** `placeKey` hier ist eine **andere** Funktion als `placeKey` in
-`lib/places/normalize.ts` (Schlüssel der Tabelle `Place`).
+**Achtung:** `placeCompareKey` ist **nicht** `placeKey` aus
+`lib/places/normalize.ts` (vollständiger Schlüssel der Tabelle `Place`);
+die Namen sind deshalb verschieden.
 
 **Benutzt von:** `duplicates`, `import-linking`, `merge-rules`,
 `lib/services/duplicates.ts`.
@@ -1143,9 +1150,10 @@ Personen-/Quellen-Metadaten, Fotos, Hinweise, Eigentümer), `resolveNames`,
   als `PhotoRef`.
 - `indexOriginal…` erschließt für den Export den Originaldatensatz nach
   denselben Schlüsseln.
-**Hinweis:** Ereignis-Zuordnung (`PARTNERSHIP_ONLY`, `SHARED`) und
-`DERIVED_KINDS` sind hier eigene Kopien der Listen aus `lib/events.ts` bzw.
-`lib/source-labels.ts`.
+**Hinweis:** Welche Ereignisart an Person bzw. Partnerschaft passt, prüft
+`eventTypeAllowed` aus `lib/events.ts` (dieselbe Regel wie in der App);
+Quellenarten ohne unabhängigen Beweiswert kommen aus
+`DERIVED_SOURCE_KINDS` (`lib/source-labels.ts`).
 **Benutzt von:** Dienste `gedcom-import`, `gedcom-export`,
 `gedcom-photos`.
 **Tests:** `tests/gedcom-mapping.test.ts`, `tests/gedcom-import.db.test.ts`.
@@ -1153,15 +1161,18 @@ Personen-/Quellen-Metadaten, Fotos, Hinweise, Eigentümer), `resolveNames`,
 #### lib/gedcom-import/suggest.ts
 **Zweck:** Vorschläge, welche Person der Datei eine schon in der App
 erfasste sein könnte. Nur Vorschläge, nie automatisch zusammengeführt.
-**Wichtige Funktionen:** `normalizeName`, `scorePair`, `suggestMatches`
+**Wichtige Funktionen:** `scorePair`, `suggestMatches`
 (Schwelle 0,6, höchstens 3 je Person, gruppiert nach erstem Vornamen).
 **Regeln (Punkte):** gleiches Geschlecht (wenn bekannt) und gleicher erster
 Vorname Pflicht; Nachname/Geburtsname gleich +0,4, Abstand 1 +0,3, sonst
 kein Kandidat; Vorname ganz gleich +0,2, sonst +0,1; Geburtsjahr gleich
 +0,3, höchstens 2 Jahre +0,2, weiter → kein Kandidat, einseitig +0,05;
 Geburtsort +0,1; gemeinsame Elternnamen +0,15 je (höchstens 2).
-**Hinweis:** Eigenes, einfacheres Punkteschema mit eigener
-Levenshtein-Funktion — nicht `lib/duplicates.ts`.
+**Hinweis:** Eigenes, einfacheres Punkteschema — nicht `lib/duplicates.ts`.
+Den Abstand rechnet `editDistance` aus `lib/name-keys.ts`; die
+Vergleichsform (`suggestKey`, intern) bleibt bewusst eigen: `nameKey`
+faltet Umlaute zu „ue“, ph/th und Doppelbuchstaben — ein Umstieg würde die
+Vorschläge ändern (z.B. „Müller“ = „Muller“ nur hier).
 **Benutzt von:** `lib/services/gedcom-import.ts`.
 **Tests:** `tests/gedcom-mapping.test.ts`.
 
@@ -1275,8 +1286,8 @@ TOO_LARGE, TIMEOUT, NETWORK), `defaultResolver`, `httpsTransport`,
 **Zweck:** Daten der Karte „Wurzeln nach Jahr“ aus Personen, Ortsangaben
 und Koordinaten — einmal je Ausgangsperson auf dem Server gerechnet.
 
-**Wichtige Funktionen/Typen:** `buildMapData`, `factYear`, `MAX_LIFESPAN`
-(100), `LINE_BIT`, `linesFromBits`, `MapPlace`, `MapPerson` (kurze
+**Wichtige Funktionen/Typen:** `buildMapData`, `factYear` (geschätztes
+Lebensende mit `PRESUMED_LIFESPAN` aus `lib/consistency.ts`), `LINE_BIT`, `linesFromBits`, `MapPlace`, `MapPerson` (kurze
 Schlüssel: Name, Lebensdaten, Beginn, Ende, geschätzt, Linien-Bits,
 Stationen als Jahr/Ortsindex-Paare), `MapPayload`, `MapPersonInput`,
 `MapFactInput`, `CoordsLookup`.
@@ -1431,6 +1442,13 @@ Kandidaten), `ANCHOR_KM` (50), `AMBIGUOUS_KM` (25), `HISTORIC_KM` (300).
 ---
 
 ## Sonstiges
+
+### lib/plural.ts
+**Zweck:** `plural(n, eins, mehrere)` — Zahl mit passender Einzahl/Mehrzahl
+(„1 Eintrag“, „3 Einträge“). Ersetzt frühere Kopien in mehreren Dateien.
+
+**Benutzt von:** `GedcomImport`, `ImportHistory`, `PersonNode`,
+`lib/services/merge.ts`, `lib/services/changes.ts`.
 
 ### lib/build-info.ts
 **Zweck:** Version des laufenden Builds für die Fußzeile.

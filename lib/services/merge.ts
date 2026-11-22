@@ -30,6 +30,7 @@ import {
 import { personDateIssues, MAX_BIOLOGICAL_PARENTS, PARENT_SUBTYPES, PARTNER_SUBTYPES } from "../validation";
 import { conflictError, forbiddenError, notFoundError, parseOrThrow, validationError } from "./errors";
 import { newId } from "./imports";
+import { plural } from "../plural";
 import { importLabel } from "./dto";
 import { auditActor, auditData, fieldChanges } from "../audit";
 import { nameChangeSet } from "../change-sets";
@@ -524,7 +525,6 @@ export type MergeSummary = {
 function altText(a: AlternateFact): string {
   return [formatDateWithPhrase(a.date, a.datePhrase), a.place, a.cause ? `Ursache: ${a.cause}` : null].filter(Boolean).join(", ") || "ohne Datum";
 }
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 export function summarizePlan(scope: Scope, plan: MergePlan): MergeSummary {
   const { keep, other } = plan.snapshot;

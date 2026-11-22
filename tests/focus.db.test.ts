@@ -6,23 +6,12 @@
 import { afterAll, describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/prisma";
+import { mockDbSkipReason } from "./db-ready";
 import type { Scope } from "@/lib/scope";
 import { loadFocusTree, loadTree, scopeForEmail } from "@/lib/services";
 import { mockData } from "./helpers";
 
-async function mockDbReady(): Promise<string | null> {
-  try {
-    const admin = await Promise.race([
-      prisma.user.findUnique({ where: { id: "mock-user-admin" } }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Zeitüberschreitung")), 5000)),
-    ]);
-    return admin ? null : "Mock-Datenbank ist leer — bitte `npm run mock:setup` ausführen.";
-  } catch (err) {
-    return `Mock-Datenbank nicht erreichbar (${(err as Error).message.split("\n").pop()}).`;
-  }
-}
-
-const skipReason = await mockDbReady();
+const skipReason = await mockDbSkipReason();
 if (skipReason) console.warn(`\n[tests] Fokus-Tests übersprungen: ${skipReason}\n`);
 
 const L = mockData().landmarks;

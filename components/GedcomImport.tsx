@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { apiFetch, jsonBody } from "./api-client";
+import { plural } from "@/lib/plural";
 
 /**
  * GEDCOM-Import mit Vorschau: Datei hochladen → Vorschau (Quell-Baum,
@@ -162,8 +163,6 @@ const DIAG_LABEL: Record<string, string> = {
   OTHER_CHILD_KIND: "Unbekannte Eltern-Kind-Art (als leiblich übernommen)",
 };
 
-/** Zahl mit passender Einzahl/Mehrzahl: plural(1, "Eintrag", "Einträge") → "1 Eintrag". */
-export const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
 

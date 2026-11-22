@@ -3,7 +3,8 @@
  * verwendbar.
  *
  * Zwei verschiedene Normalisierungen:
- * - `placeKey`: Schlüssel der Tabelle Place. Nur Groß-/Kleinschreibung,
+ * - `placeKey`: Schlüssel der Tabelle Place (nicht zu verwechseln mit
+ *   `placeCompareKey` in lib/name-keys.ts, dem Dublettenvergleich). Nur Groß-/Kleinschreibung,
  *   Unicode-Form und Leerzeichen werden vereinheitlicht — „Berkum, Peine“
  *   und „berkum ,  peine“ teilen sich eine Zuordnung, „Vöhrum“ und
  *   „Peine-Vöhrum“ aber nicht (das entscheidet ein Mensch).

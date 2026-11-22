@@ -1,18 +1,4 @@
-type Gender = "MALE" | "FEMALE" | "OTHER" | "UNKNOWN";
-
-const RING: Record<Gender, string> = {
-  MALE: "ring-sky-300 dark:ring-sky-700",
-  FEMALE: "ring-rose-300 dark:ring-rose-700",
-  OTHER: "ring-violet-300 dark:ring-violet-700",
-  UNKNOWN: "ring-stone-200 dark:ring-stone-700",
-};
-
-const INITIALS_BG: Record<Gender, string> = {
-  MALE: "bg-sky-50 text-sky-800 dark:bg-sky-950 dark:text-sky-200",
-  FEMALE: "bg-rose-50 text-rose-800 dark:bg-rose-950 dark:text-rose-200",
-  OTHER: "bg-violet-50 text-violet-800 dark:bg-violet-950 dark:text-violet-200",
-  UNKNOWN: "bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300",
-};
+import { GENDER_INITIALS_BG, GENDER_RING, type Gender } from "./gender-style";
 
 const SIZE = {
   md: "h-12 w-12 text-sm",
@@ -37,7 +23,7 @@ export function Avatar({
   };
   size?: keyof typeof SIZE;
 }) {
-  const base = `${SIZE[size]} shrink-0 rounded-full ring-2 ring-offset-2 ring-offset-surface ${RING[person.gender]}`;
+  const base = `${SIZE[size]} shrink-0 rounded-full ring-2 ring-offset-2 ring-offset-surface ${GENDER_RING[person.gender]}`;
   if (person.primaryMediaId) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
@@ -56,7 +42,7 @@ export function Avatar({
   return (
     <span
       aria-hidden
-      className={`${base} ${INITIALS_BG[person.gender]} inline-flex items-center justify-center font-serif font-semibold`}
+      className={`${base} ${GENDER_INITIALS_BG[person.gender]} inline-flex items-center justify-center font-serif font-semibold`}
     >
       {initials}
     </span>

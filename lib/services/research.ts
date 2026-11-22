@@ -1,4 +1,5 @@
 import { prisma } from "../prisma";
+import { PRESUMED_LIFESPAN } from "../consistency";
 import { maskPerson, type Scope } from "../scope";
 import {
   ancestorsOf,
@@ -217,8 +218,6 @@ export type Statistics = {
   birthYears: { earliest: number | null; latest: number | null };
 };
 
-const LIKELY_DECEASED_AGE = 100;
-
 /**
  * Ohne Sterbedatum, aber sicher älter als 100 Jahre. Bei ungenauem
  * Geburtsdatum zählt der späteste mögliche Zeitpunkt („nach 1900“ also nie).
@@ -228,7 +227,7 @@ function probablyDeceased(p: GraphPerson, now: Date): boolean {
   const birth = fuzzyField(p, "birthDate")!;
   const latest = dateBounds(birth).end;
   if (!Number.isFinite(latest)) return false;
-  return now.getUTCFullYear() - new Date(latest - 1).getUTCFullYear() > LIKELY_DECEASED_AGE;
+  return now.getUTCFullYear() - new Date(latest - 1).getUTCFullYear() > PRESUMED_LIFESPAN;
 }
 
 export async function getStatistics(scope: Scope): Promise<Statistics> {

@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/prisma";
+import { mockDbSkipReason } from "./db-ready";
 import type { Scope } from "@/lib/scope";
 import {
   bulkMerge,
@@ -25,18 +26,7 @@ import {
 import { referenceView, resolveReference, setSelfPerson } from "@/lib/services/reference";
 import { mockData } from "./helpers";
 
-async function dbReady(): Promise<string | null> {
-  try {
-    const admin = await Promise.race([
-      prisma.user.findUnique({ where: { id: "mock-user-admin" } }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Zeitüberschreitung")), 5000)),
-    ]);
-    return admin ? null : "Testdatenbank ist leer — bitte `npm run mock:setup` ausführen.";
-  } catch (err) {
-    return `Testdatenbank nicht erreichbar (${(err as Error).message.split("\n").pop()}).`;
-  }
-}
-const skipReason = await dbReady();
+const skipReason = await mockDbSkipReason();
 if (skipReason) console.warn(`\n[tests] Bezugsperson-Tests übersprungen: ${skipReason}\n`);
 
 const FAMILY_A = "mock-family-a";
