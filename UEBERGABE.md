@@ -1,4 +1,4 @@
-# Übergabe (Stand 21.11.2026)
+# Übergabe (Stand 22.11.2026)
 
 Arbeitsnotiz für die Fortsetzung auf einem anderen Rechner. Beim Weiterarbeiten
 aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
@@ -10,17 +10,26 @@ aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
   Portainer aktualisiert den Stack von dort. **Ein Merge ist ein
   Produktiv-Deployment auf echte Daten.**
 - `optimierung` = Arbeitsbranch, zum Zeitpunkt der Übergabe gleich `main`.
-- Zuletzt ausgerollt (21.11.): Bezugsperson mit Verwandtschaftsgrad und
-  Linienfarben, Changelog (Verlauf je Person, `/admin/changes`, Pakete auch
-  über MCP), GEDCOM-Export mit Familienauswahl, Dubletten ohne Vorfahren/
-  Nachkommen, Familien-Sperre gegen Selbstaussperren. Zwei neue, rein
-  ergänzende Migrationen: `20261122000000_changelog` und
-  `20261122000001_bezugsperson` (letzter Migrationsordner).
-- Prüfstand des letzten Pakets (alle drei Branches zusammengeführt):
-  Typecheck, Lint, Vitest 725/725; `prisma migrate diff` Migrationen ↔ Schema
-  ohne Abweichung; schema-diff-check beide Migrationen ergänzend; Playwright
-  auf frischem Server, zwischen read und write neu gestartet: setup 6/6,
-  read 167/167, write 83/83.
+- Zuletzt ausgerollt (22.11.): Bilder an Quellen, Ereignissen und Belegen
+  (App, MCP `add_media`/`link_media`, Export), Linienfarben auch an den
+  Verbindungen, Untermenü „Verwaltung“ in der Kopfzeile, Anleitungen „Claude
+  verbinden“ (Handy, Browser/Desktop, Claude Code) auf `/ai-access` mit der
+  optionalen Variablen `MCP_CONNECTOR_URL`, MCP-Hinweis „keine Namen in
+  Paket-Titeln“. Neue, rein ergänzende Migration
+  `20261123000000_medien_an_eintraegen` (letzter Migrationsordner). Davor
+  (21.11.): Bezugsperson/Linien, Changelog, GEDCOM-Export mit
+  Familienauswahl, Dubletten ohne Vorfahren (`20261122000000_changelog`,
+  `20261122000001_bezugsperson`).
+- Prüfstand des letzten Pakets: Typecheck, Lint, Vitest 757/757;
+  Migrationen ↔ Schema ohne Abweichung; schema-diff-check ergänzend;
+  Playwright auf frischem Server, zwischen read und write neu gestartet:
+  setup 6/6, read 168/169 (ein Ausfall: der bekannte seltene
+  Hydration-Fehler auf `/people`, `people-list.spec` „Sortierung nach
+  Geburt“ — danach 5×5 Wiederholungen grün; Aufzeichnung lokal gesichert),
+  write 89/89.
+- Beim Ausrollen beachten: Der Reverse-Proxy muss für `/api/mcp` größere
+  Anfragen durchlassen (Bilder als base64 über MCP, bis
+  MAX_UPLOAD_BYTES × 4/3 + 1 MiB), sonst antwortet er mit 413.
 - Parallel in Worktrees arbeiten: je Worktree eigene `.env` mit
   `MOCK_DATABASE_URL=…/familytree_<name>_mock`; den Port nur in der Shell
   setzen (`$env:MOCK_PORT`, `scripts/mock.mjs` liest ihn vor der `.env`).
@@ -200,7 +209,7 @@ sie freigibt.
 Freigabe (21.11.): „bauen und Gas geben“ — die Wünsche werden umgesetzt.
 - **Bilder per MCP an Quellen, Ereignisse und Belege** („wenn ich die Bilder
   per MCP zu Quellen gebe … auch den entsprechenden Einträgen beigefügt“) —
-  erledigt auf Branch `medien`, noch nicht ausgerollt. Migration
+  erledigt, ausgerollt 22.11. Migration
   `20261123000000_medien_an_eintraegen` (Tabellen `SourceMedia`,
   `EventMedia`, `CitationMedia`; rein ergänzend, ohne Datenänderung —
   `Source.mediaId` bleibt Hauptscan, die App liest beide Stellen). Regel:
