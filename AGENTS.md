@@ -31,6 +31,24 @@ Abhängigkeiten, wo sie benutzt wird, zugehörige Tests. Einstieg und Übersicht
 - Öffentliches Repository: keine echten Namen, Orte oder Daten aus
   Stammbäumen, keine Hostnamen oder Zugangsdaten.
 
+### Anwender-Hilfe fortschreiben (Pflicht)
+
+Unter [`docs/anwender/`](docs/anwender/README.md) steht die Hilfe **für
+Anwender** (Familienmitglieder ohne Technikwissen), je Thema eine Datei
+`NN-thema.md`; die App zeigt sie unter `/hilfe`.
+
+- **Nach jeder abgeschlossenen Änderung, die Anwender betrifft, im selben
+  Commit fortschreiben:** neue Funktionen erklären, Geändertes berichtigen,
+  Entferntes streichen. Gilt wie die Komponenten-Doku — ohne passende
+  Anwender-Hilfe ist eine solche Änderung nicht abgeschlossen.
+- **Kontexthilfe mitziehen:** Die kleinen Links „?“ bzw. „Wie funktioniert
+  das?“ in der App (`components/HelpLink.tsx`, Ziele in
+  `lib/help/links.ts`) an neuen Stellen ergänzen; wird eine Überschrift
+  umbenannt, den Anker dort anpassen (`tests/help.test.ts` prüft das).
+- Nur beschreiben, was die App heute kann — jede Aussage am Code prüfen;
+  freundlich, „du“, Begriffe der Oberfläche wörtlich, erfundene Beispiele.
+  Regeln zu Aufbau und Markdown-Subset: [`docs/anwender/README.md`](docs/anwender/README.md).
+
 ## 2. Umsetzung durch Sub-Prozesse (Sub-Agenten)
 
 - Die **Hauptsitzung koordiniert**: Anforderungen klären, Aufgaben
@@ -60,9 +78,27 @@ Abhängigkeiten, wo sie benutzt wird, zugehörige Tests. Einstieg und Übersicht
   wird ausgerollt — auf echte Daten. Gearbeitet wird auf `optimierung`.
 - Nach `main` nur zusammengeführte, vollständig geprüfte Stände: Typecheck,
   Lint, Vitest, Migrationen ↔ Schema ohne Abweichung, jede neue Migration
-  rein ergänzend (`docker/schema-diff-check.mjs`), Playwright read und write
-  auf frisch gestartetem Server (dazwischen neu starten).
+  rein ergänzend (`docker/schema-diff-check.mjs`), Playwright-Gesamtlauf
+  mit `npm run test:e2e`: ein Befehl, der den Produktions-Build der
+  Mock-Umgebung bei Bedarf neu baut, einen eigenen Server startet,
+  setup → read → write ausführt und den Server wieder beendet (kein
+  Neustart zwischen read und write nötig). Vorher keinen von Hand
+  gestarteten Server auf dem Port laufen lassen (er würde mitbenutzt).
 - Veröffentlichte Migrationen nie nachträglich ändern.
+- **Neuigkeiten:** Jedes Release nach `main` bekommt einen neuen Eintrag
+  ganz oben in [CHANGELOG.md](CHANGELOG.md) — im selben Stand wie die
+  Änderung (mit ihr zusammengeführt). **Ohne Eintrag kein Ausrollen.** Die
+  App zeigt ihn den Benutzern einmal als „Was ist neu?“ und auf der Seite
+  „Neuigkeiten“ (README, „Neuigkeiten“).
+  - Überschrift `## JJJJ-MM-TT.N — Kurztitel`: `JJJJ-MM-TT` ist der Tag des
+    Ausrollens, `N` die laufende Nummer an diesem Tag (erstes Release des
+    Tages `.1`, zweites `.2` …). Keine Commit-Kennung — die Git-Historie
+    kann sich ändern. Eine veröffentlichte Kennung nie umbenennen (Benutzer
+    haben sie als „gesehen“ gespeichert).
+  - Darunter Stichpunkte `- …` in Anwendersprache: was kann ich jetzt, was
+    hat sich geändert. Keine Technikbegriffe, keine echten Namen, Orte oder
+    Daten; reine Technik ohne sichtbare Folge weglassen.
+  - `npm test` prüft das Format (`tests/release-notes.test.ts`).
 
 ## 4. Zusammenarbeit mit dem Eigentümer
 

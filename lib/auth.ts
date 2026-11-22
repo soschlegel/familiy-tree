@@ -6,6 +6,7 @@ import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import type { Role } from "@prisma/client";
 
+import { devLoginAllowed } from "./dev-login";
 import { prisma } from "./prisma";
 
 declare module "next-auth" {
@@ -42,7 +43,9 @@ if (process.env.AUTH_GOOGLE_ID) {
 // Dev-Login: erlaubt Anmeldung per E-Mail ohne Passwort, damit die App ohne
 // Internetverbindung und ohne OAuth-App testbar ist. Greift ebenfalls nur für
 // E-Mails, die in der User-Tabelle stehen (siehe signIn-Callback).
-// NIEMALS in Produktion aktivieren.
+// NIEMALS in Produktion aktivieren. In NODE_ENV=production lehnt er jede
+// Anmeldung ab — einzige, eng begrenzte Ausnahme ist der Produktions-Build
+// der Mock-Umgebung für die E2E-Tests (devLoginAllowed, lib/dev-login.ts).
 if (process.env.ENABLE_DEV_LOGIN === "true") {
   providers.push(
     Credentials({
@@ -50,7 +53,7 @@ if (process.env.ENABLE_DEV_LOGIN === "true") {
       name: "Dev-Login (nur lokal)",
       credentials: { email: { label: "E-Mail", type: "email" } },
       async authorize(credentials) {
-        if (process.env.NODE_ENV === "production") return null;
+        if (!devLoginAllowed()) return null;
         const email = String(credentials?.email ?? "")
           .trim()
           .toLowerCase();

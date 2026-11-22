@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireScope } from "@/lib/session";
 import { listDuplicateCandidates } from "@/lib/services";
 import { DuplicateList } from "@/components/DuplicateList";
+import { HelpLink } from "@/components/HelpLink";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Mögliche Dubletten" };
@@ -43,6 +44,9 @@ export default async function DuplicatesPage({ searchParams }: { searchParams: P
           Einträge, die vermutlich dieselbe Person meinen — auch unter Ehe- und Geburtsnamen und aus verschiedenen
           Importen. „Sicher“ heißt: gleicher Name, gleiches tagesgenaues Geburts- und Sterbedatum (oder
           dieselben Eltern) und kein Widerspruch. {list.dismissed > 0 && `${list.dismissed} Paare sind als „kein Duplikat“ markiert.`}
+        </p>
+        <p className="mt-1">
+          <HelpLink to="dubletten" label="Wie funktionieren Dubletten und Zusammenführen?" />
         </p>
       </div>
 

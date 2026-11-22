@@ -123,6 +123,7 @@ beide). Ereignisse, Belege, Namen und Rohdaten folgen ihrem Träger.
 | `exchange-export.ts` | Export (JSON/ZIP) des sichtbaren Bestands |
 | `gedcom-export.ts` | GEDCOM-Export (Datei bzw. ZIP mit Bildern) |
 | `export-selection.ts` | Familienauswahl für den GEDCOM-Export |
+| `release-notes.ts` | Neuigkeiten: zuletzt gesehenes Release je Benutzer merken |
 
 ---
 
@@ -138,7 +139,7 @@ Grundsätze der Schicht (reine async-Funktionen, Scope, kein `next/*`,
 `tree`, `persons`, `relationships`, `research`, `duplicates`, `merge`,
 `merge-bulk`, `families`, `kinship`, `reference`, `timeline`, `consistency`,
 `sources`, `ai-access`, `events`, `names`, `imports`, `import-apply`,
-`changes`, `media-links`, `attached-media` weiter, aus `graph-data` nur
+`changes`, `media-links`, `attached-media`, `release-notes` weiter, aus `graph-data` nur
 `loadGraph` und die Graph-Typen.
 
 **Regeln und Entscheidungen:** Nicht über den Sammel-Export erreichbar sind
@@ -1445,6 +1446,40 @@ beim KI-Recht (vorher → nachher).
 **Tests:** `tests/ai-access.db.test.ts`, `tests/ai-access.test.ts`,
 `tests/media-links.db.test.ts`, MCP-Tests; `e2e/write/ai-access.spec.ts`,
 `e2e/read/mcp-http.spec.ts`. `requireAiCall` wird nirgends benutzt.
+
+---
+
+## Neuigkeiten
+
+### lib/services/release-notes.ts
+
+**Zweck:** Lesemarke für die Neuigkeiten (Versions-Changelog aus
+`CHANGELOG.md`, README „Neuigkeiten“) — nicht zu verwechseln mit der
+Änderungsgeschichte der Daten oben.
+
+**Wichtige Funktionen:** `markReleaseSeen(scope, releaseId, known)` setzt
+`User.lastSeenReleaseId` des Benutzers `scope.userId` auf `releaseId`.
+
+**Regeln und Entscheidungen:**
+- Nur Kennungen aus `known` (der Aufrufer übergibt `releaseNotes()` aus
+  `lib/release-notes-data.ts`), sonst `VALIDATION`. Die Liste kommt als
+  Parameter, damit der Dienst ohne den Build-Zeit-Import der Datei auskommt
+  (MCP über stdio, Skripte).
+- Auch ein älteres Release ist erlaubt (es ist nur eine Lesemarke; die
+  E2E-Tests setzen sie so zurück). Die Oberfläche schickt immer das neueste.
+- Welche Releases das Fenster zeigt, entscheidet `releasesSince` in
+  `lib/release-notes.ts` (im Layout).
+
+**Rechte/Datenschutz:** Immer nur der angemeldete Benutzer selbst; eine
+fremde Benutzerkennung nimmt weder Dienst noch Route an.
+
+**Protokoll:** keins — eine Lesemarke wie „zuletzt angemeldet“, kein
+Datenstand.
+
+**Benutzt von:** `app/api/me/release-seen/route.ts`.
+
+**Tests:** `tests/release-notes.db.test.ts`; `e2e/read/neuigkeiten.spec.ts`,
+`e2e/write/whats-new.spec.ts`.
 
 ---
 

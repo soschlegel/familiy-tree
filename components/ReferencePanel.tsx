@@ -6,6 +6,7 @@ import { loadReferenceFor } from "@/lib/services";
 import { REFERENCE_COOKIE } from "@/lib/reference";
 import { ReferenceChip } from "./ReferenceChip";
 import { SelfPersonButton } from "./SelfPersonButton";
+import { HelpLink } from "./HelpLink";
 
 /**
  * Bezugsperson auf der Personenseite (README, „Bezugsperson“): was diese
@@ -93,6 +94,7 @@ export async function ReferencePanel({
             Baum aus dieser Sicht
           </Link>
         )}
+        <HelpLink to="bezugsperson" compact label="Wie funktionieren Bezugsperson und Verwandtschaftsgrad?" className="self-center" />
       </div>
     </section>
   );

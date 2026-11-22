@@ -484,14 +484,24 @@ async function dialogDownload(page: Page, button: string, only?: string) {
  * ihn zusammen mit der Personenzahl laut API. Parallel laufende Tests legen
  * Personen an und löschen sie; gezählt wird deshalb vor und nach dem
  * Download, und nur ein Durchgang mit gleichem Stand zählt (höchstens 5
- * Versuche).
+ * Versuche). Gleiche Zahl vorher und nachher schließt nicht aus, dass
+ * dazwischen eine Person angelegt und eine andere gelöscht wurde; mit
+ * `count` (Personen in der Datei) zählt ein Durchgang deshalb nur, wenn auch
+ * die Datei diese Zahl hat.
  */
-async function stableDownload(page: Page, api: APIRequestContext, button: string) {
+async function stableDownload(
+  page: Page,
+  api: APIRequestContext,
+  button: string,
+  count?: (body: Buffer) => number,
+) {
   const total = async () => Number((await api.get("/api/persons?limit=1")).headers()["x-total-count"]);
   for (let attempt = 0; attempt < 5; attempt++) {
     const before = await total();
     const { body } = await dialogDownload(page, button);
-    if ((await total()) === before) return { body, persons: before };
+    if ((await total()) !== before) continue;
+    if (count && count(body) !== before) continue;
+    return { body, persons: before };
   }
   throw new Error("Personenzahl hat sich bei jedem Versuch während des Downloads geändert");
 }
@@ -502,7 +512,7 @@ test("GEDCOM-Exporte: Admin (GEDCOM und ZIP) mit erwarteten Zahlen, Betrachter o
 
   await page.goto("/admin/data");
   const sourcesBefore = await sourcesOf();
-  const ged = await stableDownload(page, api, "GEDCOM");
+  const ged = await stableDownload(page, api, "GEDCOM", (body) => parseGedcom(body).document.persons.length);
   const gedText = ged.body.toString("utf8");
   const doc = parseGedcom(ged.body).document;
   expect(doc.persons).toHaveLength(ged.persons);

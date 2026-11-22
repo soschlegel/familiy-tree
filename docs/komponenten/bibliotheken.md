@@ -10,13 +10,13 @@ Netz, oft auch im Browser nutzbar), damit Oberfläche, Dienste, MCP-Server
 und Tests dieselben Regeln verwenden. Datenbankzugriff haben nur `prisma`,
 `auth`, `scope`, `audit`, `change-sets`, `media-scope`; Dateisystem bzw.
 Netz nur `storage`, `media-processing`, `places/gazetteer-file`,
-`safe-fetch`.
+`help/content`, `safe-fetch`.
 
 Übersicht:
 
 | Bereich | Module |
 |---|---|
-| Anmeldung, Rechte, Anfrage-Rahmen | `auth`, `authz`, `session`, `api`, `scope`, `ai-tokens`, `prisma` |
+| Anmeldung, Rechte, Anfrage-Rahmen | `auth`, `dev-login`, `authz`, `session`, `api`, `scope`, `ai-tokens`, `prisma` |
 | Protokoll | `audit`, `change-sets`, `change-time` |
 | Daten und Regeln | `dates`, `date-fields`, `events`, `event-labels`, `validation`, `consistency`, `partner-labels`, `source-labels`, `source-classify` |
 | Graph und Verwandtschaft | `graph`, `kinship`, `reference` |
@@ -25,7 +25,8 @@ Netz nur `storage`, `media-processing`, `places/gazetteer-file`,
 | Import/Export | `exchange`, `export-selection`, `import-fingerprint`, `gedcom/*`, `gedcom-import/*` |
 | Medien | `storage`, `media-processing`, `media-scope`, `safe-fetch` |
 | Karte und Orte | `map/*`, `places/*` |
-| Sonstiges | `build-info`, `plural` |
+| Anwender-Hilfe | `help/markdown`, `help/content`, `help/links` |
+| Sonstiges | `build-info`, `plural`, `release-notes`, `release-notes-data` |
 
 ---
 
@@ -59,7 +60,9 @@ Seiten holen die Sitzung über `lib/session.ts`, API-Routen über `route()` in
 - Anbieter nur, wenn konfiguriert: GitHub (`AUTH_GITHUB_ID`), Google
   (`AUTH_GOOGLE_ID`), jeweils mit E-Mail-Kontoverknüpfung. **Dev-Login**
   (Credentials, nur E-Mail) bei `ENABLE_DEV_LOGIN=true`; zusätzlich
-  verweigert er in `NODE_ENV=production` jede Anmeldung.
+  fragt er bei jeder Anmeldung `devLoginAllowed()` (`lib/dev-login.ts`) und
+  verweigert damit in `NODE_ENV=production` jede Anmeldung — außer im
+  Produktions-Build der Mock-Umgebung für die E2E-Tests (siehe dort).
 - `signIn`-Callback: unbekannte oder gesperrte E-Mail → abgelehnt; sonst
   Status `ACTIVE`, `lastLoginAt`, Name/Bild werden nur ergänzt, nie
   überschrieben.
@@ -73,7 +76,36 @@ Seiten holen die Sitzung über `lib/session.ts`, API-Routen über `route()` in
 `app/login/page.tsx`, `lib/api.ts`, `lib/session.ts`.
 
 **Tests:** keine direkten Tests (Ablauf wird in Playwright über den
-Dev-Login genutzt).
+Dev-Login genutzt); die Freigaberegel prüft `tests/dev-login.test.ts`.
+
+### lib/dev-login.ts
+**Zweck:** Entscheidet, ob der Dev-Login eine Anmeldung annehmen darf
+(`devLoginAllowed`). Ausgelagert, damit die Regel ohne Next.js testbar ist.
+
+**Regeln:**
+- Außerhalb von `NODE_ENV=production` (Dev-Server, Vitest): ja.
+- In Produktion grundsätzlich nein. Einzige Ausnahme ist der
+  Produktions-Build der Mock-Umgebung, gegen den die E2E-Tests laufen
+  (`scripts/mock.mjs start`). Dafür müssen **alle drei** Bedingungen
+  zugleich gelten: `E2E_PRODUCTION_DEV_LOGIN=mock-only` (genau dieser
+  Wert), der Datenbankname in `DATABASE_URL` endet auf `_mock`/`_test`, und
+  der letzte Teil von `MEDIA_DIR` endet auf `-mock`/`-test` — dieselben
+  Namensregeln, mit denen `scripts/mock.mjs` alles außer Mock-Daten
+  verweigert.
+- Sicherheitsbewertung: Der Anbieter existiert ohnehin nur bei
+  `ENABLE_DEV_LOGIN=true`; der Produktivstack setzt `false`, kennt
+  `E2E_PRODUCTION_DEV_LOGIN` nicht und nutzt Datenbank `familytree` und
+  `/data/media`. Wer die Ausnahme auslösen wollte, müsste die Umgebung des
+  Servers ändern können — und damit ohnehin alles. Die Variablen werden zur
+  Laufzeit gelesen, nicht beim Build eingesetzt; ein E2E-Build in einem
+  fremden Ordner schaltet also nichts frei.
+
+**Benutzt von:** `lib/auth.ts` (`authorize` des Dev-Logins).
+
+**Tests:** `tests/dev-login.test.ts` (Entwicklung erlaubt; Produktion ohne
+oder mit falscher Freigabe gesperrt; nur mit Mock-Datenbank **und**
+Mock-Medienordner erlaubt; echte Datenbank- und Ordnernamen trotz Freigabe
+gesperrt).
 
 ### lib/authz.ts
 **Zweck:** **Globale** Verwaltungsrechte. Inhaltliche Rechte (Personen,
@@ -1461,6 +1493,49 @@ Rangfolge, höchstens `MAX_OTHERS` = 9, für „A, B oder C“ in
 
 ---
 
+## Anwender-Hilfe
+
+Hilfe für Anwender unter `/hilfe`; Texte in `docs/anwender/NN-thema.md`
+(Pflege: `docs/anwender/README.md`).
+
+### lib/help/markdown.ts
+**Zweck:** Schlanker, eigener Markdown-Leser für genau das Subset der
+Hilfetexte — bewusst keine Bibliothek (keine neue Abhängigkeit, kein
+HTML-Durchreichen, das sich mit einem Sanitizer absichern müsste).
+
+**Verhalten:** `parseHelpMarkdown` liefert Titel (erste `#`-Überschrift),
+Kurzbeschreibung (erster Absatz als Klartext) und einen Syntaxbaum aus
+Blöcken (Überschriften `#`–`####` mit Anker, Absätze, Listen einer Ebene
+mit eingerückten Folgezeilen, `>`-Hinweiskästen, Tabellen, Codeblöcke,
+Trennlinien) und Inline-Knoten (fett, kursiv, Code, Link, Text). **Kein
+rohes HTML:** Es bleibt Text. `resolveHref` lässt als Link nur zu:
+andere Themen als `NN-thema.md#anker` (→ `/hilfe/thema#anker`, funktioniert
+so auch auf GitHub), eigene Pfade `/…` (nicht `//`, kein Backslash),
+`#anker` und `https://`; alles andere (javascript:, data:, http:, mailto:)
+wird Text. `slugify` bildet Anker aus Überschriften (Umlaute ausgeschrieben,
+doppelte mit `-2`). `headingIds` und `collectLinks` dienen den Tests.
+
+### lib/help/content.ts
+**Zweck:** Themen aus `docs/anwender/` lesen (`HELP_DIR` relativ zu
+`process.cwd()`): nur Dateien `NN-thema.md`, sortiert nach Name; Nummer =
+Reihenfolge, Rest = Adresse. `listHelpTopics`, `getHelpTopic` (optional mit
+anderem Ordner für Tests). Im Betrieb einmal gelesen und behalten, in der
+Entwicklung bei jedem Aufruf. Ins Standalone-Image kommen die Dateien über
+`outputFileTracingIncludes` in `next.config.mjs`.
+
+### lib/help/links.ts
+**Zweck:** Ziele der Kontexthilfe (`HELP_LINKS`: Karte, Orte zuordnen,
+Linien, Bezugsperson, Dubletten, Dubletten-Klassen, KI-Zugang) an einer
+Stelle, damit der Test prüfen kann, dass Thema und Anker existieren.
+
+**Benutzt von:** `components/HelpLink.tsx`, `components/DuplicateBanner.tsx`.
+
+**Tests:** `tests/help.test.ts` (Leser, Sicherheit der Links und gegen
+rohes HTML, alle Querverweise und Kontexthilfe-Ziele gegen die echten
+Dateien).
+
+---
+
 ## Sonstiges
 
 ### lib/plural.ts
@@ -1484,3 +1559,57 @@ ersetzt Next.js sie nicht.
 **Benutzt von:** `app/layout.tsx`.
 
 **Tests:** `tests/build-info.test.ts`.
+
+### lib/release-notes.ts
+**Zweck:** Neuigkeiten — der Versions-Changelog für Anwender aus
+`CHANGELOG.md` (README „Neuigkeiten“). Nicht zu verwechseln mit der
+Änderungsgeschichte der Daten (`change-sets`, `/admin/changes`). Rein, ohne
+Datei- und Datenbankzugriff (auch im Browser, in `prisma/seed-mock.ts` und
+in den E2E-Tests benutzt).
+
+**Format der Datei:** je Release eine Überschrift `## JJJJ-MM-TT.N — Kurztitel`
+(Gedankenstrich, Halbgeviertstrich oder Bindestrich), darunter Stichpunkte
+`- …` bzw. `* …`; eingerückte Folgezeilen setzen den Stichpunkt fort.
+Alles vor der ersten Überschrift und HTML-Kommentare werden übergangen.
+Kennung = Tag des Ausrollens plus laufende Nummer am Tag, bewusst keine
+Commit-Kennung (die Git-Historie kann sich ändern).
+
+**Wichtige Funktionen/Typen:**
+- `Release` (`id`, `date`, `seq`, `title`, `items`).
+- `parseReleaseNotes(text)` → `{ releases, errors }`: Fehler mit Zeilennummer
+  (falsche Überschrift, Freitext statt Stichpunkt, Release ohne Stichpunkte,
+  doppelte Kennung, falsche Reihenfolge). Fehlerhafte Releases fallen weg,
+  der Rest wird absteigend sortiert — die App bricht an einer kaputten Datei
+  nie ab; der Test der echten Datei verlangt eine leere Fehlerliste.
+- `parseReleaseId`, `compareReleaseIds` (Datum, dann Nummer numerisch:
+  `.10` nach `.9`).
+- `releasesSince(releases, lastSeenId, limit = WHATS_NEW_LIMIT (3))` →
+  `{ show, more }`: leer/unlesbar → nur das neueste; sonst alle neueren als
+  die gesehene Kennung (auch wenn es diese nicht mehr gibt — eingeordnet nach
+  Datum), höchstens `limit`, Rest als Zahl `more`; nichts Neues → leer.
+- `formatReleaseDate` („22. November 2026“).
+
+**Benutzt von:** `app/layout.tsx`, `lib/release-notes-data.ts`,
+`lib/services/release-notes.ts` (Typ), `components/ReleaseNoteList.tsx`,
+`prisma/seed-mock.ts`, E2E-Tests.
+
+**Tests:** `tests/release-notes.test.ts` (Parser, Auswahl, echte Datei: fehlerfrei,
+keine Commit-Kennungen und Technikbegriffe).
+
+### lib/release-notes-data.ts
+**Zweck:** Der Inhalt von `CHANGELOG.md` für Seiten und Route-Handler.
+Die Datei wird per `import … from "../CHANGELOG.md?raw"` **zur Build-Zeit**
+als Text eingebaut (Webpack-Regel `resourceQuery: /raw/` → `asset/source`
+in `next.config.mjs`; Vitest/Vite kann `?raw` von sich aus; Typ in
+`types/raw.d.ts`). Das Standalone-Image braucht die Datei deshalb zur
+Laufzeit nicht; im Docker-Build muss sie im Kontext liegen
+(`!CHANGELOG.md` in `.dockerignore`).
+
+**Wichtige Funktionen:** `releaseNotes()` (einmal gelesen, zwischengespeichert;
+Fehler der Datei als Warnung ins Server-Log), `latestReleaseId()`.
+
+**Grenze:** Nicht aus `lib/services` importieren — die Dienste laufen auch in
+einfachen Node-Prozessen (MCP über stdio, Skripte), die `?raw` nicht kennen.
+
+**Benutzt von:** `app/layout.tsx`, `app/neuigkeiten/page.tsx`,
+`app/api/me/release-seen/route.ts`, `app/api/users/route.ts` (Einladung).

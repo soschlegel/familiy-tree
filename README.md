@@ -21,7 +21,10 @@ npm run dev:mock                                  # http://localhost:3100
 Anmelden per Dev-Login nur mit der E-Mail, z.B. `admin@example.test`
 (weitere Rollen: `editor@…`, `viewer@…`). Neuere npm-Versionen führen
 Install-Skripte nicht mehr automatisch aus; ohne `npx prisma generate` fehlt
-dann der Prisma-Client. Mehr: [Mock-Daten](#mock-daten),
+dann der Prisma-Client. Alle Browser-Tests mit einem Befehl (einmalig
+`npx playwright install chromium`): `npm run test:e2e` — baut die
+Mock-Umgebung als Produktions-Build, startet und beendet den Server selbst
+(siehe [Tests](#tests)). Mehr: [Mock-Daten](#mock-daten),
 [Lokal starten](#lokal-starten) (eigene Daten statt Mock),
 [Entwicklung: Prüfen und Testen](#entwicklung-prüfen-und-testen).
 
@@ -64,7 +67,8 @@ Claude Desktop/Browser und das Telefon. Ausführlich:
   [Austauschformat](#austauschformat) ·
   [GEDCOM](#gedcom-import-und-export) ·
   [Dubletten zusammenführen](#dubletten-zusammenführen) ·
-  [Änderungsgeschichte](#änderungsgeschichte)
+  [Änderungsgeschichte](#änderungsgeschichte) ·
+  [Neuigkeiten](#neuigkeiten)
 - Technik und Betrieb: [Dienstschicht](#dienstschicht) ·
   [KI-Zugang (MCP)](#ki-zugang-mcp) ·
   [Betrieb auf der NAS](#betrieb-auf-der-nas-portainer) ·
@@ -141,6 +145,9 @@ Claude Desktop/Browser und das Telefon. Ausführlich:
   nachher je Feld, Benutzer, Kanal App oder KI samt Schlüssel), gebündelt zu
   Paketen; Verlauf je Person für ihre Bearbeiter, Übersicht je Familie und
   Zeitraum für Administratoren ([Änderungsgeschichte](#änderungsgeschichte))
+- **Neuigkeiten** — was eine neue Version bringt, in Anwendersprache: einmal
+  als Fenster „Was ist neu?“ nach dem Ausrollen, jederzeit auf der Seite
+  „Neuigkeiten“ (Link in der Fußzeile) ([Neuigkeiten](#neuigkeiten))
 
 ## Technik
 
@@ -177,8 +184,11 @@ darunter. `GET /api/health` meldet `error`, wenn der Ordner nicht beschreibbar
 ist; der genaue Grund steht im Server-Log.
 
 Ohne konfiguriertes OAuth greift der **Dev-Login** (`ENABLE_DEV_LOGIN=true`):
-E-Mail eingeben, kein Passwort. Er funktioniert nur mit `NODE_ENV=development`
-und nur für E-Mails, die bereits in der Benutzerliste stehen.
+E-Mail eingeben, kein Passwort. Er funktioniert nur außerhalb von
+`NODE_ENV=production` und nur für E-Mails, die bereits in der Benutzerliste
+stehen. Einzige Ausnahme: der Produktions-Build der Mock-Umgebung für die
+E2E-Tests (`npm run mock:start`), und auch der nur mit Mock-Datenbank,
+Mock-Medienordner und ausdrücklicher Freigabe (`lib/dev-login.ts`).
 
 ## Entwicklung: Prüfen und Testen
 
@@ -203,22 +213,34 @@ laufende Mock-Datenbank überspringen sich die `*.db.test.ts` mit Hinweis, der
 Rest läuft trotzdem (so auch in der CI).
 
 **End-to-End-Tests** (Playwright, Ordner `e2e/`) bedienen die App im Browser
-(Chromium) gegen die Mock-Umgebung.
+(Chromium) gegen die Mock-Umgebung — standardmäßig gegen einen
+**Produktions-Build** der Mock-Umgebung (`next build` nach `.next-e2e`,
+`next start` auf dem Mock-Port), nicht gegen den Dev-Server.
 
 Voraussetzungen: Docker Desktop läuft (`docker compose -f
 docker-compose.dev.yml up -d` — Postgres), die Mock-Datenbank ist
 einmal angelegt (`npm run mock:setup`), und einmalig `npx playwright install
 chromium`.
 
-| Befehl | Zweck | Dauer (Dev-Server warm) |
+| Befehl | Zweck | Dauer (Build aktuell) |
 |---|---|---|
-| `npm run test:e2e` | alles: setup → read → write | ca. 9–10 min |
-| `npm run test:e2e:setup` | nur Ausgangszustand: Mock-Daten neu, Anmeldungen, Vorwärmen | ca. 1–2 min (Kaltstart des Dev-Servers: länger) |
-| `npm run test:e2e:read` | setup + lesende Tests (`e2e/read/`, 188 Tests, 4 parallel) | ca. 3:10–3:20 min ohne Setup |
-| `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 105 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 4–5 min ohne Setup |
+| `npm run test:e2e` | **alles mit einem Befehl:** Build prüfen (nur bei geänderten Quellen neu), Server starten, setup → read → write, Server beenden | ca. 1,5–3 min, mit Neubau 1–2 min mehr (früher gegen den Dev-Server 9–10 min) |
+| `npm run test:e2e:setup` | nur Ausgangszustand: Mock-Daten neu, Anmeldungen | ca. 10 s |
+| `npm run test:e2e:read` | setup + lesende Tests (`e2e/read/`, 186 Tests, 6 parallel) | ca. 1 min (früher 3:10–3:20 min) |
+| `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 100 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 1:10 min (früher 4–5 min) |
+| `npm run mock:build` / `npm run mock:start` | Build von Hand erzeugen bzw. den Server von Hand starten (z.B. für mehrere Terminals) | |
 | `npm run test:e2e:headed` | alles mit sichtbarem Browser, ein Test nach dem anderen | |
 | `npm run test:e2e:ui` | Playwright-Oberfläche: Tests einzeln starten, Schritte ansehen | |
 | `npm run test:e2e:report` | HTML-Bericht des letzten Laufs öffnen | |
+
+Eigene Optionen von `scripts/e2e.mjs` (nach `--`): `--dev` testet wie
+früher gegen den Mock-Dev-Server (`npm run dev:mock`, Vorwärmen im Setup,
+4 bzw. 2 Worker), `--rebuild` baut in jedem Fall neu, `--no-build` nimmt den
+vorhandenen Build ungeprüft, `--skip-setup` siehe unten. Port und Datenbank
+je Worktree wie bisher: `MOCK_PORT` in der Shell, `MOCK_DATABASE_URL` in der
+`.env`. Läuft auf dem Port schon ein Server, wird er mitbenutzt und nicht
+beendet (das Skript sagt, ob Dev-Server oder Build) — sonst startet und
+beendet es ihn selbst.
 
 Alle `test:e2e*`-Befehle reichen weitere Argumente an `playwright test`
 durch (nach `--`), z.B. eine einzelne Datei oder einen Testnamen:
@@ -227,6 +249,7 @@ durch (nach `--`), z.B. eine einzelne Datei oder einen Testnamen:
 npm run test:e2e:write -- e2e/write/sources.spec.ts
 npm run test:e2e:read -- e2e/read/permissions.spec.ts -g "Betrachter"
 npm run test:e2e -- e2e/read/export.spec.ts e2e/write/media.spec.ts
+npm run test:e2e -- --dev e2e/read/auth.spec.ts      # gegen den Dev-Server
 ```
 
 Mit Filter (Datei oder `-g`) läuft `npm run test:e2e` in drei Schritten
@@ -235,41 +258,56 @@ Tests. Sonst zöge ein Filter auf eine `write`-Datei alle lesenden Tests als
 Abhängigkeit mit. Der HTML-Bericht enthält danach nur den letzten Schritt.
 
 **Setup überspringen:** Ist der Ausgangszustand schon vorbereitet (gerade
-`npm run test:e2e:setup` gelaufen, Dev-Server läuft noch), spart
-`--skip-setup` (oder Umgebungsvariable `E2E_SKIP_SETUP=1`) die gut eine
-Minute Setup: `npm run test:e2e:write -- --skip-setup e2e/write/sources.spec.ts`.
+`npm run test:e2e:setup` gelaufen), spart
+`--skip-setup` (oder Umgebungsvariable `E2E_SKIP_SETUP=1`) das Setup: `npm run test:e2e:write -- --skip-setup e2e/write/sources.spec.ts`.
 Die ändernden Tests räumen ihre Datensätze selbst ab und lassen sich daher
 mehrfach hintereinander ohne neues Setup laufen; die lesenden zählen gegen den
 frisch befüllten Stand und brauchen ein Setup, nachdem ändernde Tests liefen.
 
-Tipp für schnelles Arbeiten: `npm run dev:mock` in einem eigenen Terminal
-starten — Playwright benutzt ihn mit, und nicht jeder Lauf zahlt den Kaltstart.
+Der Produktionsserver startet in gut einer Sekunde; ein eigener Server im
+Hintergrund lohnt sich kaum. Wer trotzdem einen will (oder beim Sharding):
+`npm run mock:build`, dann `npm run mock:start` in einem eigenen Terminal —
+die Läufe benutzen ihn mit. Nach Codeänderungen diesen Server beenden, sonst
+testen die Läufe den alten Stand.
 
-**Auf mehrere Terminals verteilen (Sharding):** einmal `npm run
-test:e2e:setup`, dann in jedem Terminal einen Teil mit `--skip-setup` — etwa
+**Auf mehrere Terminals verteilen (Sharding):** `npm run mock:start` in
+einem eigenen Terminal (sonst beendet der zuerst fertige Teil den Server
+der anderen), einmal `npm run test:e2e:setup`, dann in jedem Terminal einen
+Teil mit `--skip-setup` — etwa
 `npm run test:e2e:read -- --skip-setup --shard=1/2` und
 `npm run test:e2e:read -- --skip-setup --shard=2/2`. Ohne `--skip-setup`
 würde jeder Teil die Mock-Daten neu aufbauen, während die anderen noch laufen.
 Die ändernden Tests erst nach den lesenden starten (sie verändern Zählungen).
-Mehr Parallelität bringt gegen den Dev-Server wenig: 4 statt 2 Worker für die
-ändernden Tests waren langsamer und liefen in Zeitüberschreitungen.
 
-Ablauf: Playwright startet `npm run dev:mock` auf Port 3100 (läuft dort schon
-ein Server, wird er mitbenutzt und hinterher nicht beendet — bewusst der
-Dev-Server, weil der Dev-Login in Produktion abgeschaltet ist). Das Projekt
-`setup` baut die Mock-Daten neu auf (`npm run db:mock`), meldet jede Rolle
-einmal an (`e2e/.auth/`) und ruft die Seiten einmal auf, damit Next.js sie
-vorab kompiliert. Danach laufen die lesenden Tests (`e2e/read/`) parallel, erst
+**Worker** (gemessen gegen den Build): lesende 6 (6 und 8 je rund 55 s);
+ändernde 2 Dateien gleichzeitig — 6 waren mit 64 statt 67 s kaum schneller,
+weil die längste Datei die Dauer bestimmt, und mit 4 trafen Zählungen auf
+fremde „E2E …“-Datensätze.
+
+Ablauf: `scripts/e2e.mjs` baut bei Bedarf (`npm run mock:build`, Ordner
+`.next-e2e`, getrennt von `.next` und `.next-mock`) und startet `npm run
+mock:start` auf dem Mock-Port. Der Dev-Login ist in Produktion gesperrt; der
+Server bekommt deshalb eine eng begrenzte Freigabe, die nur zusammen mit
+Mock-Datenbank (`…_mock`/`…_test`) und Mock-Medienordner wirkt
+(`lib/dev-login.ts`, [Komponenten-Doku](docs/komponenten/bibliotheken.md)).
+Das Projekt `setup` baut die Mock-Daten neu auf (`npm run db:mock`) und
+meldet jede Rolle einmal an (`e2e/.auth/`); nur gegen den Dev-Server ruft es
+zusätzlich die Seiten einmal auf, damit Next.js sie vorab kompiliert. Danach
+laufen die lesenden Tests (`e2e/read/`) parallel, erst
 dann die ändernden (`e2e/write/`); diese legen eigene, „E2E …“ benannte
 Datensätze an und räumen sie wieder ab. Jeder Test schlägt außerdem fehl, wenn
 im Browser ein unerwarteter Konsolenfehler oder eine nicht abgefangene
-Ausnahme auftritt (`e2e/support/fixtures.ts`). Die Tests sprechen nur mit der
+Ausnahme auftritt (`e2e/support/fixtures.ts`) — mit einer Ausnahme: den
+bekannten, seltenen Hydration-Fehler beim Laden (React #418, siehe
+UEBERGABE) meldet die Wache gegen den Build nur (`[bekannt] …` in der
+Ausgabe, Anmerkung im Bericht); `E2E_STRICT_HYDRATION=1` macht ihn wieder
+zum Fehler. Die Tests sprechen nur mit der
 App (Browser und HTTP-API), nie direkt mit Datenbank oder Medienordner. Den
 KI-Zugang prüfen `e2e/write/ai-access.spec.ts` (Recht vergeben, Schlüssel
 anlegen und widerrufen) und `e2e/read/mcp-http.spec.ts` (`/api/mcp` mit den
 festen Mock-Schlüsseln; abgelehnte Anfragen mit zufälliger
 `X-Forwarded-For`-Adresse, damit wiederholte Läufe gegen denselben
-Dev-Server nicht in die Sperre nach Fehlversuchen laufen). Den
+Server nicht in die Sperre nach Fehlversuchen laufen). Den
 GEDCOM-Import prüft `e2e/write/gedcom-import.spec.ts` mit eigenen, im Test
 erzeugten Dateien (eigener Baum, eigene Familie): Vorschau mit Gruppen,
 Baumwahl und Abbrechen, Erst- und Wiederholungsimport, geänderte Datei (in
@@ -2296,6 +2334,43 @@ Person rund 2 ms (GIN-Index auf `personIds`, ältere Einträge über
 `entityType`/`entityId`), Übersicht einer Familie für einen Tag rund 70 ms;
 die Übersicht über alle Einträge ohne Zeitraum braucht bei dieser Menge
 mehrere Sekunden — deshalb der Standardzeitraum.
+
+## Neuigkeiten
+
+Der Versions-Changelog für Anwender — nicht zu verwechseln mit der
+[Änderungsgeschichte](#änderungsgeschichte) der Daten. Einzige Quelle ist
+[CHANGELOG.md](CHANGELOG.md) im Wurzelverzeichnis:
+
+```markdown
+## 2026-11-22.2 — Kurztitel
+
+- Was kann ich jetzt, was hat sich geändert — in Anwendersprache,
+  Folgezeilen eingerückt.
+```
+
+- **Kennung** `JJJJ-MM-TT.N`: Tag des Ausrollens und laufende Nummer an
+  diesem Tag — keine Commit-Kennung. Neueste zuerst. Jedes Release nach
+  `main` bekommt einen Eintrag (AGENTS.md, Abschnitt 3).
+- **Eingebaut zur Build-Zeit** (`lib/release-notes-data.ts`, Webpack-Regel
+  `?raw` in `next.config.mjs`): das Image braucht die Datei zur Laufzeit
+  nicht. Den Aufbau prüft `tests/release-notes.test.ts` (fehlerfrei, keine
+  Commit-Kennungen, keine Technikbegriffe).
+- **Fenster „Was ist neu?“**: Angemeldete sehen nach einer neuen Version auf
+  der ersten aufgerufenen Seite einmal die Releases seit dem zuletzt
+  gesehenen (höchstens drei, für den Rest ein Hinweis auf die Seite). Jedes
+  Schließen — „Gelesen“, Escape, Hintergrund, „Alle Neuigkeiten“ — merkt
+  das neueste Release am Benutzer (`User.lastSeenReleaseId`, Migration
+  `20261124000000_neuigkeiten`; `PUT /api/me/release-seen`, nur für sich
+  selbst). Wer noch nichts gesehen hat (bestehende Benutzer beim ersten
+  Ausrollen), sieht nur das neueste Release; neu eingeladene Benutzer
+  starten beim neuesten, das Fenster kommt für sie erst mit dem nächsten.
+  Nie auf der Anmeldeseite, nie ohne Anmeldung.
+- **Seite `/neuigkeiten`**: alle Releases; nur für Angemeldete, Link in der
+  Fußzeile neben der Build-Angabe.
+- **Tests**: Die Mock-Benutzer haben nach dem Seed das neueste Release schon
+  gesehen, kein Test begegnet also einem unerwarteten Fenster.
+  `e2e/write/whats-new.spec.ts` prüft das Fenster mit einem eigenen,
+  eingeladenen Benutzer.
 
 ## Datenmodell
 

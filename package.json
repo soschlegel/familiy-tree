@@ -24,6 +24,8 @@
     "db:mock": "node scripts/mock.mjs seed",
     "mock:setup": "node scripts/mock.mjs setup",
     "dev:mock": "node scripts/mock.mjs dev",
+    "mock:build": "node scripts/mock.mjs build",
+    "mock:start": "node scripts/mock.mjs start",
     "mock:env": "node scripts/mock.mjs env",
     "mcp:stdio": "node scripts/mock.mjs mcp",
     "mcp:key": "node scripts/mock.mjs mcp-key",

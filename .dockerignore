@@ -10,6 +10,10 @@ data
 !.env.example
 *.md
 !README.md
+# Neuigkeiten: wird beim Build in den Server-Code eingebaut (lib/release-notes-data.ts).
+!CHANGELOG.md
+# Anwender-Hilfe: wird zur Laufzeit gelesen (/hilfe, lib/help/content.ts).
+!docs/anwender/*.md
 *.log
 *.tsbuildinfo
 

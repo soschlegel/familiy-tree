@@ -6,6 +6,7 @@ import { REFERENCE_COOKIE } from "@/lib/reference";
 import { loadMapView, type MapMode } from "@/lib/services/map";
 import { MapExplorer } from "@/components/MapExplorer";
 import { MapPersonChooser } from "@/components/MapPersonChooser";
+import { HelpLink } from "@/components/HelpLink";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Karte" };
@@ -118,7 +119,8 @@ export default async function MapPage({
           Koordinaten —{" "}
           <Link href="/admin/places" className="btn-link">
             Orte zuordnen
-          </Link>
+          </Link>{" "}
+          <HelpLink to="orteZuordnen" compact label="Wie funktioniert das Zuordnen der Orte?" className="ml-1 align-middle" />
         </p>
       )}
 
@@ -144,6 +146,9 @@ export default async function MapPage({
             darfst.
           </li>
         </ul>
+        <p className="mt-2">
+          <HelpLink to="karte" label="Ausführlich mit Beispiel: wie die Karte zählt" />
+        </p>
       </details>
 
       <p className="text-xs muted" data-testid="map-attribution">

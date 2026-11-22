@@ -84,6 +84,9 @@ Alle Seiten außer `/login` und der Weiterleitung `/` sind
 | `/admin/users` | Benutzerverwaltung | `user:manage` (Admin) |
 | `/admin/changes` | Änderungsübersicht | `audit:read` (Admin) |
 | `/admin/places` | Orte zuordnen | `place:manage` (Admin) |
+| `/neuigkeiten` | Neuigkeiten: alle Releases aus `CHANGELOG.md` | angemeldet |
+| `/hilfe` | Anwender-Hilfe: Themenliste | angemeldet |
+| `/hilfe/[thema]` | Ein Hilfethema aus `docs/anwender/` | angemeldet; unbekanntes Thema 404 |
 
 ## Übersicht: API-Routen
 
@@ -132,6 +135,7 @@ Dienst über den `Scope`.
 | `GET, POST /api/ai-tokens` | Eigene Schlüssel / neuer Schlüssel; Admin: alle | angemeldet (Dienst) |
 | `DELETE /api/ai-tokens/[id]` | Schlüssel widerrufen; mit `?endgueltig=1` endgültig löschen | eigener oder Admin |
 | `PUT /api/me/person` | „Das bin ich“ setzen | angemeldet, Person sichtbar |
+| `PUT /api/me/release-seen` | Neuigkeiten: Release als gesehen merken | angemeldet (nur sich selbst) |
 | `GET /api/changes` | Änderungspakete | `audit:read` |
 | `GET /api/changes/[key]` | Einträge eines Pakets | `audit:read` |
 | `GET /api/export` | Export JSON/ZIP/GEDCOM | angemeldet (nur Sichtbares) |
@@ -163,13 +167,22 @@ Dienst über den `Scope`.
   Personen, Recherche, Quellen, Daten; im Untermenü „Verwaltung“:
   KI-Zugang (nur bei KI-Recht oder noch nicht widerrufenen Schlüsseln —
   dafür eine kleine Abfrage am Benutzer), Familien, Benutzer, Änderungen
-  (je nach globalem Recht). Dazu Benutzername mit Rolle und
+  (je nach globalem Recht) und für alle zuletzt „Hilfe“ (`/hilfe`) — damit
+  hat jeder Angemeldete das Untermenü. Dazu Benutzername mit Rolle und
   Abmelde-Knopf (Server-Aktion `signOut`, danach `/login`).
 - Ohne Anmeldung keine Navigation.
 - Sprungmarke „Zum Inhalt springen“, Schriften (Fraunces, Source Sans 3
   über `next/font`), Farbe der Browserleiste je Farbschema, Fußzeile mit
   Build-Angabe (`buildInfo`/`buildLabel` aus `lib/build-info.ts`; ohne
-  Anmeldung nur das Datum).
+  Anmeldung nur das Datum) und — nur angemeldet — den Links „Neuigkeiten“
+  (`/neuigkeiten`) und „Hilfe“ (`FooterHelpLink` aus
+  `components/HelpLink.tsx`; einzeilig, die Fußzeile hat eine feste Höhe).
+- **Neuigkeiten:** Die Benutzerabfrage liest auch `lastSeenReleaseId`;
+  `releasesSince` (`lib/release-notes.ts`) wählt aus `releaseNotes()` die
+  Releases seit dem zuletzt gesehenen. Gibt es welche, rendert das Layout
+  `WhatsNewDialog` („Was ist neu?“) mit höchstens drei Releases, der Zahl der
+  übrigen und der neuesten Kennung. Ohne Anmeldung nie; auf `/login`
+  unterdrückt es die Komponente selbst.
 
 ### Fehler und „nicht gefunden“
 
@@ -437,6 +450,17 @@ Die Personenseite.
 - **Anzeige:** Filterformular, `ChangeSetList` (eine Zeile je Paket,
   aufklappbar über `GET /api/changes/[key]`), Seitennavigation.
 
+### `/neuigkeiten` — `app/neuigkeiten/page.tsx`
+
+- **Rechte:** angemeldet (`requirePage`), sonst `/login` — wie die genaue
+  Build-Angabe geht der Stand der App Fremde nichts an.
+- **Daten:** `releaseNotes()` (`lib/release-notes-data.ts`, zur Build-Zeit
+  eingebaute `CHANGELOG.md`). Keine Datenbank; die Lesemarke ändert die
+  Seite nicht.
+- **Anzeige:** Überschrift „Neuigkeiten“, alle Releases über
+  `ReleaseNoteList`, neueste zuerst. Nicht zu verwechseln mit
+  `/admin/changes` (Änderungen an den Daten).
+
 ### `/places/[ref]` — `app/places/[ref]/page.tsx`
 
 - **Rechte:** angemeldet; Daten über `getPlacePage` (nur Angaben sichtbarer
@@ -458,6 +482,29 @@ Die Personenseite.
 - **Daten:** `listPlaces`. **Anzeige:** Zähler je Status als Filter,
   `PlaceAutoAssign`, Suchfeld, `PlaceTable`, Seitennavigation. KI-Zuordnungen
   stehen als „von KI“ mit eigenem Filter, Begründung und „Bestätigen“.
+
+### `/hilfe` und `/hilfe/[thema]` — `app/hilfe/page.tsx`, `app/hilfe/[thema]/page.tsx`
+
+- **Zweck:** Anwender-Hilfe für Familienmitglieder; Inhalt ausschließlich
+  aus `docs/anwender/NN-thema.md` (Pflege: `docs/anwender/README.md`,
+  AGENTS.md „Anwender-Hilfe fortschreiben“).
+- **Rechte:** angemeldet (`requirePage()`), sonst `/login`. Die Texte
+  enthalten keine Stammbaumdaten; bewusst trotzdem nicht öffentlich.
+- **Daten:** `listHelpTopics` bzw. `getHelpTopic` aus `lib/help/content.ts`
+  (Dateien von der Platte, im Betrieb einmal gelesen). Das Thema muss dem
+  Muster `a-z0-9-` entsprechen und als Datei existieren, sonst 404.
+- **Anzeige:** Themenliste als Karten (Titel + erster Absatz); ein Thema
+  mit Brotkrumen „← Alle Hilfethemen“, Text über `renderHelpBlocks`
+  (`components/help-render.ts`, kein rohes HTML), unten Links zum vorigen
+  und nächsten Thema. Seitentitel „Thema · Hilfe · Stammbaum“.
+- **Build:** `next.config.mjs` nimmt `docs/anwender/*.md` per
+  `outputFileTracingIncludes` ins Standalone-Image mit; `.dockerignore`
+  lässt die Dateien ausdrücklich im Build-Kontext.
+- **Kontexthilfe** in anderen Seiten: `HelpLink` (siehe
+  oberflaeche-komponenten.md) auf `/map` („Wie wird gezählt?“ und
+  Admin-Hinweis „Orte zuordnen“), `/admin/data` (Orte zuordnen),
+  `/research/duplicates`, `/ai-access`, Personenseite (Bezugsperson,
+  Dubletten-Hinweis) und Legende der Baumlinien.
 
 ---
 
@@ -618,7 +665,9 @@ Fehlercodes aus den Grundregeln.
   aktiver Schlüssel.
 - **`POST /api/users`** (`user:manage`; Felder nach `userInput`):
   Einladung — legt den Benutzer mit Status „eingeladen“ an; vorhandene
-  E-Mail → 409. 201.
+  E-Mail → 409. 201. Die Lesemarke der Neuigkeiten steht gleich auf dem
+  neuesten Release: „Was ist neu?“ beginnt für neue Benutzer erst mit dem
+  nächsten.
 - **`PATCH /api/users/[id]`** (`user:manage`; Felder nach `userPatch`,
   u.a. Rolle, Status, E-Mail, eigene Person): Schutzregeln mit 409 — E-Mail
   nur änderbar, solange sich der Benutzer nie angemeldet hat, und nicht auf
@@ -632,6 +681,10 @@ Fehlercodes aus den Grundregeln.
   wirksame Stufe folgt sofort dem neuen Recht.
 - **`PUT /api/me/person`** (`personId` oder `null`): „Das bin ich“ über
   `setSelfPerson`; nur sichtbare Personen, sonst 404.
+- **`PUT /api/me/release-seen`** (`releaseId`, sonst nichts — weitere Felder
+  → 400): `markReleaseSeen` für den angemeldeten Benutzer; nur Kennungen aus
+  `CHANGELOG.md`, sonst 400; ohne Anmeldung 401. Antwort
+  `{ lastSeenReleaseId }`. Kein Audit-Eintrag.
 
 ### KI-Schlüssel
 
@@ -761,3 +814,4 @@ und `tests/mcp-http.db.test.ts`.
 | Quellen, Bilder | `e2e/write/sources.spec.ts`, `import-sources.spec.ts`, `media.spec.ts`, `attached-media.spec.ts` |
 | Export, Import | `e2e/read/export.spec.ts`, `gedcom-export-dialog.spec.ts`; `e2e/write/import.spec.ts`, `gedcom-import.spec.ts` |
 | Verwaltung, KI-Zugang, Änderungen | `e2e/write/admin.spec.ts`, `ai-access.spec.ts`, `changelog.spec.ts`; `e2e/read/mcp-http.spec.ts` |
+| Anwender-Hilfe, Kontexthilfe | `e2e/read/help.spec.ts`; Unit: `tests/help.test.ts` |

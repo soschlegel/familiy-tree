@@ -186,7 +186,12 @@ steht, kommt trotz gültigem Google-/GitHub-Konto nicht hinein
 **Felder:** `email` (eindeutig, kleingeschrieben verglichen), `name`,
 `image`, `emailVerified`, `role` (Standard `VIEWER`), `status` (Standard
 `INVITED`), `createdAt`, `lastLoginAt`, `aiAccess` (Standard `NONE`),
-`personId` (**Bezugsperson** „das bin ich“, optional).
+`personId` (**Bezugsperson** „das bin ich“, optional), `lastSeenReleaseId`
+(**Neuigkeiten**: Kennung „JJJJ-MM-TT.N“ des zuletzt gesehenen Release aus
+`CHANGELOG.md`, optional; leer = noch keins gesehen, dann zeigt „Was ist
+neu?“ nur das neueste — siehe `lib/release-notes.ts`). Bewusst kein
+Fremdschlüssel und keine Tabelle für Releases: die Liste steht in der Datei,
+nicht in der Datenbank.
 
 **Beziehungen:** Konten (`Account`), Sitzungen (`Session`), hochgeladene
 Medien, Audit-Einträge, Pakete (`ChangeSet`), Familienmitgliedschaften
@@ -614,6 +619,7 @@ zuordnen“, von Hand Bestätigtes nie überschreiben).
 | `20261122000001_bezugsperson` | `User.personId` mit Index und Fremdschlüssel `ON DELETE SET NULL`. |
 | `20261123000000_medien_an_eintraegen` | Tabellen `SourceMedia`, `EventMedia`, `CitationMedia` (Cascade beidseitig); bestehende Hauptscans werden bewusst nicht kopiert. |
 | `20261123000001_orte` | Tabelle `Place`, Enums `PlaceSource`, `PlacePrecision`. |
+| `20261124000000_neuigkeiten` | `User.lastSeenReleaseId` (Text, optional) — nur `ADD COLUMN`. |
 | `20261124000001_orte_ki` | `PlaceSource` um `AI` (`ALTER TYPE … ADD VALUE`); `Place.note` (optional) und `Place.uncertain` (Standard `false`). |
 
 `migration_lock.toml` legt den Anbieter (PostgreSQL) fest.

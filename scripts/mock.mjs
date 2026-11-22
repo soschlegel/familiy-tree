@@ -5,6 +5,11 @@
 //   node scripts/mock.mjs setup   Datenbank anlegen, Schema anwenden, befüllen
 //   node scripts/mock.mjs seed    nur neu befüllen (Datenbank muss existieren)
 //   node scripts/mock.mjs dev     Dev-Server gegen die Mock-Daten auf Port 3100
+//   node scripts/mock.mjs build [--if-stale]
+//                                 Produktions-Build für die E2E-Tests in .next-e2e
+//                                 (--if-stale: nur, wenn Quellen neuer als der Build)
+//   node scripts/mock.mjs start   diesen Build mit `next start` auf Port 3100
+//                                 (Mock-Datenbank, Mock-Bilder, Dev-Login)
 //   node scripts/mock.mjs env     berechnete Umgebung anzeigen
 //   node scripts/mock.mjs mcp     MCP-Server (stdio, nur Entwicklung/Tests) gegen die Mock-Daten
 //   node scripts/mock.mjs mcp-key [name]
@@ -19,7 +24,7 @@
 // ./data/media-mock, änderbar über MOCK_MEDIA_DIR; der Name muss auf -mock
 // oder -test enden), nie im normalen MEDIA_DIR.
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -83,6 +88,87 @@ const mockEnv = {
   NEXT_DIST_DIR: ".next-mock",
   PORT: MOCK_PORT,
 };
+
+/**
+ * Produktions-Build der Mock-Umgebung (E2E-Tests). Eigener Ausgabeordner, damit
+ * er weder den normalen (.next) noch den Mock-Dev-Server (.next-mock) stört.
+ * Im Build selbst steckt nichts Ortsabhängiges (Port, Datenbank, Medienordner
+ * und Anmeldung liest der Server erst beim Start), er gilt also für jeden Port.
+ */
+const E2E_DIST_DIR = ".next-e2e";
+const E2E_STAMP = join(root, E2E_DIST_DIR, "e2e-build-stamp.json");
+const e2eEnv = {
+  ...mockEnv,
+  NEXT_DIST_DIR: E2E_DIST_DIR,
+  // Eng begrenzte Freigabe des Dev-Logins im Produktionsmodus — wirkt nur
+  // zusammen mit Mock-Datenbank und Mock-Medienordner (lib/dev-login.ts).
+  E2E_PRODUCTION_DEV_LOGIN: "mock-only",
+  // Keine Telemetrie-Hinweise im Testprotokoll.
+  NEXT_TELEMETRY_DISABLED: "1",
+};
+delete e2eEnv.NODE_ENV; // setzt next build/start selbst
+
+/** Alles, was in den Build eingeht (für --if-stale). */
+const BUILD_INPUTS = [
+  "app", "components", "lib", "public", "geo",
+  "prisma/schema.prisma", "next.config.mjs", "package-lock.json",
+  "tailwind.config.ts", "postcss.config.mjs", "tsconfig.json",
+];
+
+/** Jüngste Änderungszeit (ms) unter den Build-Eingaben. */
+function newestInput() {
+  let newest = 0;
+  const visit = (p) => {
+    let st;
+    try {
+      st = statSync(p);
+    } catch {
+      return;
+    }
+    if (st.isDirectory()) {
+      for (const name of readdirSync(p)) visit(join(p, name));
+    } else if (st.mtimeMs > newest) {
+      newest = st.mtimeMs;
+    }
+  };
+  for (const rel of BUILD_INPUTS) visit(join(root, rel));
+  return newest;
+}
+
+/** Ist der E2E-Build vorhanden und jünger als alle Eingaben? */
+function e2eBuildFresh() {
+  if (!existsSync(E2E_STAMP) || !existsSync(join(root, E2E_DIST_DIR, "BUILD_ID"))) return false;
+  return statSync(E2E_STAMP).mtimeMs >= newestInput();
+}
+
+async function build({ ifStale = false } = {}) {
+  if (ifStale && e2eBuildFresh()) {
+    console.log(`[mock] E2E-Build in ${E2E_DIST_DIR} ist aktuell — übersprungen.`);
+    return;
+  }
+  const started = Date.now();
+  console.log(`[mock] Produktions-Build der Mock-Umgebung nach ${E2E_DIST_DIR} …`);
+  // Zeitstempel VOR dem Build nehmen: was währenddessen geändert wird, gilt
+  // beim nächsten --if-stale als neuer.
+  const startedAt = new Date();
+  await run([bin.next, "build"], { env: e2eEnv });
+  writeFileSync(E2E_STAMP, JSON.stringify({ builtAt: startedAt.toISOString() }, null, 2));
+  utimesSync(E2E_STAMP, startedAt, startedAt);
+  console.log(`[mock] Build fertig in ${Math.round((Date.now() - started) / 1000)} s.`);
+}
+
+async function start() {
+  if (!existsSync(join(root, E2E_DIST_DIR, "BUILD_ID"))) {
+    throw new Error(`Kein Build in ${E2E_DIST_DIR} — zuerst npm run mock:build`);
+  }
+  if (!e2eBuildFresh()) {
+    console.warn(`[mock] Hinweis: Quellen sind neuer als der Build in ${E2E_DIST_DIR} (npm run mock:build).`);
+  }
+  console.log(
+    `[mock] Produktionsserver: http://localhost:${MOCK_PORT}  (Datenbank ${databaseName}, Bilder ${MOCK_MEDIA_DIR})`,
+  );
+  await run([bin.next, "start", "-p", MOCK_PORT], { env: e2eEnv });
+}
 
 function run(args, { env = mockEnv } = {}) {
   return new Promise((resolve, reject) => {
@@ -170,6 +256,12 @@ try {
     case "dev":
       await dev();
       break;
+    case "build":
+      await build({ ifStale: process.argv.includes("--if-stale") });
+      break;
+    case "start":
+      await start();
+      break;
     case "mcp":
       // MCP-Server (mcp/server.ts) gegen die Mock-Datenbank. Hier nichts auf
       // stdout ausgeben — das gehört allein dem MCP-Protokoll.
@@ -206,7 +298,7 @@ try {
       );
       break;
     default:
-      console.error("Aufruf: node scripts/mock.mjs <setup|seed|dev|env|mcp|mcp-key>");
+      console.error("Aufruf: node scripts/mock.mjs <setup|seed|dev|build|start|env|mcp|mcp-key>");
       process.exit(1);
   }
 } catch (err) {

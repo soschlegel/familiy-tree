@@ -54,6 +54,7 @@ npx prisma generate                               # npm blockiert Install-Skript
 docker compose -f docker-compose.dev.yml up -d   # nur Postgres
 npm run mock:setup                                # Mock-Datenbank + Bilder
 npm run dev:mock                                  # http://localhost:3100
+npm run test:e2e                                  # Browser-Tests, ein Befehl (Build, Server, setup → read → write)
 ```
 
 Anmeldung im Mock per Dev-Login, z.B. `admin@example.test`. Tests siehe
@@ -247,6 +248,28 @@ Freigabe (21.11.): „bauen und Gas geben“ — die Wünsche werden umgesetzt.
   verbinden (Anker, Ausbreitung, Cluster) und Sammel-Zusammenführen.
   Laufzeit im Rauschen: 11 847 erzeugte Personen Liste ~1,4 s, Hinweis
   Median ~74 ms je Person (vorher ~73 ms); Mock ~19 ms bzw. ~6 ms.
+- **Neuigkeiten / „Was ist neu?“** („Mit jeder neuen Version bitte das
+  Changelog mit erstellen und anzeigen beim erstmaligen Laden durch den
+  Anwender“) — erledigt auf Branch `neuigkeiten` (NICHT gemergt, nicht
+  ausgerollt). Quelle `CHANGELOG.md` (Format und Kennung `JJJJ-MM-TT.N`:
+  AGENTS.md Abschnitt 3, README „Neuigkeiten“), rückwirkend ab 20.11.
+  befüllt; das kommende Release steht als `2026-11-22.3` drin — beim
+  Ausrollen an einem anderen Tag die Kennung anpassen. Zur Build-Zeit
+  eingebaut (Webpack `?raw`, `.dockerignore` lässt die Datei durch).
+  Migration `20261124000000_neuigkeiten` (`User.lastSeenReleaseId`, nur
+  `ADD COLUMN`). Fenster einmal nach einer neuen Version (höchstens drei
+  Releases, Rest per Link), Seite `/neuigkeiten`, Link in der Fußzeile.
+  Bestehende Benutzer sehen beim ersten Ausrollen nur das neueste Release;
+  neu eingeladene starten beim neuesten (Verfeinerung gegenüber dem
+  Entwurf, damit Neue nicht mit „Neuigkeiten“ begrüßt werden). Mock-Seed
+  setzt das neueste als gesehen.
+  Prüfstand (22.11., Worktree `familiy-tree-neuigkeiten`): Typecheck, Lint,
+  Vitest 848/848; schema-diff-check Exit 0, `prisma migrate diff` ohne
+  Abweichung; `npm run build` ok (Text im Server-Bundle); Playwright auf
+  frischem Server, zwischen read und write neu gestartet: setup 6/6, read
+  186/186, write 100/100. Ein erster write-Lauf unter starker Last durch
+  parallele Agenten hatte 4 Zeitüberschreitungen (darunter der erste Aufruf
+  von `/neuigkeiten`, inzwischen im Vorwärmen); Wiederholung grün.
 
 - **Orte: zeitabhängige Staatszugehörigkeit** (Idee aus dem Paket
   `orte-ki`, nicht beauftragt): Breslau 1900 = Deutsches Reich, heute Polen —
@@ -299,10 +322,24 @@ Freigabe (21.11.): „bauen und Gas geben“ — die Wünsche werden umgesetzt.
   älterer Importe sind es noch nicht. Regeln: von Hand Geändertes nicht
   anfassen, Fingerabdrücke der Herkunftsvermerke nachziehen, doppelte Belege
   nur auf ausdrückliches Ankreuzen entfernen.
-- **Seltener Fehler auf `/people`**: zweimal ein Hydration-Fehler, einmal ein
-  verlorener Klick auf eine Seitenzahl (die Adresse blieb stehen). Vermutung:
-  Klick bzw. Auswahl vor der Hydration. Beim nächsten Auftreten die
-  Aufzeichnung aus `test-results` sichern, bevor sie überschrieben wird.
+- **Seltener Hydration-Fehler beim Laden (React #418)** — nicht nur
+  `/people`: auch `/people/[id]`, `/sources`, `/tree`, `/login`. Gegen den
+  Produktions-Build in wenigen Prozent der Seitenaufrufe unter Last (gegen
+  den Dev-Server selten). Untersucht mit einem Diagnose-Build (React
+  ungekürzt): Server-HTML und RSC-Daten sind byteweise gleich wie bei
+  fehlerfreien Aufrufen, vor dem Fehler ändert nichts das DOM, meist lädt
+  das Dokument noch. React erwartet an der Stelle der Seite deren äußeres
+  Element (`PeoplePage` → `div.space-y-5`, `PersonPage` → `div.space-y-8`),
+  steht aber schon eine Ebene tiefer — Wettlauf beim Streaming in
+  Next.js 15.5/React 19, kein Datenfehler; React baut die Seite selbst neu
+  auf (auf Seiten mit `loading.tsx` wie `/research` mit Folgefehlern
+  „Cannot read properties of null (reading 'parentNode')“ aus den
+  nachgeschobenen Streaming-Skripten). Die E2E-Wache meldet beides gegen
+  den Build nur (`[bekannt] …`);
+  `E2E_STRICT_HYDRATION=1` bzw. `--dev` werten ihn als Fehler. Nächste
+  Schritte: Next.js-/React-Aktualisierung prüfen; sonst minimal
+  nachstellen und melden. Früher dazu beobachtet: ein verlorener Klick auf
+  eine Seitenzahl (Klick vor der Hydration).
 - **GEDCOM-Export**: eine abgelehnte Eltern-Kind-Verbindung (z.B. dritter
   leiblicher Elternteil) bleibt als Original erhalten, wird aber nicht
   zurückgeschrieben.
@@ -331,23 +368,33 @@ Laufzeit: 2 Importe mit je rund 4800 Personen 0,56 s; 5 Importe mit zusammen
 
 ## Stolperfallen dieser Umgebung
 
-- **Entwicklungsserver**: verwirft übersetzte Seiten, wächst auf 3–4 GB, die
-  erste Übersetzung einer Seite dauert mehrere Sekunden und reißt die
-  Zeitgrenzen der Tests. Vor einem Gesamtlauf den Server neu starten; auf
-  schwacher oder belasteter Maschine mit `--workers=1` in Teilen laufen
-  lassen und zwischen read und write neu starten. `onDemandEntries` in
-  `next.config.mjs` hat nicht geholfen.
-- **Während eines Gesamtlaufs nichts ändern** (keine Dateien, kein `tsc`):
-  Der Server übersetzt sonst neu, und es entstehen Ausfälle in `auth` und
-  `permissions`, die nur Last sind.
+- **E2E laufen gegen einen Produktions-Build** der Mock-Umgebung
+  (`npm run test:e2e`: baut nach `.next-e2e` nur bei geänderten Quellen,
+  startet `next start` auf `MOCK_PORT`, beendet ihn danach). Damit gilt
+  nicht mehr: Server vor dem Gesamtlauf neu starten, zwischen read und
+  write neu starten, `--workers=1` auf belasteter Maschine, während des
+  Laufs nichts ändern (Änderungen wirken erst mit dem nächsten Build). Ein
+  schon laufender Server auf dem Port wird mitbenutzt — nach
+  Codeänderungen einen von Hand gestarteten `mock:start` beenden.
+- **Entwicklungsserver** (nur noch bei `--dev` bzw. `npm run dev:mock`):
+  verwirft übersetzte Seiten, wächst auf 3–4 GB, die erste Übersetzung
+  einer Seite reißt Zeitgrenzen; dort gelten die alten Regeln weiter (vor
+  dem Lauf neu starten, zwischen read und write neu starten, nichts
+  ändern). `onDemandEntries` in `next.config.mjs` hat nicht geholfen.
+- **Dev-Login im Produktions-Build** nur über die eng begrenzte
+  Mock-Freigabe (`lib/dev-login.ts`: `E2E_PRODUCTION_DEV_LOGIN=mock-only`
+  plus Datenbank `…_mock`/`…_test` plus Medienordner `…-mock`/`…-test`).
+  Nie im Stack setzen.
 - **Windows**: `prisma generate` scheitert mit EPERM, solange ein
   Entwicklungsserver die Engine-Datei geladen hat. Vorher stoppen.
 - **npm ab Version 12** blockiert Install-Skripte: nach `npm install` einmal
   `npx prisma generate` ausführen.
 - **Mock**: Seed und Setup verweigern Datenbanknamen ohne Endung
   `_mock`/`_test` und Medienordner ohne `-mock`/`-test`.
-- **Playwright**: schreibende Tests mit 2 Workern; Dateien im Modus `serial`
-  überspringen nach einem Fehler den Rest der Datei.
+- **Playwright**: lesende Tests mit 6 Workern, schreibende mit 2 (mehr
+  ist nicht schneller und trifft öfter fremde „E2E …“-Datensätze in
+  Zählungen); Dateien im Modus `serial` überspringen nach einem Fehler den
+  Rest der Datei.
 - **Migrationen**: eine veröffentlichte Migration nie nachträglich ändern.
   `node docker/schema-diff-check.mjs < migration.sql` prüft, ob eine neue
   rein ergänzend ist; Abweichungen in der Release-Beschreibung begründen.
