@@ -10,23 +10,21 @@ aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
   Portainer aktualisiert den Stack von dort. **Ein Merge ist ein
   Produktiv-Deployment auf echte Daten.**
 - `optimierung` = Arbeitsbranch, zum Zeitpunkt der Übergabe gleich `main`.
-- Zuletzt ausgerollt (22.11.): Bilder an Quellen, Ereignissen und Belegen
-  (App, MCP `add_media`/`link_media`, Export), Linienfarben auch an den
-  Verbindungen, Untermenü „Verwaltung“ in der Kopfzeile, Anleitungen „Claude
-  verbinden“ (Handy, Browser/Desktop, Claude Code) auf `/ai-access` mit der
-  optionalen Variablen `MCP_CONNECTOR_URL`, MCP-Hinweis „keine Namen in
-  Paket-Titeln“. Neue, rein ergänzende Migration
-  `20261123000000_medien_an_eintraegen` (letzter Migrationsordner). Davor
-  (21.11.): Bezugsperson/Linien, Changelog, GEDCOM-Export mit
-  Familienauswahl, Dubletten ohne Vorfahren (`20261122000000_changelog`,
-  `20261122000001_bezugsperson`).
-- Prüfstand des letzten Pakets: Typecheck, Lint, Vitest 757/757;
+- Zuletzt ausgerollt (22.11., zweites Release): Karte „Wurzeln nach Jahr“
+  mit Ortszuordnung (`/map`, `/admin/places`, Ortsnamen „heutiger Name (alter
+  Name)“), Belegbilder ohne doppelte Vorschau, KI-Schlüssel löschen und
+  Verlauf ausblenden, Komponenten-Doku `docs/komponenten/` mit AGENTS.md/
+  CLAUDE.md, Aufräumrunde (kleine Fehler, toter Code, doppelte Logik,
+  Beispielorte, README mit Quickstart, Historisches in
+  `docs/dev-history.md`), Demofamilie ohne echte Namen. Neue, rein
+  ergänzende Migration `20261123000001_orte` (letzter Migrationsordner).
+  Davor am 22.11.: Bilder an Einträgen (`20261123000000_medien_an_eintraegen`),
+  Linienfarben an Verbindungen, Untermenü „Verwaltung“, Handy-Anleitung.
+- Prüfstand des letzten Pakets: Typecheck, Lint, Vitest 827/827;
   Migrationen ↔ Schema ohne Abweichung; schema-diff-check ergänzend;
-  Playwright auf frischem Server, zwischen read und write neu gestartet:
-  setup 6/6, read 168/169 (ein Ausfall: der bekannte seltene
-  Hydration-Fehler auf `/people`, `people-list.spec` „Sortierung nach
-  Geburt“ — danach 5×5 Wiederholungen grün; Aufzeichnung lokal gesichert),
-  write 89/89.
+  lokaler Docker-Build ok (Ortsverzeichnis und Ländergrenzen im Image, keine
+  Tests); Playwright auf frischem Server, zwischen read und write neu
+  gestartet, ohne parallele Agenten: setup 6/6, read 182/182, write 97/97.
 - Beim Ausrollen beachten: Der Reverse-Proxy muss für `/api/mcp` größere
   Anfragen durchlassen (Bilder als base64 über MCP, bis
   MAX_UPLOAD_BYTES × 4/3 + 1 MiB), sonst antwortet er mit 413.
