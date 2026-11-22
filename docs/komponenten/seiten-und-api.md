@@ -481,7 +481,8 @@ Die Personenseite.
   `manual`, `unresolvable`), `q`, `page`.
 - **Daten:** `listPlaces`. **Anzeige:** Zähler je Status als Filter,
   `PlaceAutoAssign`, Suchfeld, `PlaceTable`, Seitennavigation. KI-Zuordnungen
-  stehen als „von KI“ mit eigenem Filter, Begründung und „Bestätigen“.
+  stehen als „von KI“ mit eigenem Filter, Begründung und „Bestätigen“. Link
+  zur Anwender-Hilfe „Orte zuordnen“ (`HelpLink`).
 
 ### `/hilfe` und `/hilfe/[thema]` — `app/hilfe/page.tsx`, `app/hilfe/[thema]/page.tsx`
 

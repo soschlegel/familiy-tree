@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requirePage, requireScope } from "@/lib/session";
 import { listPlaces, PLACE_STATUS_LABEL, type PlaceStatus } from "@/lib/services/places";
 import { PlaceAutoAssign, PlaceTable } from "@/components/PlaceAdmin";
+import { HelpLink } from "@/components/HelpLink";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Orte zuordnen" };
@@ -45,6 +46,9 @@ export default async function PlacesPage({ searchParams }: { searchParams: Promi
           Server nicht. Neue Ortstexte werden nach dem Speichern und nach Importen automatisch zugeordnet; der Knopf
           „Automatisch zuordnen“ ordnet den Altbestand neu zu. Von Hand Bestätigtes und Zuordnungen des KI-Assistenten
           („von KI“, gelten sofort für die Karte) überschreibt die Automatik nie — KI-Zuordnungen hier bestätigen oder ändern.
+        </p>
+        <p className="mt-1 text-sm">
+          <HelpLink to="orteZuordnen" label="Wie funktioniert das Zuordnen der Orte?" />
         </p>
       </div>
 

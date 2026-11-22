@@ -43,7 +43,7 @@ Ungenaue Daten zählen mit ihrem Jahr: „um 1850“, „vor 1850“ und „nach
 
 Orte stehen im Stammbaum als **Text**, so wie du sie eingibst („Hamburg“, „Kleinbach, Kreis Musterstadt“). Für die Karte braucht jeder Ortstext Koordinaten. Die kommen aus einem **mitgelieferten Ortsverzeichnis** (GeoNames) — die App fragt dafür keinen Dienst im Internet, und die Ortsnamen verlassen den Server nie.
 
-Welcher Text zu welchem Ort gehört, legt ein Administrator unter **Orte zuordnen** fest, automatisch oder von Hand — siehe [Orte zuordnen](06-orte-zuordnen.md). Ein Ortstext, der (noch) keine Koordinaten hat, zählt als **„mit Ort, der nicht auf der Karte ist“**: Die Person ist dann an einem Ort, den die Karte nicht zeichnen kann, und steht nicht mehr am früheren Ort. Administratoren sehen unter der Karte, wie viele Ortsangaben noch fehlen.
+Neue Ortstexte ordnet die App nach dem Speichern von selbst zu; beim Eingeben kannst du den Ort auch auswählen, und Administratoren (auch mit Hilfe des KI-Assistenten) prüfen und ergänzen den Rest — siehe [Orte zuordnen](06-orte-zuordnen.md). Ein Ortstext, der (noch) keine Koordinaten hat, zählt als **„mit Ort, der nicht auf der Karte ist“**: Die Person ist dann an einem Ort, den die Karte nicht zeichnen kann, und steht nicht mehr am früheren Ort. Administratoren sehen unter der Karte, wie viele Ortsangaben noch fehlen.
 
 Orte, die nur als Region oder Land bekannt sind („Westfalen“, „Polen“), stehen in deren Mitte; die Personenliste des Kreises vermerkt das.
 
@@ -52,5 +52,20 @@ Orte, die nur als Region oder Land bekannt sind („Westfalen“, „Polen“), 
 Die Karte nennt Orte mit ihrem **heutigen** Namen, dahinter in Klammern den Namen, unter dem sie in den Daten stehen (bzw. den deutschen oder historischen Namen), wenn er anders ist: „Wrocław (Breslau), Polen“, „Gdańsk (Danzig), Polen“, „Kaliningrad (Königsberg), Russland“. Orte in Deutschland, Österreich und der Schweiz stehen ohne Klammer, dafür mit Bundesland bzw. Kanton: „Celle, Niedersachsen, Deutschland“.
 
 Die Ländergrenzen sind die **heutigen** — die Karte zeigt keine historischen Grenzen.
+
+## Ortsseiten
+
+Jeder zugeordnete Ort hat eine eigene **Ortsseite**. Du erreichst sie über die Personenseite: Dort ist jeder zugeordnete Ort ein Link — angezeigt wird weiter der Text, wie er eingegeben ist, und dezent der erkannte Ort, wenn er anders heißt („Breslau → Wrocław, Polen“). Auf der Ortsseite stehen:
+
+- der heutige Name mit dem früheren bzw. deutschen Namen, Region, Land, Koordinaten und eine kleine Lagekarte,
+- wie der Ort zugeordnet wurde (automatisch, von KI oder von Hand),
+- alle Schreibweisen: die Texte in den Daten, die auf diesen Ort zeigen („Breslau“, „Breslau, Schlesien“, „Wrocław“), und weitere Namen aus dem Ortsverzeichnis,
+- die **Personen mit Angaben an diesem Ort** — Geburt, Tod, Heirat, Scheidung und Lebensereignisse mit Jahr, je mit Link zur Person.
+
+> **Datenschutz:** Auch auf der Ortsseite stehen nur Personen, die du sehen darfst — nicht freigegebene Personen erscheinen weder als Eintrag noch in einer Zahl.
+
+## Orte im GEDCOM-Export
+
+Beim [GEDCOM-Export](08-import-und-export.md) schreibt die App für zugeordnete Orte die volle **heutige** Form „Ort, Region, Land“ mit Koordinaten, damit andere Programme den Ort sicher finden — z.B. „Wrocław, Województwo dolnośląskie, Polen“. Dein ursprünglicher Text steht als Notiz dabei („Originaltext: Breslau“). Liest du die Datei wieder in diese App ein, kommt dein ursprünglicher Text zurück. Nicht zugeordnete Orte bleiben, wie sie sind.
 
 > **Datenschutz:** Die Karte rechnet nur mit Personen, die du sehen darfst. Nicht freigegebene Personen erscheinen weder auf der Karte noch in einer Zahl.
