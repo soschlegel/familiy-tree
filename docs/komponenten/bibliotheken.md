@@ -10,7 +10,7 @@ Netz, oft auch im Browser nutzbar), damit Oberfläche, Dienste, MCP-Server
 und Tests dieselben Regeln verwenden. Datenbankzugriff haben nur `prisma`,
 `auth`, `scope`, `audit`, `change-sets`, `media-scope`; Dateisystem bzw.
 Netz nur `storage`, `media-processing`, `places/gazetteer-file`,
-`safe-fetch`.
+`help/content`, `safe-fetch`.
 
 Übersicht:
 
@@ -25,6 +25,7 @@ Netz nur `storage`, `media-processing`, `places/gazetteer-file`,
 | Import/Export | `exchange`, `export-selection`, `import-fingerprint`, `gedcom/*`, `gedcom-import/*` |
 | Medien | `storage`, `media-processing`, `media-scope`, `safe-fetch` |
 | Karte und Orte | `map/*`, `places/*` |
+| Anwender-Hilfe | `help/markdown`, `help/content`, `help/links` |
 | Sonstiges | `build-info`, `plural` |
 
 ---
@@ -1438,6 +1439,49 @@ Kandidaten), `ANCHOR_KM` (50), `AMBIGUOUS_KM` (25), `HISTORIC_KM` (300).
 **Benutzt von:** `lib/services/places.ts`, `prisma/seed-mock.ts`.
 
 **Tests:** `tests/places.test.ts`.
+
+---
+
+## Anwender-Hilfe
+
+Hilfe für Anwender unter `/hilfe`; Texte in `docs/anwender/NN-thema.md`
+(Pflege: `docs/anwender/README.md`).
+
+### lib/help/markdown.ts
+**Zweck:** Schlanker, eigener Markdown-Leser für genau das Subset der
+Hilfetexte — bewusst keine Bibliothek (keine neue Abhängigkeit, kein
+HTML-Durchreichen, das sich mit einem Sanitizer absichern müsste).
+
+**Verhalten:** `parseHelpMarkdown` liefert Titel (erste `#`-Überschrift),
+Kurzbeschreibung (erster Absatz als Klartext) und einen Syntaxbaum aus
+Blöcken (Überschriften `#`–`####` mit Anker, Absätze, Listen einer Ebene
+mit eingerückten Folgezeilen, `>`-Hinweiskästen, Tabellen, Codeblöcke,
+Trennlinien) und Inline-Knoten (fett, kursiv, Code, Link, Text). **Kein
+rohes HTML:** Es bleibt Text. `resolveHref` lässt als Link nur zu:
+andere Themen als `NN-thema.md#anker` (→ `/hilfe/thema#anker`, funktioniert
+so auch auf GitHub), eigene Pfade `/…` (nicht `//`, kein Backslash),
+`#anker` und `https://`; alles andere (javascript:, data:, http:, mailto:)
+wird Text. `slugify` bildet Anker aus Überschriften (Umlaute ausgeschrieben,
+doppelte mit `-2`). `headingIds` und `collectLinks` dienen den Tests.
+
+### lib/help/content.ts
+**Zweck:** Themen aus `docs/anwender/` lesen (`HELP_DIR` relativ zu
+`process.cwd()`): nur Dateien `NN-thema.md`, sortiert nach Name; Nummer =
+Reihenfolge, Rest = Adresse. `listHelpTopics`, `getHelpTopic` (optional mit
+anderem Ordner für Tests). Im Betrieb einmal gelesen und behalten, in der
+Entwicklung bei jedem Aufruf. Ins Standalone-Image kommen die Dateien über
+`outputFileTracingIncludes` in `next.config.mjs`.
+
+### lib/help/links.ts
+**Zweck:** Ziele der Kontexthilfe (`HELP_LINKS`: Karte, Orte zuordnen,
+Linien, Bezugsperson, Dubletten, Dubletten-Klassen, KI-Zugang) an einer
+Stelle, damit der Test prüfen kann, dass Thema und Anker existieren.
+
+**Benutzt von:** `components/HelpLink.tsx`, `components/DuplicateBanner.tsx`.
+
+**Tests:** `tests/help.test.ts` (Leser, Sicherheit der Links und gegen
+rohes HTML, alle Querverweise und Kontexthilfe-Ziele gegen die echten
+Dateien).
 
 ---
 

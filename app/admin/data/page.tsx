@@ -7,6 +7,7 @@ import { exportFamilyOverview } from "@/lib/services/export-selection";
 import { DataTransfer } from "@/components/DataTransfer";
 import { GedcomImport } from "@/components/GedcomImport";
 import { ImportHistory } from "@/components/ImportHistory";
+import { HelpLink } from "@/components/HelpLink";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Daten" };
@@ -38,7 +39,8 @@ export default async function DataPage() {
           Ortsangaben für die Karte:{" "}
           <Link href="/admin/places" className="btn-link">
             Orte zuordnen
-          </Link>
+          </Link>{" "}
+          <HelpLink to="orteZuordnen" compact label="Wie funktioniert das Zuordnen der Orte?" className="ml-1 align-middle" />
         </p>
       )}
     </div>

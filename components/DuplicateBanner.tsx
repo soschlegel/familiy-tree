@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { CONFIDENCE_LABEL } from "@/lib/duplicates";
+import { HELP_LINKS } from "@/lib/help/links";
 import { lifeSpan } from "@/lib/tree-layout";
 import type { PersonDuplicates } from "@/lib/services/duplicates";
 
@@ -19,8 +20,14 @@ export function DuplicateBanner({ personId, duplicates }: { personId: string; du
   const more = total - items.length;
   return (
     <aside aria-labelledby="duplicate-banner-h" className="alert-warning" data-testid="duplicate-banner">
-      <p id="duplicate-banner-h" className="font-semibold">
-        {total === 1 ? "1 mögliche Dublette" : `${total} mögliche Dubletten`}
+      <p className="flex flex-wrap items-baseline justify-between gap-x-3">
+        <span id="duplicate-banner-h" className="font-semibold">
+          {total === 1 ? "1 mögliche Dublette" : `${total} mögliche Dubletten`}
+        </span>
+        {/* In der Farbe des Hinweises statt der Akzentfarbe (Kontrast). */}
+        <Link href={HELP_LINKS.dublettenKlassen} className="text-xs underline underline-offset-2" data-testid="help-link">
+          Was bedeuten „sicher“ und „wahrscheinlich“?
+        </Link>
       </p>
       <ul className="mt-1 space-y-1">
         {items.map((d) => (

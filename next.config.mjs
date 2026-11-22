@@ -12,6 +12,9 @@ const nextConfig = {
   outputFileTracingIncludes: {
     "/api/places/**": ["./geo/gazetteer.tsv.gz"],
     "/admin/places": ["./geo/gazetteer.tsv.gz"],
+    // Anwender-Hilfe: Markdown wird zur Laufzeit gelesen (lib/help/content.ts).
+    "/hilfe": ["./docs/anwender/*.md"],
+    "/hilfe/**": ["./docs/anwender/*.md"],
   },
 };
 

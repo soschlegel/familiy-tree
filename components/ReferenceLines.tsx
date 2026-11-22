@@ -3,6 +3,7 @@
 import { createContext, type CSSProperties } from "react";
 
 import { LINE_CODE, LINE_KEYS, LINE_LABEL, type LineKey, type ReferenceView } from "@/lib/reference";
+import { HelpLink } from "./HelpLink";
 
 /**
  * Bezugsperson im Baum: Verwandtschaft je Karte und die vier Ahnenlinien
@@ -112,6 +113,7 @@ export function LineLegend({ view }: { view: ReferenceView }) {
         VV = Vater des Vaters, VM = Mutter des Vaters, MV = Vater der Mutter, MM = Mutter der Mutter.
         Alle anderen bleiben ohne Farbe.
       </p>
+      <HelpLink to="linien" />
     </div>
   );
 }

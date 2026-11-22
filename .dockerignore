@@ -10,6 +10,8 @@ data
 !.env.example
 *.md
 !README.md
+# Anwender-Hilfe: wird zur Laufzeit gelesen (/hilfe, lib/help/content.ts).
+!docs/anwender/*.md
 *.log
 *.tsbuildinfo
 

@@ -27,7 +27,8 @@ Abschnitt 1). Seiten und API-Routen selbst stehen in
   `PersonChanges`, `PersonPicker`, `AttachedMedia`, `MediaGallery`,
   `DeletePersonButton`, `SelfPersonButton`, `SourceForm`, `DeleteSourceButton`
 - [Rahmen und Helfer](#rahmen-und-helfer) — `NavBar`, `PageLoading`,
-  `AutoSubmit`, `api-client`, `useDismiss`, `ai-access-labels`
+  `AutoSubmit`, `api-client`, `useDismiss`, `ai-access-labels`, `HelpLink`
+  (mit `FooterHelpLink`), `help-render`
 - [Import, Export, Dubletten und Zusammenführen](#import-export-dubletten-und-zusammenführen)
   — `GedcomImport`, `GedcomExportDialog`, `DataTransfer`, `ImportHistory`,
   `ConnectImports`, `DuplicateBanner`, `DuplicateList`, `MergeView`,
@@ -198,7 +199,7 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 ### components/ReferenceLines.tsx
 
-**Zweck:** Darstellungsbausteine für Bezugsperson und Ahnenlinien: `ReferenceContext` (Bezugsperson und Schalterzustand), `lineTint` (zarte Kartentönung, mehrere Linien als Streifen nebeneinander), `LineStripe` (Farbstreifen am linken Kartenrand), `LineCodes`/`LineCode` (Kurzzeichen VV/VM/MV/MM, höchstens zwei plus „+n“), `linesText` (Screenreader-Text) und `LineLegend` (Legende mit den Namen der vier Großeltern, „nicht erfasst“ für fehlende/gesperrte).
+**Zweck:** Darstellungsbausteine für Bezugsperson und Ahnenlinien: `ReferenceContext` (Bezugsperson und Schalterzustand), `lineTint` (zarte Kartentönung, mehrere Linien als Streifen nebeneinander), `LineStripe` (Farbstreifen am linken Kartenrand), `LineCodes`/`LineCode` (Kurzzeichen VV/VM/MV/MM, höchstens zwei plus „+n“), `linesText` (Screenreader-Text) und `LineLegend` (Legende mit den Namen der vier Großeltern, „nicht erfasst“ für fehlende/gesperrte, darunter Kontexthilfe „Wie funktioniert das?“ → `/hilfe/stammbaum#linienfarben`).
 
 **Wo eingesetzt:** `FamilyTree` (Kontext, Legende), `PersonNode` (Tönung, Streifen, Kurzzeichen, Text), `MapExplorer` (`LineCode` in Legende, Personen- und Ortsliste).
 
@@ -236,7 +237,7 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 **Props/Daten:** Berechtigungsbereich des Benutzers, ID und Name der Person, roher Wert von `?bezug=`.
 
-**Verhalten:** Liest das Bezugsperson-Cookie, berechnet über `loadReferenceFor` (nur über sichtbare Personen) die Sicht. Drei Fälle: Person ist selbst Bezugsperson („… ist die Bezugsperson — das bist du.“), Verwandtschaftsbegriff (oder „keine Verwandtschaft über freigegebene Personen bekannt“), keine Bezugsperson (Hinweis auf „Das bin ich“). Bindet `ReferenceChip` (nur bei nicht-eigener Bezugsperson mit Namen) und `SelfPersonButton` ein; „Baum aus dieser Sicht“ führt zu `/tree?focus=<id>&bezug=<id>` und fehlt, wenn die Person schon Bezugsperson ist.
+**Verhalten:** Liest das Bezugsperson-Cookie, berechnet über `loadReferenceFor` (nur über sichtbare Personen) die Sicht. Drei Fälle: Person ist selbst Bezugsperson („… ist die Bezugsperson — das bist du.“), Verwandtschaftsbegriff (oder „keine Verwandtschaft über freigegebene Personen bekannt“), keine Bezugsperson (Hinweis auf „Das bin ich“). Bindet `ReferenceChip` (nur bei nicht-eigener Bezugsperson mit Namen) und `SelfPersonButton` ein; „Baum aus dieser Sicht“ führt zu `/tree?focus=<id>&bezug=<id>` und fehlt, wenn die Person schon Bezugsperson ist. Daneben ein „?“ (`HelpLink`) zu `/hilfe/stammbaum#bezugsperson`.
 
 **Server oder Client:** Server-Komponente (async, kein `"use client"`).
 
@@ -1075,6 +1076,23 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 - **Ruft auf:** nichts.
 - **Tests:** keine eigenen. `tests/ai-access.test.ts` prüft die Serverregel `effectiveAiLevel`, nicht diese Datei. `e2e/write/ai-access.spec.ts` deckt die angezeigten Texte ab (`ai-token-effective`, Status).
 
+### components/HelpLink.tsx
+
+- **Zweck:** Kontexthilfe — kleiner Link zur passenden Seite der Anwender-Hilfe (`/hilfe/…`), und `FooterHelpLink`, der Link „Hilfe“ in der Fußzeile.
+- **Wo eingesetzt:** `HelpLink` auf `/map` (in „Wie wird gezählt?“ und am Admin-Hinweis „Orte zuordnen“), `/admin/data` (Orte zuordnen), `/research/duplicates`, `/ai-access`, in `ReferencePanel` und `LineLegend`; `FooterHelpLink` in `app/layout.tsx` (nur angemeldet).
+- **Props:** `to` (Schlüssel aus `HELP_LINKS` in `lib/help/links.ts` — nie eine freie Adresse, damit der Test alle Ziele kennt), `label` (Standard „Wie funktioniert das?“), `compact` (nur „?“ im Kreis; Text dann als `sr-only` und Tooltip; auf dem Telefon 44 px Tippziel), `className`.
+- **Verhalten:** `next/link`, `data-testid="help-link"`. Neue Stellen: Ziel in `HELP_LINKS` ergänzen (Anker aus der Überschrift, siehe `slugify`).
+- **Server oder Client:** neutral (kein `"use client"`), auch in Client-Komponenten nutzbar.
+- **Tests:** `e2e/read/help.spec.ts` (Karte, KI-Zugang, Personenseite, Dubletten, Daten, Fußzeile, Menü), Ziele in `tests/help.test.ts`.
+
+### components/help-render.ts
+
+- **Zweck:** Gibt den Syntaxbaum der Anwender-Hilfe (`lib/help/markdown.ts`) als React-Elemente aus (`renderHelpBlocks`, `hrefOf`).
+- **Wo eingesetzt:** `app/hilfe/[thema]/page.tsx`.
+- **Verhalten:** Ohne JSX (`createElement`), damit Vitest die Ausgabe mit `renderToStaticMarkup` prüfen kann; liegt unter `components/`, damit Tailwind die Klassen findet. Kein `dangerouslySetInnerHTML` — aller Text wird von React maskiert. Hilfe- und App-Links über `next/link`, externe (nur https) mit `target="_blank"` und `rel="noopener noreferrer"`. Überschriften mit `id` (Anker) und `scroll-mt`; `>`-Blöcke als Hinweiskasten (`alert-info` mit Akzentrand); Tabellen in einem eigenen, per Tastatur erreichbaren Scrollrahmen, damit die Seite auf dem Telefon nicht seitlich scrollt; Farben über die Klassen des Gestaltungssystems mit `dark:`-Varianten.
+- **Server oder Client:** neutral; benutzt nur auf dem Server.
+- **Tests:** `tests/help.test.ts` (rohes HTML bleibt Text, gefährliche Links werden Text), `e2e/read/help.spec.ts` (axe hell/dunkel, Telefonbreite).
+
 ## Import, Export, Dubletten und Zusammenführen
 
 **Ergänzung (22.11.):** `HISTORY_PARAM`, `isHistoryToken`, `canDeleteToken` (Spiegel von `apiTokenDeletable`), `deleteTokenQuestion(t, owner?)` (Rückfrage mit Folgen je Status, „Änderungsgeschichte bleibt“, „nicht rückgängig“).
@@ -1202,6 +1220,7 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
   - Je Kandidat: Name (mit Geburtsname), Lebensdaten, Herkunft, Sicherheitsstufe und der Link „Vergleichen“. Der Link öffnet die Vergleichsseite für genau dieses Paar; der Screenreader hört dazu den Namen.
   - Gibt es mehr Kandidaten als angezeigt, verweist der Hinweis auf „Mögliche Dubletten“.
   - Ausgezeichnet als `<aside>` mit Überschrift.
+  - Rechts neben der Überschrift Kontexthilfe „Was bedeuten „sicher“ und „wahrscheinlich“?“ (Ziel aus `HELP_LINKS.dublettenKlassen`); in der Schriftfarbe des Hinweises statt der Akzentfarbe, wegen des Kontrasts auf dem Messing-Hintergrund.
 - **Server oder Client:** Server (kein `"use client"`).
 - **Ruft auf:** nichts. Nur Links.
 - **Tests:** `e2e/read/duplicate-banner.spec.ts` und `e2e/write/duplicate-banner.spec.ts`. Den Dienst prüft `tests/person-duplicates.db.test.ts`.

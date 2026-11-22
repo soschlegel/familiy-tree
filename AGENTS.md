@@ -31,6 +31,24 @@ Abhängigkeiten, wo sie benutzt wird, zugehörige Tests. Einstieg und Übersicht
 - Öffentliches Repository: keine echten Namen, Orte oder Daten aus
   Stammbäumen, keine Hostnamen oder Zugangsdaten.
 
+### Anwender-Hilfe fortschreiben (Pflicht)
+
+Unter [`docs/anwender/`](docs/anwender/README.md) steht die Hilfe **für
+Anwender** (Familienmitglieder ohne Technikwissen), je Thema eine Datei
+`NN-thema.md`; die App zeigt sie unter `/hilfe`.
+
+- **Nach jeder abgeschlossenen Änderung, die Anwender betrifft, im selben
+  Commit fortschreiben:** neue Funktionen erklären, Geändertes berichtigen,
+  Entferntes streichen. Gilt wie die Komponenten-Doku — ohne passende
+  Anwender-Hilfe ist eine solche Änderung nicht abgeschlossen.
+- **Kontexthilfe mitziehen:** Die kleinen Links „?“ bzw. „Wie funktioniert
+  das?“ in der App (`components/HelpLink.tsx`, Ziele in
+  `lib/help/links.ts`) an neuen Stellen ergänzen; wird eine Überschrift
+  umbenannt, den Anker dort anpassen (`tests/help.test.ts` prüft das).
+- Nur beschreiben, was die App heute kann — jede Aussage am Code prüfen;
+  freundlich, „du“, Begriffe der Oberfläche wörtlich, erfundene Beispiele.
+  Regeln zu Aufbau und Markdown-Subset: [`docs/anwender/README.md`](docs/anwender/README.md).
+
 ## 2. Umsetzung durch Sub-Prozesse (Sub-Agenten)
 
 - Die **Hauptsitzung koordiniert**: Anforderungen klären, Aufgaben

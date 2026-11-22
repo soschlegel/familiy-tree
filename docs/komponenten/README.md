@@ -13,6 +13,11 @@ Quickstart am Anfang); frühere Stände und Umstiege für alte Installationen
 (MinIO, `db-access`, Zwei-Image-Stack, privates Image, Baselining) stehen in
 [docs/dev-history.md](../dev-history.md).
 
+Die Hilfe **für Anwender** (ohne Technik, in der App unter `/hilfe`) steht
+getrennt davon in [docs/anwender/](../anwender/README.md) und wird ebenso
+mit jeder Änderung fortgeschrieben (AGENTS.md, „Anwender-Hilfe
+fortschreiben“).
+
 ## Wegweiser
 
 | Datei | Inhalt | Wann lesen |
