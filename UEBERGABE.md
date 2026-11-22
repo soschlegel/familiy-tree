@@ -35,7 +35,15 @@ aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
   `/admin/places` als „von KI“ mit Bestätigen. Neue, rein ergänzende
   Migration `20261124000001_orte_ki` (`PlaceSource.AI`, `Place.note`,
   `Place.uncertain`). Das Ortsverzeichnis ist jetzt für alle API-Routen im
-  Standalone-Build (`next.config.mjs`, `/api/**`).
+  Standalone-Build (`next.config.mjs`, `/api/**`, `/places/**`). Dazu
+  Ortsseiten `/places/<ref>` (ein Ort = gleicher Verzeichniseintrag bzw.
+  gleiche Koordinaten), Ortslinks auf der Personenseite, „Ort wählen …“ in
+  den Ortsfeldern (`POST /api/places/choose`, Zuordnung „von Hand“ nur für
+  diesen Text), GEDCOM-Export mit heutiger Ortsform + MAP + NOTE
+  „Originaltext“ (Rundreise über den eigenen Import), Austauschformat
+  Version 5 mit `places`, MCP `get_place` und `places` in
+  `get_person`/`list_events`. Prüfstand: Vitest 877/877, Playwright
+  (Produktions-Build) 317/317, `gedcom:check` ohne Warnungen.
 - Beim Ausrollen beachten: Der Reverse-Proxy muss für `/api/mcp` größere
   Anfragen durchlassen (Bilder als base64 über MCP, bis
   MAX_UPLOAD_BYTES × 4/3 + 1 MiB), sonst antwortet er mit 413.

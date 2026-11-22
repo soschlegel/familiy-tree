@@ -226,8 +226,8 @@ chromium`.
 |---|---|---|
 | `npm run test:e2e` | **alles mit einem Befehl:** Build prüfen (nur bei geänderten Quellen neu), Server starten, setup → read → write, Server beenden | ca. 1,5–3 min, mit Neubau 1–2 min mehr (früher gegen den Dev-Server 9–10 min) |
 | `npm run test:e2e:setup` | nur Ausgangszustand: Mock-Daten neu, Anmeldungen | ca. 10 s |
-| `npm run test:e2e:read` | setup + lesende Tests (`e2e/read/`, 186 Tests, 6 parallel) | ca. 1 min (früher 3:10–3:20 min) |
-| `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 100 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 1:10 min (früher 4–5 min) |
+| `npm run test:e2e:read` | setup + lesende Tests (`e2e/read/`, 209 Tests, 6 parallel) | ca. 1 min (früher 3:10–3:20 min) |
+| `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 103 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 1:10 min (früher 4–5 min) |
 | `npm run mock:build` / `npm run mock:start` | Build von Hand erzeugen bzw. den Server von Hand starten (z.B. für mehrere Terminals) | |
 | `npm run test:e2e:headed` | alles mit sichtbarem Browser, ein Test nach dem anderen | |
 | `npm run test:e2e:ui` | Playwright-Oberfläche: Tests einzeln starten, Schritte ansehen | |
