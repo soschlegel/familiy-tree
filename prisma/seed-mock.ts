@@ -12,6 +12,7 @@
  * Wiederholbar: jeder Lauf leert die Mock-Datenbank und den Mock-Medienordner
  * und baut alles neu auf.
  */
+import { readFileSync } from "node:fs";
 import { mkdir, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 
@@ -22,6 +23,7 @@ import { hashToken } from "../lib/ai-tokens";
 import { loadGazetteerSync } from "../lib/places/gazetteer-file";
 import { matchPlace } from "../lib/places/match";
 import { placeKey } from "../lib/places/normalize";
+import { parseReleaseNotes } from "../lib/release-notes";
 import { generateMockData, type MockData, type MockImage } from "./mock-data";
 
 /** Automatische Ortszuordnung aller Ortstexte der Mock-Daten. */
@@ -194,6 +196,8 @@ async function main() {
       data: data.families.map((f) => ({ id: f.id, name: f.name, description: f.description })),
     });
 
+    const latestRelease =
+      parseReleaseNotes(readFileSync(path.join(__dirname, "..", "CHANGELOG.md"), "utf8")).releases[0]?.id ?? null;
     await prisma.user.createMany({
       data: data.users.map((u) => ({
         id: u.id,
@@ -202,6 +206,10 @@ async function main() {
         role: u.role,
         status: u.status,
         aiAccess: u.aiAccess,
+        // Neuigkeiten: alle Mock-Benutzer haben das neueste Release schon
+        // gesehen — sonst stünde „Was ist neu?“ in jedem Test im Weg.
+        // e2e/write/whats-new.spec.ts prüft das Fenster gezielt.
+        lastSeenReleaseId: latestRelease,
       })),
     });
     // Feste Testschlüssel (prisma/mock-data.ts) — gespeichert wird wie im

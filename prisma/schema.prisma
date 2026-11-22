@@ -43,6 +43,10 @@ model User {
   // der Verweis auf die bleibende Person (lib/services/merge.ts).
   personId      String?
   person        Person?    @relation("UserSelf", fields: [personId], references: [id], onDelete: SetNull)
+  // Neuigkeiten: Kennung des zuletzt gesehenen Release aus CHANGELOG.md
+  // („JJJJ-MM-TT.N“, lib/release-notes.ts). Leer = noch keins gesehen; dann
+  // zeigt „Was ist neu?“ nur das neueste.
+  lastSeenReleaseId String?
 
   accounts Account[]
   sessions Session[]

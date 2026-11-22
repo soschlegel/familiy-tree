@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { route, badRequest } from "@/lib/api";
 import { audit, auditActor } from "@/lib/audit";
 import { userInput } from "@/lib/validation";
+import { latestReleaseId } from "@/lib/release-notes-data";
 
 /**
  * Alle Benutzer — samt KI-Recht (aiAccess) und Zahl der aktiven
@@ -54,8 +55,10 @@ export const POST = route("user:manage", async (ctx, req) => {
     );
   }
 
+  // Neue Benutzer kennen noch keine frühere Version — „Was ist neu?“ beginnt
+  // für sie erst mit dem nächsten Release (README „Neuigkeiten“).
   const user = await prisma.user.create({
-    data: { ...parsed.data, status: "INVITED" },
+    data: { ...parsed.data, status: "INVITED", lastSeenReleaseId: latestReleaseId() },
     select: { id: true, email: true, name: true, role: true, status: true },
   });
 

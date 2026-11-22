@@ -157,7 +157,8 @@ Ein einziges Image mit App, Migrationen und Admin-Abgleich.
    Einstieg `docker/entrypoint.sh`, Befehl `node server.js`.
 
 `.dockerignore` hält u.a. `node_modules`, Build-Ordner, `data/`, `.env*`
-(außer dem Beispiel), Markdown außer der README, `tests/`, `e2e/`, die
+(außer dem Beispiel), Markdown außer der README und `CHANGELOG.md` (die
+Neuigkeiten werden beim Build eingebaut, siehe `next.config.mjs`), `tests/`, `e2e/`, die
 Test-Konfigurationen (`vitest.config.ts`, `playwright.config.ts`),
 Testergebnisse, Compose-Dateien, `scripts/backup.sh`, `stack.env*` und
 `.mcp.json` aus dem Build-Kontext. Nichts davon braucht Build oder
@@ -278,6 +279,12 @@ Workflow nicht — die Prüfungen dort sind Handarbeit (AGENTS.md, Abschnitt 3).
 - `sharp` als externes Server-Paket (nicht gebündelt).
 - `outputFileTracingIncludes`: `geo/gazetteer.tsv.gz` für `/api/places/**`
   und `/admin/places`, damit die Datei im Standalone-Bundle landet.
+- `webpack`: Regel `resourceQuery: /raw/` → `asset/source` — `import … from
+  "…?raw"` liefert den Dateiinhalt als Text. Damit ist `CHANGELOG.md`
+  (`lib/release-notes-data.ts`) zur Build-Zeit in den Server-Code eingebaut
+  und braucht keinen Eintrag in `outputFileTracingIncludes`; im Dev-Server
+  wirkt eine Änderung sofort. Gilt nur für Webpack (Turbopack ist nicht im
+  Einsatz).
 
 ---
 
@@ -311,7 +318,9 @@ Schreibt das Ergebnis des Generators in die Mock-Datenbank. Verweigert (Code
 alle App-Tabellen per `TRUNCATE … CASCADE` leeren (auch Importläufe,
 Herkunft, Rohdaten, Sitzungen, Orte), dann Familien, Benutzer, KI-Schlüssel
 (nur als Hash), Familienrechte, Personen, Familienzugehörigkeit,
-Beziehungen, eigene Personen der Benutzer, Ereignisse, weitere Namen anlegen;
+Beziehungen, eigene Personen der Benutzer, Ereignisse, weitere Namen anlegen
+(alle Benutzer mit dem neuesten Release aus `CHANGELOG.md` als gesehen,
+damit „Was ist neu?“ keinem Test im Weg steht);
 Ortstexte automatisch über das mitgelieferte Ortsverzeichnis zuordnen;
 Medienordner leeren, Platzhalterbilder (SVG → PNG mit `sharp`) über die
 normale Bildverarbeitung speichern und an Personen bzw. Beziehungen hängen;
@@ -539,6 +548,10 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   `geo/gazetteer.tsv.gz`.
 - **`reference.test.ts`** — Verwandtschaft aller Personen zur Bezugsperson
   (gegen die Einzelabfrage), Ahnenlinien, Linienfarben, Leistung.
+- **`release-notes.test.ts`** — Neuigkeiten: Parser von `CHANGELOG.md`,
+  Kennungen und Reihenfolge, Auswahl „seit zuletzt gesehen“; die echte
+  Datei ist fehlerfrei, gleich dem eingebauten Text und ohne
+  Commit-Kennungen oder Technikbegriffe.
 - **`safe-fetch.test.ts`** — öffentliche Adressen, sicherer Abruf
   (Weiterleitungen, Größe, Typ, Zeit) und Nebenläufigkeitsgrenze.
 - **`scope.test.ts`** — Sicht- und Bearbeitungsrechte je Person/Beziehung,
@@ -586,6 +599,9 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   Rechten (nichts, auch keine Anzahl, ohne Bearbeitungsrecht an beiden).
 - **`reference.db.test.ts`** — „Das bin ich“, Auflösung der Bezugsperson,
   keine Durchsickerung, Mitwandern beim Zusammenführen.
+- **`release-notes.db.test.ts`** — Lesemarke der Neuigkeiten nur am
+  eigenen Benutzer, unbekannte Kennungen abgelehnt, Mock-Benutzer haben das
+  neueste Release gesehen.
 - **`research.db.test.ts`** — Verwandtschaft, Zeitleisten, Plausibilität,
   erweiterte Suche (nur lesend).
 - **`services.db.test.ts`** — die zentralen Dienste (Lesen mit Rechten,
@@ -646,6 +662,10 @@ Benutzer bekommt keinen gespeicherten Zustand.
   an).
 - **`mobile.spec.ts`** — Telefonbreite: kein waagerechtes Scrollen,
   erreichbare Navigation, ausreichend große Schrift in Eingabefeldern.
+- **`neuigkeiten.spec.ts`** — Link „Neuigkeiten“ in der Fußzeile, Seite mit
+  allen Releases, kein Fenster für Mock-Benutzer, ohne Anmeldung weder Link
+  noch Seite; `PUT /api/me/release-seen` (401, 400 bei unbekannter Kennung
+  und fremden Feldern).
 - **`navigation.spec.ts`** — Navigation und Untermenü „Verwaltung“ je Rolle
   und Breite.
 - **`people-list.spec.ts`** — Personenliste: Suche, Familienfilter,
@@ -707,6 +727,11 @@ zum nächsten Setup).
   durch den Admin.
 - **`sources.spec.ts`** — Quelle anlegen, zitieren, Beleg ändern/entfernen,
   Scan-Auswahl, Quelle löschen.
+- **`whats-new.spec.ts`** — Fenster „Was ist neu?“ mit einem eigenen
+  eingeladenen Benutzer (die Mock-Benutzer bleiben unberührt): nach der
+  Einladung keins, nach zurückgesetzter Lesemarke mit den Releases seither,
+  Fokus, axe, Escape speichert, höchstens drei plus Hinweis, „Alle
+  Neuigkeiten“, Telefonbreite.
 
 ---
 

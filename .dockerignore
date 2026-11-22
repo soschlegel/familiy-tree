@@ -10,6 +10,8 @@ data
 !.env.example
 *.md
 !README.md
+# Neuigkeiten: wird beim Build in den Server-Code eingebaut (lib/release-notes-data.ts).
+!CHANGELOG.md
 *.log
 *.tsbuildinfo
 

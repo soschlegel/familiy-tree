@@ -32,6 +32,7 @@ const PAGES: { name: string; url: string; heading: string | RegExp }[] = [
   { name: "Orte zuordnen", url: "/admin/places", heading: "Orte zuordnen" },
   { name: "Daten", url: "/admin/data", heading: /.+/ },
   { name: "KI-Zugang", url: "/ai-access", heading: /.+/ },
+  { name: "Neuigkeiten", url: "/neuigkeiten", heading: "Neuigkeiten" },
 ];
 
 /** Der Menü-Knopf ist sichtbar, groß genug zum Antippen und öffnet das Menü. */

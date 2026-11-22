@@ -27,7 +27,8 @@ Abschnitt 1). Seiten und API-Routen selbst stehen in
   `PersonChanges`, `PersonPicker`, `AttachedMedia`, `MediaGallery`,
   `DeletePersonButton`, `SelfPersonButton`, `SourceForm`, `DeleteSourceButton`
 - [Rahmen und Helfer](#rahmen-und-helfer) — `NavBar`, `PageLoading`,
-  `AutoSubmit`, `api-client`, `useDismiss`, `ai-access-labels`
+  `AutoSubmit`, `api-client`, `useDismiss`, `ai-access-labels`,
+  `WhatsNewDialog`, `ReleaseNoteList`
 - [Import, Export, Dubletten und Zusammenführen](#import-export-dubletten-und-zusammenführen)
   — `GedcomImport`, `GedcomExportDialog`, `DataTransfer`, `ImportHistory`,
   `ConnectImports`, `DuplicateBanner`, `DuplicateList`, `MergeView`,
@@ -1018,6 +1019,30 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 - **Server oder Client:** kein `"use client"`. Reine Darstellung, als Server-Komponente nutzbar.
 - **Ruft auf:** nichts.
 - **Tests:** keine gezielten. Kein Test sucht den Ladetext.
+
+### components/WhatsNewDialog.tsx
+
+- **Zweck:** Fenster „Was ist neu?“ — zeigt nach einer neuen Version einmal die Neuigkeiten seit dem zuletzt gesehenen Release (`CHANGELOG.md`, README „Neuigkeiten“). Nicht zu verwechseln mit der Änderungsgeschichte der Daten.
+- **Wo eingesetzt:** nur in `app/layout.tsx`, und nur für Angemeldete mit ungesehenen Releases (Auswahl `releasesSince` auf dem Server).
+- **Props:** `releases` (höchstens drei, neueste zuerst), `more` (Zahl weiterer ungesehener), `latestId` (neueste Kennung, wird als gesehen gespeichert).
+- **Verhalten:**
+  - Echtes `<dialog>` mit `showModal` beim ersten Rendern (nicht auf `/login`): Fokus im Fenster auf „Gelesen“, Escape und Klick auf den Hintergrund schließen; danach Fokus zurück auf das vorher fokussierte Element, sofern es eines gab.
+  - Jedes Schließen — „Gelesen“, Escape, Hintergrund, Link „Alle Neuigkeiten“ (führt zu `/neuigkeiten`) — speichert genau einmal `latestId`. Scheitert das (Netz), gibt es keine Meldung; das Fenster erscheint beim nächsten Laden wieder.
+  - Titel über `aria-labelledby`; Releases als `h3` unter dem `h2` „Was ist neu?“. Gibt es mehr als drei, nennt ein Hinweis die Zahl und verweist auf die Seite.
+  - Telefon: Breite und Höhe auf den Bildschirm begrenzt, der Inhalt scrollt, Knöpfe mindestens 44 px hoch; dunkles Farbschema über die üblichen Klassen.
+  - Nach dem Schließen rendert die Komponente nichts mehr; das Layout bleibt bei Seitenwechseln stehen, das Fenster kommt also erst nach einem neuen Laden mit neuem Release wieder.
+- **Server oder Client:** Client.
+- **Ruft auf:** `PUT /api/me/release-seen` (über `apiFetch`).
+- **Tests:** `e2e/write/whats-new.spec.ts` (eigener eingeladener Benutzer: kein Fenster nach Einladung; Lesemarke zurückgesetzt → Fenster, Fokus, axe, Escape speichert; drei plus Hinweis; „Alle Neuigkeiten“; 360 px ohne Überlauf). Die Auswahl prüft `tests/release-notes.test.ts`.
+
+### components/ReleaseNoteList.tsx
+
+- **Zweck:** Darstellung von Releases (Kurztitel als Überschrift, Datum ausgeschrieben, ab der zweiten Version des Tages mit Nummer, Stichpunkte).
+- **Wo eingesetzt:** `app/neuigkeiten/page.tsx` (Überschriften `h2`) und `WhatsNewDialog` (`h3`).
+- **Props:** `releases`, `headingLevel` (2 oder 3).
+- **Verhalten:** je Release ein `<section>` mit `data-testid="release"` und `data-release-id`; lange Wörter brechen um.
+- **Server oder Client:** kein `"use client"`, in beiden Welten nutzbar.
+- **Tests:** über `e2e/read/neuigkeiten.spec.ts` und `e2e/write/whats-new.spec.ts`.
 
 ### components/AutoSubmit.tsx
 

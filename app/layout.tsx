@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Source_Sans_3 } from "next/font/google";
+import Link from "next/link";
 
 import "./globals.css";
 import "reactflow/dist/style.css";
@@ -8,6 +9,9 @@ import { can } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import { buildInfo, buildLabel } from "@/lib/build-info";
 import { MainContainer, NavBar, type NavItem } from "@/components/NavBar";
+import { WhatsNewDialog } from "@/components/WhatsNewDialog";
+import { releaseNotes } from "@/lib/release-notes-data";
+import { releasesSince } from "@/lib/release-notes";
 
 export const metadata: Metadata = {
   title: { default: "Stammbaum", template: "%s · Stammbaum" },
@@ -58,10 +62,19 @@ export default async function RootLayout({
   const ai = user
     ? await prisma.user.findUnique({
         where: { id: user.id },
-        select: { aiAccess: true, _count: { select: { apiTokens: { where: { revokedAt: null } } } } },
+        select: {
+          aiAccess: true,
+          lastSeenReleaseId: true,
+          _count: { select: { apiTokens: { where: { revokedAt: null } } } },
+        },
       })
     : null;
   const showAi = Boolean(ai && (ai.aiAccess !== "NONE" || ai._count.apiTokens > 0));
+
+  // Neuigkeiten (CHANGELOG.md): einmal „Was ist neu?“ nach einer neuen
+  // Version, mit den Releases seit dem zuletzt gesehenen (README „Neuigkeiten“).
+  const releases = releaseNotes();
+  const whatsNew = ai ? releasesSince(releases, ai.lastSeenReleaseId) : { show: [], more: 0 };
 
   const items: NavItem[] = user
     ? [
@@ -118,11 +131,20 @@ export default async function RootLayout({
           />
         )}
         <MainContainer>{children}</MainContainer>
+        {whatsNew.show.length > 0 && (
+          <WhatsNewDialog releases={whatsNew.show} more={whatsNew.more} latestId={releases[0].id} />
+        )}
         {/* Feste Höhe (--footer-h): die Baumseite rechnet sie aus ihrer Höhe heraus. */}
-        <footer className="flex h-[var(--footer-h)] shrink-0 items-center justify-center px-4 text-xs muted">
+        <footer className="flex h-[var(--footer-h)] shrink-0 items-center justify-center gap-x-3 px-4 text-xs muted">
           <span data-testid="build-info" className="tabular-nums">
             {buildLabel(buildInfo(), Boolean(user))}
           </span>
+          {/* Neuigkeiten nur für Angemeldete, wie die genaue Build-Angabe. */}
+          {user && (
+            <Link href="/neuigkeiten" className="underline underline-offset-2 hover:text-stone-900 dark:hover:text-stone-100" data-testid="footer-news">
+              Neuigkeiten
+            </Link>
+          )}
         </footer>
       </body>
     </html>
