@@ -130,7 +130,7 @@ Dienst über den `Scope`.
 | `PATCH, DELETE /api/users/[id]` | Benutzer ändern / löschen | `user:manage` |
 | `PUT /api/users/[id]/ai-access` | KI-Recht setzen | `user:manage` |
 | `GET, POST /api/ai-tokens` | Eigene Schlüssel / neuer Schlüssel; Admin: alle | angemeldet (Dienst) |
-| `DELETE /api/ai-tokens/[id]` | Schlüssel widerrufen | eigener oder Admin |
+| `DELETE /api/ai-tokens/[id]` | Schlüssel widerrufen; mit `?endgueltig=1` endgültig löschen | eigener oder Admin |
 | `PUT /api/me/person` | „Das bin ich“ setzen | angemeldet, Person sichtbar |
 | `GET /api/changes` | Änderungspakete | `audit:read` |
 | `GET /api/changes/[key]` | Einträge eines Pakets | `audit:read` |
@@ -626,7 +626,8 @@ Fehlercodes aus den Grundregeln.
   höchstens das eigene Recht, begrenzte Zahl aktiver Schlüssel. Antwort
   201 mit `{ token, secret }` und `Cache-Control: no-store`; das Geheimnis
   steht nur hier.
-- **`DELETE /api/ai-tokens/[id]`**: `revokeApiToken` — eigene immer,
+- **`DELETE /api/ai-tokens/[id]?endgueltig=1`**: endgültig löschen (`deleteApiToken`) → `{ …ApiTokenDto, deleted: true }`; 404 fremd/unbekannt, 409 aktiv und schon benutzt („erst widerrufen“), 403 über den KI-Kanal.
+- **`DELETE /api/ai-tokens/[id]`** (ohne Parameter): `revokeApiToken` — eigene immer,
   fremde nur als Admin (sonst 404); der Datensatz bleibt als widerrufen
   erhalten.
 

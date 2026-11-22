@@ -1248,6 +1248,8 @@ Verwandten aus fremder Familie) ohne Feldwerte.
 **Tests:** `tests/changelog.db.test.ts` (Regeln der Pakete:
 `tests/changelog.test.ts`); `e2e/write/changelog.spec.ts`.
 
+**Gelöschte Schlüssel im Verlauf (seit 22.11.):** `tokenLabels(ids)` löst `apiTokenId` zu Namen auf. Fehlt der Schlüssel (endgültig gelöscht oder mit seinem Benutzer entfernt), kommt der Name aus dem letzten `CREATE`/`DELETE`-Protokolleintrag des Schlüssels, dazu `tokenDeleted: true`; ohne solchen Eintrag `tokenName: null`. Gilt für `listPersonChanges`/`listChangeSetEntries` und `listChangeSets`; Anzeige „KI über MCP · Schlüssel „Name“ (gelöscht)“ bzw. „· Schlüssel (gelöscht)“.
+
 ### lib/services/ai-access.ts
 
 **Zweck:** KI-Zugang (MCP): Benutzerrecht, persönliche Schlüssel und die
@@ -1311,6 +1313,13 @@ beim KI-Recht (vorher → nachher).
 ---
 
 ## Import
+
+**Schlüssel löschen (seit 22.11.):**
+- `apiTokenDeletable(t, now)`: endgültig löschbar sind widerrufene, abgelaufene und nie benutzte Schlüssel (`lastUsedAt` leer); aktiv und schon benutzt: nein (erst widerrufen). Dieselbe Regel spiegelt `canDeleteToken` in `components/ai-access-labels.ts`; ein Unit-Test hält beide gleich.
+- `deleteApiToken(scope, id)`: nur Web-Kanal (über MCP FORBIDDEN); eigene Schlüssel immer, fremde nur Admins (sonst NOT_FOUND). Nicht löschbar → CONFLICT (`details.reason = "ACTIVE_AND_USED"`). Löscht atomar mit der Regel als Bedingung (eine gleichzeitige erste Benutzung lässt den Schlüssel stehen). Ein aktiver, unbenutzter Schlüssel wird damit zugleich widerrufen.
+- Protokoll: `DELETE` `ApiToken` mit name, prefix, level, status, Zeitpunkten, `revokedByDelete`, bei fremden `ownerId`; eigenes Changelog-Paket „KI-Schlüssel „…“ gelöscht“. AuditLog/ChangeSet verweisen ohne Fremdschlüssel per `apiTokenId` und bleiben unverändert.
+- `listApiTokens`/`listAllApiTokens` liefern weiter alle Schlüssel samt Status; das Ausblenden des Verlaufs macht die Oberfläche.
+- Tests: `tests/ai-token-delete.db.test.ts`, `tests/ai-access.test.ts`.
 
 ### lib/services/imports.ts
 

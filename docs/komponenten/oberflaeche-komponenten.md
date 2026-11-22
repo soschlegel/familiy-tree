@@ -1061,6 +1061,8 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 
 ## Import, Export, Dubletten und Zusammenführen
 
+**Ergänzung (22.11.):** `HISTORY_PARAM`, `isHistoryToken`, `canDeleteToken` (Spiegel von `apiTokenDeletable`), `deleteTokenQuestion(t, owner?)` (Rückfrage mit Folgen je Status, „Änderungsgeschichte bleibt“, „nicht rückgängig“).
+
 ### components/GedcomImport.tsx
 
 - **Zweck:** GEDCOM-Import mit Vorschau in den Schritten Datei → Vorschau → Entscheidungen → Ausführen → Ergebnis. Die Vorschau ändert nichts.
@@ -1299,6 +1301,8 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
   - `DELETE /api/ai-tokens/[id]` (Schlüssel widerrufen)
 - **Tests:** `e2e/write/admin.spec.ts` (einladen, Rolle, sperren, löschen, E-Mail korrigieren, `user-delete-why`); `e2e/write/ai-access.spec.ts` (KI-Recht, Schlüsselliste); `e2e/write/reference.spec.ts` (Person zuordnen); `e2e/read/mobile.spec.ts` (Telefonbreite).
 
+**Ergänzung (22.11.):** In der aufgeklappten Schlüsselliste eines Benutzers Verlauf-Schalter (ein gemeinsamer für alle Listen, `?verlauf=1`) und „löschen“ mit Rückfrage „… von <E-Mail> endgültig löschen?“; danach wird die Liste neu geladen.
+
 ### components/FamilyAdmin.tsx
 
 - **Zweck:** Familien anlegen und löschen; Zugriffsrechte je Benutzer und Familie festlegen.
@@ -1361,6 +1365,8 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 - **Ruft auf:** `POST /api/ai-tokens`, `DELETE /api/ai-tokens/[id]`.
 - **Tests:** `e2e/write/ai-access.spec.ts` (Info, Anlegen, `ai-secret`, Limit, Widerrufen, wirksame Stufe). Serverregeln: `tests/ai-access.test.ts`, `tests/ai-access.db.test.ts`, `tests/mcp-http.db.test.ts`. Die Kopierknöpfe testet kein Test.
 
+**Ergänzung (22.11.):** Eigene Schlüssel löschen (`DELETE …?endgueltig=1`, Rückfrage, Meldung „Schlüssel „…“ gelöscht.“); nach einem Widerruf Hinweis „Er steht jetzt im ausgeblendeten Verlauf.“, solange der Verlauf aus ist. Die Seite reicht `?verlauf=1` als `initialShowHistory` durch.
+
 ### components/AiConnectGuide.tsx
 
 - **Zweck:** Schritt-für-Schritt-Anleitungen, wie man Claude mit dem Stammbaum verbindet:
@@ -1396,3 +1402,5 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 - **Server oder Client:** Client (`"use client"`; enthält keine Zustände).
 - **Ruft auf:** nichts selbst.
 - **Tests:** `e2e/write/ai-access.spec.ts` (`ai-token-list`, `ai-token`, `ai-token-status`, `ai-token-prefix`, `ai-token-effective`).
+
+**Verlauf und Löschen (seit 22.11.):** Aktive Schlüssel immer sichtbar; widerrufene/abgelaufene (Verlauf) standardmäßig ausgeblendet mit Zähler „N ausgeblendet“; Kontrollkästchen „Widerrufene und abgelaufene anzeigen (Verlauf)“ blendet sie als eigene Liste „Verlauf: …“ ein („N im Verlauf“). Knöpfe „widerrufen“ (aktiv) und „löschen“ (wenn `canDeleteToken`); Rückfragen stellt der Aufrufer (`onRevoke`, `onDelete`). `useHistoryToggle(initial)` hält den Zustand und schreibt `?verlauf=1` per `history.replaceState`; den Anfangswert liest die Seite serverseitig (`HISTORY_PARAM` aus `ai-access-labels.ts`, nicht aus der Client-Datei importieren). Telefon: Schalter und Knöpfe ≥ 44 px. Tests: `e2e/write/ai-access.spec.ts`.
