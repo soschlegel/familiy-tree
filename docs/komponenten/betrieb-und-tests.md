@@ -1,0 +1,733 @@
+# Betrieb, Werkzeuge und Tests
+
+Diese Beschreibung fasst alles zusammen, was nicht zur App selbst gehört,
+aber für Entwicklung, Prüfung und Betrieb nötig ist: Hilfsskripte, das
+Container-Image und die Compose-Dateien, die Build-Pipeline, die
+Mock-Umgebung, die mitgelieferten Geodaten, die Umgebungsvariablen und den
+Aufbau der Unit- und End-to-End-Tests. Bedienung und Schritt-für-Schritt-
+Anleitungen stehen in der [README](../../README.md) (Abschnitte „Lokal
+starten“, „Tests“, „Mock-Daten“, „Betrieb auf der NAS“, „Schema und
+Migrationen“, „Sicherung“), laufende Stolperfallen in
+[UEBERGABE.md](../../UEBERGABE.md).
+
+**Code bleibt die Wahrheit:** Weicht diese Beschreibung vom Code ab, gilt der
+Code, und die Beschreibung wird berichtigt.
+
+---
+
+## 1. npm-Skripte (`package.json`)
+
+| Skript | Was es aufruft | Zweck |
+|---|---|---|
+| `dev` | `next dev` | normaler Dev-Server (Port 3000, normale Datenbank aus `.env`) |
+| `build` | `prisma generate` und `next build` | Produktionsbuild (Standalone-Ausgabe) |
+| `start` | `next start` | gebauten Stand starten (im Image stattdessen `node server.js`) |
+| `lint` | `eslint .` | ESLint mit Flat-Config `eslint.config.mjs` |
+| `typecheck` | `tsc --noEmit` | TypeScript-Prüfung |
+| `test` / `test:watch` | `vitest run` / `vitest` | Unit- und Dienst-Tests in `tests/` |
+| `test:e2e` | `scripts/e2e.mjs all` | Playwright: setup → read → write |
+| `test:e2e:setup` / `:read` / `:write` | `scripts/e2e.mjs setup/read/write` | Teilläufe (read und write jeweils mit vorangestelltem Setup) |
+| `test:e2e:headed` | `scripts/e2e.mjs all --headed --workers=1` | sichtbarer Browser, ein Test nach dem anderen |
+| `test:e2e:ui` | `playwright test --ui` | Playwright-Oberfläche (geht **nicht** über `scripts/e2e.mjs`) |
+| `test:e2e:report` | `playwright show-report` | HTML-Bericht des letzten Laufs |
+| `db:push` | `prisma db push` | Schema in die Datenbank aus `DATABASE_URL` schieben (normale Dev-Datenbank!) |
+| `db:migrate` | `prisma migrate dev` | neue Migration anlegen |
+| `db:seed` | `tsx prisma/seed.ts` | Admin und ggf. Demofamilie (siehe unten); auch als `prisma.seed` eingetragen |
+| `db:studio` | `prisma studio` | Datenbank-Browser |
+| `db:mock` | `scripts/mock.mjs seed` | Mock-Datenbank neu befüllen |
+| `mock:setup` | `scripts/mock.mjs setup` | Mock-Datenbank anlegen, Schema anwenden, befüllen |
+| `dev:mock` | `scripts/mock.mjs dev` | Dev-Server gegen die Mock-Daten (Port 3100) |
+| `mock:env` | `scripts/mock.mjs env` | berechnete Mock-Umgebung anzeigen |
+| `mcp:stdio` | `scripts/mock.mjs mcp` | lokaler MCP-Server über stdio gegen die Mock-Daten |
+| `mcp:key` | `scripts/mock.mjs mcp-key` | festen Mock-KI-Schlüssel ausgeben |
+| `gedcom:check` | `tsx lib/gedcom/cli.ts` | GEDCOM-Datei vorab prüfen (README, „Eine Datei vorab prüfen“) |
+
+---
+
+## 2. Skripte (`scripts/`)
+
+### `scripts/mock.mjs`
+
+Plattformunabhängiger Starter für alles, was gegen die Mock-Umgebung läuft
+(unter Windows funktioniert `VAR=wert befehl` in npm-Skripten nicht). Lädt
+die `.env` des Projekts, **nachdem** es `MOCK_PORT` und `MOCK_MEDIA_DIR` aus
+der Shell gelesen hat — diese beiden wirken also nur aus der Shell, nicht aus
+der `.env`.
+
+- **Ziel bestimmen:** Die Mock-Datenbank-URL kommt aus `MOCK_DATABASE_URL`
+  oder wird aus `DATABASE_URL` abgeleitet (Datenbankname plus `_mock`; eine
+  vorhandene Endung `_mock`/`_test` wird vorher entfernt). Medienordner:
+  `MOCK_MEDIA_DIR`, Standard `data/media-mock`.
+- **Sicherungen:** Bricht mit Code 2 ab, wenn der Datenbankname nicht auf
+  `_mock`/`_test` oder der Medienordner nicht auf `-mock`/`-test` endet.
+- **Umgebung für Kindprozesse:** setzt `DATABASE_URL`, `MEDIA_DIR`,
+  `AUTH_URL` (localhost mit Mock-Port), `AUTH_TRUST_HOST`, ein Ersatz-
+  `AUTH_SECRET` (wenn keins oder der Platzhalter aus `.env.example` gesetzt
+  ist), `ENABLE_DEV_LOGIN=true`, `NEXT_DIST_DIR=.next-mock` und `PORT`.
+- **Befehle:**
+  - `setup` — Mock-Datenbank über die Wartungsdatenbank `postgres` anlegen,
+    falls sie fehlt; `prisma db push --accept-data-loss` dagegen; dann `seed`.
+  - `seed` — `prisma/seed-mock.ts` ausführen.
+  - `dev` — `next dev` auf dem Mock-Port; eigener Build-Ordner, läuft
+    parallel zum normalen Dev-Server.
+  - `env` — die berechneten Werte als JSON ausgeben.
+  - `mcp` — `mcp/server.ts` über `tsx` (stdio; nichts auf stdout ausgeben).
+  - `mcp-key [name]` — gibt den festen Testschlüssel aus `prisma/mock-data.ts`
+    aus (Standard `editor-read`), nur den Schlüssel, damit er direkt in
+    `FAMILYTREE_MCP_KEY` übernommen werden kann.
+- Signale (Strg+C) werden an den Kindprozess weitergereicht.
+
+### `scripts/e2e.mjs`
+
+Starter für Playwright in Teilen. Erstes Argument `all`, `read`, `write` oder
+`setup`; daraus wird `--project=…` und die Variable `E2E_AREA`. Die Option
+`--skip-setup` (oder `E2E_SKIP_SETUP=1`) lässt das Setup-Projekt weg; alle
+übrigen Argumente gehen unverändert an `playwright test`.
+
+Besonderheit bei `all` **mit Filter** (Datei, Muster oder `-g`): Da `write` in
+der Playwright-Konfiguration von `read` abhängt und Playwright Abhängigkeiten
+immer vollständig ausführt, läuft der Aufruf dann in drei Schritten
+nacheinander — Setup ohne Filter, gefilterte lesende Tests, gefilterte
+ändernde Tests (beide mit `--pass-with-no-tests`). Bricht ein Schritt ab,
+folgen die weiteren nicht. Der HTML-Bericht enthält danach nur den letzten
+Schritt. Zur Erkennung eines Filters kennt das Skript, welche
+Playwright-Optionen einen Wert verbrauchen.
+
+### `scripts/backup.sh`
+
+Löst die Datenbanksicherung im laufenden Produktivstack aus, indem es den
+vorhandenen Container des Dienstes `backup-db` (gefunden über die
+Compose-Labels von Projekt und Dienst) erneut startet und auf dessen
+Exit-Code wartet. Stackname als erstes Argument, sonst `STACK_NAME`, sonst
+`familytree`. Braucht weder Repo-Kopie noch `docker compose` auf dem Host. Die
+Bilder sichert es nicht — sie sind gewöhnliche Dateien und gehören in die
+Sicherung des Hosts. Wird von keinem npm-Skript aufgerufen und ist per
+`.dockerignore` nicht im Image.
+
+### `scripts/build-geodata.mjs`
+
+Erzeugt die beiden mitgelieferten Geodaten-Dateien (siehe Abschnitt 6) aus
+vorher von Hand heruntergeladenen Rohdaten: GeoNames-Exporte (Orte ab 1000
+Einwohnern, Länderdateien für Deutschland/Österreich/Schweiz, Regionen erster
+Ebene, Länderinfos, Alternativnamen europäischer Länder) und Natural-Earth-
+Ländergrenzen. Aufruf mit zwei Ordnern (GeoNames, Natural Earth). Läuft weder
+zur Laufzeit noch im Build und wird von keinem npm-Skript aufgerufen.
+
+- **Auswahl:** Deutschland, Österreich, Schweiz mit allen bewohnten Orten
+  (auch historische Ortsteile), übriges Europa ab 1000 Einwohnern, übrige
+  Welt mit einer Einwohner-Mindestgrenze (Verwaltungssitze immer), dazu
+  Regionen erster Ebene, alle Länder und eine kleine Liste historischer
+  Landschaften mit ungefährer Mitte. Weitere Namen nur in lateinischer
+  Schrift; Kürzel aus Großbuchstaben fallen weg (außer bei Ländern).
+- **Normalisierung** muss mit `normalizeForLookup` in
+  `lib/places/normalize.ts` übereinstimmen (im Skript doppelt geführt — bei
+  Änderungen beide anpassen).
+- **Ländergrenzen** werden vorab wie `lib/map/projection.ts` projiziert und
+  vereinfacht; die Projektion steht in der Ausgabedatei mit drin.
+
+---
+
+## 3. Container und Auslieferung
+
+### `Dockerfile` (Stufen)
+
+Ein einziges Image mit App, Migrationen und Admin-Abgleich.
+
+1. **`deps`** — Node 22 (Alpine), `npm ci` mit `package.json`, Lockfile und
+   `prisma/` (für den postinstall der Prisma-Engines).
+2. **`builder`** — kopiert alles, setzt einen Platzhalter-`DATABASE_URL` (nur
+   für `prisma generate`), nimmt die Build-Argumente `BUILD_DATE` und
+   `BUILD_SHA` als `NEXT_PUBLIC_BUILD_DATE`/`NEXT_PUBLIC_BUILD_SHA` an (für
+   die Fußzeile, `lib/build-info.ts`; erst hier deklariert, damit frühere
+   Stufen im Cache bleiben) und führt `prisma generate` und `npm run build`
+   aus.
+3. **`prisma-cli`** — stellt nur das Paket `prisma` mit seinen transitiven
+   Abhängigkeiten in genau den Lockfile-Versionen nach `/opt/prisma-cli`
+   zusammen (Liste von `docker/prisma-cli-closure.mjs`), prüft, dass die
+   Schema-Engine für linux-musl da ist, und entfernt, was `migrate deploy`,
+   `migrate resolve` und `db execute` nicht brauchen (Query-Engines, Vorlage
+   für `generate`, WebAssembly-Engines, Typdateien).
+4. **`runner`** — Laufzeit als Benutzer `nextjs` (uid 1001), `NODE_ENV=
+   production`, Telemetrie und Prisma-Update-Hinweise aus. Legt
+   `/data/media` an (bewusst **kein** `VOLUME`, damit kein anonymes Volume
+   entsteht) und setzt `MEDIA_DIR` darauf. Kopiert `public/`, das
+   Standalone-Bundle, statische Dateien, Schema und Migrationen, das
+   Prisma-CLI, `docker/seed-admin.mjs`, das Startskript und den
+   Prisma-Wrapper (Zeilenenden werden auf LF korrigiert). Port 3000,
+   Einstieg `docker/entrypoint.sh`, Befehl `node server.js`.
+
+`.dockerignore` hält u.a. `node_modules`, Build-Ordner, `data/`, `.env*`
+(außer dem Beispiel), Markdown außer der README, `e2e/`, Testergebnisse,
+Compose-Dateien, `scripts/backup.sh`, `stack.env*` und `.mcp.json` aus dem
+Build-Kontext. Der Ordner `tests/` wird nicht ausgeschlossen.
+
+### `docker/entrypoint.sh`
+
+Startskript des App-Containers:
+
+1. auf die Datenbank warten (über `prisma db execute`, höchstens
+   `DB_WAIT_SECONDS`, Standard 60 s),
+2. `prisma migrate deploy` — Ausgabe live ins Log; bekannte Fehlerbilder
+   werden erklärt: Tabellen ohne Migrationshistorie (P3005, Baselining
+   nötig) und als fehlgeschlagen vermerkte Migration (P3009/P3018),
+3. `INITIAL_ADMIN_EMAIL` per `docker/seed-admin.mjs` als Administrator
+   sicherstellen,
+4. per `exec` den eigentlichen Befehl starten (Signale kommen direkt bei Node
+   an).
+
+Schlägt 1–3 fehl, beendet sich der Container mit Code 1 — die App startet
+nie auf halb migriertem Schema. `RUN_MIGRATIONS=false` überspringt 1–3 (nur
+zur Fehlersuche).
+
+### `docker/prisma.sh`
+
+Wird im Image als `/usr/local/bin/prisma` installiert (für das Startskript
+und Handgriffe im Container). Setzt `PRISMA_QUERY_ENGINE_LIBRARY` auf die
+Query-Engine aus dem Standalone-Bundle (das CLI hat keine eigene), arbeitet
+aus `/opt/prisma-cli` (damit die `package.json` der App nicht gelesen wird)
+und hängt bei `migrate …`/`db …` das Schema des Images an, falls kein
+`--schema` angegeben ist.
+
+### `docker/prisma-cli-closure.mjs`
+
+Nur für den Image-Build: liest `package-lock.json`, löst die Abhängigkeiten
+von `node_modules/prisma` (inklusive optionaler) nach der Node-Auflösung im
+Lockfile auf und gibt die benötigten Ordner der obersten Ebene aus. Fehlt eine
+Pflicht-Abhängigkeit im Lockfile, bricht es ab.
+
+### `docker/seed-admin.mjs`
+
+Läuft beim Containerstart (reines JavaScript, kein `tsx` im Image). Legt den
+Benutzer aus `INITIAL_ADMIN_EMAIL` (kleingeschrieben) als Administrator mit
+Status „eingeladen“ an bzw. hebt einen vorhandenen auf Administrator.
+Idempotent; ohne Variable tut es nichts.
+
+### `docker/schema-diff-check.mjs`
+
+Entwicklungswerkzeug (nicht im Image): liest ein Migrations-SQL von stdin,
+entfernt Kommentare (auch bei CRLF), teilt in Anweisungen und meldet alle, die
+nicht rein ergänzend sind. Als ergänzend gelten neue Tabellen/Typen/
+Sequenzen/Erweiterungen/Schemata/Indizes, neue Enum-Werte sowie `ALTER
+TABLE` nur mit `ADD …`, `SET DEFAULT` oder `DROP NOT NULL`. Exit 0 =
+ergänzend (oder leer), Exit 3 = beanstandete Anweisungen auf stdout. Nach
+AGENTS.md Pflichtprüfung vor jedem Release.
+
+### `docker-compose.yml` (Produktivstack)
+
+Für Portainer als Git-Stack; bindet keine Dateien aus dem Repository ein. Alle
+dauerhaften Daten liegen als Bind-Mounts unter `DATA_ROOT`. Dienste:
+
+- **`db`** — Postgres 17 (Alpine) mit fester Locale `C.UTF-8`, kein Port nach
+  außen, Healthcheck mit `pg_isready`.
+- **`media-init`** — Einmal-Job als root: legt `DATA_ROOT/media` an,
+  übereignet alles, was nicht uid 1001 gehört, und macht einen Schreibtest
+  mit genau der Identität der App; scheitert er (z.B. ACLs), startet die App
+  nicht.
+- **`backup-db`** — Einmal-Job nach gesunder Datenbank: `pg_dump` (mit
+  `--clean --if-exists`) gepackt nach `DATA_ROOT/backups`, löscht Dumps älter
+  als `BACKUP_KEEP_DAYS`. Läuft bei jedem Stack-Start **vor** der App, also
+  vor jeder Migration.
+- **`app`** — das Image aus der Registry (`IMAGE_REPO`/`IMAGE_TAG`), startet
+  erst nach gesunder Datenbank, erfolgreichem `media-init` und `backup-db`.
+  Port nur an `APP_BIND` (Standard localhost) und `APP_PORT`. Healthcheck auf
+  `/api/health` mit großzügiger Startphase (Migrationen). Dev-Login fest aus.
+- **`proxy`** (optional, Profil `caddy`) — eigener Reverse-Proxy mit inline
+  erzeugter Caddy-Konfiguration (`CADDY_*`), Standard „tls internal“.
+
+Logs aller Dienste sind auf rotierende JSON-Dateien begrenzt.
+
+### `docker-compose.dev.yml`
+
+Nur Postgres 17 für die lokale Entwicklung, Port 5432 auf dem Rechner, Daten
+unter `data/dev-postgres`. Die App läuft daneben mit `npm run dev` bzw.
+`npm run dev:mock`. Benutzer, Passwort und Datenbankname sind feste
+Entwicklungswerte und passen zum Standard in `scripts/mock.mjs` und
+`vitest.config.ts`.
+
+### `docker-compose.build.yml`
+
+Ergänzung zur Produktivdatei: baut das App-Image lokal (Ziel `runner`) statt
+es zu laden — zum Ausprobieren des Produktivstacks auf dem eigenen Rechner
+(mit eigener Env-Datei und eigenem Projektnamen). Nicht für Portainer.
+
+### `.github/workflows/images.yml`
+
+Workflow „Images“, ausgelöst durch Push auf `main`, Tags `v*` oder von Hand.
+Läufe auf demselben Ref brechen ältere ab.
+
+1. **`checks`** — `npm ci`, `prisma generate`, Typecheck, Lint, Vitest (ohne
+   Datenbank; die `*.db.test.ts` überspringen sich). Playwright läuft hier
+   **nicht**.
+2. **`images`** — baut das Ziel `runner` für linux/amd64 mit Build-Datum
+   (deutsche Zeit) und Kurz-Commit als Build-Argumente und legt es in der
+   GitHub Container Registry ab. Tags: `latest` (Standardbranch),
+   `sha-<kurz>`, bei Versions-Tags `<version>` und `<major>.<minor>`.
+3. **`promote`** — nur auf `main`: setzt den Branch `deploy` auf genau diesen
+   Commit (Force-Push). Portainer beobachtet `deploy` und sieht neue
+   Compose-Dateien so erst, wenn das passende Image fertig ist.
+
+Rechte werden je Job minimal vergeben. Auf dem Arbeitsbranch läuft der
+Workflow nicht — die Prüfungen dort sind Handarbeit (AGENTS.md, Abschnitt 3).
+
+### `next.config.mjs`
+
+- `distDir` aus `NEXT_DIST_DIR` (Mock-Server: `.next-mock`), sonst `.next`.
+- `output: "standalone"` für ein kleines Image.
+- `sharp` als externes Server-Paket (nicht gebündelt).
+- `outputFileTracingIncludes`: `geo/gazetteer.tsv.gz` für `/api/places/**`
+  und `/admin/places`, damit die Datei im Standalone-Bundle landet.
+
+---
+
+## 4. Mock-Umgebung
+
+Eigene Datenbank (Name endet auf `_mock`/`_test`) und eigener Medienordner
+(endet auf `-mock`/`-test`) auf demselben Postgres; die normale Datenbank und
+`data/media` bleiben unberührt. Für parallele Worktrees: je Worktree eigene
+`MOCK_DATABASE_URL` in der `.env` und eigener `MOCK_PORT` in der Shell.
+
+### `prisma/mock-data.ts`
+
+Reiner, deterministischer Generator ohne Datenbank und Netz (fester
+Startwert, feste „Gegenwart“): gleiche Eingabe, gleiche Daten bis zu den IDs
+(`mock-p-…`, `mock-r-…`, `mock-family-…` usw.). Liefert Familien, Personen
+über sechs Generationen in vier miteinander verheirateten Familien,
+Beziehungen, Lebensereignisse, weitere Namen, Quellen und Belege,
+Platzhalterbild-Beschreibungen, Benutzer mit Rollen und Familienrechten, feste
+KI-Testschlüssel (`MOCK_API_TOKEN_KEYS`, gültig nur in der Mock-Datenbank) und
+`landmarks` — die IDs der gezielt eingebauten Sonderfälle (Scheidung mit
+Wiederheirat, Halb-, Stief-, Adoptiv- und Pflegeverhältnisse, Datenlücken,
+ungenaue Daten, mögliche Dubletten, Personen ohne Familie, eigene Person des
+Bearbeiters usw.). Unit-Tests (über `tests/helpers.ts`) und E2E-Tests (über
+`e2e/support/mock.ts`) lesen IDs und Namen von hier, statt sie
+abzuschreiben. Inhalt im Einzelnen: README, „Mock-Daten“.
+
+### `prisma/seed-mock.ts`
+
+Schreibt das Ergebnis des Generators in die Mock-Datenbank. Verweigert (Code
+2) jede Datenbank und jeden Medienordner ohne Mock-/Test-Endung. Ablauf:
+alle App-Tabellen per `TRUNCATE … CASCADE` leeren (auch Importläufe,
+Herkunft, Rohdaten, Sitzungen, Orte), dann Familien, Benutzer, KI-Schlüssel
+(nur als Hash), Familienrechte, Personen, Familienzugehörigkeit,
+Beziehungen, eigene Personen der Benutzer, Ereignisse, weitere Namen anlegen;
+Ortstexte automatisch über das mitgelieferte Ortsverzeichnis zuordnen;
+Medienordner leeren, Platzhalterbilder (SVG → PNG mit `sharp`) über die
+normale Bildverarbeitung speichern und an Personen bzw. Beziehungen hängen;
+zuletzt Quellen (Scan nur, wenn das Bild angelegt wurde) und Belege. Gibt eine
+Zusammenfassung samt Benutzertabelle aus.
+
+### `prisma/seed.ts`
+
+Seed für die **normale** Datenbank (`npm run db:seed`): legt
+`INITIAL_ADMIN_EMAIL` als Administrator an bzw. hebt ihn an. Nur mit
+`SEED_DEMO=true` und leerer Personentabelle zusätzlich eine kleine
+Demofamilie über drei Generationen (sieben Personen, zwei Ehen,
+Eltern-Kind-Beziehungen), ohne Familienzuordnung. Ohne Variable bzw. mit
+vorhandenen Personen wird nur gemeldet, was übersprungen wurde.
+
+---
+
+## 5. Konfiguration der Testläufer
+
+### `vitest.config.ts`
+
+Lädt die `.env` und leitet daraus die Mock-Datenbank-URL ab (gleiche Regel
+wie `scripts/mock.mjs`, `MOCK_DATABASE_URL` hat Vorrang). Setzt für alle Tests
+`DATABASE_URL` auf diese Mock-Datenbank, `MEDIA_DIR` auf `data/media-test` und
+`NODE_ENV=test` — nie die normale Datenbank. Umgebung Node, Alias `@` auf das
+Projekt, nur `tests/**/*.test.ts`, Zeitgrenzen 30 s, **Dateien nacheinander**
+(die Datenbank-Tests teilen sich eine Datenbank und zählen).
+
+### `playwright.config.ts`
+
+- Testordner `e2e/`, Ergebnisse `test-results/`, HTML-Bericht
+  `playwright-report/`, Reporter „list“ plus HTML.
+- Zeitgrenzen: Test 60 s, `expect` 10 s, Aktion 15 s, Navigation 45 s;
+  keine Wiederholungen; Trace und Screenshot nur bei Fehlern.
+- Locale `de-DE`, Zeitzone Europe/Berlin; Basis-URL localhost mit
+  `MOCK_PORT` (Standard 3100).
+- Worker: 4, in CI 2; `forbidOnly` in CI.
+- **Projekte:**
+  - `setup` — nur `e2e/global.setup.ts`, Zeitgrenze 10 min.
+  - `read` — `e2e/read/`, voll parallel, Desktop-Chrome; hängt an `setup`
+    (entfällt mit `E2E_SKIP_SETUP=1`).
+  - `write` — `e2e/write/`, Dateien parallel, Tests einer Datei nacheinander,
+    2 Worker; hängt an `read`, bei `E2E_AREA=write` nur an `setup`.
+- **Web-Server:** `node scripts/mock.mjs dev`, bereit wenn `/login` antwortet,
+  Start bis 3 min; ein schon laufender Server auf dem Port wird mitbenutzt
+  und nicht beendet. Bewusst der Dev-Server, weil der Dev-Login in Produktion
+  aus ist.
+
+---
+
+## 6. Geodaten
+
+### `geo/gazetteer.tsv.gz`
+
+Gepacktes, tabulatorgetrenntes Ortsverzeichnis (Orte, Regionen erster Ebene,
+historische Landschaften, Länder mit Koordinaten, Ländercode, weiteren
+Namen), erzeugt von `scripts/build-geodata.mjs`. Nur der Server liest es:
+`lib/places/gazetteer-file.ts` lädt es beim ersten Bedarf (gut 100 MB im
+Speicher) und gibt es nach zehn Minuten ohne Benutzung wieder frei;
+`lib/places/gazetteer.ts` enthält Datenstruktur und Suche, `lib/places/match.ts`
+die automatische Zuordnung. Benutzt von `lib/services/places.ts` (Admin-Seite
+„Orte zuordnen“, `/api/places/…`) und von `prisma/seed-mock.ts`; die Karte
+selbst liest nur die fertigen Koordinaten aus der Tabelle `Place`. Keine
+Anfrage nach außen. Über `next.config.mjs` ins Standalone-Image gebracht.
+
+### `public/geo/countries.json`
+
+Ländergrenzen (Natural Earth), bereits projiziert und vereinfacht, mit der
+Projektionsangabe. Statisch ausgeliefert und im Browser von
+`components/MapExplorer.tsx` geladen (einmal je Seite zwischengespeichert);
+die Projektion muss zu `lib/map/projection.ts` passen.
+
+---
+
+## 7. Umgebungsvariablen
+
+Werte stehen in `.env.example` (lokal) bzw. `stack.env.example`
+(Produktivstack); hier nur der Zweck. „implizit“ = von einer Bibliothek
+selbst gelesen, nicht im eigenen Code.
+
+### App (lokal und Produktion)
+
+| Variable | Zweck | gelesen in |
+|---|---|---|
+| `DATABASE_URL` | Postgres-Verbindung | Prisma (implizit), `mcp/server.ts`, Mock-/Test-Werkzeuge |
+| `AUTH_SECRET` | Schlüssel für Sitzungen | Auth.js (implizit); Mock-Ersatzwert in `scripts/mock.mjs` |
+| `AUTH_URL` | öffentliche Adresse der App (Callbacks, Cookies) | Auth.js (implizit); `mcp/http.ts` als erlaubte Herkunft |
+| `AUTH_TRUST_HOST` | Host-Kopf hinter Proxy vertrauen | Auth.js (implizit) |
+| `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` | OAuth GitHub | `lib/auth.ts`, Login-Seite |
+| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | OAuth Google | `lib/auth.ts`, Login-Seite |
+| `ENABLE_DEV_LOGIN` | Anmeldung nur per E-Mail (wirkt nicht bei `NODE_ENV=production`) | `lib/auth.ts`, Login-Seite |
+| `INITIAL_ADMIN_EMAIL` | erster Administrator | `prisma/seed.ts`, `docker/seed-admin.mjs`, `docker/entrypoint.sh` |
+| `MEDIA_DIR` | Ordner der Bilddateien (zur Laufzeit gelesen, Standard `data/media`) | `lib/storage.ts`, `prisma/seed-mock.ts`, Tests |
+| `MAX_UPLOAD_BYTES` | größte Bilddatei (Standard 15 MiB) | `lib/services/media-links.ts`, `lib/services/gedcom-photos.ts`, `mcp/http.ts` |
+| `MCP_CONNECTOR_URL` | öffentliche Adresse des MCP-Gateways, nur für die Anleitung auf `/ai-access` | `app/ai-access/page.tsx`, `components/AiConnectGuide` |
+| `MCP_ALLOWED_ORIGINS` | weitere erlaubte `Origin`-Werte für `/api/mcp` (kommagetrennt) | `mcp/http.ts` — steht in keiner Beispieldatei |
+| `NODE_ENV` | Produktion/Entwicklung (Dev-Login, Prisma-Logging, Client-Singleton) | `lib/auth.ts`, `lib/prisma.ts` |
+| `NEXT_PUBLIC_BUILD_DATE` / `NEXT_PUBLIC_BUILD_SHA` | Build-Angabe in der Fußzeile, beim Build fest eingesetzt | `lib/build-info.ts` |
+| `NEXT_DIST_DIR` | eigener Build-Ordner (Mock-Server) | `next.config.mjs` |
+| `PORT` / `HOSTNAME` | Port und Bind-Adresse des Servers | Next.js (implizit); im Image gesetzt |
+| `SEED_DEMO` | Demofamilie beim `db:seed` | `prisma/seed.ts` |
+
+### Containerstart und Stack
+
+| Variable | Zweck |
+|---|---|
+| `RUN_MIGRATIONS` | `false` überspringt Datenbankwarten, Migrationen und Admin (`docker/entrypoint.sh`) |
+| `DB_WAIT_SECONDS` | Wartezeit auf die Datenbank (`docker/entrypoint.sh`, nicht in den Beispieldateien) |
+| `PRISMA_QUERY_ENGINE_LIBRARY` | Pfad der Query-Engine für das CLI im Image (`docker/prisma.sh`) |
+| `DATA_ROOT` | Wurzel aller Bind-Mounts (Pflicht) |
+| `POSTGRES_PASSWORD` / `POSTGRES_USER` / `POSTGRES_DB` | Zugang der Datenbank; daraus baut Compose `DATABASE_URL` |
+| `PUBLIC_URL` | Adresse im Browser; wird zu `AUTH_URL` |
+| `APP_BIND` / `APP_PORT` | Bind-Adresse und Port der App nach außen |
+| `IMAGE_REPO` / `IMAGE_TAG` | welches Image geladen wird |
+| `BACKUP_KEEP_DAYS` | Aufbewahrung der Dumps |
+| `COMPOSE_PROFILES` | `caddy` schaltet den eigenen Proxy zu |
+| `CADDY_SITE`, `CADDY_TLS`, `CADDY_HTTP_PORT`, `CADDY_HTTPS_PORT`, `CADDY_BIND`, `CADDY_MAX_BODY` | Einstellungen des optionalen Caddy |
+| `STACK_NAME` | Stackname für `scripts/backup.sh` (nicht in den Beispieldateien) |
+| `BUILD_DATE` / `BUILD_SHA` | Build-Argumente des Images (von der Action gesetzt) |
+
+### Mock, MCP-Entwicklung und Tests
+
+| Variable | Zweck |
+|---|---|
+| `MOCK_DATABASE_URL` | Mock-Datenbank ausdrücklich setzen (`scripts/mock.mjs`, `vitest.config.ts`) |
+| `MOCK_MEDIA_DIR` | Mock-Medienordner (nur aus der Shell wirksam) |
+| `MOCK_PORT` | Port des Mock-Servers (Standard 3100; `scripts/mock.mjs`, `playwright.config.ts`, `e2e/support/api.ts`; nur aus der Shell wirksam) |
+| `MCP_USER_EMAIL` | Benutzer, als der der stdio-MCP-Server handelt (Pflicht) |
+| `MCP_ALLOW_WRITE` | `true` schaltet im stdio-Server Schreibwerkzeuge frei (zusätzlich KI-Recht nötig) |
+| `MCP_KEY_NAME` | intern: Übergabe des Schlüsselnamens an den `mcp-key`-Unterprozess |
+| `FAMILYTREE_MCP_KEY` | Schlüssel für den Eintrag in `.mcp.json` (Claude Code); im App-Code nicht gelesen |
+| `E2E_SKIP_SETUP` | `1` = Setup-Projekt weglassen |
+| `E2E_AREA` | von `scripts/e2e.mjs` gesetzt; `write` hängt dann nur am Setup |
+| `CI` | Playwright: 2 Worker, `forbidOnly` |
+| `MERGE_SCREENS` | Ordner für Bildschirmfotos in `e2e/write/merge.spec.ts` und `connect.spec.ts` |
+| `GEDCOM_PERF` / `GEDCOM_PERF_N` | große GEDCOM-Leistungsmessung in `tests/gedcom-performance.test.ts` |
+
+---
+
+## 8. Unit- und Dienst-Tests (`tests/`, Vitest)
+
+Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
+
+- **Reine Tests** (`*.test.ts` ohne `.db`) brauchen keine Datenbank und
+  laufen auch in CI.
+- **Datenbank-Tests** (`*.db.test.ts`) laufen gegen die Mock-Datenbank
+  (vorher `npm run mock:setup`). Jede Datei prüft zu Beginn selbst (mit
+  Zeitgrenze), ob die Mock-Datenbank erreichbar und befüllt ist, und
+  überspringt sich sonst mit Hinweis. Lesende Tests verlassen sich auf die
+  deterministischen Mock-Daten; schreibende legen eigene, erfundene
+  Datensätze an und räumen sie (samt Audit, Paketen, Importdateien) wieder
+  ab. Dateien laufen nacheinander.
+
+### Hilfsdateien
+
+- **`helpers.ts`** — liefert die Mock-Daten (einmal erzeugt) sowie daraus die
+  Baumdaten in der Form der Baumansicht (Admin-Sicht) und die Kanten für die
+  Graph-Algorithmen.
+- **`merge-fixtures.ts`** — erzeugt kleine, sich überschneidende
+  GEDCOM-Bäume mit erfundenen Namen und je Aufruf eigener Projekt-/Datensatz-
+  Kennung und eigenem Familiennamen, damit sich Läufe nicht vermischen
+  (benutzt von Zusammenführen-, Importe-verbinden-, Importquellen- und
+  Personen-Dubletten-Tests).
+- **`fixtures/linking-generator.ts`** — deterministische erfundene
+  „Wahrheit“ und daraus mehrere verrauschte, sich überschneidende Importe mit
+  Fallen, für die Genauigkeitsmessung von „Importe verbinden“.
+- **`fixtures/gedcom/`** — erfundene GEDCOM-Beispieldateien (minimal 5.5.1,
+  MyHeritage-Stil, GEDCOM 7, Grenzfälle) sowie `generate.ts` (große
+  synthetische Datei erzeugen) und `measure.ts` (Leistungsmessung, kein
+  Test).
+
+### Reine Tests
+
+- **`ai-access.test.ts`** — Schlüsselformat und Hash, wirksame KI-Stufe,
+  Eingabeschemas und die festen Mock-Schlüssel.
+- **`ai-connect-guide.test.ts`** — Ermittlung der Connector-Adresse aus
+  `MCP_CONNECTOR_URL`.
+- **`build-info.test.ts`** — Build-Angabe der Fußzeile, Rückfall „Build
+  lokal“, ohne Anmeldung kein Commit.
+- **`changelog.test.ts`** — Feldänderungen und Paket-Titel des Changelogs.
+- **`consistency.test.ts`** — Plausibilitätsprüfung, auch mit ungenauen
+  Daten.
+- **`dates.test.ts`** — Einlesen ungenauer Daten, Anzeige und Rundlauf,
+  Vergleich.
+- **`duplicates.test.ts`** — Bewertung und Paarbildung der
+  Dublettenerkennung, Vorfahren/Nachkommen-Regel.
+- **`focus.test.ts`** — Ausschnitt, Layout und Startperson der
+  Fokus-Ansicht, Platzhalter für fremde Familien.
+- **`gedcom-dates.test.ts`** — GEDCOM-Datumsformen (genormt, nachsichtig,
+  ungültig als Text) lesen und schreiben.
+- **`gedcom-diagnostics.test.ts`** — Diagnose, Dokumentvergleich und das
+  Prüfprogramm `gedcom:check`.
+- **`gedcom-interpret.test.ts`** — Deutung von MyHeritage-Export,
+  Grenzfall-Datei, GEDCOM 7 und Familienstand.
+- **`gedcom-mapping.test.ts`** — Abbildung des GEDCOM-Zwischenmodells auf den
+  Massenimport (Namen, Daten, Ereignisse, Familien, Quellen, Fotos,
+  Rohdaten).
+- **`gedcom-parser.test.ts`** — Zeilenenden, Zeichensätze, Fortsetzungs-
+  zeilen und Defekte aus der Praxis.
+- **`gedcom-performance.test.ts`** — Laufzeit mit kleiner Datei im normalen
+  Lauf; große Messung nur mit `GEDCOM_PERF`.
+- **`gedcom-writer.test.ts`** — Rundreise lesen → schreiben → lesen, Kopf und
+  Format, Familien.
+- **`genealogy.test.ts`** — Datumsbereiche, Ereignisregeln, Plausibilität
+  mit Ereignissen, Ehestand unbekannt, Import-Hilfen.
+- **`graph.test.ts`** — Vorfahren/Nachfahren, kürzester Weg, Zyklen- und
+  Geschwisterprüfung, auch auf den Mock-Daten.
+- **`health.test.ts`** — `/api/health` mit Datenbank-Attrappe, auch bei nicht
+  beschreibbarem Medienordner.
+- **`import-linking.test.ts`** — Genauigkeit und Trefferquote von „Importe
+  verbinden“ gegen erfundene Wahrheit („sicher“ muss fehlerfrei sein).
+- **`kinship.test.ts`** — Verwandtschaftsbegriffe und Wegbeschreibung.
+- **`layout.test.ts`** — Generationen- und Zeitstrahl-Layout, auch mit
+  Hochzeiten.
+- **`map.test.ts`** — Lebend- und Ortsregel der Karte, Auswertung eines
+  Jahres, Projektion, Laufzeit bei vielen Personen.
+- **`mcp-format.test.ts`** — Formatierungshilfen der MCP-Antworten.
+- **`media-links.test.ts`** — base64-Eingang, Abruf per Adresse mit
+  SSRF-Schutz (ohne echtes Netz) und die Belegbild-Regel.
+- **`merge-rules.test.ts`** — Regeln des Zusammenführens (Datumsverfeinerung,
+  Hauptangaben, Beziehungen).
+- **`places.test.ts`** — Normalisierung, Zerlegen von Ortstexten und
+  Zuordnung, mit kleinem Verzeichnis und mit dem mitgelieferten
+  `geo/gazetteer.tsv.gz`.
+- **`reference.test.ts`** — Verwandtschaft aller Personen zur Bezugsperson
+  (gegen die Einzelabfrage), Ahnenlinien, Linienfarben, Leistung.
+- **`safe-fetch.test.ts`** — öffentliche Adressen, sicherer Abruf
+  (Weiterleitungen, Größe, Typ, Zeit) und Nebenläufigkeitsgrenze.
+- **`scope.test.ts`** — Sicht- und Bearbeitungsrechte je Person/Beziehung,
+  Familienfilter.
+- **`source-classify.test.ts`** — Einordnung importierter Quellen und Anzeige
+  älterer Importe.
+- **`storage.test.ts`** — Schlüsselprüfung gegen Pfad-Ausbrüche, atomares
+  Schreiben, Lesen, Löschen, Ordnerprüfung (in eigenem Temp-Ordner).
+- **`validation.test.ts`** — Datumsprüfungen, Beziehungsregeln,
+  Zod-Schemata, ungenaue Daten.
+
+### Datenbank-Tests
+
+- **`ai-access.db.test.ts`** — KI-Rechte, Schlüssel, Prüfung pro Aufruf und
+  Audit über den KI-Kanal.
+- **`changelog.db.test.ts`** — Pakete, Momentaufnahmen, Verlauf je Person mit
+  Rechten und Maskierung, Admin-Übersicht, Bündeln über den KI-Zugang.
+- **`focus.db.test.ts`** — Fokus-Ausschnitt mit Sichtbarkeit und Rückfall auf
+  die Startperson (nur lesend).
+- **`gedcom-export-selection.db.test.ts`** — GEDCOM-Export mit
+  Familienauswahl: nur Gewähltes, keine hängenden Verweise, gültiges
+  GEDCOM, Rechte.
+- **`gedcom-import.db.test.ts`** — Vorschau, Import, Wiederholungsimporte in
+  allen Varianten, zwei Bäume, doppeltes Absenden, Rechte, Vorschläge.
+- **`genealogy.db.test.ts`** — Ereignisse, Namen, Orte, Ehestand unbekannt
+  und Massenimport.
+- **`import-linking.db.test.ts`** — zwei Importe derselben Familie abgleichen,
+  zusammenführen, Fortsetzen nach Unterbrechung.
+- **`import-sources.db.test.ts`** — Einordnung importierter Quellen, Links,
+  doppelte Belege, Korrektur beim erneuten Import.
+- **`map.db.test.ts`** — Datenschutz der Kartendaten, Linien, Admin-Rechte
+  und Protokoll der Ortszuordnung.
+- **`mcp-http.db.test.ts`** — MCP-Endpunkt `/api/mcp` über den HTTP-Client
+  des SDK (Route direkt aufgerufen, ohne Server) sowie Form der `.mcp.json`.
+- **`mcp.db.test.ts`** — stdio-MCP-Server als Kindprozess: Lesewerkzeuge,
+  Verbergen für Betrachter, Schreibwerkzeuge samt Audit, Weigerung gegen
+  Nicht-Mock-Datenbanken.
+- **`media-cleanup.db.test.ts`** — Löschen von Person/Beziehung räumt nur
+  nicht mehr benutzte Bilder ab (Dateiablage als Attrappe).
+- **`media-links.db.test.ts`** — Bilder an Ereignissen, Belegen und Quellen:
+  Rechte, Regeln, Audit, MCP-Werkzeuge, Export.
+- **`merge.db.test.ts`** — Zusammenführen ohne stillen Datenverlust,
+  Blockaden, erneuter Import danach, Export.
+- **`person-duplicates.db.test.ts`** — mögliche Dubletten einer Person mit
+  Rechten (nichts, auch keine Anzahl, ohne Bearbeitungsrecht an beiden).
+- **`reference.db.test.ts`** — „Das bin ich“, Auflösung der Bezugsperson,
+  keine Durchsickerung, Mitwandern beim Zusammenführen.
+- **`research.db.test.ts`** — Verwandtschaft, Zeitleisten, Plausibilität,
+  erweiterte Suche (nur lesend).
+- **`services.db.test.ts`** — die zentralen Dienste (Lesen mit Rechten,
+  Anlegen/Ändern/Löschen eigener Personen).
+- **`sources.db.test.ts`** — Quellen, Belege und ungenaue Daten.
+
+---
+
+## 9. End-to-End-Tests (`e2e/`, Playwright)
+
+Bedienen die App in Chromium gegen den Mock-Dev-Server; sprechen nur mit der
+App (Browser und HTTP-API), nie direkt mit Datenbank oder Medienordner.
+Voraussetzungen: Postgres läuft, Mock-Datenbank einmal angelegt, einmalig
+`npx playwright install chromium`. Start und Optionen siehe Abschnitt 1 und
+`scripts/e2e.mjs`; Anmeldezustände liegen in `e2e/.auth/` (von Git
+ausgenommen).
+
+### `e2e/global.setup.ts` (Projekt `setup`)
+
+Nacheinander: Mock-Daten neu aufbauen (`scripts/mock.mjs seed`), je Rolle
+(Admin, Bearbeiter, Betrachter, ohne Familie) per Dev-Login anmelden und den
+Zustand speichern, dann als Admin die wichtigsten Seiten und API-Routen
+einmal aufrufen, damit der Dev-Server sie vorab übersetzt. Der gesperrte
+Benutzer bekommt keinen gespeicherten Zustand.
+
+### Hilfen (`e2e/support/`)
+
+- **`fixtures.ts`** — erweitertes `test`: eine automatische Wache, die jeden
+  Test an unerwarteten Konsolen- oder Seitenfehlern scheitern lässt (mit eng
+  gefassten Ausnahmen und pro Test erlaubten Meldungen), `loginAs` für weitere
+  Rollen in eigenen Kontexten; dazu Dev-Login, Dialoge annehmen,
+  Barrierefreiheitsprüfung mit axe (WCAG 2.1 A/AA, begründete Ausnahmen),
+  Prüfung auf waagerechte Scrollleiste, Warten auf Baum und Hydration,
+  Muster für erwartete HTTP-Fehler.
+- **`api.ts`** — API-Kontext je Rolle, eindeutige Zusätze für Testnamen,
+  Anlegen/Löschen von Personen, Beziehungen und Quellen, ein von Hand
+  gebautes kleines PNG, verlängerte Zeitgrenze für Importe.
+- **`mock.ts`** — derselbe Mock-Datensatz wie im Seed, Sonderfall-IDs,
+  Familien, Benutzer je Rolle sowie die Listen sichtbarer bzw. verbotener
+  Namen je Familienrecht.
+- **`nav.ts`** — Hauptnavigation finden und das Untermenü „Verwaltung“
+  aufklappen (wiederholt, bis die Hydration greift).
+
+### Lesende Tests (`e2e/read/`, parallel)
+
+- **`auth.spec.ts`** — Anmeldung über den Dev-Login ohne gespeicherten
+  Zustand.
+- **`dates.spec.ts`** — ungenaue Daten erscheinen auf Personenseite, Liste
+  und Baumkarte gleich.
+- **`duplicate-banner.spec.ts`** — Dubletten-Hinweis nur für Berechtigte,
+  „Vergleichen“ führt zum richtigen Paar.
+- **`export.spec.ts`** — Export-Downloads über die Daten-Seite je Rolle.
+- **`gedcom-export-dialog.spec.ts`** — GEDCOM-Export-Dialog mit
+  Familienauswahl, Tastatur, Telefon und Rechten.
+- **`map.spec.ts`** — Karte „Wurzeln nach Jahr“ je Rolle und auf dem Telefon.
+- **`mcp-http.spec.ts`** — `/api/mcp` nur über HTTP mit den festen
+  Testschlüsseln (401/403/200, Werkzeuglisten, Sitzungs-Cookie meldet nicht
+  an).
+- **`mobile.spec.ts`** — Telefonbreite: kein waagerechtes Scrollen,
+  erreichbare Navigation, ausreichend große Schrift in Eingabefeldern.
+- **`navigation.spec.ts`** — Navigation und Untermenü „Verwaltung“ je Rolle
+  und Breite.
+- **`people-list.spec.ts`** — Personenliste: Suche, Familienfilter,
+  Sortierung, Seiten, Zählung.
+- **`permissions.spec.ts`** — keine Information über fremde Familien, weder
+  im Text noch im ausgelieferten HTML, über direkte Adressen oder die API.
+- **`person-families.spec.ts`** — letzte bearbeitbare Familie lässt sich
+  nicht abwählen (nichts wird gespeichert).
+- **`quality.spec.ts`** — Barrierefreiheit (axe) und Telefonbreite quer über
+  die Seiten.
+- **`reference.spec.ts`** — Bezugsperson und Ahnenlinien, keine
+  Durchsickerung, Telefon.
+- **`research.spec.ts`** — Recherche-Seite als Admin und Betrachter.
+- **`tree-focus.spec.ts`** — Fokus-Ansicht ab fester Person, Startperson.
+- **`tree-whole.spec.ts`** — Gesamtansichten Generationen und Zeitstrahl.
+
+### Ändernde Tests (`e2e/write/`, Dateien zu zweit parallel, Tests einer Datei seriell)
+
+Alle Dateien laufen im Modus `serial`; eigene Datensätze heißen „E2E …“ und
+werden am Ende entfernt (Audit-Einträge, Pakete und Importläufe bleiben bis
+zum nächsten Setup).
+
+- **`admin.spec.ts`** — Benutzer einladen, Rolle ändern, sperren, Familie
+  anlegen, Sichtbarkeit beim Eingeladenen prüfen.
+- **`ai-access.spec.ts`** — KI-Recht vergeben/entziehen, Schlüssel anlegen
+  (einmal sichtbar), Herabsetzen, Widerrufen.
+- **`attached-media.spec.ts`** — Bilder an Ereignissen, Quellen und Belegen
+  hochladen, verknüpfen, entfernen; Betrachter- und Telefonsicht.
+- **`changelog.spec.ts`** — Änderungsabschnitt der Personenseite und
+  Admin-Übersicht mit einem KI-Paket.
+- **`connect.spec.ts`** — „Importe verbinden“ als Admin bis zum Folge-
+  Abgleich; Bearbeiter sieht die Seite nicht.
+- **`dates.spec.ts`** — ungenaue Daten über das Formular eingeben, prüfen,
+  anzeigen, zurück ins Formular.
+- **`duplicate-banner.spec.ts`** — Dubletten-Hinweis mit eigenen Datensätzen,
+  Begrenzung, „kein Duplikat“.
+- **`gedcom-import.spec.ts`** — GEDCOM-Import und -Export über die Oberfläche
+  mit im Test erzeugten Dateien, Wiederholungsimport, Rechte, kein Abruf nach
+  außen ohne Foto-Haken.
+- **`genealogy.spec.ts`** — Ereignisse, weitere Namen, Orte, Ehestand auf der
+  Personenseite.
+- **`import-sources.spec.ts`** — Online-Stammbaum-Quellen mit Anbieter und
+  Beleg-Link.
+- **`import.spec.ts`** — Import geänderter Exporte (JSON, ZIP mit Bild) und
+  des alten Formats, beschränkt auf eigene Datensätze.
+- **`media.spec.ts`** — Bild hochladen, Porträt, ZIP-Export, Löschen und
+  Wiederherstellen per Import.
+- **`merge.spec.ts`** — Dubletten zusammenführen als Bearbeiter, „kein
+  Duplikat“, sichere Paare, Blockade, Betrachter ohne Zugriff.
+- **`person-lifecycle.spec.ts`** — Person anlegen, bearbeiten, Beziehungen,
+  Familien, löschen.
+- **`places.spec.ts`** — Orte zuordnen (nicht zuordenbar, zurücksetzen,
+  automatisch, aus Verzeichnis, von Hand, Protokoll), stellt den
+  Ausgangszustand wieder her.
+- **`reference.spec.ts`** — „Das bin ich“ setzen und aufheben, selbst und
+  durch den Admin.
+- **`sources.spec.ts`** — Quelle anlegen, zitieren, Beleg ändern/entfernen,
+  Scan-Auswahl, Quelle löschen.
+
+---
+
+## 10. Bekannte Flakes und Stolperfallen
+
+- **Hydration-Fehler auf `/people`** — selten; trifft `people-list.spec`
+  („Sortierung nach Geburt“). Wiederholungen waren danach grün.
+- **Dev-Server unter Last** — er wächst auf mehrere GB, verwirft übersetzte
+  Seiten, und die erste Übersetzung einer Route reißt Zeitgrenzen. Vor einem
+  Gesamtlauf neu starten, zwischen read und write neu starten, auf
+  schwachen Rechnern mit `--workers=1` in Teilen laufen lassen.
+- **Während eines Laufs nichts ändern** (keine Dateien, kein `tsc`) — sonst
+  übersetzt der Server neu, und es fallen v.a. `auth` und `permissions` aus.
+- **Mehr als 2 Worker für `write`** waren langsamer und liefen in
+  Zeitüberschreitungen; `serial`-Dateien überspringen nach einem Fehler den
+  Rest der Datei.
+- **Lesende Tests nach ändernden** brauchen ein neues Setup (Zählungen).
+  Beim Sharding nur einmal Setup, dann jeden Teil mit `--skip-setup`.
+- **Sperre nach Fehlversuchen** am MCP-Endpunkt: `mcp-http.spec` schickt
+  abgelehnte Anfragen mit zufälliger `X-Forwarded-For`-Adresse, damit
+  wiederholte Läufe gegen denselben Server nicht gesperrt werden.
+- **Worktrees mit eigener Mock-Datenbank** — `tests/mcp.db.test.ts` erwartet
+  in der Ausgabe den Namen `familytree_mock` und schlägt dort immer fehl.
+- **Windows** — `prisma generate` scheitert mit EPERM, solange ein
+  Dev-Server die Engine geladen hat. Nach `npm install` mit neueren
+  npm-Versionen einmal `npx prisma generate` ausführen.
+- **`npx prisma db push` ohne Mock-Skript** trifft die normale
+  Dev-Datenbank (`DATABASE_URL`), nicht die Mock-Datenbank.
+- **Abgebrochene Läufe** können „E2E …“-Datensätze zurücklassen; das nächste
+  Setup baut die Mock-Daten ohnehin neu auf.
