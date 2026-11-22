@@ -13,6 +13,13 @@ const nextConfig = {
     "/api/places/**": ["./geo/gazetteer.tsv.gz"],
     "/admin/places": ["./geo/gazetteer.tsv.gz"],
   },
+  // `import text from "…?raw"` liefert den Dateiinhalt als Text, eingebaut
+  // zur Build-Zeit — für CHANGELOG.md (lib/release-notes-data.ts). Kein
+  // Dateizugriff zur Laufzeit, nichts für das Standalone-Image nachzutragen.
+  webpack(config) {
+    config.module.rules.push({ resourceQuery: /raw/, type: "asset/source" });
+    return config;
+  },
 };
 
 export default nextConfig;

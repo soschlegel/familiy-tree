@@ -25,7 +25,7 @@ Netz nur `storage`, `media-processing`, `places/gazetteer-file`,
 | Import/Export | `exchange`, `export-selection`, `import-fingerprint`, `gedcom/*`, `gedcom-import/*` |
 | Medien | `storage`, `media-processing`, `media-scope`, `safe-fetch` |
 | Karte und Orte | `map/*`, `places/*` |
-| Sonstiges | `build-info`, `plural` |
+| Sonstiges | `build-info`, `plural`, `release-notes`, `release-notes-data` |
 
 ---
 
@@ -1464,3 +1464,57 @@ ersetzt Next.js sie nicht.
 **Benutzt von:** `app/layout.tsx`.
 
 **Tests:** `tests/build-info.test.ts`.
+
+### lib/release-notes.ts
+**Zweck:** Neuigkeiten — der Versions-Changelog für Anwender aus
+`CHANGELOG.md` (README „Neuigkeiten“). Nicht zu verwechseln mit der
+Änderungsgeschichte der Daten (`change-sets`, `/admin/changes`). Rein, ohne
+Datei- und Datenbankzugriff (auch im Browser, in `prisma/seed-mock.ts` und
+in den E2E-Tests benutzt).
+
+**Format der Datei:** je Release eine Überschrift `## JJJJ-MM-TT.N — Kurztitel`
+(Gedankenstrich, Halbgeviertstrich oder Bindestrich), darunter Stichpunkte
+`- …` bzw. `* …`; eingerückte Folgezeilen setzen den Stichpunkt fort.
+Alles vor der ersten Überschrift und HTML-Kommentare werden übergangen.
+Kennung = Tag des Ausrollens plus laufende Nummer am Tag, bewusst keine
+Commit-Kennung (die Git-Historie kann sich ändern).
+
+**Wichtige Funktionen/Typen:**
+- `Release` (`id`, `date`, `seq`, `title`, `items`).
+- `parseReleaseNotes(text)` → `{ releases, errors }`: Fehler mit Zeilennummer
+  (falsche Überschrift, Freitext statt Stichpunkt, Release ohne Stichpunkte,
+  doppelte Kennung, falsche Reihenfolge). Fehlerhafte Releases fallen weg,
+  der Rest wird absteigend sortiert — die App bricht an einer kaputten Datei
+  nie ab; der Test der echten Datei verlangt eine leere Fehlerliste.
+- `parseReleaseId`, `compareReleaseIds` (Datum, dann Nummer numerisch:
+  `.10` nach `.9`).
+- `releasesSince(releases, lastSeenId, limit = WHATS_NEW_LIMIT (3))` →
+  `{ show, more }`: leer/unlesbar → nur das neueste; sonst alle neueren als
+  die gesehene Kennung (auch wenn es diese nicht mehr gibt — eingeordnet nach
+  Datum), höchstens `limit`, Rest als Zahl `more`; nichts Neues → leer.
+- `formatReleaseDate` („22. November 2026“).
+
+**Benutzt von:** `app/layout.tsx`, `lib/release-notes-data.ts`,
+`lib/services/release-notes.ts` (Typ), `components/ReleaseNoteList.tsx`,
+`prisma/seed-mock.ts`, E2E-Tests.
+
+**Tests:** `tests/release-notes.test.ts` (Parser, Auswahl, echte Datei: fehlerfrei,
+keine Commit-Kennungen und Technikbegriffe).
+
+### lib/release-notes-data.ts
+**Zweck:** Der Inhalt von `CHANGELOG.md` für Seiten und Route-Handler.
+Die Datei wird per `import … from "../CHANGELOG.md?raw"` **zur Build-Zeit**
+als Text eingebaut (Webpack-Regel `resourceQuery: /raw/` → `asset/source`
+in `next.config.mjs`; Vitest/Vite kann `?raw` von sich aus; Typ in
+`types/raw.d.ts`). Das Standalone-Image braucht die Datei deshalb zur
+Laufzeit nicht; im Docker-Build muss sie im Kontext liegen
+(`!CHANGELOG.md` in `.dockerignore`).
+
+**Wichtige Funktionen:** `releaseNotes()` (einmal gelesen, zwischengespeichert;
+Fehler der Datei als Warnung ins Server-Log), `latestReleaseId()`.
+
+**Grenze:** Nicht aus `lib/services` importieren — die Dienste laufen auch in
+einfachen Node-Prozessen (MCP über stdio, Skripte), die `?raw` nicht kennen.
+
+**Benutzt von:** `app/layout.tsx`, `app/neuigkeiten/page.tsx`,
+`app/api/me/release-seen/route.ts`, `app/api/users/route.ts` (Einladung).

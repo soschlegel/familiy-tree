@@ -57,6 +57,7 @@ setup("Routen vorwärmen", async ({ browser }) => {
     "/admin/families",
     "/map",
     "/admin/places",
+    "/neuigkeiten",
     "/people/gibt-es-nicht",
   ];
   for (const url of pages) {
@@ -89,6 +90,8 @@ setup("Routen vorwärmen", async ({ browser }) => {
     "/api/families",
     "/api/families/x",
     "/api/families/x/members",
+    // Neuigkeiten: PUT-Route (GET → 405, kompiliert sie trotzdem).
+    "/api/me/release-seen",
   ];
   for (const url of api) {
     await context.request.get(url, { timeout: 180_000 });

@@ -84,6 +84,7 @@ Alle Seiten außer `/login` und der Weiterleitung `/` sind
 | `/admin/users` | Benutzerverwaltung | `user:manage` (Admin) |
 | `/admin/changes` | Änderungsübersicht | `audit:read` (Admin) |
 | `/admin/places` | Orte zuordnen | `place:manage` (Admin) |
+| `/neuigkeiten` | Neuigkeiten: alle Releases aus `CHANGELOG.md` | angemeldet |
 
 ## Übersicht: API-Routen
 
@@ -132,6 +133,7 @@ Dienst über den `Scope`.
 | `GET, POST /api/ai-tokens` | Eigene Schlüssel / neuer Schlüssel; Admin: alle | angemeldet (Dienst) |
 | `DELETE /api/ai-tokens/[id]` | Schlüssel widerrufen; mit `?endgueltig=1` endgültig löschen | eigener oder Admin |
 | `PUT /api/me/person` | „Das bin ich“ setzen | angemeldet, Person sichtbar |
+| `PUT /api/me/release-seen` | Neuigkeiten: Release als gesehen merken | angemeldet (nur sich selbst) |
 | `GET /api/changes` | Änderungspakete | `audit:read` |
 | `GET /api/changes/[key]` | Einträge eines Pakets | `audit:read` |
 | `GET /api/export` | Export JSON/ZIP/GEDCOM | angemeldet (nur Sichtbares) |
@@ -167,7 +169,14 @@ Dienst über den `Scope`.
 - Sprungmarke „Zum Inhalt springen“, Schriften (Fraunces, Source Sans 3
   über `next/font`), Farbe der Browserleiste je Farbschema, Fußzeile mit
   Build-Angabe (`buildInfo`/`buildLabel` aus `lib/build-info.ts`; ohne
-  Anmeldung nur das Datum).
+  Anmeldung nur das Datum) und — nur angemeldet — dem Link „Neuigkeiten“
+  (`/neuigkeiten`).
+- **Neuigkeiten:** Die Benutzerabfrage liest auch `lastSeenReleaseId`;
+  `releasesSince` (`lib/release-notes.ts`) wählt aus `releaseNotes()` die
+  Releases seit dem zuletzt gesehenen. Gibt es welche, rendert das Layout
+  `WhatsNewDialog` („Was ist neu?“) mit höchstens drei Releases, der Zahl der
+  übrigen und der neuesten Kennung. Ohne Anmeldung nie; auf `/login`
+  unterdrückt es die Komponente selbst.
 
 ### Fehler und „nicht gefunden“
 
@@ -435,6 +444,17 @@ Die Personenseite.
 - **Anzeige:** Filterformular, `ChangeSetList` (eine Zeile je Paket,
   aufklappbar über `GET /api/changes/[key]`), Seitennavigation.
 
+### `/neuigkeiten` — `app/neuigkeiten/page.tsx`
+
+- **Rechte:** angemeldet (`requirePage`), sonst `/login` — wie die genaue
+  Build-Angabe geht der Stand der App Fremde nichts an.
+- **Daten:** `releaseNotes()` (`lib/release-notes-data.ts`, zur Build-Zeit
+  eingebaute `CHANGELOG.md`). Keine Datenbank; die Lesemarke ändert die
+  Seite nicht.
+- **Anzeige:** Überschrift „Neuigkeiten“, alle Releases über
+  `ReleaseNoteList`, neueste zuerst. Nicht zu verwechseln mit
+  `/admin/changes` (Änderungen an den Daten).
+
 ### `/admin/places` — `app/admin/places/page.tsx`
 
 - **Rechte:** `place:manage`, sonst `/tree?denied=1`.
@@ -602,7 +622,9 @@ Fehlercodes aus den Grundregeln.
   aktiver Schlüssel.
 - **`POST /api/users`** (`user:manage`; Felder nach `userInput`):
   Einladung — legt den Benutzer mit Status „eingeladen“ an; vorhandene
-  E-Mail → 409. 201.
+  E-Mail → 409. 201. Die Lesemarke der Neuigkeiten steht gleich auf dem
+  neuesten Release: „Was ist neu?“ beginnt für neue Benutzer erst mit dem
+  nächsten.
 - **`PATCH /api/users/[id]`** (`user:manage`; Felder nach `userPatch`,
   u.a. Rolle, Status, E-Mail, eigene Person): Schutzregeln mit 409 — E-Mail
   nur änderbar, solange sich der Benutzer nie angemeldet hat, und nicht auf
@@ -616,6 +638,10 @@ Fehlercodes aus den Grundregeln.
   wirksame Stufe folgt sofort dem neuen Recht.
 - **`PUT /api/me/person`** (`personId` oder `null`): „Das bin ich“ über
   `setSelfPerson`; nur sichtbare Personen, sonst 404.
+- **`PUT /api/me/release-seen`** (`releaseId`, sonst nichts — weitere Felder
+  → 400): `markReleaseSeen` für den angemeldeten Benutzer; nur Kennungen aus
+  `CHANGELOG.md`, sonst 400; ohne Anmeldung 401. Antwort
+  `{ lastSeenReleaseId }`. Kein Audit-Eintrag.
 
 ### KI-Schlüssel
 

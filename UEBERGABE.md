@@ -236,6 +236,28 @@ Freigabe (21.11.): „bauen und Gas geben“ — die Wünsche werden umgesetzt.
   verbinden (Anker, Ausbreitung, Cluster) und Sammel-Zusammenführen.
   Laufzeit im Rauschen: 11 847 erzeugte Personen Liste ~1,4 s, Hinweis
   Median ~74 ms je Person (vorher ~73 ms); Mock ~19 ms bzw. ~6 ms.
+- **Neuigkeiten / „Was ist neu?“** („Mit jeder neuen Version bitte das
+  Changelog mit erstellen und anzeigen beim erstmaligen Laden durch den
+  Anwender“) — erledigt auf Branch `neuigkeiten` (NICHT gemergt, nicht
+  ausgerollt). Quelle `CHANGELOG.md` (Format und Kennung `JJJJ-MM-TT.N`:
+  AGENTS.md Abschnitt 3, README „Neuigkeiten“), rückwirkend ab 20.11.
+  befüllt; das kommende Release steht als `2026-11-22.3` drin — beim
+  Ausrollen an einem anderen Tag die Kennung anpassen. Zur Build-Zeit
+  eingebaut (Webpack `?raw`, `.dockerignore` lässt die Datei durch).
+  Migration `20261124000000_neuigkeiten` (`User.lastSeenReleaseId`, nur
+  `ADD COLUMN`). Fenster einmal nach einer neuen Version (höchstens drei
+  Releases, Rest per Link), Seite `/neuigkeiten`, Link in der Fußzeile.
+  Bestehende Benutzer sehen beim ersten Ausrollen nur das neueste Release;
+  neu eingeladene starten beim neuesten (Verfeinerung gegenüber dem
+  Entwurf, damit Neue nicht mit „Neuigkeiten“ begrüßt werden). Mock-Seed
+  setzt das neueste als gesehen.
+  Prüfstand (22.11., Worktree `familiy-tree-neuigkeiten`): Typecheck, Lint,
+  Vitest 848/848; schema-diff-check Exit 0, `prisma migrate diff` ohne
+  Abweichung; `npm run build` ok (Text im Server-Bundle); Playwright auf
+  frischem Server, zwischen read und write neu gestartet: setup 6/6, read
+  186/186, write 100/100. Ein erster write-Lauf unter starker Last durch
+  parallele Agenten hatte 4 Zeitüberschreitungen (darunter der erste Aufruf
+  von `/neuigkeiten`, inzwischen im Vorwärmen); Wiederholung grün.
 
 ### 4. Weitere offene Punkte
 

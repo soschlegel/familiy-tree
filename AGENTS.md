@@ -63,6 +63,20 @@ Abhängigkeiten, wo sie benutzt wird, zugehörige Tests. Einstieg und Übersicht
   rein ergänzend (`docker/schema-diff-check.mjs`), Playwright read und write
   auf frisch gestartetem Server (dazwischen neu starten).
 - Veröffentlichte Migrationen nie nachträglich ändern.
+- **Neuigkeiten:** Jedes Release nach `main` bekommt einen neuen Eintrag
+  ganz oben in [CHANGELOG.md](CHANGELOG.md) — im selben Stand wie die
+  Änderung (mit ihr zusammengeführt). **Ohne Eintrag kein Ausrollen.** Die
+  App zeigt ihn den Benutzern einmal als „Was ist neu?“ und auf der Seite
+  „Neuigkeiten“ (README, „Neuigkeiten“).
+  - Überschrift `## JJJJ-MM-TT.N — Kurztitel`: `JJJJ-MM-TT` ist der Tag des
+    Ausrollens, `N` die laufende Nummer an diesem Tag (erstes Release des
+    Tages `.1`, zweites `.2` …). Keine Commit-Kennung — die Git-Historie
+    kann sich ändern. Eine veröffentlichte Kennung nie umbenennen (Benutzer
+    haben sie als „gesehen“ gespeichert).
+  - Darunter Stichpunkte `- …` in Anwendersprache: was kann ich jetzt, was
+    hat sich geändert. Keine Technikbegriffe, keine echten Namen, Orte oder
+    Daten; reine Technik ohne sichtbare Folge weglassen.
+  - `npm test` prüft das Format (`tests/release-notes.test.ts`).
 
 ## 4. Zusammenarbeit mit dem Eigentümer
 

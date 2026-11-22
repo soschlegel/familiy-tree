@@ -64,7 +64,8 @@ Claude Desktop/Browser und das Telefon. Ausführlich:
   [Austauschformat](#austauschformat) ·
   [GEDCOM](#gedcom-import-und-export) ·
   [Dubletten zusammenführen](#dubletten-zusammenführen) ·
-  [Änderungsgeschichte](#änderungsgeschichte)
+  [Änderungsgeschichte](#änderungsgeschichte) ·
+  [Neuigkeiten](#neuigkeiten)
 - Technik und Betrieb: [Dienstschicht](#dienstschicht) ·
   [KI-Zugang (MCP)](#ki-zugang-mcp) ·
   [Betrieb auf der NAS](#betrieb-auf-der-nas-portainer) ·
@@ -141,6 +142,9 @@ Claude Desktop/Browser und das Telefon. Ausführlich:
   nachher je Feld, Benutzer, Kanal App oder KI samt Schlüssel), gebündelt zu
   Paketen; Verlauf je Person für ihre Bearbeiter, Übersicht je Familie und
   Zeitraum für Administratoren ([Änderungsgeschichte](#änderungsgeschichte))
+- **Neuigkeiten** — was eine neue Version bringt, in Anwendersprache: einmal
+  als Fenster „Was ist neu?“ nach dem Ausrollen, jederzeit auf der Seite
+  „Neuigkeiten“ (Link in der Fußzeile) ([Neuigkeiten](#neuigkeiten))
 
 ## Technik
 
@@ -214,8 +218,8 @@ chromium`.
 |---|---|---|
 | `npm run test:e2e` | alles: setup → read → write | ca. 9–10 min |
 | `npm run test:e2e:setup` | nur Ausgangszustand: Mock-Daten neu, Anmeldungen, Vorwärmen | ca. 1–2 min (Kaltstart des Dev-Servers: länger) |
-| `npm run test:e2e:read` | setup + lesende Tests (`e2e/read/`, 182 Tests, 4 parallel) | ca. 3:10–3:20 min ohne Setup |
-| `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 97 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 4–5 min ohne Setup |
+| `npm run test:e2e:read` | setup + lesende Tests (`e2e/read/`, 186 Tests, 4 parallel) | ca. 3:10–3:20 min ohne Setup |
+| `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 100 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 4–5 min ohne Setup |
 | `npm run test:e2e:headed` | alles mit sichtbarem Browser, ein Test nach dem anderen | |
 | `npm run test:e2e:ui` | Playwright-Oberfläche: Tests einzeln starten, Schritte ansehen | |
 | `npm run test:e2e:report` | HTML-Bericht des letzten Laufs öffnen | |
@@ -2234,6 +2238,43 @@ Person rund 2 ms (GIN-Index auf `personIds`, ältere Einträge über
 `entityType`/`entityId`), Übersicht einer Familie für einen Tag rund 70 ms;
 die Übersicht über alle Einträge ohne Zeitraum braucht bei dieser Menge
 mehrere Sekunden — deshalb der Standardzeitraum.
+
+## Neuigkeiten
+
+Der Versions-Changelog für Anwender — nicht zu verwechseln mit der
+[Änderungsgeschichte](#änderungsgeschichte) der Daten. Einzige Quelle ist
+[CHANGELOG.md](CHANGELOG.md) im Wurzelverzeichnis:
+
+```markdown
+## 2026-11-22.2 — Kurztitel
+
+- Was kann ich jetzt, was hat sich geändert — in Anwendersprache,
+  Folgezeilen eingerückt.
+```
+
+- **Kennung** `JJJJ-MM-TT.N`: Tag des Ausrollens und laufende Nummer an
+  diesem Tag — keine Commit-Kennung. Neueste zuerst. Jedes Release nach
+  `main` bekommt einen Eintrag (AGENTS.md, Abschnitt 3).
+- **Eingebaut zur Build-Zeit** (`lib/release-notes-data.ts`, Webpack-Regel
+  `?raw` in `next.config.mjs`): das Image braucht die Datei zur Laufzeit
+  nicht. Den Aufbau prüft `tests/release-notes.test.ts` (fehlerfrei, keine
+  Commit-Kennungen, keine Technikbegriffe).
+- **Fenster „Was ist neu?“**: Angemeldete sehen nach einer neuen Version auf
+  der ersten aufgerufenen Seite einmal die Releases seit dem zuletzt
+  gesehenen (höchstens drei, für den Rest ein Hinweis auf die Seite). Jedes
+  Schließen — „Gelesen“, Escape, Hintergrund, „Alle Neuigkeiten“ — merkt
+  das neueste Release am Benutzer (`User.lastSeenReleaseId`, Migration
+  `20261124000000_neuigkeiten`; `PUT /api/me/release-seen`, nur für sich
+  selbst). Wer noch nichts gesehen hat (bestehende Benutzer beim ersten
+  Ausrollen), sieht nur das neueste Release; neu eingeladene Benutzer
+  starten beim neuesten, das Fenster kommt für sie erst mit dem nächsten.
+  Nie auf der Anmeldeseite, nie ohne Anmeldung.
+- **Seite `/neuigkeiten`**: alle Releases; nur für Angemeldete, Link in der
+  Fußzeile neben der Build-Angabe.
+- **Tests**: Die Mock-Benutzer haben nach dem Seed das neueste Release schon
+  gesehen, kein Test begegnet also einem unerwarteten Fenster.
+  `e2e/write/whats-new.spec.ts` prüft das Fenster mit einem eigenen,
+  eingeladenen Benutzer.
 
 ## Datenmodell
 
