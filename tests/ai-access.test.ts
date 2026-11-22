@@ -1,11 +1,13 @@
 /**
  * KI-Zugang ohne Datenbank: Schlüsselformat und Hash (lib/ai-tokens.ts),
- * Stufenregel und Eingabeschemas, feste Mock-Schlüssel.
+ * Stufenregel und Eingabeschemas, feste Mock-Schlüssel, Lösch- und
+ * Verlaufsregel der Oberfläche (gleich der des Dienstes).
  */
 import { describe, expect, it } from "vitest";
 
 import { generateToken, hashToken, tokenMatches, tokenPrefixOf } from "@/lib/ai-tokens";
-import { aiLevelSatisfies, effectiveAiLevel } from "@/lib/services/ai-access";
+import { aiLevelSatisfies, apiTokenDeletable, effectiveAiLevel } from "@/lib/services/ai-access";
+import { canDeleteToken, deleteTokenQuestion, isHistoryToken, type TokenRow } from "@/components/ai-access-labels";
 import { aiAccessInput, apiTokenCreateInput, API_TOKEN_MAX_DAYS } from "@/lib/validation";
 import { MOCK_API_TOKEN_KEYS } from "@/prisma/mock-data";
 import { mockData } from "./helpers";
@@ -97,5 +99,53 @@ describe("feste Mock-Schlüssel", () => {
       "nofamily@example.test": "NONE",
       "blocked@example.test": "READ",
     });
+  });
+});
+
+describe("Löschen und Verlauf in der Oberfläche", () => {
+  const now = new Date("2026-06-01T00:00:00Z");
+  const used = "2026-05-01T00:00:00.000Z";
+  const later = "2026-07-01T00:00:00.000Z";
+  const row = (status: TokenRow["status"], lastUsedAt: string | null): TokenRow => ({
+    id: "t",
+    name: "Laptop",
+    prefix: "ftk_000000000001",
+    level: "READ",
+    status,
+    createdAt: used,
+    lastUsedAt,
+    expiresAt: status === "EXPIRED" ? used : later,
+    revokedAt: status === "REVOKED" ? used : null,
+  });
+
+  it("canDeleteToken entspricht apiTokenDeletable", () => {
+    for (const status of ["ACTIVE", "REVOKED", "EXPIRED"] as const) {
+      for (const last of [null, used]) {
+        const t = row(status, last);
+        const server = apiTokenDeletable(
+          {
+            revokedAt: t.revokedAt ? new Date(t.revokedAt) : null,
+            expiresAt: t.expiresAt ? new Date(t.expiresAt) : null,
+            lastUsedAt: t.lastUsedAt ? new Date(t.lastUsedAt) : null,
+          },
+          now,
+        );
+        expect(canDeleteToken(t), `${status}/${last}`).toBe(server);
+      }
+    }
+    expect(canDeleteToken(row("ACTIVE", used))).toBe(false);
+  });
+
+  it("Verlauf = widerrufen oder abgelaufen", () => {
+    expect(isHistoryToken(row("ACTIVE", null))).toBe(false);
+    expect(isHistoryToken(row("REVOKED", used))).toBe(true);
+    expect(isHistoryToken(row("EXPIRED", null))).toBe(true);
+  });
+
+  it("Rückfrage nennt Folgen und Besitzer", () => {
+    expect(deleteTokenQuestion(row("ACTIVE", null))).toContain("noch nie benutzt und funktioniert danach sofort nicht mehr");
+    const q = deleteTokenQuestion(row("REVOKED", used), "editor@example.test");
+    expect(q).toMatch(/^Schlüssel „Laptop“ \(ftk_000000000001…\) von editor@example\.test endgültig löschen\?/);
+    expect(q).toContain("nicht rückgängig");
   });
 });

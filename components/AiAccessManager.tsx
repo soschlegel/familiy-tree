@@ -4,10 +4,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { apiFetch, jsonBody } from "./api-client";
-import { ApiTokenList } from "./ApiTokenList";
+import { ApiTokenList, useHistoryToggle } from "./ApiTokenList";
 import {
   AI_ACCESS_LABEL,
   countKeys,
+  deleteTokenQuestion,
   TOKEN_LEVEL_LABEL,
   type AiAccessLevel,
   type ApiTokenLevelName,
@@ -42,8 +43,18 @@ function useOrigin(): string {
   );
 }
 
-export function AiAccessManager({ info, tokens }: { info: Info; tokens: TokenRow[] }) {
+export function AiAccessManager({
+  info,
+  tokens,
+  initialShowHistory = false,
+}: {
+  info: Info;
+  tokens: TokenRow[];
+  /** Verlauf (widerrufen/abgelaufen) eingeblendet — aus `?verlauf=1`. */
+  initialShowHistory?: boolean;
+}) {
   const router = useRouter();
+  const [showHistory, setShowHistory] = useHistoryToggle(initialShowHistory);
   const origin = useOrigin();
   const endpoint = `${origin}/api/mcp`;
 
@@ -118,7 +129,27 @@ export function AiAccessManager({ info, tokens }: { info: Info; tokens: TokenRow
       return;
     }
     if (created?.token.id === t.id) setCreated(null);
-    setNotice(`Schlüssel „${t.name}“ widerrufen.`);
+    setNotice(
+      `Schlüssel „${t.name}“ widerrufen.${showHistory ? "" : " Er steht jetzt im ausgeblendeten Verlauf."}`,
+    );
+    router.refresh();
+  }
+
+  async function remove(t: TokenRow) {
+    if (busy) return;
+    if (!confirm(deleteTokenQuestion(t))) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    const res = await apiFetch(`/api/ai-tokens/${t.id}?endgueltig=1`, { method: "DELETE" });
+    setBusy(false);
+    if (!res.ok) {
+      setError(res.message);
+      router.refresh();
+      return;
+    }
+    if (created?.token.id === t.id) setCreated(null);
+    setNotice(`Schlüssel „${t.name}“ gelöscht.`);
     router.refresh();
   }
 
@@ -329,14 +360,20 @@ export function AiAccessManager({ info, tokens }: { info: Info; tokens: TokenRow
               userAccess={info.aiAccess}
               busy={busy}
               onRevoke={(t) => void revoke(t)}
+              onDelete={(t) => void remove(t)}
               label="Deine Schlüssel"
+              showHistory={showHistory}
+              onShowHistoryChange={setShowHistory}
               own
             />
           </div>
         )}
         <p className="text-xs muted">
-          Widerrufene und abgelaufene Schlüssel bleiben zur Nachvollziehbarkeit in der Liste. Die
-          wirksame Stufe eines Schlüssels ist nie höher als dein aktueller KI-Zugang.
+          Widerrufene und abgelaufene Schlüssel sind ausgeblendet und lassen sich als Verlauf
+          einblenden. Löschen kannst du sie dort — und Schlüssel, die noch nie benutzt wurden; ein
+          schon benutzter aktiver Schlüssel muss zuerst widerrufen werden. Die Änderungsgeschichte
+          bleibt beim Löschen erhalten. Die wirksame Stufe eines Schlüssels ist nie höher als dein
+          aktueller KI-Zugang.
         </p>
       </section>
     </div>

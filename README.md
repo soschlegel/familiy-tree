@@ -166,7 +166,7 @@ chromium`.
 | `npm run test:e2e` | alles: setup → read → write | ca. 9–10 min |
 | `npm run test:e2e:setup` | nur Ausgangszustand: Mock-Daten neu, Anmeldungen, Vorwärmen | ca. 1–2 min (Kaltstart des Dev-Servers: länger) |
 | `npm run test:e2e:read` | setup + lesende Tests (`e2e/read/`, 180 Tests, 4 parallel) | ca. 3:10–3:20 min ohne Setup |
-| `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 93 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 4–5 min ohne Setup |
+| `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 95 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 4–5 min ohne Setup |
 | `npm run test:e2e:headed` | alles mit sichtbarem Browser, ein Test nach dem anderen | |
 | `npm run test:e2e:ui` | Playwright-Oberfläche: Tests einzeln starten, Schritte ansehen | |
 | `npm run test:e2e:report` | HTML-Bericht des letzten Laufs öffnen | |
@@ -908,7 +908,8 @@ und Taufe, Beruf, Wohnort usw. als Ereignis (`add_event`) statt im Notizfeld.
   Widerrufen eines Schlüssels oder Sperren des Benutzers greifen beim
   nächsten Aufruf — ohne Neustart von App oder Assistent.
 - **Schlüssel verwaltet nur die Weboberfläche**, nie die KI selbst: Anlegen,
-  Widerrufen und Rechte vergeben gehen über die MCP-Schnittstelle nicht.
+  Widerrufen, Löschen und Rechte vergeben gehen über die MCP-Schnittstelle
+  nicht.
 - **Alles wird protokolliert.** Jede Änderung durch die KI steht im
   Audit-Log unter dem Benutzer, mit Kanal `MCP` und dem verwendeten
   Schlüssel, gebündelt zu Paketen; KI-Notizen tragen zusätzlich
@@ -1008,6 +1009,25 @@ lebenden Personen bedenken.
 - **Ablauf:** Schlüssel laufen nach der gewählten Zeit ab (Standard 90 Tage)
   und antworten dann mit 401; dann einen neuen anlegen und im Client
   austauschen (`claude mcp remove …` und neu `add`).
+- **Verlauf und Löschen.** Die Liste auf `/ai-access` (und die
+  Schlüsselliste eines Benutzers unter *Benutzer*) zeigt standardmäßig nur
+  aktive Schlüssel; widerrufene und abgelaufene sind ausgeblendet, ein Zähler
+  „N ausgeblendet“ nennt sie. Der Schalter „Widerrufene und abgelaufene
+  anzeigen (Verlauf)“ blendet sie zur Ansicht ein (Name, Anfang, Stufe,
+  angelegt, zuletzt benutzt, widerrufen bzw. abgelaufen am); er steht in der
+  Adresse (`?verlauf=1`) und übersteht so das Neuladen. **Endgültig löschen**
+  (mit Rückfrage) lassen sich widerrufene und abgelaufene Schlüssel sowie
+  Schlüssel, die noch nie benutzt wurden — bei einem aktiven, unbenutzten ist
+  Löschen zugleich Widerruf. Ein aktiver, schon benutzter Schlüssel muss
+  zuerst widerrufen werden (die Schnittstelle antwortet sonst mit 409).
+  Rechte wie beim Widerrufen: eigene Schlüssel jeder selbst, fremde nur
+  Administratoren. Das Löschen steht im Audit-Log (`DELETE`, Name, Anfang,
+  Stufe, Daten; bei fremden Schlüsseln der Besitzer) in einem eigenen Paket
+  „KI-Schlüssel „…“ gelöscht“. Die Änderungsgeschichte bleibt lesbar:
+  Einträge über einen gelöschten Schlüssel zeigen „Schlüssel „…“ (gelöscht)“
+  — der Name kommt aus dessen Protokolleintrag —, ohne bekannten Namen
+  „Schlüssel (gelöscht)“. Schnittstelle: `DELETE /api/ai-tokens/<id>`
+  widerruft, `DELETE /api/ai-tokens/<id>?endgueltig=1` löscht.
 - **Schlüssel verraten?** (z.B. in einen Chat, eine Datei im Repository oder
   einen Screenshot geraten): sofort auf `/ai-access` widerrufen — wirkt beim
   nächsten Aufruf. Der Administrator kann unter *Benutzer* über „Schlüssel:
@@ -1106,6 +1126,8 @@ Tests: `tests/mcp-http.db.test.ts` prüft den Endpunkt mit dem HTTP-Client des
 SDK (Schlüssel-Matrix, Werkzeuge je Stufe, Maskierung, Schreiben mit Audit,
 Sperre nach Fehlversuchen, Größenlimit, keine Geheimnisse im Log),
 `tests/ai-access.db.test.ts` die Rechte- und Schlüssellogik,
+`tests/ai-token-delete.db.test.ts` das endgültige Löschen (Regeln, Rechte,
+Protokoll, Änderungsgeschichte danach),
 `tests/media-links.db.test.ts` die Bild-Werkzeuge (`add_media` per base64 und per Adresse mit ersetztem Netz, `link_media`, Rechte, Export), `tests/mcp.db.test.ts` den stdio-Server (alle Werkzeuge, Maskierung,
 Schreiben samt ungenauer Daten, Quellen, Belegen und Audit-Log, Start wie mit
 `npm run -s mcp:stdio`). Alle überspringen sich ohne Mock-Datenbank; die
@@ -2147,7 +2169,9 @@ Duplikat“). API: `POST /api/persons/merge/preview`, `POST /api/persons/merge`,
 
 Jede Änderung — in der Oberfläche, beim Import, beim Zusammenführen und über
 den KI-Zugang — steht im `AuditLog`: wer, wann, was, über welchen Kanal
-(App oder KI über MCP mit dem Namen des Schlüssels). Seit der Migration
+(App oder KI über MCP mit dem Namen des Schlüssels; ein inzwischen
+gelöschter Schlüssel erscheint als „Schlüssel „…“ (gelöscht)“, siehe
+[KI-Zugang](#schlüssel-richtig-verwenden)). Seit der Migration
 `20261122000000_changelog` speichert ein Eintrag bei Änderungen je Feld den
 Wert **vorher und nachher** (`diff.changes`; ungenaue Daten in Anzeigeform,
 „um 1850“ → „12.03.1850“), dazu eine **Momentaufnahme der betroffenen

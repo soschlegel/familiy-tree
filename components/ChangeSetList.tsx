@@ -44,7 +44,7 @@ function ChangeSetRow({ set, filterQuery }: { set: ChangeSetRowData; filterQuery
             <time dateTime={set.last}>{set.lastText}</time>
             <span aria-hidden>·</span>
             <span>{set.user ?? "unbekannter Benutzer"}</span>
-            <ChannelBadge channel={set.channel} tokenName={set.tokenName} />
+            <ChannelBadge channel={set.channel} tokenName={set.tokenName} tokenDeleted={set.tokenDeleted} />
           </p>
           <p className="mt-1 break-words text-sm" data-testid="change-set-summary">
             {set.summary || `${set.entries} ${set.entries === 1 ? "Änderung" : "Änderungen"}`}

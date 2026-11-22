@@ -64,6 +64,33 @@ export function formatDateTime(iso: string | null): string {
   return iso ? new Date(iso).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" }) : "nie";
 }
 
+/** Adressparameter für den eingeblendeten Verlauf (`?verlauf=1`). */
+export const HISTORY_PARAM = "verlauf";
+
+/** Verlauf = widerrufen oder abgelaufen; standardmäßig ausgeblendet. */
+export function isHistoryToken(t: Pick<TokenRow, "status">): boolean {
+  return t.status !== "ACTIVE";
+}
+
+/**
+ * Darf endgültig gelöscht werden? Widerrufen, abgelaufen oder noch nie
+ * benutzt — dieselbe Regel wie apiTokenDeletable in
+ * lib/services/ai-access.ts (dort verbindlich geprüft).
+ */
+export function canDeleteToken(t: Pick<TokenRow, "status" | "lastUsedAt">): boolean {
+  return t.status !== "ACTIVE" || t.lastUsedAt === null;
+}
+
+/** Rückfrage vor dem endgültigen Löschen; `owner` bei fremden Schlüsseln (Admin). */
+export function deleteTokenQuestion(t: Pick<TokenRow, "name" | "prefix" | "status">, owner?: string): string {
+  const what = `Schlüssel „${t.name}“ (${t.prefix}…)${owner ? ` von ${owner}` : ""} endgültig löschen?`;
+  const effect =
+    t.status === "ACTIVE"
+      ? "Er wurde noch nie benutzt und funktioniert danach sofort nicht mehr."
+      : "Er verschwindet damit auch aus dem Verlauf.";
+  return `${what}\n\n${effect} Die Änderungsgeschichte bleibt erhalten und nennt ihn dann „gelöscht“. Das lässt sich nicht rückgängig machen.`;
+}
+
 export function countKeys(n: number, adjective = "aktive"): string {
   return n === 1 ? `1 ${adjective.replace(/e$/, "er")} Schlüssel` : `${n} ${adjective} Schlüssel`;
 }

@@ -5,12 +5,13 @@ import { useRouter } from "next/navigation";
 import { Fragment, useState } from "react";
 
 import { apiFetch, jsonBody } from "./api-client";
-import { ApiTokenList } from "./ApiTokenList";
+import { ApiTokenList, useHistoryToggle } from "./ApiTokenList";
 import { PersonPicker, type PickerPerson } from "./PersonPicker";
 import {
   AI_ACCESS_LABEL,
   aiRank,
   countKeys,
+  deleteTokenQuestion,
   type AiAccessLevel,
   type TokenRow,
 } from "./ai-access-labels";
@@ -80,11 +81,14 @@ export function UserAdmin({
   users,
   currentUserId,
   people = [],
+  initialShowHistory = false,
 }: {
   users: Row[];
   currentUserId: string;
   /** Auswahl für „Person zuordnen“. */
   people?: PickerPerson[];
+  /** Verlauf der KI-Schlüssel (widerrufen/abgelaufen) eingeblendet — aus `?verlauf=1`. */
+  initialShowHistory?: boolean;
 }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -156,6 +160,8 @@ export function UserAdmin({
   // --- KI-Zugang -----------------------------------------------------------
   const [openKeys, setOpenKeys] = useState<string | null>(null);
   const [keys, setKeys] = useState<Record<string, TokenRow[] | "loading" | "error">>({});
+  // Ein Schalter für alle aufgeklappten Schlüssellisten, gemerkt in der Adresse.
+  const [showHistory, setShowHistory] = useHistoryToggle(initialShowHistory);
 
   async function loadKeys(userId: string) {
     setKeys((k) => ({ ...k, [userId]: "loading" }));
@@ -207,6 +213,13 @@ export function UserAdmin({
       `Schlüssel „${t.name}“ von ${u.email} widerrufen.`,
     );
     if (ok) void loadKeys(u.id);
+  }
+
+  async function deleteKey(u: Row, t: TokenRow) {
+    if (!confirm(deleteTokenQuestion(t, u.email))) return;
+    await call(`/api/ai-tokens/${t.id}?endgueltig=1`, { method: "DELETE" }, `Schlüssel „${t.name}“ von ${u.email} gelöscht.`);
+    // Auch nach einer Ablehnung (z.B. inzwischen benutzt) den aktuellen Stand zeigen.
+    void loadKeys(u.id);
   }
 
   return (
@@ -528,7 +541,10 @@ export function UserAdmin({
                             userAccess={u.aiAccess}
                             busy={busy}
                             onRevoke={(t) => void revokeKey(u, t)}
+                            onDelete={(t) => void deleteKey(u, t)}
                             label={`KI-Schlüssel von ${u.email}`}
+                            showHistory={showHistory}
+                            onShowHistoryChange={setShowHistory}
                           />
                         </div>
                       )}

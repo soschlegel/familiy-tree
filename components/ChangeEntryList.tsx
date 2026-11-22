@@ -3,12 +3,26 @@
 import type { ChangeEntryDto } from "@/lib/services/changes";
 import { formatChangeTime } from "@/lib/change-time";
 
-/** Kanal einer Änderung: App oder KI über MCP (mit Schlüsselname). */
-export function ChannelBadge({ channel, tokenName }: { channel: "APP" | "MCP"; tokenName: string | null }) {
+/**
+ * Kanal einer Änderung: App oder KI über MCP (mit Schlüsselname). Ein
+ * inzwischen gelöschter Schlüssel erscheint als „Schlüssel „…“ (gelöscht)“
+ * bzw. ohne bekannten Namen als „Schlüssel (gelöscht)“.
+ */
+export function ChannelBadge({
+  channel,
+  tokenName,
+  tokenDeleted = false,
+}: {
+  channel: "APP" | "MCP";
+  tokenName: string | null;
+  tokenDeleted?: boolean;
+}) {
   if (channel === "MCP") {
+    const key = tokenName ? ` · Schlüssel „${tokenName}“` : tokenDeleted ? " · Schlüssel" : "";
     return (
       <span className="badge-accent max-w-full whitespace-normal break-words" title="Änderung über den KI-Zugang (MCP)">
-        KI über MCP{tokenName ? ` · Schlüssel „${tokenName}“` : ""}
+        KI über MCP{key}
+        {tokenDeleted ? " (gelöscht)" : ""}
       </span>
     );
   }
@@ -44,7 +58,7 @@ export function ChangeEntryList({
             <time dateTime={e.at}>{formatChangeTime(e.at)}</time>
             <span aria-hidden>·</span>
             <span>{e.user ?? "unbekannter Benutzer"}</span>
-            <ChannelBadge channel={e.channel} tokenName={e.tokenName} />
+            <ChannelBadge channel={e.channel} tokenName={e.tokenName} tokenDeleted={e.tokenDeleted} />
             {showChangeSet && e.changeSet && (
               <span className="min-w-0 break-words">
                 <span className="sr-only">Paket: </span>
