@@ -772,8 +772,14 @@ zum nächsten Setup).
   beim Streaming in Next.js/React, kein Datenfehler. React baut die Seite
   danach selbst neu auf. Gegen den Dev-Server selten, gegen den
   Produktions-Build in wenigen Prozent der Seitenaufrufe (mehr Worker, mehr
-  Meldungen). Die Wache in `fixtures.ts` meldet ihn dort deshalb nur
-  (Konsole `[bekannt] …`, Anmerkung „bekannter Fehler“ im HTML-Bericht);
+  Meldungen). Auf Seiten mit Streaming (`loading.tsx`, z.B. `/research`)
+  folgen ihm Seitenfehler „Cannot read properties of null (reading
+  'parentNode')“ — die nachgeschobenen Inline-Skripte finden ihre
+  Platzhalter im neu aufgebauten Baum nicht mehr. Die Wache in
+  `fixtures.ts` meldet beides gegen den Build deshalb nur (Konsole
+  `[bekannt] …`, Anmerkung „bekannter Fehler“ im HTML-Bericht; den
+  Folgefehler nur nach einem #418 auf derselben Seite bis zu deren
+  `load`);
   gegen den Dev-Server und mit `E2E_STRICT_HYDRATION=1` bleibt er ein
   Testfehler.
 - **Nur mit `--dev`: Dev-Server unter Last** — er wächst auf mehrere GB,

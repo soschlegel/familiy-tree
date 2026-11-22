@@ -39,6 +39,13 @@ const GLOBAL_ALLOW: RegExp[] = [
  * bleibt er ein Fehler.
  */
 const KNOWN_HYDRATION = /^Minified React error #418;/;
+/**
+ * Folgefehler davon auf Seiten mit Streaming (loading.tsx, z.B. /research):
+ * Nachdem React den Baum neu aufgebaut hat, finden die nachgeschobenen
+ * Inline-Skripte ihre Platzhalter nicht mehr. Nur zusammen mit einem
+ * vorherigen #418 auf derselben Seite toleriert.
+ */
+const HYDRATION_FOLLOW_UP = /^Cannot read properties of null \(reading 'parentNode'\)$/;
 const TOLERATE_HYDRATION =
   process.env.E2E_SERVER !== "dev" && process.env.E2E_STRICT_HYDRATION !== "1";
 
@@ -65,9 +72,21 @@ export function watchPage(page: Page, guard: Guard, extraAllow: RegExp[]) {
       return page.url();
     }
   };
+  // Gilt nur bis zum Ende des Ladens des betroffenen Dokuments: die
+  // nachgeschobenen Inline-Skripte laufen alle vor „load“.
+  let hydrationFailed = false;
+  page.on("load", () => {
+    hydrationFailed = false;
+  });
   page.on("pageerror", (err) => {
     if (TOLERATE_HYDRATION && KNOWN_HYDRATION.test(err.message)) {
+      hydrationFailed = true;
       guard.known.push(`Hydration-Fehler (React #418) @ ${label()}`);
+      return;
+    }
+    if (hydrationFailed && HYDRATION_FOLLOW_UP.test(err.message)) {
+      const note = `Folgefehler nach Hydration-Fehler @ ${label()}`;
+      if (!guard.known.includes(note)) guard.known.push(note);
       return;
     }
     guard.problems.push(`[pageerror @ ${label()}] ${err.message}`);

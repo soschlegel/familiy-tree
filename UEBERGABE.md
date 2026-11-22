@@ -290,7 +290,10 @@ Freigabe (21.11.): „bauen und Gas geben“ — die Wünsche werden umgesetzt.
   Element (`PeoplePage` → `div.space-y-5`, `PersonPage` → `div.space-y-8`),
   steht aber schon eine Ebene tiefer — Wettlauf beim Streaming in
   Next.js 15.5/React 19, kein Datenfehler; React baut die Seite selbst neu
-  auf. Die E2E-Wache meldet ihn gegen den Build nur (`[bekannt] …`);
+  auf (auf Seiten mit `loading.tsx` wie `/research` mit Folgefehlern
+  „Cannot read properties of null (reading 'parentNode')“ aus den
+  nachgeschobenen Streaming-Skripten). Die E2E-Wache meldet beides gegen
+  den Build nur (`[bekannt] …`);
   `E2E_STRICT_HYDRATION=1` bzw. `--dev` werten ihn als Fehler. Nächste
   Schritte: Next.js-/React-Aktualisierung prüfen; sonst minimal
   nachstellen und melden. Früher dazu beobachtet: ein verlorener Klick auf
