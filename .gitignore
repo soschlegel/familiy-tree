@@ -20,6 +20,8 @@ dev.log
 
 # Zweiter Build-Ordner für den Mock-Server (npm run dev:mock)
 .next-mock/
+# Produktions-Build der Mock-Umgebung für die E2E-Tests (npm run mock:build)
+.next-e2e/
 
 # Playwright (npm run test:e2e): Berichte, Spuren, Anmeldezustände
 /playwright-report/

@@ -60,8 +60,12 @@ Abhängigkeiten, wo sie benutzt wird, zugehörige Tests. Einstieg und Übersicht
   wird ausgerollt — auf echte Daten. Gearbeitet wird auf `optimierung`.
 - Nach `main` nur zusammengeführte, vollständig geprüfte Stände: Typecheck,
   Lint, Vitest, Migrationen ↔ Schema ohne Abweichung, jede neue Migration
-  rein ergänzend (`docker/schema-diff-check.mjs`), Playwright read und write
-  auf frisch gestartetem Server (dazwischen neu starten).
+  rein ergänzend (`docker/schema-diff-check.mjs`), Playwright-Gesamtlauf
+  mit `npm run test:e2e`: ein Befehl, der den Produktions-Build der
+  Mock-Umgebung bei Bedarf neu baut, einen eigenen Server startet,
+  setup → read → write ausführt und den Server wieder beendet (kein
+  Neustart zwischen read und write nötig). Vorher keinen von Hand
+  gestarteten Server auf dem Port laufen lassen (er würde mitbenutzt).
 - Veröffentlichte Migrationen nie nachträglich ändern.
 - **Neuigkeiten:** Jedes Release nach `main` bekommt einen neuen Eintrag
   ganz oben in [CHANGELOG.md](CHANGELOG.md) — im selben Stand wie die

@@ -90,12 +90,16 @@ test("Familie anlegen, Zugriff vergeben — der Benutzer sieht danach mehr", asy
   await access(familyName("C")).selectOption({ label: "lesen" });
   await expect(access(familyName("C"))).toHaveValue("VIEWER");
 
-  // Der Benutzer sieht jetzt Familie C — ohne neue Anmeldung.
+  // Der Benutzer sieht jetzt Familie C — ohne neue Anmeldung. Mindestens die
+  // Mock-Personen von C: gleichzeitig laufende Dateien (changelog,
+  // person-lifecycle) legen kurzzeitig eigene „E2E …“-Personen in C an.
   const inC = visibleFor(["C"]).length;
+  const count = async (testId: string, re: RegExp) =>
+    Number((re.exec((await user.getByTestId(testId).textContent()) ?? "") ?? [])[1] ?? -1);
   await user.goto("/people");
-  await expect(user.getByTestId("people-count")).toHaveText(`1–${Math.min(40, inC)} von ${inC} Personen`);
+  await expect.poll(() => count("people-count", /von (\d+) Personen/)).toBeGreaterThanOrEqual(inC);
   await user.goto("/tree");
-  await expect(user.getByTestId("tree-counts")).toContainText(`${inC} Personen`);
+  await expect.poll(() => count("tree-counts", /(\d+) Personen/)).toBeGreaterThanOrEqual(inC);
   const cPerson = mock.persons.find((x) => x.familyKeys.length === 1 && x.familyKeys[0] === "C")!;
   expect((await user.request.get(`/api/persons/${cPerson.id}`)).status()).toBe(200);
   // Die neue Familie erscheint im Filter, A nicht.

@@ -12,7 +12,9 @@ import { L, USERS, type Role } from "./support/mock";
  * aufbauen (scripts/mock.mjs verweigert alles, was nicht auf _mock/_test
  * endet), je Rolle einmal anmelden und die wichtigsten Routen einmal
  * aufrufen — im Dev-Modus kompiliert Next.js jede Route beim ersten Aufruf,
- * das soll nicht in die Zeitmessung der eigentlichen Tests fallen.
+ * das soll nicht in die Zeitmessung der eigentlichen Tests fallen. Gegen den
+ * Produktions-Build (Standard, siehe playwright.config.ts) ist alles schon
+ * übersetzt; dort entfällt das Vorwärmen.
  */
 setup.describe.configure({ mode: "serial" });
 
@@ -38,6 +40,7 @@ for (const role of ROLES) {
 }
 
 setup("Routen vorwärmen", async ({ browser }) => {
+  setup.skip(process.env.E2E_SERVER !== "dev", "Produktions-Build: nichts zu übersetzen");
   const context = await browser.newContext({ storageState: authFile("admin") });
   const page = await context.newPage();
   const pages = [

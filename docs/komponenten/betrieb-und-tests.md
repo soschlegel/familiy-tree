@@ -25,7 +25,7 @@ Code, und die Beschreibung wird berichtigt.
 | `lint` | `eslint .` | ESLint mit Flat-Config `eslint.config.mjs` |
 | `typecheck` | `tsc --noEmit` | TypeScript-Prüfung |
 | `test` / `test:watch` | `vitest run` / `vitest` | Unit- und Dienst-Tests in `tests/` |
-| `test:e2e` | `scripts/e2e.mjs all` | Playwright: setup → read → write |
+| `test:e2e` | `scripts/e2e.mjs all` | Playwright mit einem Befehl: Build prüfen/erneuern, Server starten, setup → read → write, Server beenden |
 | `test:e2e:setup` / `:read` / `:write` | `scripts/e2e.mjs setup/read/write` | Teilläufe (read und write jeweils mit vorangestelltem Setup) |
 | `test:e2e:headed` | `scripts/e2e.mjs all --headed --workers=1` | sichtbarer Browser, ein Test nach dem anderen |
 | `test:e2e:ui` | `playwright test --ui` | Playwright-Oberfläche (geht **nicht** über `scripts/e2e.mjs`) |
@@ -37,6 +37,8 @@ Code, und die Beschreibung wird berichtigt.
 | `db:mock` | `scripts/mock.mjs seed` | Mock-Datenbank neu befüllen |
 | `mock:setup` | `scripts/mock.mjs setup` | Mock-Datenbank anlegen, Schema anwenden, befüllen |
 | `dev:mock` | `scripts/mock.mjs dev` | Dev-Server gegen die Mock-Daten (Port 3100) |
+| `mock:build` | `scripts/mock.mjs build` | Produktions-Build der Mock-Umgebung für die E2E-Tests (`.next-e2e`) |
+| `mock:start` | `scripts/mock.mjs start` | diesen Build mit `next start` auf dem Mock-Port |
 | `mock:env` | `scripts/mock.mjs env` | berechnete Mock-Umgebung anzeigen |
 | `mcp:stdio` | `scripts/mock.mjs mcp` | lokaler MCP-Server über stdio gegen die Mock-Daten |
 | `mcp:key` | `scripts/mock.mjs mcp-key` | festen Mock-KI-Schlüssel ausgeben |
@@ -70,6 +72,22 @@ der `.env`.
   - `seed` — `prisma/seed-mock.ts` ausführen.
   - `dev` — `next dev` auf dem Mock-Port; eigener Build-Ordner, läuft
     parallel zum normalen Dev-Server.
+  - `build [--if-stale]` — `next build` mit der Mock-Umgebung in den eigenen
+    Ordner `.next-e2e` (getrennt von `.next` und `.next-mock`; Dev-Server
+    und Build stören sich nicht). Schreibt danach `e2e-build-stamp.json`
+    mit dem Zeitpunkt des Build-Beginns. `--if-stale` baut nur, wenn eine
+    Build-Eingabe (`app`, `components`, `lib`, `public`, `geo`,
+    `prisma/schema.prisma`, `next.config.mjs`, `package-lock.json`,
+    Tailwind-/PostCSS-/TS-Konfiguration) jünger ist als dieser Stempel. Der
+    Build enthält nichts Ortsabhängiges (Port, Datenbank, Medienordner und
+    Anmeldung liest der Server erst beim Start).
+  - `start` — `next start` auf dem Mock-Port gegen `.next-e2e`, mit der
+    Mock-Umgebung und zusätzlich `E2E_PRODUCTION_DEV_LOGIN=mock-only`
+    (eng begrenzte Freigabe des Dev-Logins im Produktionsmodus, siehe
+    `lib/dev-login.ts` in [bibliotheken.md](bibliotheken.md)). Warnt, wenn
+    die Quellen neuer sind als der Build. Die Warnung von Next.js, `next
+    start` passe nicht zu `output: "standalone"`, ist hier harmlos: der
+    Server läuft; nur das Image nimmt `server.js`.
   - `env` — die berechneten Werte als JSON ausgeben.
   - `mcp` — `mcp/server.ts` über `tsx` (stdio; nichts auf stdout ausgeben).
   - `mcp-key [name]` — gibt den festen Testschlüssel aus `prisma/mock-data.ts`
@@ -79,10 +97,23 @@ der `.env`.
 
 ### `scripts/e2e.mjs`
 
-Starter für Playwright in Teilen. Erstes Argument `all`, `read`, `write` oder
-`setup`; daraus wird `--project=…` und die Variable `E2E_AREA`. Die Option
-`--skip-setup` (oder `E2E_SKIP_SETUP=1`) lässt das Setup-Projekt weg; alle
-übrigen Argumente gehen unverändert an `playwright test`.
+Starter für Playwright in Teilen — ein Befehl für den ganzen Lauf. Erstes
+Argument `all`, `read`, `write` oder `setup`; daraus wird `--project=…` und
+die Variable `E2E_AREA`. Eigene Optionen: `--skip-setup` (oder
+`E2E_SKIP_SETUP=1`) lässt das Setup-Projekt weg; `--dev` testet gegen den
+Mock-Dev-Server statt gegen den Produktions-Build; `--rebuild` baut in jedem
+Fall neu, `--no-build` nimmt den vorhandenen Build ungeprüft. Alle übrigen
+Argumente gehen unverändert an `playwright test`.
+
+**Server:** Antwortet auf `MOCK_PORT` (Standard 3100) schon ein Server, wird
+er mitbenutzt und nicht beendet; das Skript erkennt an den Chunk-Namen, ob
+es ein Dev-Server oder ein Build ist, und warnt, wenn das nicht zur Option
+passt. Sonst ruft es `scripts/mock.mjs build --if-stale` auf (nicht bei
+`--dev`/`--no-build`), startet `scripts/mock.mjs start` bzw. `dev`, wartet
+auf `/login` (60 s bzw. 3 min), lässt Playwright laufen und beendet den
+Server samt Kindprozessen (Windows `taskkill /T`, sonst Prozessgruppe) —
+auch bei Strg+C. Setzt `E2E_SERVER=prod|dev` für die Konfiguration und
+meldet am Ende die Gesamtdauer. `--list` startet keinen Server.
 
 Besonderheit bei `all` **mit Filter** (Datei, Muster oder `-g`): Da `write` in
 der Playwright-Konfiguration von `read` abhängt und Playwright Abhängigkeiten
@@ -274,7 +305,9 @@ Workflow nicht — die Prüfungen dort sind Handarbeit (AGENTS.md, Abschnitt 3).
 
 ### `next.config.mjs`
 
-- `distDir` aus `NEXT_DIST_DIR` (Mock-Server: `.next-mock`), sonst `.next`.
+- `distDir` aus `NEXT_DIST_DIR` (Mock-Dev-Server: `.next-mock`, E2E-Build:
+  `.next-e2e`), sonst `.next`. `tsconfig.json` nennt die `types`-Ordner
+  aller drei, sonst trüge `next build` sie selbst nach.
 - `output: "standalone"` für ein kleines Image.
 - `sharp` als externes Server-Paket (nicht gebündelt).
 - `outputFileTracingIncludes`: `geo/gazetteer.tsv.gz` für `/api/places/**`
@@ -357,17 +390,25 @@ Projekt, nur `tests/**/*.test.ts`, Zeitgrenzen 30 s, **Dateien nacheinander**
   keine Wiederholungen; Trace und Screenshot nur bei Fehlern.
 - Locale `de-DE`, Zeitzone Europe/Berlin; Basis-URL localhost mit
   `MOCK_PORT` (Standard 3100).
-- Worker: 4, in CI 2; `forbidOnly` in CI.
+- Server-Art aus `E2E_SERVER` (von `scripts/e2e.mjs`): `prod` (Standard,
+  Produktions-Build) oder `dev` (Dev-Server).
+- Worker (gilt für `read`): 6 gegen den Build, 4 gegen den Dev-Server, in
+  CI 2; `--workers` übersteuert. `forbidOnly` in CI.
 - **Projekte:**
   - `setup` — nur `e2e/global.setup.ts`, Zeitgrenze 10 min.
   - `read` — `e2e/read/`, voll parallel, Desktop-Chrome; hängt an `setup`
     (entfällt mit `E2E_SKIP_SETUP=1`).
-  - `write` — `e2e/write/`, Dateien parallel, Tests einer Datei nacheinander,
-    2 Worker; hängt an `read`, bei `E2E_AREA=write` nur an `setup`.
-- **Web-Server:** `node scripts/mock.mjs dev`, bereit wenn `/login` antwortet,
-  Start bis 3 min; ein schon laufender Server auf dem Port wird mitbenutzt
-  und nicht beendet. Bewusst der Dev-Server, weil der Dev-Login in Produktion
-  aus ist.
+  - `write` — `e2e/write/`, Dateien parallel, Tests einer Datei nacheinander;
+    Obergrenze je Projekt 2 Worker (mehr war nicht schneller, aber
+    anfälliger für Zählungen mit fremden „E2E …“-Datensätzen);
+    `E2E_WRITE_WORKERS` übersteuert (`--workers` hebt sie nicht an); hängt an
+    `read`, bei `E2E_AREA=write` nur an `setup`.
+- **Web-Server:** nur für direkte Aufrufe (`playwright test`,
+  `test:e2e:ui`) — `node scripts/mock.mjs start` (Build muss vorhanden sein)
+  bzw. bei `E2E_SERVER=dev` `node scripts/mock.mjs dev`; bereit, wenn
+  `/login` antwortet, Start bis 3 min; ein laufender Server wird mitbenutzt
+  und nicht beendet. Über `scripts/e2e.mjs` steht der Server schon, bevor
+  Playwright startet.
 
 ---
 
@@ -411,15 +452,15 @@ selbst gelesen, nicht im eigenen Code.
 | `AUTH_TRUST_HOST` | Host-Kopf hinter Proxy vertrauen | Auth.js (implizit) |
 | `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` | OAuth GitHub | `lib/auth.ts`, Login-Seite |
 | `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | OAuth Google | `lib/auth.ts`, Login-Seite |
-| `ENABLE_DEV_LOGIN` | Anmeldung nur per E-Mail (wirkt nicht bei `NODE_ENV=production`) | `lib/auth.ts`, Login-Seite |
+| `ENABLE_DEV_LOGIN` | Anmeldung nur per E-Mail (lehnt bei `NODE_ENV=production` ab; einzige Ausnahme siehe `E2E_PRODUCTION_DEV_LOGIN`) | `lib/auth.ts`, `lib/dev-login.ts`, Login-Seite |
 | `INITIAL_ADMIN_EMAIL` | erster Administrator | `prisma/seed.ts`, `docker/seed-admin.mjs`, `docker/entrypoint.sh` |
 | `MEDIA_DIR` | Ordner der Bilddateien (zur Laufzeit gelesen, Standard `data/media`) | `lib/storage.ts`, `prisma/seed-mock.ts`, Tests |
 | `MAX_UPLOAD_BYTES` | größte Bilddatei (Standard 15 MiB) | `lib/services/media-links.ts`, `lib/services/gedcom-photos.ts`, `mcp/http.ts` |
 | `MCP_CONNECTOR_URL` | öffentliche Adresse des MCP-Gateways, nur für die Anleitung auf `/ai-access` | `app/ai-access/page.tsx`, `components/AiConnectGuide` |
 | `MCP_ALLOWED_ORIGINS` | weitere erlaubte `Origin`-Werte für `/api/mcp` (kommagetrennt) | `mcp/http.ts` — nur lokal (`.env.example`, auskommentiert); der Stack reicht sie bewusst nicht durch |
-| `NODE_ENV` | Produktion/Entwicklung (Dev-Login, Prisma-Logging, Client-Singleton) | `lib/auth.ts`, `lib/prisma.ts` |
+| `NODE_ENV` | Produktion/Entwicklung (Dev-Login, Prisma-Logging, Client-Singleton) | `lib/dev-login.ts`, `lib/prisma.ts` |
 | `NEXT_PUBLIC_BUILD_DATE` / `NEXT_PUBLIC_BUILD_SHA` | Build-Angabe in der Fußzeile, beim Build fest eingesetzt | `lib/build-info.ts` |
-| `NEXT_DIST_DIR` | eigener Build-Ordner (Mock-Server) | `next.config.mjs` |
+| `NEXT_DIST_DIR` | eigener Build-Ordner (Mock-Dev-Server `.next-mock`, E2E-Build `.next-e2e`) | `next.config.mjs` |
 | `PORT` / `HOSTNAME` | Port und Bind-Adresse des Servers | Next.js (implizit); im Image gesetzt |
 | `SEED_DEMO` | Demofamilie beim `db:seed` | `prisma/seed.ts` |
 
@@ -453,6 +494,10 @@ selbst gelesen, nicht im eigenen Code.
 | `MCP_KEY_NAME` | intern: Übergabe des Schlüsselnamens an den `mcp-key`-Unterprozess |
 | `FAMILYTREE_MCP_KEY` | Schlüssel für den Eintrag in `.mcp.json` (Claude Code); im App-Code nicht gelesen |
 | `E2E_SKIP_SETUP` | `1` = Setup-Projekt weglassen |
+| `E2E_SERVER` | von `scripts/e2e.mjs` gesetzt: `prod` (Standard) oder `dev`; wählt Web-Server, Worker, Vorwärmen und Umgang mit dem bekannten Hydration-Fehler |
+| `E2E_STRICT_HYDRATION` | `1` = bekannten Hydration-Fehler (React #418) auch gegen den Produktions-Build als Testfehler werten |
+| `E2E_WRITE_WORKERS` | Obergrenze der Worker für das Projekt `write` (Standard 2) übersteuern, für Messungen |
+| `E2E_PRODUCTION_DEV_LOGIN` | nur `scripts/mock.mjs start` setzt `mock-only`: Dev-Login im Produktions-Build — wirkt nur zusammen mit Datenbank `…_mock`/`…_test` und Medienordner `…-mock`/`…-test` (`lib/dev-login.ts`); im Stack nie gesetzt |
 | `E2E_AREA` | von `scripts/e2e.mjs` gesetzt; `write` hängt dann nur am Setup |
 | `CI` | Playwright: 2 Worker, `forbidOnly` |
 | `MERGE_SCREENS` | Ordner für Bildschirmfotos in `e2e/write/merge.spec.ts` und `connect.spec.ts` |
@@ -612,7 +657,8 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
 
 ## 9. End-to-End-Tests (`e2e/`, Playwright)
 
-Bedienen die App in Chromium gegen den Mock-Dev-Server; sprechen nur mit der
+Bedienen die App in Chromium gegen den Produktions-Build der Mock-Umgebung
+(Standard; mit `--dev` gegen den Mock-Dev-Server); sprechen nur mit der
 App (Browser und HTTP-API), nie direkt mit Datenbank oder Medienordner.
 Voraussetzungen: Postgres läuft, Mock-Datenbank einmal angelegt, einmalig
 `npx playwright install chromium`. Start und Optionen siehe Abschnitt 1 und
@@ -623,15 +669,18 @@ ausgenommen).
 
 Nacheinander: Mock-Daten neu aufbauen (`scripts/mock.mjs seed`), je Rolle
 (Admin, Bearbeiter, Betrachter, ohne Familie) per Dev-Login anmelden und den
-Zustand speichern, dann als Admin die wichtigsten Seiten und API-Routen
-einmal aufrufen, damit der Dev-Server sie vorab übersetzt. Der gesperrte
+Zustand speichern, dann — nur gegen den Dev-Server (`E2E_SERVER=dev`) — als
+Admin die wichtigsten Seiten und API-Routen einmal aufrufen, damit er sie
+vorab übersetzt; gegen den Build entfällt dieser Schritt. Der gesperrte
 Benutzer bekommt keinen gespeicherten Zustand.
 
 ### Hilfen (`e2e/support/`)
 
 - **`fixtures.ts`** — erweitertes `test`: eine automatische Wache, die jeden
   Test an unerwarteten Konsolen- oder Seitenfehlern scheitern lässt (mit eng
-  gefassten Ausnahmen und pro Test erlaubten Meldungen), `loginAs` für weitere
+  gefassten Ausnahmen und pro Test erlaubten Meldungen; den bekannten
+  Hydration-Fehler React #418 meldet sie gegen den Produktions-Build nur,
+  siehe Abschnitt 10), `loginAs` für weitere
   Rollen in eigenen Kontexten; dazu Dev-Login, Dialoge annehmen,
   Barrierefreiheitsprüfung mit axe (WCAG 2.1 A/AA, begründete Ausnahmen),
   Prüfung auf waagerechte Scrollleiste, Warten auf Baum und Hydration,
@@ -684,7 +733,7 @@ Benutzer bekommt keinen gespeicherten Zustand.
 - **`tree-focus.spec.ts`** — Fokus-Ansicht ab fester Person, Startperson.
 - **`tree-whole.spec.ts`** — Gesamtansichten Generationen und Zeitstrahl.
 
-### Ändernde Tests (`e2e/write/`, Dateien zu zweit parallel, Tests einer Datei seriell)
+### Ändernde Tests (`e2e/write/`, Dateien parallel, Tests einer Datei seriell)
 
 Alle Dateien laufen im Modus `serial`; eigene Datensätze heißen „E2E …“ und
 werden am Ende entfernt (Audit-Einträge, Pakete und Importläufe bleiben bis
@@ -737,17 +786,43 @@ zum nächsten Setup).
 
 ## 10. Bekannte Flakes und Stolperfallen
 
-- **Hydration-Fehler auf `/people`** — selten; trifft `people-list.spec`
-  („Sortierung nach Geburt“). Wiederholungen waren danach grün.
-- **Dev-Server unter Last** — er wächst auf mehrere GB, verwirft übersetzte
-  Seiten, und die erste Übersetzung einer Route reißt Zeitgrenzen. Vor einem
-  Gesamtlauf neu starten, zwischen read und write neu starten, auf
-  schwachen Rechnern mit `--workers=1` in Teilen laufen lassen.
-- **Während eines Laufs nichts ändern** (keine Dateien, kein `tsc`) — sonst
-  übersetzt der Server neu, und es fallen v.a. `auth` und `permissions` aus.
-- **Mehr als 2 Worker für `write`** waren langsamer und liefen in
-  Zeitüberschreitungen; `serial`-Dateien überspringen nach einem Fehler den
-  Rest der Datei.
+- **Hydration-Fehler (React #418) beim Laden** — offen, Ursache nicht
+  in den Tests. Unter Last scheitert gelegentlich die Hydration einer Seite
+  (`/people`, `/people/[id]`, `/sources`, `/tree`, sogar `/login`).
+  Untersucht (Diagnose-Build mit ungekürzten React-Meldungen): Der Server
+  liefert dabei byteweise dasselbe HTML samt RSC-Daten wie bei fehlerfreien
+  Aufrufen, vor dem Fehler ändert nichts das DOM; meist tritt er auf,
+  solange das Dokument noch lädt. React erwartet an der Stelle der Seite
+  deren äußeres Element, steht aber schon eine Ebene tiefer — ein Wettlauf
+  beim Streaming in Next.js/React, kein Datenfehler. React baut die Seite
+  danach selbst neu auf. Gegen den Dev-Server selten, gegen den
+  Produktions-Build in wenigen Prozent der Seitenaufrufe (mehr Worker, mehr
+  Meldungen). Auf Seiten mit Streaming (`loading.tsx`, z.B. `/research`)
+  folgen ihm Seitenfehler „Cannot read properties of null (reading
+  'parentNode')“ — die nachgeschobenen Inline-Skripte finden ihre
+  Platzhalter im neu aufgebauten Baum nicht mehr. Die Wache in
+  `fixtures.ts` meldet beides gegen den Build deshalb nur (Konsole
+  `[bekannt] …`, Anmerkung „bekannter Fehler“ im HTML-Bericht; den
+  Folgefehler nur nach einem #418 auf derselben Seite bis zu deren
+  `load`);
+  gegen den Dev-Server und mit `E2E_STRICT_HYDRATION=1` bleibt er ein
+  Testfehler.
+- **Nur mit `--dev`: Dev-Server unter Last** — er wächst auf mehrere GB,
+  verwirft übersetzte Seiten, und die erste Übersetzung einer Route reißt
+  Zeitgrenzen. Dann vor einem Gesamtlauf neu starten, zwischen read und
+  write neu starten, und während des Laufs nichts ändern (sonst übersetzt
+  er neu). Der Produktions-Build (Standard) hat beides nicht: nichts wird
+  nachübersetzt, der Server bleibt klein, zwischen read und write ist kein
+  Neustart nötig, und Dateiänderungen während des Laufs wirken erst nach
+  dem nächsten Build.
+- **Veralteter Build** — `scripts/e2e.mjs` baut neu, wenn Quellen jünger
+  sind; läuft auf dem Port aber schon ein Server, wird der mitbenutzt, auch
+  wenn er einen älteren Stand zeigt. Nach Änderungen also einen von Hand
+  gestarteten `mock:start` beenden.
+- **Mehr als 2 Worker für `write`** sind nicht schneller (die längste Datei
+  bestimmt die Dauer) und treffen öfter auf fremde „E2E …“-Datensätze in
+  Zählungen; `serial`-Dateien überspringen nach einem Fehler den Rest der
+  Datei.
 - **Lesende Tests nach ändernden** brauchen ein neues Setup (Zählungen).
   Beim Sharding nur einmal Setup, dann jeden Teil mit `--skip-setup`.
 - **Sperre nach Fehlversuchen** am MCP-Endpunkt: `mcp-http.spec` schickt
