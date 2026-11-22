@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { apiFetch, jsonBody } from "./api-client";
 import { DateInput, dateInputError, datePayload } from "./DateInput";
+import { PlaceHint } from "./PlaceHint";
 import { parseFuzzyDate } from "@/lib/dates";
 import { personDateIssues } from "@/lib/validation";
 
@@ -167,7 +168,7 @@ export function PersonForm({
     />
   );
 
-  const text = (key: TextKey, label: string, opts: { type?: string; required?: boolean; autoComplete?: string } = {}) => {
+  const text = (key: TextKey, label: string, opts: { type?: string; required?: boolean; autoComplete?: string; place?: boolean } = {}) => {
     const id = `person-${key}`;
     const err = fields[key];
     const raw = values[key] ?? "";
@@ -188,6 +189,7 @@ export function PersonForm({
           value={raw}
           onChange={(e) => set(key, e.target.value)}
         />
+        {opts.place && <PlaceHint text={raw} />}
         {err && (
           <span id={`${id}-error`} className="field-error">
             {err}
@@ -234,9 +236,9 @@ export function PersonForm({
         <legend className="eyebrow mb-2">Lebensdaten</legend>
         <div className="grid gap-3 sm:grid-cols-2">
           {date("birthDate", "Geburtsdatum")}
-          {text("birthPlace", "Geburtsort")}
+          {text("birthPlace", "Geburtsort", { place: true })}
           {date("deathDate", "Sterbedatum")}
-          {text("deathPlace", "Sterbeort")}
+          {text("deathPlace", "Sterbeort", { place: true })}
         </div>
       </fieldset>
 

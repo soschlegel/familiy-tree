@@ -25,6 +25,17 @@ aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
   lokaler Docker-Build ok (Ortsverzeichnis und Ländergrenzen im Image, keine
   Tests); Playwright auf frischem Server, zwischen read und write neu
   gestartet, ohne parallele Agenten: setup 6/6, read 182/182, write 97/97.
+- Paket **Orte ohne Knopfdruck und mit KI** (Branch `orte-ki`, noch nicht
+  zusammengeführt): Vorschlag am Ortsfeld (`components/PlaceHint.tsx`,
+  `GET /api/places/suggest`), automatische Zuordnung neuer Ortstexte nach
+  dem Speichern und nach Importen im Hintergrund (`queuePlaceAutoAssign`,
+  abschaltbar mit `PLACE_AUTO_ASSIGN=off`, in Vitest aus), MCP-Werkzeuge
+  `suggest_place`, `list_places`, `assign_place` (Stapel bis 50, eigene Orte,
+  Begründung, „unsicher“) und Prompt `orte_zuordnen`, KI-Zuordnungen auf
+  `/admin/places` als „von KI“ mit Bestätigen. Neue, rein ergänzende
+  Migration `20261124000001_orte_ki` (`PlaceSource.AI`, `Place.note`,
+  `Place.uncertain`). Das Ortsverzeichnis ist jetzt für alle API-Routen im
+  Standalone-Build (`next.config.mjs`, `/api/**`).
 - Beim Ausrollen beachten: Der Reverse-Proxy muss für `/api/mcp` größere
   Anfragen durchlassen (Bilder als base64 über MCP, bis
   MAX_UPLOAD_BYTES × 4/3 + 1 MiB), sonst antwortet er mit 413.
@@ -236,6 +247,15 @@ Freigabe (21.11.): „bauen und Gas geben“ — die Wünsche werden umgesetzt.
   verbinden (Anker, Ausbreitung, Cluster) und Sammel-Zusammenführen.
   Laufzeit im Rauschen: 11 847 erzeugte Personen Liste ~1,4 s, Hinweis
   Median ~74 ms je Person (vorher ~73 ms); Mock ~19 ms bzw. ~6 ms.
+
+- **Orte: zeitabhängige Staatszugehörigkeit** (Idee aus dem Paket
+  `orte-ki`, nicht beauftragt): Breslau 1900 = Deutsches Reich, heute Polen —
+  Bezeichnung oder Karte je nach Jahr mit dem damaligen Staat. Bräuchte
+  historische Grenzen bzw. eine Zuordnung Ort × Zeitraum → Staat.
+- **Orte: eigene Orte in der Automatik** (offen): Eigene Orte (Wüstung, Hof)
+  erscheinen bei späteren Texten als Vorschlag, die automatische Zuordnung
+  nutzt sie aber nicht (gleichnamige Weiler wären riskant). Bei Bedarf
+  entscheiden.
 
 ### 4. Weitere offene Punkte
 

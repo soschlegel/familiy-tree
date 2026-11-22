@@ -149,6 +149,7 @@ Dienst über den `Scope`.
 | `GET, PUT /api/places` | Ortstexte / von Hand zuordnen | `place:manage` |
 | `POST /api/places/auto` | Automatisch zuordnen | `place:manage` |
 | `GET /api/places/search` | Suche im Ortsverzeichnis | `place:manage` |
+| `GET /api/places/suggest` | Vorschlag am Ortsfeld | angemeldet, Admin oder Bearbeiter |
 
 ---
 
@@ -438,10 +439,11 @@ Die Personenseite.
 ### `/admin/places` — `app/admin/places/page.tsx`
 
 - **Rechte:** `place:manage`, sonst `/tree?denied=1`.
-- **Suchparameter:** `status` (`all`, `open`, `auto`, `manual`,
-  `unresolvable`), `q`, `page`.
+- **Suchparameter:** `status` (`all`, `open`, `auto`, `ai` — „von KI“,
+  `manual`, `unresolvable`), `q`, `page`.
 - **Daten:** `listPlaces`. **Anzeige:** Zähler je Status als Filter,
-  `PlaceAutoAssign`, Suchfeld, `PlaceTable`, Seitennavigation.
+  `PlaceAutoAssign`, Suchfeld, `PlaceTable`, Seitennavigation. KI-Zuordnungen
+  stehen als „von KI“ mit eigenem Filter, Begründung und „Bestätigen“.
 
 ---
 
@@ -706,8 +708,17 @@ Fehlercodes aus den Grundregeln.
   `gazetteerId`), mit eigenen Koordinaten (`coordinates`, Genauigkeit,
   Bezeichnung), oder `confirm`, `unresolvable`, `reset`. Antwort
   `{ assignment }`.
-- **`POST /api/places/auto`**: alle nicht von Hand bestätigten Ortstexte
-  automatisch aus dem Ortsverzeichnis zuordnen.
+- **`POST /api/places/auto`**: alle Ortstexte, die weder von Hand bestätigt
+  noch von der KI gesetzt sind, automatisch aus dem Ortsverzeichnis zuordnen
+  (Altbestand; neue Texte ordnet das Speichern selbst zu).
+- **`GET /api/places/suggest?q=`** (`route(null)`, Prüfung im Dienst
+  `placeHint`): welcher Ort zu einem eingegebenen Text erkannt wird — Status
+  `found`/`ambiguous`/`none`, `label`, `precision`, `matchedPart`,
+  `formerName`, `otherName`, `own`, `ambiguous`. Nur für Admins und
+  Bearbeiter (sonst 403), `q` höchstens 500 Zeichen, `Cache-Control:
+  private, no-store`. Ohne `q`: lädt das Ortsverzeichnis vorab
+  (`{ warming: true }`). Liefert nur Verzeichnisdaten bzw. eigene Orte, nichts
+  über Personen.
 - **`GET /api/places/search`**: Suche im mitgelieferten Ortsverzeichnis,
   `q` höchstens 100 Zeichen.
 

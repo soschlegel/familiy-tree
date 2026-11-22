@@ -7,6 +7,7 @@ import { useId, useState } from "react";
 import { PersonPicker, type PickerPerson } from "./PersonPicker";
 import { apiFetch, jsonBody } from "./api-client";
 import { DateInput, dateFieldFrom, dateInputError, datePayload } from "./DateInput";
+import { PlaceHint } from "./PlaceHint";
 import { formatDateOf } from "@/lib/tree-layout";
 import { toDateInput, toFuzzyDate } from "@/lib/dates";
 import { PARTNER_SUBTYPE_LABEL, since } from "@/lib/partner-labels";
@@ -197,7 +198,12 @@ function RelationDateEditor({
 
       {labels.startPlace && (
         <Field label={labels.startPlace} error={fields.startPlace}>
-          {(id) => <input id={id} className="field w-48" value={startPlace} onChange={(e) => setStartPlace(e.target.value)} />}
+          {(id) => (
+            <>
+              <input id={id} className="field w-48" value={startPlace} onChange={(e) => setStartPlace(e.target.value)} />
+              <PlaceHint text={startPlace} />
+            </>
+          )}
         </Field>
       )}
 
@@ -218,7 +224,12 @@ function RelationDateEditor({
 
       {labels.endPlace && (
         <Field label={labels.endPlace} error={fields.endPlace}>
-          {(id) => <input id={id} className="field w-48" value={endPlace} onChange={(e) => setEndPlace(e.target.value)} />}
+          {(id) => (
+            <>
+              <input id={id} className="field w-48" value={endPlace} onChange={(e) => setEndPlace(e.target.value)} />
+              <PlaceHint text={endPlace} />
+            </>
+          )}
         </Field>
       )}
 
@@ -516,7 +527,10 @@ export function RelationshipEditor({
           {dateLabels.startPlace && (
             <Field label={dateLabels.startPlace} error={fields.startPlace}>
               {(id) => (
-                <input id={id} className="field w-48" value={startPlace} onChange={(e) => setStartPlace(e.target.value)} />
+                <>
+                  <input id={id} className="field w-48" value={startPlace} onChange={(e) => setStartPlace(e.target.value)} />
+                  <PlaceHint text={startPlace} />
+                </>
               )}
             </Field>
           )}
@@ -535,7 +549,10 @@ export function RelationshipEditor({
           {dateLabels.endPlace && (
             <Field label={dateLabels.endPlace} error={fields.endPlace}>
               {(id) => (
-                <input id={id} className="field w-48" value={endPlace} onChange={(e) => setEndPlace(e.target.value)} />
+                <>
+                  <input id={id} className="field w-48" value={endPlace} onChange={(e) => setEndPlace(e.target.value)} />
+                  <PlaceHint text={endPlace} />
+                </>
               )}
             </Field>
           )}

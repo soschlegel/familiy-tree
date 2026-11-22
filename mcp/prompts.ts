@@ -99,6 +99,50 @@ export function registerPrompts(server: McpServer, ctx: ToolContext): void {
     }),
   );
 
+  server.registerPrompt(
+    "orte_zuordnen",
+    {
+      title: "Orte zuordnen",
+      description:
+        "Work through the open place texts in batches: list_places(open) → suggest_place per text → assign_place for clear " +
+        "cases, uncertain ones marked or left open, summary at the end. Administrators only.",
+      argsSchema: {
+        limit: z.string().optional().describe("Höchstens so viele Ortstexte in diesem Durchgang (Standard 100)."),
+      },
+    },
+    ({ limit }) => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: [
+              `Ordne die offenen Ortstexte des Stammbaums Koordinaten zu (höchstens ${Number(limit) || 100} in diesem Durchgang). Antworte auf Deutsch.`,
+              "Der Ortstext in den Daten bleibt immer unverändert — es geht nur um die Position auf der Karte. Nur für Administratoren.",
+              "",
+              "1. list_places(status: \"open\"): offene Ortstexte, häufigste zuerst, mit Kontext (Feldarten, Zeitraum).",
+              "2. Je Text suggest_place(text): Kandidaten mit heutigem Namen, früherem/deutschem Namen (nameKind \"historic\"), " +
+                "Einwohnerzahl, Land und Entfernung. Wähle begründet: weitere Teile des Texts (Kreis, Land, Landschaft wie " +
+                "„Schlesien“, „Ostpreußen“), Zeitraum und Feldart aus dem Kontext, Nähe zu anderen Orten derselben Familie.",
+              "3. Eindeutige Fälle mit assign_place zuordnen — gesammelt in `assignments` (bis 50 je Aufruf), je mit kurzer " +
+                "deutscher Begründung in `note`. Fehlt ein Ort im Verzeichnis (Wüstung, Weiler, Hof, eingemeindeter Ortsteil) " +
+                "und kennst du seine Lage sicher, lege ihn als eigenen Ort an (latitude, longitude, label, precision).",
+              "4. Wahrscheinliche, aber nicht sichere Fälle mit uncertain=true zuordnen; echte Zweifel offen lassen. " +
+                "Nichts erfinden — keine geschätzten Koordinaten ohne Grundlage; „nicht zuordenbar“ (unresolvable) nur, " +
+                "wenn der Text gar keinen Ort nennt.",
+              "5. Mit write-Werkzeugen vorher begin_change_set mit einem Titel wie „Orte zugeordnet (KI)“ öffnen und die " +
+                "change_set_id mitgeben — ohne Personennamen im Titel.",
+              "",
+              "Zum Schluss: Zahl der zugeordneten Texte, Liste der unsicher zugeordneten und der offen gelassenen mit Grund " +
+                "— die prüft ein Administrator auf /admin/places („von KI“, Bestätigen oder Ändern).",
+              ctx.allowWrite ? "" : "Der Server ist schreibgeschützt: gib die Zuordnungen als Liste von Vorschlägen aus.",
+            ].join("\n"),
+          },
+        },
+      ],
+    }),
+  );
+
   server.registerResource(
     "person",
     new ResourceTemplate("familytree://person/{id}", { list: undefined }),

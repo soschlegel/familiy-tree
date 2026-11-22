@@ -38,6 +38,7 @@ import {
 } from "./errors";
 import { listPersonCitations, type PersonCitation } from "./sources";
 import { removeOrphanedMedia } from "./media";
+import { queuePlaceAutoAssign } from "./places";
 import {
   iso,
   toPersonRef,
@@ -707,6 +708,8 @@ export async function createPerson(
     entityId: person.id,
     diff: { ...columns, familyIds },
   });
+  // Neue Ortstexte im Hintergrund zuordnen (nie blockierend, nie fehlschlagend).
+  queuePlaceAutoAssign(scope, [person.birthPlace, person.deathPlace]);
 
   return toPersonSummary(scope, person, { familyIds, primaryMediaId: null });
 }
@@ -754,6 +757,9 @@ export async function updatePerson(
       entityId: id,
       diff: { changes },
     });
+  }
+  if (changes.birthPlace || changes.deathPlace) {
+    queuePlaceAutoAssign(scope, [changes.birthPlace?.to as string | null, changes.deathPlace?.to as string | null]);
   }
 
   return summaryById(scope, id);

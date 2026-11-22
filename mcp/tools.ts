@@ -75,6 +75,15 @@ import { CITATION_CONFIDENCES, CITATION_FACTS, SOURCE_KINDS } from "../lib/valid
 import { ALTERNATIVE_ONLY_TYPES, EVENT_TYPES, PERSON_NAME_TYPES } from "../lib/events";
 import { appendResearchNote, dateFields, isoDay, ref, type PersonLike } from "./format";
 import { beginMcpChangeSet, CHANGE_SET_TITLE_MAX, mcpChangeSet } from "../lib/change-sets";
+import {
+  AI_ASSIGN_MAX,
+  assignPlacesByAi,
+  listPlaces,
+  PLACE_STATUS_LABEL,
+  placeTextContext,
+  suggestPlaces,
+  type PlaceStatus,
+} from "../lib/services/places";
 
 export type ToolContext = {
   /** Wer zugreift — nur für Meldungen (E-Mail bzw. Schlüssel-Präfix). */
@@ -1105,6 +1114,8 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
       };
     }),
   );
+
+  registerPlaceReadTools(server, ctx);
 }
 
 // ---------------------------------------------------------------------------
@@ -1910,10 +1921,225 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
       return { mediaId: a.media_id, action: "link", targets: r.linked, changed: r.created };
     }),
   );
+
+  registerPlaceWriteTools(server, ctx);
 }
 
 /** Für die Ressource familytree://person/{id}. */
 export async function personResource(scope: Scope, id: string): Promise<Data | null> {
   const d = await getPersonDetail(scope, id);
   return d ? personDetailOut(d) : null;
+}
+
+// ---------------------------------------------------------------------------
+// Orte (Karte): Kandidaten, offene Ortstexte, Zuordnung durch die KI
+// ---------------------------------------------------------------------------
+
+/** Status-Angaben für list_places: englische Kennungen und die deutschen Wörter der Oberfläche. */
+const PLACE_STATUS_INPUT: Record<string, PlaceStatus | "all"> = {
+  all: "all",
+  alle: "all",
+  open: "open",
+  offen: "open",
+  auto: "auto",
+  automatisch: "auto",
+  ai: "ai",
+  ki: "ai",
+  manual: "manual",
+  von_hand: "manual",
+  bestaetigt: "manual",
+  unresolvable: "unresolvable",
+  nicht_zuordenbar: "unresolvable",
+};
+
+const placeCandidateSchema = z
+  .object({ source: z.string(), label: z.string(), latitude: z.number(), longitude: z.number(), recommended: z.boolean() })
+  .passthrough();
+
+function registerPlaceReadTools(server: McpServer, ctx: ToolContext): void {
+  server.registerTool(
+    "suggest_place",
+    {
+      title: "Ort vorschlagen",
+      description:
+        "Candidates for a free-text place as written in the data (e.g. 'Breslau, Schlesien, Preußen', GEDCOM forms like " +
+        "'Berkum, Peine, Lk Peine, Niedersachsen, Germany'): the same rule the app uses for automatic assignment " +
+        "(`recommended`), the other places of the same name in rank order, and own places (source 'own': created earlier by " +
+        "an admin or by you with coordinates — hamlets, farms, deserted villages). Each candidate has label (today's official " +
+        "name, former/German name in brackets), kind, precision, coordinates, country, population, `matchedName` and `nameKind` " +
+        "('historic' = the former or German name like Breslau for Wrocław, 'alternate' = another language, 'official'), " +
+        "`distanceKm` from the recommended one. `ambiguous` > 0: further places of that name exist — decide with the other parts " +
+        "of the text and the context from list_places. Without a match: prefix hits from the directory. Administrators also get " +
+        "`current` (the existing assignment). Reads only the bundled gazetteer (GeoNames) and own places.",
+      inputSchema: { text: z.string().min(1).max(500).describe("Place text exactly as in the data (from list_places).") },
+      outputSchema: {
+        text: z.string(),
+        recommended: placeCandidateSchema.nullable(),
+        ambiguous: z.number(),
+        candidates: z.array(placeCandidateSchema),
+        current: z.object({ source: z.string(), status: z.string() }).passthrough().optional(),
+      },
+      annotations: { title: "Ort vorschlagen", ...READ_ONLY },
+    },
+    run(ctx, async (scope, a) => (await suggestPlaces(scope, a.text)) as unknown as Data),
+  );
+
+  server.registerTool(
+    "list_places",
+    {
+      title: "Ortstexte auflisten",
+      description:
+        "Administrators only. All distinct place texts of the tree (birth, death, marriage/divorce places, life events) with " +
+        "number of occurrences and assignment status: open (no coordinates yet), auto (automatic from the gazetteer), ai " +
+        "(set by an AI assistant, shown as 'von KI' until an admin confirms), manual (confirmed by hand — never change), " +
+        "unresolvable. `context` tells where a text occurs (fields: birth, death, marriage, divorce, event:<TYPE>) and the " +
+        "year range — no persons. 50 per page, most frequent first; `suggestion` is the automatic candidate. Work through " +
+        "status 'open' with suggest_place and assign_place.",
+      inputSchema: {
+        status: z
+          .enum(Object.keys(PLACE_STATUS_INPUT) as [string, ...string[]])
+          .optional()
+          .describe("open/offen, auto/automatisch, ai/ki, manual/von_hand, unresolvable/nicht_zuordenbar, all/alle (default)."),
+        query: z.string().max(200).optional().describe("Only texts (or assigned labels) containing this."),
+        page: z.number().int().min(1).optional().describe("Page, 50 texts each. Default 1."),
+      },
+      outputSchema: {
+        total: z.number(),
+        page: z.number(),
+        pages: z.number(),
+        counts: z.record(z.number()),
+        places: z.array(z.object({ text: z.string(), count: z.number(), status: z.string() }).passthrough()),
+      },
+      annotations: { title: "Ortstexte auflisten", ...READ_ONLY },
+    },
+    run(ctx, async (scope, a) => {
+      const status = a.status ? PLACE_STATUS_INPUT[a.status] : "all";
+      const list = await listPlaces(scope, { status, q: a.query, page: a.page });
+      const context = await placeTextContext(
+        scope,
+        list.rows.map((r) => r.key),
+      );
+      return {
+        total: list.total,
+        page: list.page,
+        pages: Math.max(1, Math.ceil(list.total / list.pageSize)),
+        counts: list.counts,
+        places: list.rows.map((r) => ({
+          text: r.text,
+          count: r.count,
+          ...(r.variants > 1 ? { spellings: r.variants } : {}),
+          status: r.status,
+          statusLabel: PLACE_STATUS_LABEL[r.status],
+          ...(context.get(r.key) ? { context: context.get(r.key) } : {}),
+          ...(r.assignment
+            ? {
+                assignment: {
+                  source: r.assignment.source,
+                  label: r.assignment.label,
+                  latitude: r.assignment.latitude,
+                  longitude: r.assignment.longitude,
+                  precision: r.assignment.precision,
+                  unresolvable: r.assignment.unresolvable,
+                  ...(r.assignment.gazetteerId ? { gazetteerId: r.assignment.gazetteerId } : {}),
+                  ...(r.assignment.uncertain ? { uncertain: true } : {}),
+                  ...(r.assignment.note ? { note: r.assignment.note } : {}),
+                },
+              }
+            : {}),
+          ...(r.suggestion
+            ? {
+                suggestion: {
+                  gazetteerId: r.suggestion.gazetteerId,
+                  label: r.suggestion.label,
+                  precision: r.suggestion.precision,
+                  ambiguous: r.suggestion.ambiguous,
+                },
+              }
+            : {}),
+        })),
+      };
+    }),
+  );
+}
+
+const placeTextInput = z.string().min(1).max(500).describe("Place text exactly as in the data (from list_places).");
+const assignItemInput = {
+  gazetteer_id: z.string().min(1).max(32).optional().describe("Choose a directory entry (gazetteerId from suggest_place)."),
+  latitude: z.number().min(-90).max(90).optional().describe("Own place: latitude (WGS84) — with longitude and label."),
+  longitude: z.number().min(-180).max(180).optional(),
+  label: z
+    .string()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe("Own place: display name, today's name first, e.g. 'Hof Lindenau (Wüstung), Niedersachsen, Deutschland'."),
+  precision: z.enum(["PLACE", "REGION", "COUNTRY"]).optional().describe("Own place: default PLACE."),
+  unresolvable: z.literal(true).optional().describe("Mark as not assignable (no coordinates)."),
+  uncertain: z.boolean().optional().describe("true = probable but not certain; an administrator should check."),
+  note: z.string().max(1000).optional().describe("Short German reason, shown to administrators (e.g. 'Kreis Peine passt, einziger Ort dieses Namens dort')."),
+};
+
+function registerPlaceWriteTools(server: McpServer, ctx: ToolContext): void {
+  server.registerTool(
+    "assign_place",
+    {
+      title: "Ort zuordnen",
+      description:
+        "Administrators only. Assign coordinates to place texts for the map — the free text in the data is never changed. " +
+        "Either one assignment (text + one of: gazetteer_id | latitude+longitude+label | unresolvable) or `assignments` " +
+        "with up to 50 of them. A place missing from the directory (deserted village, hamlet, farm, incorporated district) " +
+        "may be created as own place with coordinates, label and precision; it then appears as candidate for later texts. " +
+        "Stored with source 'AI' ('von KI'), effective on the map at once; an administrator confirms or changes it. Mark " +
+        "probable choices with uncertain=true and give a short German `note` with the reason. Overwrites automatic and earlier " +
+        "AI assignments, never ones confirmed by hand (reported per item). Per item result with ok/error. " +
+        WRITE_NOTE,
+      inputSchema: {
+        change_set_id: changeSetIdInput,
+        text: placeTextInput.optional(),
+        ...assignItemInput,
+        assignments: z
+          .array(z.object({ text: placeTextInput, ...assignItemInput }))
+          .min(1)
+          .max(AI_ASSIGN_MAX)
+          .optional()
+          .describe(`Several assignments in one call (at most ${AI_ASSIGN_MAX}); then omit the single fields.`),
+      },
+      outputSchema: {
+        assigned: z.number(),
+        failed: z.number(),
+        results: z.array(z.object({ text: z.string(), ok: z.boolean() }).passthrough()),
+      },
+      annotations: {
+        title: "Ort zuordnen",
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    runWrite(ctx, async (scope, a) => {
+      const list = a.assignments;
+      if (list && a.text !== undefined) {
+        throw validationError([{ path: "assignments", message: "Entweder text (eine Zuordnung) oder assignments (Liste), nicht beides." }]);
+      }
+      if (!list && a.text === undefined) throw validationError([{ path: "text", message: "text oder assignments angeben." }]);
+      const items = (list ?? [a]).map((i: Partial<z.infer<z.ZodObject<typeof assignItemInput>>> & { text?: string }) => ({
+        text: i.text,
+        gazetteerId: i.gazetteer_id,
+        latitude: i.latitude,
+        longitude: i.longitude,
+        label: i.label,
+        precision: i.precision,
+        unresolvable: i.unresolvable,
+        uncertain: i.uncertain,
+        note: i.note,
+      }));
+      const results = await assignPlacesByAi(scope, items);
+      return {
+        assigned: results.filter((r) => r.ok).length,
+        failed: results.filter((r) => !r.ok).length,
+        results: results as unknown as Data[],
+      };
+    }),
+  );
 }

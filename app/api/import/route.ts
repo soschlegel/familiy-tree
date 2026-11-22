@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { route } from "@/lib/api";
 import { audit, auditActor } from "@/lib/audit";
 import { nameChangeSet } from "@/lib/change-sets";
+import { queuePlaceAutoAssign } from "@/lib/services/places";
 import { processAndStoreImage } from "@/lib/media-processing";
 import type { Prisma } from "@prisma/client";
 
@@ -653,6 +654,8 @@ export const POST = route("data:import", async (ctx, req) => {
     // oder aktualisiert), samt ihren Familien.
     personIds: data.persons.map((p) => p.id),
   });
+  // Neue Ortstexte im Hintergrund zuordnen (alle offenen).
+  queuePlaceAutoAssign(ctx.scope);
 
   return NextResponse.json({ preview: false, plan });
 });

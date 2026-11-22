@@ -214,8 +214,8 @@ chromium`.
 |---|---|---|
 | `npm run test:e2e` | alles: setup → read → write | ca. 9–10 min |
 | `npm run test:e2e:setup` | nur Ausgangszustand: Mock-Daten neu, Anmeldungen, Vorwärmen | ca. 1–2 min (Kaltstart des Dev-Servers: länger) |
-| `npm run test:e2e:read` | setup + lesende Tests (`e2e/read/`, 182 Tests, 4 parallel) | ca. 3:10–3:20 min ohne Setup |
-| `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 97 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 4–5 min ohne Setup |
+| `npm run test:e2e:read` | setup + lesende Tests (`e2e/read/`, 188 Tests, 4 parallel) | ca. 3:10–3:20 min ohne Setup |
+| `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 105 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 4–5 min ohne Setup |
 | `npm run test:e2e:headed` | alles mit sichtbarem Browser, ein Test nach dem anderen | |
 | `npm run test:e2e:ui` | Playwright-Oberfläche: Tests einzeln starten, Schritte ansehen | |
 | `npm run test:e2e:report` | HTML-Bericht des letzten Laufs öffnen | |
@@ -570,13 +570,37 @@ Heirat, Scheidung, Ereignisse) mit Häufigkeit, Zuordnung und Vorschlag
 („mehrdeutig“, wenn es einen ähnlich großen gleichnamigen Ort anderswo gibt).
 Von Hand: Vorschlag übernehmen bzw. bestätigen, im Verzeichnis suchen (auch
 alte Namen), Koordinaten eingeben, „nicht zuordenbar“, zurücksetzen.
-**Automatisch zuordnen** ordnet alle nicht von Hand bestätigten Texte neu zu;
-von Hand Bestätigtes wird nie überschrieben. Jede Änderung steht im
+**Neue Ortstexte ordnet die App selbst zu** (Migration
+`20261124000001_orte_ki`): nach dem Speichern einer Person, eines Ereignisses
+oder einer Beziehung und nach GEDCOM- bzw. Austausch-Import, im Hintergrund —
+das Speichern wartet nicht darauf und scheitert nie daran; nur Texte ohne
+Zuordnung, ohne Treffer bleiben sie offen. Der Knopf **Automatisch zuordnen**
+ordnet den Altbestand neu zu (alle Texte, die weder von Hand bestätigt noch
+von der KI gesetzt sind); von Hand Bestätigtes wird nie überschrieben.
+**Zuordnungen des KI-Assistenten** (MCP `assign_place`, siehe
+[KI-Zugang](#ki-zugang-mcp)) stehen als „von KI“ mit eigenem Filter, ggf.
+„unsicher“ und der Begründung der KI; sie gelten sofort für die Karte, die
+Automatik überschreibt sie nie, der Admin **bestätigt** sie (→ von Hand) oder
+ändert sie. Mit eigenen Koordinaten angelegte Orte (Wüstung, Hof, Weiler)
+sind **eigene Orte** und werden bei späteren Texten wieder vorgeschlagen.
+
+**Vorschlag am Ortsfeld:** Unter Geburts- und Sterbeort, dem Ort eines
+Ereignisses und den Orten einer Ehe/Beziehung zeigt die App beim Tippen
+dezent, welcher Ort erkannt wird — dieselbe Regel wie die automatische
+Zuordnung: „→ Wrocław (Breslau), Polen · früherer bzw. deutscher Name:
+Breslau“, „mehrdeutig“ (weitere Orte gleichen Namens — ein Zusatz wie Kreis
+oder Land hilft) oder „Ort nicht gefunden“. Der eingegebene Text bleibt, wie
+er ist. Für Administratoren und Bearbeiter (`GET /api/places/suggest?q=`,
+nur Verzeichnisdaten und eigene Orte, nichts über Personen); das erste
+Ortsfeld einer Seite lädt das Verzeichnis vorab (rund 0,9 s), danach dauert
+ein Vorschlag wenige Millisekunden. Jede Änderung steht im
 `AuditLog` (`entityType` „Place“, vorher → nachher), die automatische
 Zuordnung als ein Paket „Orte automatisch zugeordnet“ (unter „Änderungen“).
 Die Ortstexte sieht nur der Admin — sie enthalten auch Angaben gesperrter
 Personen (`GET/PUT /api/places`, `POST /api/places/auto`,
-`GET /api/places/search?q=`, sonst 403). Der Mock-Seed ordnet alle
+`GET /api/places/search?q=`, sonst 403).
+Zeitabhängige Staatszugehörigkeit (Breslau 1900 = Deutsches Reich) zeigt die
+App nicht — die Bezeichnung nennt immer das heutige Land. Der Mock-Seed ordnet alle
 Ortstexte automatisch zu.
 
 **Automatische Zuordnung** ([lib/places/match.ts](lib/places/match.ts)):
@@ -904,6 +928,8 @@ vorbei direkt zur Datenbank gibt es nicht.
 | `get_timeline` | Zeitleiste einer Person (mit Alter und fehlenden Daten) oder einer Familie |
 | `search_sources` | Quellen suchen (Titel, Verfasser, Archiv, Signatur; Art) mit Zahl der sichtbaren Belege |
 | `get_source` | Quelle mit Abschrift und allem, wofür sie zitiert wird (verborgene Belege nur gezählt), dazu `images` (Bilder der Quelle) und `citations[].media` |
+| `suggest_place` | Kandidaten für einen Ortstext („A, B oder C“): Wahl der automatischen Zuordnung, gleichnamige Orte mit Land, Einwohnerzahl, Entfernung, welcher Name gepasst hat (früherer/deutscher Name wie „Breslau“), eigene Orte; nur Verzeichnisdaten |
+| `list_places` | Nur Administratoren: alle Ortstexte mit Anzahl, Status (offen, automatisch, von KI, von Hand, nicht zuordenbar) und Kontext (Feldarten, Jahre — ohne Personen), 50 je Seite |
 
 Nur mit der Stufe „lesen und schreiben“ (siehe unten) kommen hinzu:
 
@@ -920,6 +946,7 @@ Nur mit der Stufe „lesen und schreiben“ (siehe unten) kommen hinzu:
 | `set_person_families` | Familienzuordnung setzen |
 | `add_media` | Neues Bild an Personen, Beziehungen, Ereignisse, Belege und/oder Quellen hängen (`person_ids`, `relationship_ids`, `event_ids`, `citation_ids`, `source_ids`; mindestens ein Ziel), Bild **entweder** per `url` (https-Adresse der Bilddatei; der Server lädt sie selbst über [lib/safe-fetch.ts](lib/safe-fetch.ts)) **oder** als `data_base64` (Dateiinhalt, auch als `data:`-Adresse; `mime_type` und `file_name` optional), dazu `caption` (wird Alt-Text) |
 | `link_media` | Vorhandenes Bild (`media_id`) an weitere Einträge hängen oder mit `action: "unlink"` davon lösen; die letzte Zuordnung lässt sich nicht lösen (die KI löscht keine Bilder) |
+| `assign_place` | Nur Administratoren: Ortstexten Koordinaten zuordnen — einzeln oder bis 50 je Aufruf, aus dem Verzeichnis (`gazetteer_id`), als eigener Ort (Koordinaten + Bezeichnung) oder „nicht zuordenbar“, mit `uncertain` und Begründung (`note`); erscheint als „von KI“, nie über von Hand Bestätigtes |
 | `begin_change_set` | Änderungspaket mit Titel öffnen (z.B. „Taufbuch St. Marien 1850–1870 ausgewertet“); die Kennung geht als `change_set_id` an die folgenden Schreibwerkzeuge, siehe [Änderungsgeschichte](#änderungsgeschichte) |
 
 Personen, Quellen oder Bilder löschen kann die KI bewusst nicht.
@@ -944,7 +971,8 @@ dem Dekodieren geprüft, der Typ anhand der Bytes (eine abweichende
 das schon in der App ist (z.B. nach dem Hochladen in der App). Ein nur im
 Chat gezeigtes Bild braucht Weg 1 oder 3; der Server-Hinweis an das Modell
 sagt das ausdrücklich. Dazu kommen
-zwei Prompt-Vorlagen (`research_person`, `review_data_quality`) und die
+drei Prompt-Vorlagen (`research_person`, `review_data_quality`,
+`orte_zuordnen` — offene Ortstexte stapelweise zuordnen) und die
 Ressource `familytree://person/{id}`. Die Ergebnisse sind kompaktes JSON;
 Daten stehen in ihrer echten Genauigkeit (`1850`, `um 1850`, `vor 1900` —
 siehe [Ungenaue Daten](#ungenaue-daten)), und Eingaben akzeptieren dieselben
@@ -1618,6 +1646,7 @@ Das Schema liegt in `prisma/schema.prisma`, die Migrationen in
 | `20261122000001_bezugsperson` | Bezugsperson: `User.personId` (Fremdschlüssel, `ON DELETE SET NULL`) — rein ergänzend |
 | `20261123000000_medien_an_eintraegen` | Bilder an Quellen, Ereignissen und Belegen: Tabellen `SourceMedia`, `EventMedia`, `CitationMedia` (Muster `PersonMedia`, `sortOrder`, `CASCADE` an beiden Seiten) — rein ergänzend, ohne Datenänderung; `Source.mediaId` bleibt der Hauptscan und wird nicht kopiert (die App liest beide Stellen) |
 | `20261123000001_orte` | Ortszuordnung für die Karte: Tabelle `Place` (normalisierter Ortstext → Koordinaten, Herkunft automatisch/von Hand, Genauigkeit, „nicht zuordenbar“), Enums `PlaceSource` und `PlacePrecision` — rein ergänzend |
+| `20261124000001_orte_ki` | Ortszuordnung durch die KI: `PlaceSource` um `AI` (`ALTER TYPE … ADD VALUE`), `Place.note` (Begründung) und `Place.uncertain` (Standard `false`) — rein ergänzend |
 
 Schemaänderungen künftig mit `npm run db:migrate` (`prisma migrate dev`) als
 Migration anlegen und mit einchecken. Vor dem Commit prüfen, ob sie rein

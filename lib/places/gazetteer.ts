@@ -128,6 +128,23 @@ function bracketName(gaz: Gazetteer, e: GeoEntry, dataName?: string | null): str
 }
 
 /**
+ * Welcher Name eines Eintrags in einem Teil des Ortstexts steht:
+ * `official` (heutiger Hauptname, auch in anderer Schreibweise wie
+ * „Wroclaw“/„Timişoara“), `historic` (der deutsche bzw. frühere Name aus dem
+ * Verzeichnis, „Breslau“) oder `alternate` (ein weiterer Name, z.B. in
+ * anderer Sprache). Rein, für den Vorschlag am Eingabefeld und `suggest_place`.
+ */
+export type NameKind = "official" | "historic" | "alternate";
+
+export function nameKindOf(e: GeoEntry, part: string): { name: string; kind: NameKind } {
+  const clean = stripParen(part);
+  const key = normalizeForLookup(clean);
+  if (!key || key === normalizeForLookup(e.name)) return { name: e.name, kind: "official" };
+  if (e.de && key === normalizeForLookup(e.de)) return { name: clean, kind: "historic" };
+  return { name: clean, kind: "alternate" };
+}
+
+/**
  * Anzeigename für einen Ortstext: der erste Teil des Texts, der ein Name
  * dieses Eintrags ist, kommt in die Klammer („Breslau, Schlesien“ →
  * „Wrocław (Breslau), Polen“).

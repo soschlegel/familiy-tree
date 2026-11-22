@@ -20,6 +20,7 @@ import {
 import { eventIssues, eventTitle, type EventOwner, type EventTypeName } from "../events";
 import { forbiddenError, notFoundError, parseOrThrow, validationError } from "./errors";
 import { iso } from "./dto";
+import { queuePlaceAutoAssign } from "./places";
 import { mediaAttachedTo, removeOrphanedMedia } from "./media";
 import { imagesOfEvents, type AttachedImage } from "./attached-media";
 
@@ -250,6 +251,7 @@ export async function createEvent(scope: Scope, input: unknown): Promise<EventDt
     entityId: event.id,
     diff: toEventDto(event, true),
   });
+  queuePlaceAutoAssign(scope, [event.place]);
   return toEventDto(event, true);
 }
 
@@ -286,6 +288,7 @@ export async function updateEvent(scope: Scope, id: string, patch: unknown): Pro
       diff: { subject: eventTitle(event), changes },
     });
   }
+  if (changes.place) queuePlaceAutoAssign(scope, [event.place]);
   return toEventDto(event, true);
 }
 

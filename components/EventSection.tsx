@@ -6,6 +6,7 @@ import { useEffect, useId, useState } from "react";
 
 import { apiFetch, jsonBody } from "./api-client";
 import { DateInput, dateFieldFrom, dateInputError, datePayload } from "./DateInput";
+import { PlaceHint } from "./PlaceHint";
 import { toDateInput, toFuzzyDate, type DatePrecision, type DateQualifier } from "@/lib/dates";
 import {
   ALTERNATIVE_ONLY_TYPES,
@@ -180,6 +181,7 @@ function EventForm({
         aria-invalid={err(k) ? true : undefined}
         onChange={(e) => set(k, e.target.value)}
       />
+      {k === "place" && <PlaceHint text={v.place} />}
       {err(k) && <span className="field-error">{err(k)}</span>}
     </div>
   );

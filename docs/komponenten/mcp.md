@@ -20,7 +20,7 @@ Schlüsselverwaltung in der Oberfläche: Seite `/ai-access` und die Routen
 |---|---|
 | `mcp/register.ts` | Gemeinsamer Aufbau: `createMcpServer(ctx)` erzeugt einen `McpServer` mit Name `familytree`, Titel „Stammbaum“, Version `0.1.0` und dem Server-Hinweis (`INSTRUCTIONS`). Registriert immer die Lesewerkzeuge, Prompts und die Ressource, die Schreibwerkzeuge nur bei `ctx.allowWrite`. Ohne Seiteneffekte beim Import. |
 | `mcp/tools.ts` | Alle Werkzeuge (`registerReadTools`, `registerWriteTools`), Ausgabeaufbereitung, `personResource` für die Ressource. |
-| `mcp/prompts.ts` | Zwei Prompt-Vorlagen und die Ressource `familytree://person/{id}`. |
+| `mcp/prompts.ts` | Drei Prompt-Vorlagen und die Ressource `familytree://person/{id}`. |
 | `mcp/format.ts` | Reine Formatierungsfunktionen: einheitliche Personenreferenz (`ref`), Lebensspanne, Datumsfelder in echter Genauigkeit (`dateFields`, `dateToken`), `appendResearchNote`. |
 | `mcp/http.ts` | Der reguläre Zugang: `handleMcpPost` für Streamable HTTP, Schlüsselprüfung, Origin-Prüfung, Sperre nach Fehlversuchen, Größenlimits. Bewusst ohne `next/*`, damit Tests den Handler direkt aufrufen können. |
 | `app/api/mcp/route.ts` | Route-Handler `/api/mcp`: `POST` → `handleMcpPost`; `GET`, `DELETE`, `PUT`, `PATCH`, `OPTIONS` → 405. Laufzeit Node.js, immer dynamisch, kein Caching. |
@@ -189,6 +189,18 @@ sagt sinngemäß:
   ohne Kennung bündeln Schreibvorgänge desselben Schlüssels innerhalb von
   30 Minuten automatisch. Titel sehen auch Benutzer, die nicht jede
   beteiligte Person sehen — deshalb nie Personennamen in den Titel.
+- **Orte (eigener Absatz):** Ortsfelder sind Freitext und bleiben genau so,
+  wie sie geschrieben sind — nie einen Ortstext „verbessern“. Koordinaten
+  kommen aus einer eigenen Zuordnung je Text. `suggest_place` zeigt
+  Kandidaten aus dem Verzeichnis und eigene Orte; alte und deutsche Namen
+  werden verstanden („Breslau“ = Wrocław, „Danzig“ = Gdańsk, „Königsberg,
+  Ostpreußen“ = Kaliningrad; `nameKind` „historic“). Administratoren
+  arbeiten offene Texte ab: `list_places` (offen) → `suggest_place` →
+  `assign_place` (Stapel bis 50, kurze deutsche Begründung, `uncertain`
+  bei nur Wahrscheinlichem, eigene Orte für Weiler, Höfe, Wüstungen).
+  KI-Zuordnungen heißen „von KI“, bis ein Admin bestätigt; von Hand
+  Bestätigtes wird nie geändert. Ablauf im Prompt `orte_zuordnen`; keine
+  Personennamen in Pakettiteln.
 
 ## Lesewerkzeuge (immer vorhanden, Stufe `READ`)
 
@@ -207,6 +219,8 @@ sagt sinngemäß:
 | `get_timeline` | Zeitleiste **einer** Person oder **einer** Familie (`getPersonTimeline` / `getFamilyTimeline`) | genau eines von `person_id`/`family_id` (sonst Validierungsfehler), `from_year`/`to_year` (nach Ankerjahr), `limit` (Standard 100), `offset` | `subject`, `total`, `hasMore`, `events` (Datum, Art, Bezeichnung, Personen, Ort, Rolle, Alter ggf. ungefähr), bei Personen `missing` (fehlende Daten) |
 | `list_events` | Alle Lebensereignisse einer Person oder einer Beziehung mit allen Feldern (`listPersonEvents` / `listRelationshipEvents`) | genau eines von `person_id`/`relationship_id` | `events` chronologisch, undatierte zuletzt, mit `sortOrder` und `canEdit` |
 | `search_sources` | Quellen suchen (`listSources`) | `query` (Titel, Verfasser, Archiv, Signatur), `kind`, `limit` (Standard 20, höchstens 100), `offset` | `total`, `offset`, `hasMore`, `sources` mit Zahl der sichtbaren Belege |
+| `suggest_place` | Kandidaten für einen Ortstext (`suggestPlaces`) — für jeden Lesezugang, liest nur das mitgelieferte Verzeichnis und eigene Orte | `text` (wie in den Daten) | `text`, `recommended` (Wahl der automatischen Zuordnung bzw. passender eigener Ort), `ambiguous`, `candidates` je mit `source` (`directory`/`own` = eigener Ort), `gazetteerId`, `label` (heutiger Name, alter Name in Klammern), `kind` (Ort, Region, historische Landschaft, Land, eigener Ort), Genauigkeit, Koordinaten, Land, Einwohnerzahl, `matchedName` und `nameKind` (`historic` = früherer/deutscher Name, `alternate`, `official`), `distanceKm` zur Empfehlung; ohne Treffer Präfixtreffer. Nur für Admins `current` (vorhandene Zuordnung mit Status) |
+| `list_places` | Vorkommende Ortstexte mit Status (`listPlaces`, `placeTextContext`) — **nur Administratoren**, sonst Fehler „Keine Berechtigung …“ | `status` (`open`/`offen`, `auto`/`automatisch`, `ai`/`ki`, `manual`/`von_hand`, `unresolvable`/`nicht_zuordenbar`, `all`/`alle`), `query`, `page` (50 je Seite) | `total`, `page`, `pages`, `counts`, `places` je mit Text, Anzahl, Schreibweisen, Status, `context` (Feldarten birth/death/marriage/divorce/`event:<Art>` mit Anzahl, `fromYear`/`toYear` — ohne Personen), Zuordnung (Quelle, Bezeichnung, Koordinaten, ggf. `uncertain`, `note`), Vorschlag der Automatik |
 | `get_source` | Eine Quelle mit Abschrift/Notizen und allem, wofür sie zitiert wird (`getSource`) | `source_id` | `source`, `canEdit`, `citations` (Angabe, Fundstelle, Ziel Person/Beziehung, Ereignis, Bilder), `hiddenCitationCount` (Belege an verborgenen Personen nur gezählt), `images` (Hauptscan markiert) |
 
 ## Schreibwerkzeuge (nur bei wirksamer Stufe `WRITE`)
@@ -243,6 +257,7 @@ kann die KI bewusst nicht.
 | `delete_event` | Falsch erfasstes Ereignis samt seinen Belegen entfernen (`deleteEvent`) | `event_id` | `deleted`, `eventId`; die Quellen bleiben |
 | `add_name_variant` | Weiteren Namen erfassen (`createPersonName`) | `person_id`, `type` (Geburtsname, Ehename, Alias, religiöser Name, Name nach Einwanderung, Schreibvariante, sonstiger mit Bezeichnung), Vor-/Familienname, Vorsatz, Zusatz, Rufname, Bezeichnung, Notiz | `name`. Mindestens Vor-, Familien- oder Rufname; der Hauptname bleibt an der Person |
 | `add_media` | Neues Bild speichern und anhängen (`addMedia`) | **genau eines** von `url` oder `data_base64`; `mime_type`, `file_name`, `caption` (wird Alt-Text); Ziele `person_ids`, `relationship_ids`, `event_ids`, `citation_ids`, `source_ids` (mindestens eines, je Liste begrenzt durch `MAX_MEDIA_TARGETS`) | `media`, `linked`. Jedes Ziel muss bearbeitbar sein. Einziges Werkzeug mit „Außenwelt“-Hinweis |
+| `assign_place` | Ortstexten Koordinaten zuordnen (`assignPlacesByAi`) — **nur Administratoren**, wie `/admin/places`; der Freitext bleibt unverändert | entweder eine Zuordnung (`text` + genau eines von `gazetteer_id` \| `latitude`+`longitude`+`label` (eigener Ort, `precision` Standard Ort) \| `unresolvable`) oder `assignments` mit bis zu 50 solchen; je optional `uncertain`, `note` (Begründung, bis 1000 Zeichen); `change_set_id` | `assigned`, `failed`, `results` je mit `ok`, Status, Bezeichnung, Koordinaten, `replaced` (vorherige Herkunft) bzw. `error`. Herkunft `AI` („von KI“), gilt sofort für die Karte; überschreibt automatische und frühere KI-Zuordnungen, nie von Hand bestätigte (Eintrag mit Fehler, die übrigen laufen weiter); Text muss in den Daten vorkommen. Protokoll mit Kanal `MCP` und Schlüssel; Paket „Ort zugeordnet (KI): …“ bzw. „Orte zugeordnet (KI)“ ohne Kennung |
 | `link_media` | Vorhandenes Bild an weitere Einträge hängen oder lösen (`linkMedia` / `unlinkMedia`) | `media_id`, `action` (verknüpfen, Standard, oder lösen), Ziele wie bei `add_media` | `mediaId`, `action`, `targets`, `changed`. Das Bild muss sichtbar, jedes Ziel bearbeitbar sein; die letzte Zuordnung lässt sich nicht lösen — die KI löscht nie ein Bild |
 
 ### Bild-Wege
@@ -279,7 +294,16 @@ oder 3 (Server-Hinweis und Werkzeugbeschreibung sagen das ausdrücklich).
   `family_id`): `get_statistics` → `check_consistency` →
   `find_possible_duplicates` → `find_data_gaps`, priorisierte Liste
   (Fehler, Dubletten, Lücken), Personen immer mit Name und ID.
-- Beide Prompts hängen einen Schreibhinweis an: mit Schreibwerkzeugen
+- **Prompt `orte_zuordnen`** („Orte zuordnen“, optional `limit`, Standard
+  100): offene Ortstexte stapelweise abarbeiten — `list_places(offen)` →
+  je Text `suggest_place` und begründet wählen (weitere Teile des Texts,
+  Kontext, Nähe) → eindeutige mit `assign_place` in Stapeln samt `note`
+  zuordnen, fehlende Orte nur bei sicherer Lage als eigenen Ort anlegen,
+  Wahrscheinliches mit `uncertain`, echte Zweifel offen lassen, vorher
+  `begin_change_set` ohne Personennamen; am Ende Liste der unsicheren und
+  offen gelassenen zur Prüfung auf `/admin/places`. Ohne Schreibrecht als
+  Vorschlagsliste.
+- `research_person` und `review_data_quality` hängen einen Schreibhinweis an: mit Schreibwerkzeugen
   „erst nach Rückfrage festhalten, nur mit Beleg, so genau wie die Quelle,
   Ereignisse statt Notizen, nichts nachweislich Richtiges überschreiben“;
   ohne „schreibgeschützt — Ergebnisse als Vorschläge formulieren“.
@@ -307,6 +331,7 @@ oder 3 (Server-Hinweis und Werkzeugbeschreibung sagen das ausdrücklich).
 | `tests/mcp-format.test.ts` | Formatierung: Personenreferenz, Lebensspanne, Recherchenotiz anhängen, ungenaue Daten |
 | `tests/media-links.db.test.ts` | `add_media` per base64 und per Adresse (mit ersetztem Netz), `link_media`, Rechte |
 | `tests/changelog.db.test.ts` | Bündeln je Schlüssel, `begin_change_set`, fremde Paketkennung abgelehnt |
+| `tests/places-ai.db.test.ts` | `suggest_place` (früherer Name, mehrdeutig, eigener Ort), `list_places` nur für Admins mit Kontext ohne Personennamen, `assign_place` mit Stapel, eigenem Ort, Ablehnung bei MANUAL bzw. unbekanntem Text, Protokoll mit Kanal und Schlüssel, Rechte für Nicht-Admins |
 | `tests/ai-access.db.test.ts`, `tests/ai-access.test.ts` | Rechte- und Schlüssellogik (`authorizeAiCall`, Stufen) |
 | `e2e/read/mcp-http.spec.ts` | Gegen den laufenden Server: Schlüssel-Matrix, `tools/list` nach Stufe, Cookie allein meldet nicht an |
 | `e2e/write/ai-access.spec.ts` | Oberfläche `/ai-access` und Verwaltung (Schlüssel anlegen, herabsetzen, widerrufen) |

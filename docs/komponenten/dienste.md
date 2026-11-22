@@ -1164,31 +1164,89 @@ aus `lib/places/`), Pflege durch Administratoren.
 - `assignPlace(scope, input)` — von Hand: Verzeichniseintrag übernehmen,
   Koordinaten eingeben, automatische Zuordnung bestätigen, „nicht
   zuordenbar“ markieren oder zurücksetzen (`placeAssignSchema`).
-- `autoAssignPlaces(scope)` — ordnet alle nicht von Hand bestätigten
-  Ortstexte neu zu.
+- `autoAssignPlaces(scope)` — Knopf „Automatisch zuordnen“ (Altbestand):
+  ordnet alle Ortstexte neu zu, die weder von Hand bestätigt noch von der KI
+  gesetzt sind (Ergebnis zählt beide getrennt: `manual`, `ai`).
+- `assignNewPlaceTexts(actor, texts?)` / `queuePlaceAutoAssign(scope,
+  texts?)` / `placeAutoAssignIdle()` — **Zuordnung ohne Knopfdruck:** nach dem
+  Speichern einer Person (Geburts-/Sterbeort), Beziehung (Orte von
+  Beginn/Ende) oder eines Ereignisses (Ort) mit den gespeicherten Texten,
+  nach dem GEDCOM-Import (`applyGedcomImport`) und dem Austausch-Import
+  (`POST /api/import`) ohne Textliste (alle offenen). Nur Texte **ohne**
+  Zuordnung, ohne Treffer bleiben sie offen. Läuft im Hintergrund des
+  Node-Prozesses in einer Warteschlange (nacheinander); das Speichern wartet
+  nicht und scheitert nie daran — Fehler nur im Server-Log („[places]“).
+  Zusammenführen und „Importe verbinden“ erzeugen keine neuen Ortstexte und
+  stoßen deshalb nichts an. Abschaltbar mit `PLACE_AUTO_ASSIGN=off` (so in
+  `vitest.config.ts`).
+- `placeHint(scope, text)` — Vorschlag am Eingabefeld: dieselbe Regel wie die
+  Automatik (`matchPlace`), dazu eigene Orte; Status gefunden / mehrdeutig /
+  nicht gefunden, Anzeigename, Genauigkeit, `formerName` (früherer bzw.
+  deutscher Name, über den erkannt wurde), `otherName`. Für Admins und
+  Bearbeiter einer Familie (sonst `FORBIDDEN`). `warmPlaceDirectory` lädt das
+  Verzeichnis vorab.
+- `suggestPlaces(scope, text)` — Kandidaten für die KI (`suggest_place`):
+  empfohlene Wahl der Automatik, die übrigen gleichnamigen Kandidaten mit
+  Art, Einwohnerzahl, Land, Namensart (`nameKindOf`) und Entfernung, eigene
+  Orte (`source: "own"`), ohne Treffer die Präfixsuche; die vorhandene
+  Zuordnung des Texts (`current`) nur für Admins.
+- `placeTextContext(scope, keys)` — nur Admins: je Ortstext Feldarten
+  (birth, death, marriage, divorce, `event:<Art>`) mit Anzahl und
+  Jahresspanne, ohne Personen (Kontext für `list_places`).
+- `assignPlacesByAi(scope, items)` — `assign_place`: bis `AI_ASSIGN_MAX` (50)
+  Zuordnungen je Aufruf (`aiPlaceAssignSchema`: Verzeichniseintrag, eigener
+  Ort mit Koordinaten und Bezeichnung, oder „nicht zuordenbar“; optional
+  `uncertain`, `note`). Quelle `AI`; überschreibt `AUTO`/`AI`, nie `MANUAL`;
+  der Text muss in den Daten vorkommen. Ergebnis je Eintrag mit `ok`/`error`
+  — ein abgelehnter Eintrag hält die übrigen nicht auf.
 
-**Regeln und Entscheidungen:** Von Hand Bestätigtes (`MANUAL`) wird von der
-Automatik nie überschrieben oder gelöscht. Die Automatik legt neue
+**Eigene Orte:** Zuordnungen mit eigenen Koordinaten (ohne `gazetteerId`,
+von Hand oder von der KI). Sie erscheinen in `placeHint` und `suggestPlaces`
+als Kandidat, wenn ihr Text bzw. ihre Bezeichnung (erster Teil, ohne Klammer)
+zum ersten Teil eines neuen Texts passt; sie gehen dem Verzeichnis vor, wenn
+dieses nur einen allgemeineren Teil getroffen hat („Hof Lindenau, Amt
+Peine“ → der eigene Hof, nicht Peine). Die automatische Zuordnung nutzt sie
+nicht (offene Frage: Weiler gleichen Namens).
+
+**Regeln und Entscheidungen:** Von Hand Bestätigtes (`MANUAL`) und
+KI-Zuordnungen (`AI`) werden von der Automatik nie überschrieben oder
+gelöscht. Bestätigen (`confirm`) macht aus `AUTO` bzw. `AI` (bei der KI auch
+„nicht zuordenbar“) `MANUAL`, behält die Notiz und hebt „unsicher“ auf;
+eine Wahl von Hand (Verzeichnis, Koordinaten) löscht Notiz und „unsicher“. Die Automatik legt neue
 Zuordnungen an, aktualisiert geänderte Treffer und entfernt automatische
 Zuordnungen ohne Treffer bzw. zu Texten, die nirgends mehr vorkommen.
 Bestätigen ohne vorhandene Zuordnung → `CONFLICT`. Koordinaten werden auf 5
 Nachkommastellen gerundet.
 
-**Rechte/Datenschutz:** Nur Administratoren — jede Funktion prüft selbst
-`isAdmin`, zusätzlich zur Route, weil die Liste die Ortstexte **aller**
-Personen enthält, auch gesperrter.
+**Rechte/Datenschutz:** Liste, Kontext, Suche, Zuordnen nur
+Administratoren — jede Funktion prüft selbst `isAdmin`, zusätzlich zur
+Route, weil die Liste die Ortstexte **aller** Personen enthält, auch
+gesperrter. Ausnahmen: `placeHint` (Bearbeiter) und `suggestPlaces` (jeder
+Lesezugang) liefern nur Verzeichnisdaten und Bezeichnung/Koordinaten eigener
+Orte (Entscheidung des Eigentümers: eigene Orte sollen wiederverwendet
+werden), nie Personen oder Zählungen; die automatische Zuordnung prüft keine
+Rechte (Systemvorgang nach eigenem Speichern).
 
 **Protokoll:** Einträge mit `entityType` „Place“ (`CREATE`, `UPDATE` mit
 Feldänderungen, `DELETE` mit vorherigem Stand), direkt über `auditData`
 geschrieben. Paket „Ort zugeordnet: …“ bzw. ein Paket „Orte automatisch
-zugeordnet“ für alle Einträge der Automatik.
+zugeordnet“ für alle Einträge der Automatik — auch für die Zuordnung nach dem
+Speichern (eigenes Paket im Namen dessen, der gespeichert hat, mit Kanal und
+Schlüssel bei MCP). KI: Paket „Ort zugeordnet (KI): …“ bzw. „Orte zugeordnet
+(KI)“, oder das mit `change_set_id` angegebene; Kanal `MCP` und
+Schlüssel-ID. Im Changelog heißt die Herkunft `AI` „KI-Vorschlag“.
 
 **Benutzt von:** `app/admin/places/page.tsx`, `app/api/places/route.ts`,
-`app/api/places/search/route.ts`, `app/api/places/auto/route.ts`; Typen in
-`components/PlaceAdmin.tsx`.
+`app/api/places/search/route.ts`, `app/api/places/auto/route.ts`,
+`app/api/places/suggest/route.ts`, `app/api/import/route.ts`; Dienste
+`persons`, `relationships`, `events`, `gedcom-import` (Anstoß nach dem
+Speichern); `mcp/tools.ts` (`suggest_place`, `list_places`, `assign_place`);
+Typen in `components/PlaceAdmin.tsx`, `components/PlaceHint.tsx`.
 
-**Tests:** `tests/map.db.test.ts` (Regeln: `tests/places.test.ts`);
-`e2e/write/places.spec.ts`.
+**Tests:** `tests/map.db.test.ts`, `tests/places-ai.db.test.ts` (Vorschlag
+samt Route und Rechten, Automatik nach Speichern/Import ohne MANUAL/KI zu
+überschreiben, Fehler ohne Folgen, MCP-Werkzeuge, Bestätigen) (Regeln:
+`tests/places.test.ts`); `e2e/write/places.spec.ts`.
 
 ---
 

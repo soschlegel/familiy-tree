@@ -48,6 +48,10 @@ export default defineConfig({
       DATABASE_URL: mockDatabaseUrl(),
       MEDIA_DIR: path.resolve(__dirname, "data", "media-test"),
       NODE_ENV: "test",
+      // Automatische Zuordnung neuer Ortstexte im Hintergrund (lib/services/
+      // places.ts) aus — sie liefe sonst nach Testende gegen eine schon
+      // aufgeräumte Datenbank weiter. Die eigenen Tests schalten sie ein.
+      PLACE_AUTO_ASSIGN: "off",
     },
   },
 });

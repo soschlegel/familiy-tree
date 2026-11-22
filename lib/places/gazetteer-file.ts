@@ -5,10 +5,11 @@ import zlib from "node:zlib";
 import { parseGazetteer, type Gazetteer } from "./gazetteer";
 
 /**
- * Lädt das mitgelieferte Ortsverzeichnis (nur Server). Gebraucht wird es nur
- * von der Admin-Seite „Orte zuordnen“ (Vorschläge, Suche, automatische
- * Zuordnung) — die Karte liest die fertigen Koordinaten aus der Tabelle
- * Place. Deshalb wird es erst beim ersten Bedarf geladen (rund 1–2 s, gut
+ * Lädt das mitgelieferte Ortsverzeichnis (nur Server). Gebraucht wird es von
+ * der Admin-Seite „Orte zuordnen“, vom Vorschlag am Ortsfeld, von der
+ * automatischen Zuordnung nach dem Speichern bzw. nach Importen und vom
+ * MCP-Server — die Karte liest die fertigen Koordinaten aus der Tabelle
+ * Place. Deshalb wird es erst beim ersten Bedarf geladen (rund 1 s, gut
  * 100 MB im Speicher) und nach IDLE_MS ohne Benutzung wieder freigegeben.
  *
  * Der Pfad steht in next.config.mjs unter outputFileTracingIncludes, damit
