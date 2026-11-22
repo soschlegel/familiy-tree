@@ -10,20 +10,16 @@ aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
   Portainer aktualisiert den Stack von dort. **Ein Merge ist ein
   Produktiv-Deployment auf echte Daten.**
 - `optimierung` = Arbeitsbranch, zum Zeitpunkt der Übergabe gleich `main`.
-- Zuletzt ausgerollt (22.11., drittes Release, Kennung 2026-11-22.3):
-  „Was ist neu?“ nach jeder Version und Seite `/neuigkeiten` (`CHANGELOG.md`,
-  Migration `20261124000000_neuigkeiten`, letzter Migrationsordner),
-  Anwender-Hilfe `/hilfe` (`docs/anwender/`), Anmelde-Hinweis
-  „Authorization: Bearer …“ in der KI-Anleitung, E2E gegen Produktions-Build
-  (`npm run test:e2e`). Davor am 22.11.: Karte/Orte, Schlüsselverwaltung,
-  Komponenten-Doku, Aufräumrunde (2026-11-22.2); Bilder an Einträgen
-  (2026-11-22.1).
-- Prüfstand des letzten Pakets: Typecheck, Lint, Vitest 864/864;
-  `npm run test:e2e` (Produktions-Build, ein Lauf): 314 bestanden, 1
-  übersprungen, 151 s; lokaler Docker-Build ok (Hilfe-Texte, Ortsverzeichnis
-  und Changelog im Image).
-- Paket **Orte ohne Knopfdruck und mit KI** (Branch `orte-ki`, noch nicht
-  zusammengeführt): Vorschlag am Ortsfeld (`components/PlaceHint.tsx`,
+- Zuletzt ausgerollt (22.11., viertes Release, Kennung 2026-11-22.4): Orte
+  ohne Knopfdruck und mit KI (siehe nächster Punkt), Migration
+  `20261124000001_orte_ki` (letzter Migrationsordner). Davor am 22.11.:
+  Neuigkeiten, Hilfe, E2E gegen Produktions-Build (2026-11-22.3); Karte/Orte,
+  Schlüsselverwaltung, Komponenten-Doku, Aufräumrunde (2026-11-22.2); Bilder
+  an Einträgen (2026-11-22.1).
+- Prüfstand des letzten Pakets: Migrationen ↔ Schema ohne Abweichung,
+  Typecheck, Lint, Vitest 877/877; `npm run test:e2e` (Produktions-Build):
+  317 bestanden, 1 übersprungen, 149 s; lokaler Docker-Build ok.
+- Paket **Orte ohne Knopfdruck und mit KI** (ausgerollt 22.11.): Vorschlag am Ortsfeld (`components/PlaceHint.tsx`,
   `GET /api/places/suggest`), automatische Zuordnung neuer Ortstexte nach
   dem Speichern und nach Importen im Hintergrund (`queuePlaceAutoAssign`,
   abschaltbar mit `PLACE_AUTO_ASSIGN=off`, in Vitest aus), MCP-Werkzeuge
