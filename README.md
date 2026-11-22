@@ -690,7 +690,7 @@ und Belege gelten als „in der Datei geändert“ und werden berichtigt — au�
 dem, was in der App von Hand geändert wurde. Ohne Datei zur Hand: im
 Importverlauf (`/admin/data`) **„Aus der aufbewahrten Datei neu einlesen“** —
 das Original des Laufs geht durch die normale Vorschau; geschrieben wird erst
-nach „Importieren“, der alte Lauf bleibt unverändert. Doppelte Belege aus
+nach „GEDCOM-Import ausführen“, der alte Lauf bleibt unverändert. Doppelte Belege aus
 älteren Importen erscheinen dabei unter „Fehlt in der Datei“ und lassen sich
 dort entfernen.
 
@@ -948,7 +948,7 @@ lebenden Personen bedenken.
    (`/ai-access`, jeder Benutzer verwaltet dort seine eigenen Schlüssel).
    Namen vergeben, der sagt, wo der Schlüssel liegt (z.B. „Laptop – Claude
    Code“), Stufe und Gültigkeit wählen (Standard 90, höchstens 365 Tage),
-   *Anlegen*. Der Schlüssel (`ftk_…`) wird **genau einmal** angezeigt —
+   *Schlüssel anlegen*. Der Schlüssel (`ftk_…`) wird **genau einmal** angezeigt —
    gleich kopieren. Die Seite zeigt dazu die Adresse der Schnittstelle
    (`<PUBLIC_URL>/api/mcp`) und den fertigen Befehl für Claude Code.
 3. **Claude Code verbinden** (in einem Terminal, einmal je Rechner):
@@ -1036,7 +1036,7 @@ lebenden Personen bedenken.
 | Adresse | `<PUBLIC_URL>/api/mcp` |
 | Verfahren | MCP „Streamable HTTP“, nur `POST`, zustandslos, Antworten als JSON (kein SSE, kein WebSocket) |
 | Anmeldung | nur `Authorization: Bearer ftk_…` — die Anmeldung der Weboberfläche (Cookie) zählt nicht, Schlüssel in der URL ebenso wenig |
-| Origin | Anfragen ohne `Origin`-Header (Claude Code, `mcp-remote`) sind erlaubt; mit `Origin` nur die eigene Adresse (`PUBLIC_URL`) oder Einträge in `MCP_ALLOWED_ORIGINS` (kommagetrennt). Das braucht nur ein MCP-Client, der im Browser läuft (z.B. der MCP Inspector) — die Variable reicht der Stack nicht durch |
+| Origin | Anfragen ohne `Origin`-Header (Claude Code, `mcp-remote`) sind erlaubt; mit `Origin` nur die eigene Adresse der App (`AUTH_URL`; im Produktivstack setzt `docker-compose.yml` sie aus `PUBLIC_URL`, lokal steht sie in `.env`) oder Einträge in `MCP_ALLOWED_ORIGINS` (kommagetrennt, ganze Origins wie `http://localhost:6274`). Das braucht nur ein MCP-Client, der im Browser läuft (z.B. der MCP Inspector) — `docker-compose.yml` reicht die Variable bewusst nicht durch, sie ist für die lokale Entwicklung gedacht |
 | Größe | Anfrage höchstens 1 MiB; mit Schreibstufe bis `MAX_UPLOAD_BYTES` × 4/3 + 1 MiB (Bild als base64 für `add_media`), geprüft erst nach dem Schlüssel |
 
 | Status | Bedeutung |
@@ -1045,7 +1045,9 @@ lebenden Personen bedenken.
 | 401 | Schlüssel fehlt, ist falsch, widerrufen oder abgelaufen, oder der Benutzer ist gesperrt — bewusst ohne Angabe des Grundes |
 | 403 | Schlüssel gültig, aber der Benutzer hat kein KI-Recht (mehr); oder fremder `Origin` |
 | 405 | andere Methode als `POST` |
-| 413 | Anfrage größer als 1 MiB |
+| 413 | Anfrage zu groß: höchstens 1 MiB, mit einem Schlüssel der Schreibstufe bis `MAX_UPLOAD_BYTES` × 4/3 + 1 MiB (Bild als base64) |
+| 500 | unerwarteter Fehler bei der Verarbeitung (Einzelheiten nur im Log der App) |
+| 503 | Schlüssel konnte nicht geprüft werden, meist weil die Datenbank nicht erreichbar ist — später erneut versuchen |
 | 429 | nach 20 fehlgeschlagenen Anmeldungen von derselben Adresse innerhalb von 10 Minuten — bis zum Ende dieser 10 Minuten, auch mit richtigem Schlüssel (`Retry-After` nennt die Sekunden). Ein Neustart der App hebt die Sperre auf |
 
 ### Fehlersuche KI-Zugang
@@ -2080,8 +2082,9 @@ Verbindungspersonen und führt sie nach Bestätigung zusammen — aus den
 Importen wird ein gemeinsamer Stammbaum.
 
 Schneller Weg: Seite öffnen (Auswahl „alle Importe“ steht schon), **Abgleichen**
-(läuft im Hintergrund), oben steht „Jetzt N getrennte Teile — mit den sicheren
-Verbindungen M“ und je Import-Paar die Zahl der Verbindungspersonen;
+(läuft im Hintergrund), oben steht „Jetzt N Familienverbände — mit den
+sicheren Verbindungen M Familienverbände“ und je Import-Paar die Zahl der
+Verbindungspersonen;
 **Gemeinsame Vorschau** (was umzieht, zusammenfällt, Zweitangabe wird, was
 blockiert ist, wie viele Personen danach zu weiteren Familien gehören und
 damit für deren Mitglieder sichtbar werden), **Jetzt zusammenführen**,

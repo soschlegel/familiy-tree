@@ -157,9 +157,11 @@ Ein einziges Image mit App, Migrationen und Admin-Abgleich.
    Einstieg `docker/entrypoint.sh`, Befehl `node server.js`.
 
 `.dockerignore` hält u.a. `node_modules`, Build-Ordner, `data/`, `.env*`
-(außer dem Beispiel), Markdown außer der README, `e2e/`, Testergebnisse,
-Compose-Dateien, `scripts/backup.sh`, `stack.env*` und `.mcp.json` aus dem
-Build-Kontext. Der Ordner `tests/` wird nicht ausgeschlossen.
+(außer dem Beispiel), Markdown außer der README, `tests/`, `e2e/`, die
+Test-Konfigurationen (`vitest.config.ts`, `playwright.config.ts`),
+Testergebnisse, Compose-Dateien, `scripts/backup.sh`, `stack.env*` und
+`.mcp.json` aus dem Build-Kontext. Nichts davon braucht Build oder
+Laufzeit (kein App-Code importiert aus `tests/`).
 
 ### `docker/entrypoint.sh`
 
@@ -405,7 +407,7 @@ selbst gelesen, nicht im eigenen Code.
 | `MEDIA_DIR` | Ordner der Bilddateien (zur Laufzeit gelesen, Standard `data/media`) | `lib/storage.ts`, `prisma/seed-mock.ts`, Tests |
 | `MAX_UPLOAD_BYTES` | größte Bilddatei (Standard 15 MiB) | `lib/services/media-links.ts`, `lib/services/gedcom-photos.ts`, `mcp/http.ts` |
 | `MCP_CONNECTOR_URL` | öffentliche Adresse des MCP-Gateways, nur für die Anleitung auf `/ai-access` | `app/ai-access/page.tsx`, `components/AiConnectGuide` |
-| `MCP_ALLOWED_ORIGINS` | weitere erlaubte `Origin`-Werte für `/api/mcp` (kommagetrennt) | `mcp/http.ts` — steht in keiner Beispieldatei |
+| `MCP_ALLOWED_ORIGINS` | weitere erlaubte `Origin`-Werte für `/api/mcp` (kommagetrennt) | `mcp/http.ts` — nur lokal (`.env.example`, auskommentiert); der Stack reicht sie bewusst nicht durch |
 | `NODE_ENV` | Produktion/Entwicklung (Dev-Login, Prisma-Logging, Client-Singleton) | `lib/auth.ts`, `lib/prisma.ts` |
 | `NEXT_PUBLIC_BUILD_DATE` / `NEXT_PUBLIC_BUILD_SHA` | Build-Angabe in der Fußzeile, beim Build fest eingesetzt | `lib/build-info.ts` |
 | `NEXT_DIST_DIR` | eigener Build-Ordner (Mock-Server) | `next.config.mjs` |
@@ -417,7 +419,7 @@ selbst gelesen, nicht im eigenen Code.
 | Variable | Zweck |
 |---|---|
 | `RUN_MIGRATIONS` | `false` überspringt Datenbankwarten, Migrationen und Admin (`docker/entrypoint.sh`) |
-| `DB_WAIT_SECONDS` | Wartezeit auf die Datenbank (`docker/entrypoint.sh`, nicht in den Beispieldateien) |
+| `DB_WAIT_SECONDS` | Wartezeit auf die Datenbank in Sekunden (`docker/entrypoint.sh`, Standard 60; `docker-compose.yml` reicht sie durch, `stack.env.example` auskommentiert) |
 | `PRISMA_QUERY_ENGINE_LIBRARY` | Pfad der Query-Engine für das CLI im Image (`docker/prisma.sh`) |
 | `DATA_ROOT` | Wurzel aller Bind-Mounts (Pflicht) |
 | `POSTGRES_PASSWORD` / `POSTGRES_USER` / `POSTGRES_DB` | Zugang der Datenbank; daraus baut Compose `DATABASE_URL` |
@@ -427,7 +429,7 @@ selbst gelesen, nicht im eigenen Code.
 | `BACKUP_KEEP_DAYS` | Aufbewahrung der Dumps |
 | `COMPOSE_PROFILES` | `caddy` schaltet den eigenen Proxy zu |
 | `CADDY_SITE`, `CADDY_TLS`, `CADDY_HTTP_PORT`, `CADDY_HTTPS_PORT`, `CADDY_BIND`, `CADDY_MAX_BODY` | Einstellungen des optionalen Caddy |
-| `STACK_NAME` | Stackname für `scripts/backup.sh` (nicht in den Beispieldateien) |
+| `STACK_NAME` | Stackname für `scripts/backup.sh` — Shell-Variable auf der NAS, kein Stack-Wert (in `stack.env.example` auskommentiert erklärt) |
 | `BUILD_DATE` / `BUILD_SHA` | Build-Argumente des Images (von der Action gesetzt) |
 
 ### Mock, MCP-Entwicklung und Tests

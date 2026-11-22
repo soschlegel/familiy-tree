@@ -172,6 +172,8 @@ services:
       # Nur zur Fehlersuche: false überspringt Migrationen und Admin beim
       # Start (README, "Fehlersuche").
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+      # Wie lange der Start höchstens auf die Datenbank wartet (Sekunden).
+      DB_WAIT_SECONDS: ${DB_WAIT_SECONDS:-60}
     volumes:
       - ${DATA_ROOT}/media:/data/media
     # Ein Port für den Reverse-Proxy der NAS. Standard: nur 127.0.0.1 — der

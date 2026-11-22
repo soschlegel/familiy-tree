@@ -23,7 +23,8 @@
  *
  * Auswahl (Größe im Griff): Deutschland, Österreich, Schweiz mit ALLEN
  * bewohnten Orten (auch Dörfer und Ortsteile, inkl. historischer), übriges
- * Europa ab 1000 Einwohnern, Rest der Welt ab 5000 Einwohnern; dazu die
+ * Europa ab 1000 Einwohnern, Rest der Welt ab 15 000 Einwohnern
+ * (WORLD_MIN_POP); dazu die
  * Verwaltungsregionen erster Ebene (Bundesländer, Bundesstaaten …), alle
  * Länder und eine kleine Liste historischer Landschaften (Schlesien, Banat
  * …) mit ungefährer Mitte. Weitere Namen nur in lateinischer Schrift.
