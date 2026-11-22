@@ -89,7 +89,7 @@ describe.skipIf(Boolean(skipReason))("Karte (Mock-Datenbank)", () => {
     const admin = await scope("admin@example.test");
     const view = await loadMapView(admin, { mode: "all" });
     const labels = view.payload.places.map((p) => p.label);
-    expect(labels).toEqual(expect.arrayContaining(["Wrocław (Breslau), Polen", "Timișoara (Temeswar), Rumänien", "Berkum, Saarland, Deutschland"]));
+    expect(labels).toEqual(expect.arrayContaining(["Wrocław (Breslau), Polen", "Timișoara (Temeswar), Rumänien", "Berkum, Niedersachsen, Deutschland"]));
     expect(view.payload.unmappedTexts).toBe(0);
   });
 });

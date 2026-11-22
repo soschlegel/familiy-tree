@@ -1428,7 +1428,7 @@ export function generateMockData(seed: number = MOCK_SEED): MockData {
   };
   mapEvent(fB, 24, "Breslau, Schlesien, Preußen", "CENSUS");
   mapEvent(byId.get(founders.C)!, 21, "Temeswar, Banat", "RESIDENCE", "ABOUT");
-  mapEvent(byId.get(founders.C)!, 27, "Berkum, Peine, Lk Peine, Saarland, Germany", "RESIDENCE", "ABOUT");
+  mapEvent(byId.get(founders.C)!, 27, "Berkum, Peine, Lk Peine, Niedersachsen, Germany", "RESIDENCE", "ABOUT");
   const emigrant = persons.find(
     (p) => p.generation === 1 && p.familyKeys.includes("D") && p.birthDate && lifeYear(p, 30) !== null,
   );

@@ -993,7 +993,7 @@ model Place {
   precision    PlacePrecision?
   latitude     Float?
   longitude    Float?
-  // Anzeigename der Zuordnung, z.B. „Peine, Saarland, Deutschland“.
+  // Anzeigename der Zuordnung, z.B. „Peine, Niedersachsen, Deutschland“.
   label        String?
   countryCode  String?
   // Kennung im Ortsverzeichnis (GeoNames-ID bzw. „h…“ für historische

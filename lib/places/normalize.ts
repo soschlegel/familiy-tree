@@ -66,7 +66,7 @@ export type PlacePart = {
   address: boolean;
 };
 
-/** Schreibweisen von „Sankt“ angleichen: „St. Wendel“ findet „Sankt Wendel“. */
+/** Schreibweisen von „Sankt“ angleichen: „St. Andreasberg“ findet „Sankt Andreasberg“. */
 function saintVariants(n: string): string[] {
   const out = [n];
   const m = /^(st|sankt|saint|san|santa|sainte|ste)\s+(.+)$/.exec(n);
@@ -83,7 +83,7 @@ function saintVariants(n: string): string[] {
 /**
  * Zerlegt einen Ortstext an Kommas (und Semikolons) in Teile, vom
  * spezifischen zum allgemeinen — so schreiben GEDCOM-Programme Orte:
- * „Berkum, Peine, Lk Peine, Saarland, Germany“.
+ * „Berkum, Peine, Lk Peine, Niedersachsen, Germany“.
  */
 export function splitPlaceText(text: string): PlacePart[] {
   const parts: PlacePart[] = [];
@@ -99,7 +99,7 @@ export function splitPlaceText(text: string): PlacePart[] {
       const stripped = n.replace(DESCRIPTOR_PREFIX, "");
       if (stripped !== n && stripped) for (const v of saintVariants(stripped)) if (!lookups.includes(v) && !into.includes(v)) into.push(v);
     };
-    // Postleitzahl vorn („66740 Peine“) ist keine Anschrift.
+    // Postleitzahl vorn („31224 Peine“) ist keine Anschrift.
     const withoutZip = raw.replace(/^\d{4,5}\s+(?=\D)/, "");
     add(withoutZip);
     // Klammerzusatz: erst mit („Halle (Saale)“), dann ohne („Hannover (Amtsgericht)“).

@@ -18,7 +18,7 @@ export type GeoEntry = {
   lon: number;
   /** ISO-Ländercode („DE“). */
   cc: string;
-  /** Code der Region erster Ebene im Land („09“ = Saarland), leer wenn unbekannt. */
+  /** Code der Region erster Ebene im Land („06“ = Niedersachsen), leer wenn unbekannt. */
   a1: string;
   pop: number;
   kind: GeoKind;
@@ -94,7 +94,7 @@ const stripParen = (s: string) => s.replace(/\s*\([^)]*\)\s*/g, " ").trim();
  * der deutsche bzw. historische Name — nur wenn er sich unterscheidet:
  * „Wrocław (Breslau), Polen“, „Gdańsk (Danzig), Polen“, „Timișoara (Temeswar),
  * Rumänien“. Orte im deutschen Sprachraum ohne Klammer, dafür mit
- * Bundesland: „Peine, Saarland, Deutschland“.
+ * Bundesland: „Peine, Niedersachsen, Deutschland“.
  *
  * `dataName`: der Name aus den Daten (ein Teil des Ortstexts); zählt nur,
  * wenn er wirklich ein Name dieses Eintrags ist.

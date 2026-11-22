@@ -14,7 +14,7 @@ import { mockData } from "./helpers";
 
 describe("normalize", () => {
   it("placeKey vereinheitlicht nur Schreibung und Leerzeichen", () => {
-    expect(placeKey("  Berkum ,Peine,  Saarland ")).toBe("berkum, peine, saarland");
+    expect(placeKey("  Berkum ,Peine,  Niedersachsen ")).toBe("berkum, peine, niedersachsen");
     expect(placeKey("KIEL")).toBe(placeKey("kiel"));
     expect(placeKey("Vöhrum")).not.toBe(placeKey("Peine-Vöhrum"));
   });
@@ -28,32 +28,32 @@ describe("normalize", () => {
   });
 
   it("zerlegt GEDCOM-Ortsformen und entfernt Verwaltungsvorsätze", () => {
-    const parts = splitPlaceText("Berkum, Peine, Lk Peine, Saarland, Germany");
-    expect(parts.map((p) => p.raw)).toEqual(["Berkum", "Peine", "Lk Peine", "Saarland", "Germany"]);
+    const parts = splitPlaceText("Berkum, Peine, Lk Peine, Niedersachsen, Germany");
+    expect(parts.map((p) => p.raw)).toEqual(["Berkum", "Peine", "Lk Peine", "Niedersachsen", "Germany"]);
     expect(parts[2].lookups).toContain("peine");
     // „Kreisstadt“ allein nennt keinen Ort.
-    expect(splitPlaceText("Vöhrum, Peine, Kreisstadt, Saarland").map((p) => p.raw)).not.toContain("Kreisstadt");
+    expect(splitPlaceText("Vöhrum, Peine, Kreisstadt, Niedersachsen").map((p) => p.raw)).not.toContain("Kreisstadt");
     // Anschrift: wird nicht als Ort gesucht.
     expect(splitPlaceText("Hannover, Lister Meile 12")[1].address).toBe(true);
     // Postleitzahl ist keine Anschrift.
-    expect(splitPlaceText("66740 Peine")[0]).toMatchObject({ address: false, lookups: ["peine"] });
+    expect(splitPlaceText("31224 Peine")[0]).toMatchObject({ address: false, lookups: ["peine"] });
     // Klammerzusatz mit und ohne, St./Sankt, zusammengesetzte Namen als Rückfall.
     expect(splitPlaceText("Hannover (Amtsgericht)")[0].lookups).toEqual(["hannover amtsgericht", "hannover"]);
-    expect(splitPlaceText("St. Wendel")[0].lookups).toContain("sankt wendel");
+    expect(splitPlaceText("St. Andreasberg")[0].lookups).toContain("sankt andreasberg");
     expect(splitPlaceText("Peine-Vöhrum")[0].fallbacks).toEqual(["vohrum", "peine"]);
   });
 });
 
 // Kleines Verzeichnis: id, name, weitere Namen, lat, lon, Land, Region, Einwohner, Art
 const MINI = [
-  "1\tPeine\tPaane\t49.31\t6.75\tDE\t09\t38000\tP",
-  "2\tRoden\t\t49.33\t6.75\tDE\t09\t\tP",
-  "3\tRoden\t\t49.90\t9.63\tDE\t02\t1089\tP",
-  "4\tRoden\t\t53.14\t6.43\tNL\t01\t7030\tP",
+  "1\tPeine\tPaane\t52.32\t10.24\tDE\t06\t49953\tP",
+  "2\tBerkum\t\t52.31\t10.19\tDE\t06\t\tP",
+  "3\tBerkum\t\t50.62\t7.13\tDE\t07\t2432\tP",
+  "4\tBerkum\t\t52.52\t6.14\tNL\t15\t3720\tP",
   "5\tKiel\t\t54.32\t10.13\tDE\t10\t246000\tP",
   "6\tWrocław\tBreslau\t51.10\t17.03\tPL\t72\t672000\tP",
   "7\tBreslau\t\t48.40\t12.00\tDE\t02\t\tP",
-  "10\tSaarland\tSarre\t49.40\t6.96\tDE\t09\t\tA",
+  "10\tNiedersachsen\tLower Saxony\t52.83\t9.17\tDE\t06\t\tA",
   "11\tBayern\tBavaria\t48.90\t11.40\tDE\t02\t\tA",
   "12\tHamburg\t\t53.55\t10.00\tDE\t04\t\tA",
   "13\tHamburg\t\t53.55\t9.99\tDE\t04\t1800000\tP",
@@ -69,11 +69,11 @@ describe("matchPlace (Regeln, kleines Verzeichnis)", () => {
   const m = (t: string) => matchPlace(gaz, t);
 
   it("sucht vom spezifischen zum allgemeinen Teil, Region schränkt ein", () => {
-    expect(m("Berkum, Peine, Lk Peine, Saarland, Germany")).toMatchObject({ precision: "PLACE", matchedPart: "Berkum", entry: { id: "2" } });
+    expect(m("Berkum, Peine, Lk Peine, Niedersachsen, Germany")).toMatchObject({ precision: "PLACE", matchedPart: "Berkum", entry: { id: "2" } });
   });
 
   it("gleichnamiger Ort weit weg vom nächsten genannten Ort wird verworfen", () => {
-    // Ohne Region: das Berkum bei Peine, nicht das in Bayern oder den Niederlanden.
+    // Ohne Region: das Berkum bei Peine, nicht das in Nordrhein-Westfalen oder den Niederlanden.
     expect(m("Berkum, Peine")?.entry.id).toBe("2");
     const gazNoLocal = parseGazetteer(MINI.split("\n").filter((l) => !l.startsWith("2\t")).join("\n"));
     expect(matchPlace(gazNoLocal, "Berkum, Peine, Germany")).toMatchObject({ entry: { id: "1" }, matchedPart: "Peine" });
@@ -89,7 +89,7 @@ describe("matchPlace (Regeln, kleines Verzeichnis)", () => {
   });
 
   it("ohne Ort: Region, dann Land", () => {
-    expect(m("Unbekanntdorf, Saarland, Germany")).toMatchObject({ precision: "REGION", entry: { id: "10" } });
+    expect(m("Unbekanntdorf, Niedersachsen, Germany")).toMatchObject({ precision: "REGION", entry: { id: "10" } });
     expect(m("Schlesien")).toMatchObject({ precision: "REGION", entry: { id: "h1" } });
     expect(m("Irgendwo, Deutschland")).toMatchObject({ precision: "COUNTRY", entry: { id: "20" } });
     expect(m("Deutschland")).toMatchObject({ precision: "COUNTRY" });
@@ -124,12 +124,13 @@ describe("matchPlace mit dem mitgelieferten Ortsverzeichnis", () => {
   });
 
   const cases: [string, { label: RegExp; precision: string; lat: number; lon: number }][] = [
-    ["Berkum, Peine, Lk Peine, Saarland, Germany", { label: /^Berkum, Saarland/, precision: "PLACE", lat: 49.33, lon: 6.75 }],
-    ["Vöhrum, Peine, Kreisstadt, Saarland, Germany", { label: /^Vöhrum, Saarland/, precision: "PLACE", lat: 49.33, lon: 6.77 }],
+    ["Berkum, Peine, Lk Peine, Niedersachsen, Germany", { label: /^Berkum, Niedersachsen/, precision: "PLACE", lat: 52.31, lon: 10.19 }],
+    ["Vöhrum, Peine, Kreisstadt, Niedersachsen, Germany", { label: /^Vöhrum, Niedersachsen/, precision: "PLACE", lat: 52.34, lon: 10.19 }],
+    ["Peine-Vöhrum", { label: /^Vöhrum, Niedersachsen/, precision: "PLACE", lat: 52.34, lon: 10.19 }],
     ["Kirchhofen, Baden-Württemberg, Germany", { label: /^Kirchhofen, Baden-Württemberg/, precision: "PLACE", lat: 47.92, lon: 7.74 }],
     ["Breslau", { label: /^Wrocław/, precision: "PLACE", lat: 51.1, lon: 17.03 }],
     ["Breslau, Schlesien, Preußen", { label: /^Wrocław/, precision: "PLACE", lat: 51.1, lon: 17.03 }],
-    ["Paane", { label: /^Peine, Saarland/, precision: "PLACE", lat: 49.31, lon: 6.75 }],
+    ["Aix-la-Chapelle", { label: /^Aachen, Nordrhein-Westfalen/, precision: "PLACE", lat: 50.78, lon: 6.08 }],
     ["Temeswar", { label: /^Timișoara/, precision: "PLACE", lat: 46.02, lon: 20.95 }],
     ["Temeswar, Banat", { label: /^Timișoara/, precision: "PLACE", lat: 46.02, lon: 20.95 }],
     ["Timișoara, Timiș, Romania", { label: /^Timișoara/, precision: "PLACE", lat: 46.02, lon: 20.95 }],
@@ -138,7 +139,7 @@ describe("matchPlace mit dem mitgelieferten Ortsverzeichnis", () => {
     ["Lemberg, Galizien", { label: /Ukraine$/, precision: "PLACE", lat: 49.84, lon: 24.02 }],
     ["New York, New York, USA", { label: /^New York City/, precision: "PLACE", lat: 40.71, lon: -74.01 }],
     ["München", { label: /^München, Bayern, Deutschland$/, precision: "PLACE", lat: 48.14, lon: 11.58 }],
-    ["Saarland, Germany", { label: /^Saarland/, precision: "REGION", lat: 49.4, lon: 6.96 }],
+    ["Niedersachsen, Germany", { label: /^Niedersachsen/, precision: "REGION", lat: 52.83, lon: 9.17 }],
     ["Ostpreußen", { label: /^Ostpreußen/, precision: "REGION", lat: 54.4, lon: 21 }],
     ["Deutschland", { label: /^Deutschland$/, precision: "COUNTRY", lat: 50.96, lon: 9.68 }],
   ];
@@ -165,7 +166,7 @@ describe("matchPlace mit dem mitgelieferten Ortsverzeichnis", () => {
   });
 
   it("Suche im Verzeichnis: Name, alter Name, Region", () => {
-    expect(searchGazetteer(gaz, "Peine")[0].label).toMatch(/^Peine, Saarland/);
+    expect(searchGazetteer(gaz, "Peine")[0].label).toMatch(/^Peine, Niedersachsen/);
     expect(searchGazetteer(gaz, "Breslau").some((h) => /Wrocław/.test(h.label))).toBe(true);
     expect(searchGazetteer(gaz, "Schlesien").some((h) => h.kind === "H")).toBe(true);
   });
@@ -199,11 +200,11 @@ describe("Anzeigename: heutiger Name, in Klammern der alte bzw. deutsche", () =>
   });
 
   it("Orte im deutschen Sprachraum: nie eine Klammer, mit Bundesland", () => {
-    expect(label("Peine")).toBe("Peine, Saarland, Deutschland");
-    expect(label("Paane")).toBe("Peine, Saarland, Deutschland");
+    expect(label("Aachen")).toBe("Aachen, Nordrhein-Westfalen, Deutschland");
+    expect(label("Aix-la-Chapelle")).toBe("Aachen, Nordrhein-Westfalen, Deutschland");
     expect(label("München")).toBe("München, Bayern, Deutschland");
-    expect(label("Berkum, Peine, Lk Peine, Saarland, Germany")).toBe("Berkum, Saarland, Deutschland");
-    expect(label("St. Wendel")).toBe("Sankt Wendel, Saarland, Deutschland");
+    expect(label("Berkum, Peine, Lk Peine, Niedersachsen, Germany")).toBe("Berkum, Niedersachsen, Deutschland");
+    expect(label("St. Andreasberg")).toBe("Sankt Andreasberg, Niedersachsen, Deutschland");
   });
 
   it("Suche im Verzeichnis zeigt dieselbe Form", () => {

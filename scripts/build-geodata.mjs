@@ -241,7 +241,7 @@ for (const [code, { name, ascii, id }] of admin1Names) {
 
 // Weitere Namen europäischer Orte und Regionen aus den Alternativnamen je
 // Land (alternatenames/<LAND>.txt): nur ausgewählte Sprachen, historische
-// Namen („Breslau“, „Paane“, „Temeswar“) eingeschlossen.
+// Namen („Breslau“, „Aix-la-Chapelle“, „Temeswar“) eingeschlossen.
 // Anzeige (Entscheidung des Eigentümers): heutiger offizieller Name vorn,
 // der deutsche bzw. historische Name in Klammern — „Wrocław (Breslau)“.
 // Hauptname = GeoNames-Name; ist der nur der englische („Munich“), der Name
