@@ -29,7 +29,10 @@ Bildarchiv und rollenbasierter Benutzerverwaltung.
   Baum zeigt an jeder Karte den Verwandtschaftsgrad zu ihr und färbt auf
   Wunsch die vier Großeltern-Linien ([Bezugsperson](#bezugsperson))
 - **Bilder** — Upload pro Person, frei wählbares Primärbild (erscheint im
-  Stammbaum), eigene Bilder an Hochzeiten, automatische Vorschaubilder;
+  Stammbaum), eigene Bilder an Hochzeiten, Scans und Fotos an Quellen,
+  Lebensereignissen und Belegen („Belegbilder“, auch über die KI per Adresse
+  oder Datei, [Bilder an Quellen, Ereignissen und Belegen](#bilder-an-quellen-ereignissen-und-belegen)),
+  automatische Vorschaubilder;
   abgelegt als WebP-Dateien in einem Ordner (`MEDIA_DIR`), ausgeliefert nur
   durch die App an angemeldete Nutzer
 - **Lebensereignisse und weitere Namen** — Taufe, Beruf, Wohnort,
@@ -159,7 +162,7 @@ chromium`.
 | `npm run test:e2e` | alles: setup → read → write | ca. 9–10 min |
 | `npm run test:e2e:setup` | nur Ausgangszustand: Mock-Daten neu, Anmeldungen, Vorwärmen | ca. 1–2 min (Kaltstart des Dev-Servers: länger) |
 | `npm run test:e2e:read` | setup + lesende Tests (`e2e/read/`, 169 Tests, 4 parallel) | ca. 3:10–3:20 min ohne Setup |
-| `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 83 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 4–5 min ohne Setup |
+| `npm run test:e2e:write` | setup + ändernde Tests (`e2e/write/`, 89 Tests, 2 Dateien parallel) — ohne die lesenden | ca. 4–5 min ohne Setup |
 | `npm run test:e2e:headed` | alles mit sichtbarem Browser, ein Test nach dem anderen | |
 | `npm run test:e2e:ui` | Playwright-Oberfläche: Tests einzeln starten, Schritte ansehen | |
 | `npm run test:e2e:report` | HTML-Bericht des letzten Laufs öffnen | |
@@ -506,8 +509,9 @@ Eine **Quelle** ist ein Dokument — ein Kirchenbuch, ein Standesamtsregister,
 eine Volkszählungsliste, ein Grabstein, die Familienbibel, ein Gespräch mit
 der Großmutter, eine Webseite. Sie hat Titel, Art, Verfasser/Herkunft,
 Archiv und Signatur, Internetadresse, Datum (ungenau erlaubt), eine Abschrift
-bzw. Notizen und optional einen Scan (ein bereits hochgeladenes Bild einer
-belegten Person oder Ehe).
+bzw. Notizen, optional einen Hauptscan (ein bereits hochgeladenes Bild einer
+belegten Person oder Ehe) und beliebig viele weitere Bilder
+([Bilder an Quellen, Ereignissen und Belegen](#bilder-an-quellen-ereignissen-und-belegen)).
 
 Ein **Beleg** verbindet eine Quelle mit genau einer Angabe: an einer Person
 `Name`, `Geburt`, `Tod` oder `Allgemein` (die Person als Ganzes), an einer
@@ -590,6 +594,73 @@ dort entfernen.
 API: `GET/POST /api/sources`, `GET/PATCH/DELETE /api/sources/{id}`,
 `POST /api/citations`, `PATCH/DELETE /api/citations/{id}`.
 
+## Bilder an Quellen, Ereignissen und Belegen
+
+Neben Porträts (Person) und Hochzeitsbildern (Beziehung) lassen sich Bilder
+an **Quellen** (mehrere: Seiten eines Registers, Grabstein, Titelblatt), an
+**Lebensereignissen** (Taufschein, Foto der Konfirmation) und an **Belegen**
+(der Ausschnitt einer Quelle, der genau diese Angabe belegt — der Eintrag auf
+Seite 12) hängen. Ein Bild ist eine Datei; es kann an beliebig vielen
+Einträgen hängen (Tabellen `SourceMedia`, `EventMedia`, `CitationMedia`; der
+bisherige Scan `Source.mediaId` bleibt als **Hauptscan** und wird mit den
+weiteren Bildern zusammen gelesen, [lib/services/attached-media.ts](lib/services/attached-media.ts)).
+
+**Wo erscheint welches Bild?**
+
+| Bild hängt an | erscheint |
+|---|---|
+| Ereignis | in der Zeile des Ereignisses auf der Personenseite (Ereignisse einer Beziehung auf beiden Personenseiten) und unter „Belegbilder“ |
+| Beleg | beim Beleg (Abschnitt „Quellen“ der Personenseite), am belegten Ereignis, unter „Belegbilder“ und auf der Seite der Quelle beim Beleg |
+| Quelle (Hauptscan oder weiteres Bild) | auf der Seite der Quelle und als **Belegbild bei jedem Beleg dieser Quelle** — **außer** das Bild hängt zugleich an mindestens einem Beleg derselben Quelle: dann gehört es erkennbar zu diesem Beleg und erscheint nur dort |
+
+Beispiel: Am „Taufbuch St. Marien“ hängen ein Titelblatt und der Scan von
+Seite 12. Solange der Scan nur an der Quelle hängt, zeigen alle Belege des
+Taufbuchs beide Bilder. Wird der Scan zusätzlich an den Beleg „Geburt Anna,
+S. 12“ gehängt, zeigen die übrigen Belege nur noch das Titelblatt.
+
+Auf der Personenseite stehen diese Bilder **getrennt** von der Galerie mit
+Porträt- und Familienbildern: als kleine Vorschauen (64 px, Alt-Text aus der
+Beschriftung) an Ereignis und Beleg und gesammelt im Abschnitt
+**„Belegbilder“** mit Herkunft („Taufe 1850 · Taufbuch, S. 12“). Antippen
+öffnet das Bild groß wie in der Galerie.
+
+**Bearbeiten in der App:** An jeder Ereignis- und Belegzeile der
+Personenseite und auf der Seite der Quelle („Bilder zur Quelle“) führt
+„Bild hinzufügen“ zu *Datei hochladen* (gleiche Verarbeitung wie jeder
+Upload: Typ anhand der Bytes, `MAX_UPLOAD_BYTES`, WebP, Vorschau) und
+*Vorhandenes Bild* verknüpfen (Bilder der Seite bzw. der belegten Personen).
+„entfernen“ löst das Bild nur von diesem Eintrag; hängt es danach an nichts
+mehr, wird es nach Rückfrage gelöscht. Wird ein Ereignis, Beleg, eine Quelle
+oder Person gelöscht, verschwinden Bilder, die nur daran hingen; beim
+Zusammenführen von Dubletten wandern die Bilder doppelter Ereignisse und
+Belege mit. Der Hauptscan wird wie bisher im Formular der Quelle („Scan“)
+gewählt.
+
+**Rechte** ([lib/media-scope.ts](lib/media-scope.ts),
+[lib/services/media-links.ts](lib/services/media-links.ts)):
+
+- Sehen: wer mindestens einen Eintrag sieht, an dem das Bild hängt — ein
+  Ereignis bzw. Beleg wie seine Person/Beziehung, eine Quelle wie die Quelle
+  (wer einen ihrer Belege sieht, der Ersteller, Administratoren). Ein Bild an
+  einer familienübergreifenden Quelle sehen also alle, die die Quelle sehen
+  (das gilt jetzt auch für den Hauptscan).
+- Hochladen und Verknüpfen: jedes Ziel muss der Benutzer **bearbeiten**
+  dürfen (geprüft vor dem Speichern, alles oder nichts); unsichtbare Ziele
+  gelten als nicht vorhanden. Ein vorhandenes Bild lässt sich nur
+  verknüpfen, wenn der Benutzer es sehen darf.
+- Ganz löschen (Galerie „Löschen“): wie bisher über eine bearbeitbare Person
+  bzw. Beziehung — hängt das Bild zusätzlich an Ereignissen, Belegen oder
+  Quellen, müssen auch diese alle bearbeitbar sein.
+- Jede Änderung steht in der Änderungsgeschichte (`MediaAsset`, CREATE /
+  UPDATE mit `linked` bzw. `unlinked`) bei allen betroffenen Personen; bei
+  einem Quellenbild sind das alle Personen, die die Quelle belegt.
+
+API: `POST /api/media` (Formular mit `file` und genau einem von `personId`,
+`relationshipId`, `eventId`, `citationId`, `sourceId`),
+`POST /api/media/{id}/links` (JSON mit einem oder mehreren Zielen, auch als
+Listen `eventIds` …), `DELETE /api/media/{id}/links?eventId=…`.
+Über die KI: `add_media` und `link_media` ([KI-Zugang](#ki-zugang-mcp)).
+
 ## Dienstschicht
 
 Die Fachlogik liegt in [lib/services](lib/services) als einfache
@@ -638,7 +709,7 @@ vorbei direkt zur Datenbank gibt es nicht.
 | Werkzeug | Zweck |
 |---|---|
 | `search_persons` | Suche nach Namenswörtern (auch Rufname und weitere Namen), Familie, Geburtsjahr (von/bis), Ort (Geburt, Tod, Ereignisse, Heirat/Scheidung), Geschlecht, verstorben; seitenweise (Standard 20) |
-| `get_person` | Vollständiger Datensatz mit Notizen, Familien, Eltern, Partnern (mit Heirats-/Scheidungsdaten und -orten, Ereignissen der Partnerschaft), Kindern, Geschwistern (voll/halb), Lebensereignissen (`events`, abweichende Angaben als `alternative`), weiteren Namen (`otherNames`), Bild-Metadaten und Belegen |
+| `get_person` | Vollständiger Datensatz mit Notizen, Familien, Eltern, Partnern (mit Heirats-/Scheidungsdaten und -orten, Ereignissen der Partnerschaft), Kindern, Geschwistern (voll/halb), Lebensereignissen (`events`, abweichende Angaben als `alternative`), weiteren Namen (`otherNames`), Bild-Metadaten und Belegen; Bilder an Ereignissen (`events[].media`), an Belegen (`citations[].media`) und geerbte Bilder der zitierten Quelle (`citations[].sourceMedia`) |
 | `list_events` | Alle Lebensereignisse einer Person oder Beziehung mit sämtlichen Feldern |
 | `get_ancestors` / `get_descendants` | Vorfahren bzw. Nachfahren nach Generationen (Standard 4, höchstens 12) |
 | `get_kinship` | Verwandtschaft zweier Personen mit deutscher Bezeichnung („Großmutter väterlicherseits“, „Cousin 1. Grades“, „Schwager“), gemeinsamen Vorfahren und Verbindungsweg |
@@ -649,7 +720,7 @@ vorbei direkt zur Datenbank gibt es nicht.
 | `check_consistency` | Widersprüche: Tod vor Geburt, Elternteil jünger als 12 bzw. älter als 70 (Mutter 50), Geburt nach dem Tod eines Elternteils, Lebensdauer über 110, Heirat vor 14 oder nach dem Tod, überschneidende Ehen, Beerdigung vor dem Tod, Ereignis vor der Geburt bzw. nach dem Tod |
 | `get_timeline` | Zeitleiste einer Person (mit Alter und fehlenden Daten) oder einer Familie |
 | `search_sources` | Quellen suchen (Titel, Verfasser, Archiv, Signatur; Art) mit Zahl der sichtbaren Belege |
-| `get_source` | Quelle mit Abschrift und allem, wofür sie zitiert wird (verborgene Belege nur gezählt) |
+| `get_source` | Quelle mit Abschrift und allem, wofür sie zitiert wird (verborgene Belege nur gezählt), dazu `images` (Bilder der Quelle) und `citations[].media` |
 
 Nur mit der Stufe „lesen und schreiben“ (siehe unten) kommen hinzu:
 
@@ -664,9 +735,32 @@ Nur mit der Stufe „lesen und schreiben“ (siehe unten) kommen hinzu:
 | `add_name_variant` | Weiteren Namen erfassen (Ehename, Schreibvariante, „auch bekannt als“ …) |
 | `delete_relationship` | eine falsche Verknüpfung entfernen (die verknüpften Personen lassen sich nicht umhängen, nur löschen und neu anlegen) |
 | `set_person_families` | Familienzuordnung setzen |
+| `add_media` | Neues Bild an Personen, Beziehungen, Ereignisse, Belege und/oder Quellen hängen (`person_ids`, `relationship_ids`, `event_ids`, `citation_ids`, `source_ids`; mindestens ein Ziel), Bild **entweder** per `url` (https-Adresse der Bilddatei; der Server lädt sie selbst über [lib/safe-fetch.ts](lib/safe-fetch.ts)) **oder** als `data_base64` (Dateiinhalt, auch als `data:`-Adresse; `mime_type` und `file_name` optional), dazu `caption` (wird Alt-Text) |
+| `link_media` | Vorhandenes Bild (`media_id`) an weitere Einträge hängen oder mit `action: "unlink"` davon lösen; die letzte Zuordnung lässt sich nicht lösen (die KI löscht keine Bilder) |
 | `begin_change_set` | Änderungspaket mit Titel öffnen (z.B. „Taufbuch St. Marien 1850–1870 ausgewertet“); die Kennung geht als `change_set_id` an die folgenden Schreibwerkzeuge, siehe [Änderungsgeschichte](#änderungsgeschichte) |
 
-Personen, Quellen oder Bilder löschen kann die KI bewusst nicht. Dazu kommen
+Personen, Quellen oder Bilder löschen kann die KI bewusst nicht.
+
+**Bilder über die KI — drei Wege.** Ein Sprachmodell, dem man im Chat ein
+Bild zeigt, hat die Originaldatei nicht und kann sie nicht weiterreichen.
+Deshalb: (1) `add_media` mit `url` — der Server holt die Datei selbst, nur
+https auf Port 443 (http-Adressen werden abgelehnt), keine Zugangsdaten in
+der Adresse, der Name wird einmal aufgelöst und **alle** Adressen müssen
+öffentlich sein (kein localhost, Heim- oder Firmennetz,
+link-local/Cloud-Metadaten, IPv6-ULA, auf IPv4 abgebildete Adressen …), die
+Verbindung geht genau an die geprüfte Adresse, höchstens 3 Weiterleitungen
+(jede neu geprüft), nur `image/*` bzw. `application/octet-stream`, Größe
+beim Lesen gezählt (`MAX_UPLOAD_BYTES`), 20 s Gesamtzeit; danach prüft sharp
+das Bild wie beim Upload. (2) `add_media` mit `data_base64` — für Clients
+mit Dateizugriff (Claude Code liest eine lokale Datei); die Größe wird vor
+dem Dekodieren geprüft, der Typ anhand der Bytes (eine abweichende
+`mime_type`-Angabe wird abgelehnt). Für Schlüssel mit Schreibstufe nimmt
+`/api/mcp` deshalb Anfragen bis `MAX_UPLOAD_BYTES` × 4/3 + 1 MiB an (sonst
+1 MiB) — ein Reverse-Proxy muss so große Anfragen durchlassen (Nginx:
+`client_max_body_size`). (3) `link_media` mit der `media_id` eines Bildes,
+das schon in der App ist (z.B. nach dem Hochladen in der App). Ein nur im
+Chat gezeigtes Bild braucht Weg 1 oder 3; der Server-Hinweis an das Modell
+sagt das ausdrücklich. Dazu kommen
 zwei Prompt-Vorlagen (`research_person`, `review_data_quality`) und die
 Ressource `familytree://person/{id}`. Die Ergebnisse sind kompaktes JSON;
 Daten stehen in ihrer echten Genauigkeit (`1850`, `um 1850`, `vor 1900` —
@@ -809,7 +903,7 @@ lebenden Personen bedenken.
 | Verfahren | MCP „Streamable HTTP“, nur `POST`, zustandslos, Antworten als JSON (kein SSE, kein WebSocket) |
 | Anmeldung | nur `Authorization: Bearer ftk_…` — die Anmeldung der Weboberfläche (Cookie) zählt nicht, Schlüssel in der URL ebenso wenig |
 | Origin | Anfragen ohne `Origin`-Header (Claude Code, `mcp-remote`) sind erlaubt; mit `Origin` nur die eigene Adresse (`PUBLIC_URL`) oder Einträge in `MCP_ALLOWED_ORIGINS` (kommagetrennt). Das braucht nur ein MCP-Client, der im Browser läuft (z.B. der MCP Inspector) — die Variable reicht der Stack nicht durch |
-| Größe | Anfrage höchstens 1 MiB |
+| Größe | Anfrage höchstens 1 MiB; mit Schreibstufe bis `MAX_UPLOAD_BYTES` × 4/3 + 1 MiB (Bild als base64 für `add_media`), geprüft erst nach dem Schlüssel |
 
 | Status | Bedeutung |
 |---|---|
@@ -890,7 +984,7 @@ Tests: `tests/mcp-http.db.test.ts` prüft den Endpunkt mit dem HTTP-Client des
 SDK (Schlüssel-Matrix, Werkzeuge je Stufe, Maskierung, Schreiben mit Audit,
 Sperre nach Fehlversuchen, Größenlimit, keine Geheimnisse im Log),
 `tests/ai-access.db.test.ts` die Rechte- und Schlüssellogik,
-`tests/mcp.db.test.ts` den stdio-Server (alle Werkzeuge, Maskierung,
+`tests/media-links.db.test.ts` die Bild-Werkzeuge (`add_media` per base64 und per Adresse mit ersetztem Netz, `link_media`, Rechte, Export), `tests/mcp.db.test.ts` den stdio-Server (alle Werkzeuge, Maskierung,
 Schreiben samt ungenauer Daten, Quellen, Belegen und Audit-Log, Start wie mit
 `npm run -s mcp:stdio`). Alle überspringen sich ohne Mock-Datenbank; die
 E2E-Tests dazu stehen unter [Tests](#tests).
@@ -1333,6 +1427,8 @@ Das Schema liegt in `prisma/schema.prisma`, die Migrationen in
 | `20261120000000_dubletten_zusammenfuehren` | Mehrere Herkunftsangaben je Datensatz: die Unique-Indizes auf den sieben Träger-Spalten von `ImportLink` werden gewöhnliche Indizes; neue Spalten `ImportLink.mergedFromId`/`mergedAt`; Tabelle `DuplicateDismissal` — **nicht rein ergänzend** (`schema-diff-check` meldet die sieben `DROP INDEX`), aber ohne Datenänderung: aus „höchstens ein Link je Datensatz“ wird „beliebig viele“, jede bestehende Zeile erfüllt die gelockerte Regel |
 | `20261121000000_quellen_einordnen` | Quellenarten `ONLINE_TREE` und `ONLINE_COLLECTION`, `Source.provider`, `Citation.url` — rein ergänzend |
 | `20261122000000_changelog` | Änderungsgeschichte: Tabelle `ChangeSet` (Pakete), im `AuditLog` die Spalten `changeSetId` (Fremdschlüssel, beim Löschen des Pakets `NULL`), `personIds` und `familyIds` (Listen mit leerem Standardwert, GIN-Indizes) — rein ergänzend; ältere Einträge bleiben unverändert (ohne Paket, leere Listen) |
+| `20261122000001_bezugsperson` | Bezugsperson: `User.personId` (Fremdschlüssel, `ON DELETE SET NULL`) — rein ergänzend |
+| `20261123000000_medien_an_eintraegen` | Bilder an Quellen, Ereignissen und Belegen: Tabellen `SourceMedia`, `EventMedia`, `CitationMedia` (Muster `PersonMedia`, `sortOrder`, `CASCADE` an beiden Seiten) — rein ergänzend, ohne Datenänderung; `Source.mediaId` bleibt der Hauptscan und wird nicht kopiert (die App liest beide Stellen) |
 
 Schemaänderungen künftig mit `npm run db:migrate` (`prisma migrate dev`) als
 Migration anlegen und mit einchecken. Vor dem Commit prüfen, ob sie rein
@@ -1380,6 +1476,8 @@ npx prisma migrate resolve --applied 20261119000000_genealogie_ereignisse_import
 npx prisma migrate resolve --applied 20261120000000_dubletten_zusammenfuehren
 npx prisma migrate resolve --applied 20261121000000_quellen_einordnen
 npx prisma migrate resolve --applied 20261122000000_changelog
+npx prisma migrate resolve --applied 20261122000001_bezugsperson
+npx prisma migrate resolve --applied 20261123000000_medien_an_eintraegen
 ```
 
 Auf der NAS (SSH, Stack `familytree`) geht Schritt 2 mit dem App-Image
@@ -1539,6 +1637,13 @@ Namenszusatz, Todesursache, Heirats- und Scheidungsort, `events`
 Importdaten) — jeweils nur für exportierte Personen, Beziehungen und Quellen.
 Importläufe und ihre Herkunftsangaben gehören zur Instanz und reisen nicht
 mit. Dateien der Versionen 1 und 2 lassen sich weiter unverändert importieren.
+
+Formatversion 4 enthält zusätzlich die Bilder an Quellen (`sources[].media`,
+neben dem Hauptscan `mediaId`), an Ereignissen (`events[].media`) und an
+Belegen (`citations[].media`), je `{ mediaId, sortOrder }` mit Verweis auf
+`media`. Sie reisen mit, wenn ihr Eintrag exportiert wird (bei der
+Familienauswahl also nur an Exportiertem); der Import hängt sie ergänzend
+wieder an. Dateien der Versionen 1–3 lassen sich weiter importieren.
 
 ## GEDCOM (Import und Export)
 
@@ -1700,7 +1805,11 @@ er sehen darf — verborgene Personen fehlen samt aller Verweise auf sie:
   Import als Rohdaten erhalten ist.
 - **GEDCOM mit Bildern (ZIP)** — dieselbe Datei plus die Bilddateien unter
   `media/`; Porträts, Hochzeitsbilder und Quellenbilder sind in der
-  `.ged`-Datei mit ihrem Pfad verknüpft.
+  `.ged`-Datei mit ihrem Pfad verknüpft — als `OBJE` an der Person bzw.
+  Familie, im `SOUR`-Datensatz (Hauptscan zuerst, dann weitere Bilder), unter
+  dem Ereignis (`EVENT_DETAIL`) und unter dem Beleg (`SOURCE_CITATION`), wie
+  GEDCOM 5.5.1 es an diesen Stellen erlaubt. Bilder am Beleg einer
+  Eltern-Kind-Beziehung stehen am Beleg beim Kind.
 
 Beide Knöpfe öffnen einen Dialog mit den Familien, die der Benutzer sehen
 darf (alle vorausgewählt, „Alle“/„Keine“, für Administratoren zusätzlich

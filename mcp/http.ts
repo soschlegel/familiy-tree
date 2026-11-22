@@ -44,6 +44,18 @@ import { createMcpServer } from "./register";
  */
 export const MCP_MAX_BODY_BYTES = 1024 * 1024;
 
+/**
+ * Obergrenze für Schlüssel mit Schreibrecht: ein Bild als base64 (add_media)
+ * darf so groß sein wie ein Upload (MAX_UPLOAD_BYTES, base64 ist 4/3 so groß)
+ * plus Rest der Anfrage. Gilt erst NACH der Prüfung des Schlüssels — ohne
+ * gültigen Schlüssel mit Schreibstufe bleibt es bei 1 MiB.
+ */
+export function mcpWriteBodyLimit(): number {
+  const max = Number(process.env.MAX_UPLOAD_BYTES ?? 15 * 1024 * 1024);
+  const upload = Number.isFinite(max) && max > 0 ? max : 15 * 1024 * 1024;
+  return Math.max(MCP_MAX_BODY_BYTES, Math.ceil(upload / 3) * 4 + MCP_MAX_BODY_BYTES);
+}
+
 /** Fehlversuche (401) je Absender und Zeitfenster, danach 429 bis Fensterende. */
 export const MCP_AUTH_FAILURE_LIMIT = 20;
 export const MCP_AUTH_FAILURE_WINDOW_MS = 10 * 60 * 1000;
@@ -279,7 +291,7 @@ export async function handleMcpPost(req: Request): Promise<Response> {
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,
-    maxRequestBodySize: MCP_MAX_BODY_BYTES,
+    maxRequestBodySize: auth.level === "WRITE" ? mcpWriteBodyLimit() : MCP_MAX_BODY_BYTES,
   });
   try {
     await server.connect(transport);

@@ -198,6 +198,29 @@ sie freigibt.
   als Zahl, nicht je Person.
 
 Freigabe (21.11.): „bauen und Gas geben“ — die Wünsche werden umgesetzt.
+- **Bilder per MCP an Quellen, Ereignisse und Belege** („wenn ich die Bilder
+  per MCP zu Quellen gebe … auch den entsprechenden Einträgen beigefügt“) —
+  erledigt auf Branch `medien`, noch nicht ausgerollt. Migration
+  `20261123000000_medien_an_eintraegen` (Tabellen `SourceMedia`,
+  `EventMedia`, `CitationMedia`; rein ergänzend, ohne Datenänderung —
+  `Source.mediaId` bleibt Hauptscan, die App liest beide Stellen). Regel:
+  Quellenbild erscheint bei allen Belegen der Quelle, außer es hängt an
+  einem Beleg derselben Quelle (dann nur dort); Details README „Bilder an
+  Quellen, Ereignissen und Belegen“. MCP `add_media` (url über
+  `lib/safe-fetch.ts` oder `data_base64`) und `link_media`; Server-Hinweis
+  mit den drei Wegen (eigene Zeile, nach „Sources“). `/api/mcp` nimmt für
+  Schlüssel mit Schreibstufe größere Anfragen an (MAX_UPLOAD_BYTES × 4/3 +
+  1 MiB) — beim Ausrollen `client_max_body_size` des Proxys prüfen.
+  Austauschformat Version 4, GEDCOM-Export mit OBJE an SOUR/Ereignis/Beleg.
+  Prüfstand (22.11., Worktree `familiy-tree-medien`, eigene Mock-DB):
+  Typecheck, Lint, Vitest 751/752 (1 Ausfall: `tests/mcp.db.test.ts`
+  erwartet den DB-Namen `familytree_mock`, bekannt); schema-diff-check
+  Exit 0; `prisma migrate diff` Migrationen ↔ Schema ohne Abweichung;
+  Playwright auf frischem Server, zwischen read und write neu gestartet:
+  setup 6/6, read 167/167, write 89/89. Offen: http-Adressen (nur https,
+  wie beim GEDCOM-Fotoimport); Bilder werden bei einer Löschung über einen
+  erneuten GEDCOM-Import (Ereignis/Beleg entfällt) nicht eigens behandelt
+  (die Verknüpfung geht per Cascade, das Bild bleibt verwaist für Admins).
 - **Dubletten: keine Vorfahren/Nachkommen als Kandidaten** — erledigt
   (Branch `export-dubletten`): `ScoreOptions.lineage` in `lib/duplicates.ts`
   (alle PARENT_OF-Kanten, wie die Zyklus-Sperre beim Zusammenführen; Kette

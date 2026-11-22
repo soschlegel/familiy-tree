@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { apiFetch, jsonBody } from "./api-client";
+import { AttachedMedia, type AttachedItem, type MediaCandidate } from "./AttachedMedia";
 import {
   CITATION_FACT_LABEL,
   CONFIDENCE_LABEL,
@@ -39,6 +40,10 @@ export type CitationRow = {
   eventId?: string | null;
   /** Bezug bei Belegen für ein Ereignis, z.B. „Taufe 1858“. */
   eventLabel?: string | null;
+  /** Bilder am Beleg. */
+  media?: AttachedItem[];
+  /** Bilder der Quelle, die hier als Belegbild erscheinen (nur angezeigt). */
+  sourceMedia?: AttachedItem[];
 };
 
 /**
@@ -148,6 +153,7 @@ export function CitationSection({
   sources,
   canEdit,
   canCreateSource,
+  mediaCandidates = [],
 }: {
   personId: string;
   citations: CitationRow[];
@@ -155,6 +161,8 @@ export function CitationSection({
   sources: { id: string; title: string; kind: SourceKindName }[];
   canEdit: boolean;
   canCreateSource: boolean;
+  /** Bilder dieser Seite, die sich an einen Beleg hängen lassen. */
+  mediaCandidates?: MediaCandidate[];
 }) {
   const router = useRouter();
   const sectionRef = useRef<HTMLElement>(null);
@@ -380,6 +388,16 @@ export function CitationSection({
                         </span>
                       )}
                     </div>
+                    <AttachedMedia
+                      target={{ kind: "citation", id: row.id }}
+                      items={row.media ?? []}
+                      inherited={(row.sourceMedia ?? []).map((m) => ({ ...m, note: "Bild der Quelle" }))}
+                      canEdit={canEdit && row.canEdit}
+                      candidates={mediaCandidates}
+                      label={`Beleg ${row.source.title}${row.detail ? `, ${row.detail}` : ""}`}
+                      fallbackAlt={`Belegbild: ${row.source.title}${row.detail ? `, ${row.detail}` : ""}`}
+                      testId="citation-media"
+                    />
                     {row.canEdit && editing === row.id && (
                       <CitationEditor
                         row={row}

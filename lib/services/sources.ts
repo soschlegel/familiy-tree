@@ -6,6 +6,7 @@ import { displayCitation, displaySourceKind, findUrls, plainText, safeHttpUrl } 
 const findUrlsIn = (text: string | null) => findUrls(text)[0] ?? null;
 import { audit, auditActor, auditRefs, fieldChanges } from "../audit";
 import { canViewMedia } from "../media-scope";
+import { mediaAttachedTo, removeOrphanedMedia } from "./media";
 import {
   canEditPerson,
   canEditRelationshipBetween,
@@ -30,6 +31,7 @@ import { phraseColumns } from "./persons";
 import { eventTitle } from "../events";
 import { forbiddenError, notFoundError, parseOrThrow, validationError } from "./errors";
 import { iso, toPersonRef, type PersonRef } from "./dto";
+import { imagesForCitations, imagesOfCitations, imagesOfSources, type AttachedImage, type SourceImage } from "./attached-media";
 
 /**
  * Quellen und Belege.
@@ -116,8 +118,10 @@ export type SourceDetail = {
   source: SourceDto;
   canEdit: boolean;
   canDelete: boolean;
-  /** Sichtbare Belege mit ihrem Bezug. */
-  citations: (CitationDto & { target: CitationTarget })[];
+  /** Sichtbare Belege mit ihrem Bezug und ihren Bildern. */
+  citations: (CitationDto & { target: CitationTarget; media: AttachedImage[] })[];
+  /** Bilder der Quelle: Hauptscan (source.mediaId) zuerst, dann weitere. */
+  images: SourceImage[];
   /** Belege an Personen/Beziehungen, die der Benutzer nicht sieht — nur die Zahl. */
   hiddenCitationCount: number;
 };
@@ -133,6 +137,10 @@ export type PersonCitation = CitationDto & {
     role: "parent" | "child" | "partner";
     other: PersonRef;
   } | null;
+  /** Bilder direkt am Beleg. */
+  media?: AttachedImage[];
+  /** Bilder der Quelle, die nach der Regel hier erscheinen („Belegbild“, attached-media.ts). */
+  sourceMedia?: AttachedImage[];
 };
 
 // ---------------------------------------------------------------------------
@@ -372,7 +380,8 @@ export async function listSources(
 
   const items: SourceListItem[] = [];
   for (const { _count, ...s } of rows) {
-    items.push({ ...(await toSourceDto(scope, s)), citationCount: _count.citations });
+    // Sichtbare Quelle ⇒ ihr Hauptscan ist sichtbar (lib/media-scope.ts).
+    items.push({ ...(await toSourceDto(scope, s, true)), citationCount: _count.citations });
   }
   return { items, total };
 }
@@ -396,12 +405,22 @@ export async function getSource(scope: Scope, id: string): Promise<SourceDetail 
   if (!access) return null;
   const { source, rated, visible, canEdit, canDelete } = access;
 
+  // Quelle sichtbar ⇒ ihre Bilder sichtbar (lib/media-scope.ts).
+  const [sourceImages, citationImages] = await Promise.all([
+    imagesOfSources([source.id]),
+    imagesOfCitations(visible.map((r) => r.c.id)),
+  ]);
   return {
-    source: await toSourceDto(scope, source, undefined, visible.slice(0, 20).map((r) => r.c.detail)),
+    source: await toSourceDto(scope, source, true, visible.slice(0, 20).map((r) => r.c.detail)),
     canEdit,
     canDelete,
-    citations: visible.map((r) => ({ ...toCitationDto(r.c, r.editable), target: targetOf(scope, r.c) })),
+    citations: visible.map((r) => ({
+      ...toCitationDto(r.c, r.editable),
+      target: targetOf(scope, r.c),
+      media: citationImages.get(r.c.id) ?? [],
+    })),
     hiddenCitationCount: rated.length - visible.length,
+    images: sourceImages.get(source.id) ?? [],
   };
 }
 
@@ -501,6 +520,11 @@ export async function listPersonCitations(scope: Scope, personId: string): Promi
       relationship,
     });
   }
+  const images = await imagesForCitations(out);
+  for (const c of out) {
+    c.media = images.own.get(c.id) ?? [];
+    c.sourceMedia = images.fromSource.get(c.id) ?? [];
+  }
   return out;
 }
 
@@ -570,7 +594,10 @@ export async function deleteSource(
 
   // Belegte Personen vor dem Löschen merken — die Belege gehen mit.
   const refs = await auditRefs({ action: "DELETE", entityType: "Source", entityId: id });
+  const mediaIds = await mediaAttachedTo({ sourceIds: [id] });
   await prisma.source.delete({ where: { id } });
+  // Bilder, die nur an dieser Quelle bzw. ihren Belegen hingen.
+  await removeOrphanedMedia(mediaIds);
   await audit({
     ...auditActor(scope),
     action: "DELETE",
@@ -748,7 +775,9 @@ export async function updateCitation(scope: Scope, id: string, patch: unknown): 
 
 export async function deleteCitation(scope: Scope, id: string): Promise<{ ok: true }> {
   const existing = await loadCitationForEdit(scope, id, "diesen Beleg zu entfernen");
+  const mediaIds = await mediaAttachedTo({ citationIds: [id] });
   await prisma.citation.delete({ where: { id } });
+  await removeOrphanedMedia(mediaIds);
   await audit({
     ...auditActor(scope),
     action: "DELETE",

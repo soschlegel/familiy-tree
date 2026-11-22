@@ -271,9 +271,9 @@ export async function buildGedcomExport(
     persons: (Row & { id: string; media: { mediaId: string; isPrimary: boolean }[] })[];
     relationships: (Row & { id: string; type: string; subtype: string; fromPersonId: string; toPersonId: string; media?: { mediaId: string; isPrimary: boolean }[] })[];
     media: { id: string; fileName: string; caption: string | null; mimeType: string }[];
-    sources: (Row & { id: string; title: string; mediaId?: string | null })[];
-    citations: (Row & { id: string; sourceId: string; personId: string | null; relationshipId: string | null; eventId: string | null; fact: string; url?: string | null })[];
-    events: (Row & { id: string; personId: string | null; relationshipId: string | null; type: EventTypeName; isAlternative: boolean })[];
+    sources: (Row & { id: string; title: string; mediaId?: string | null; media?: { mediaId: string }[] })[];
+    citations: (Row & { id: string; sourceId: string; personId: string | null; relationshipId: string | null; eventId: string | null; fact: string; url?: string | null; media?: { mediaId: string }[] })[];
+    events: (Row & { id: string; personId: string | null; relationshipId: string | null; type: EventTypeName; isAlternative: boolean; media?: { mediaId: string }[] })[];
     personNames: (Row & { id: string; personId: string; type: string })[];
     externalIds: { id: string; system: string; value: string; personId: string | null; relationshipId: string | null; eventId: string | null; sourceId: string | null; mediaId: string | null }[];
     rawRecords: { id: string; personId: string | null; relationshipId: string | null; sourceId: string | null; recordType: string; xref: string | null; content: unknown; superseded: boolean }[];
@@ -388,6 +388,15 @@ export async function buildGedcomExport(
     };
   };
 
+  /**
+   * Bilder der App an Ereignissen und Belegen (GEDCOM 5.5.1: OBJE unter
+   * EVENT_DETAIL bzw. SOURCE_CITATION) vor die Verweise des Originals setzen.
+   */
+  const withAppMedia = <T extends { media: GedcomMediaLink[] }>(target: T, links: { mediaId: string }[] | undefined): T => {
+    const app = (links ?? []).map((m) => appMediaLink(m.mediaId, false)).filter((m): m is GedcomMediaLink => m !== null);
+    if (app.length) target.media = [...app, ...(target.media ?? [])];
+    return target;
+  };
   const citationsBy = (field: "personId" | "relationshipId" | "eventId", id: string) => d.citations.filter((c) => c[field] === id);
   const citationOf = (c: (typeof d.citations)[number], idx: OriginalIndex | null, raw: RawContent): GedcomCitation => {
     const base: GedcomCitation = { sourceId: c.sourceId, texts: c.text ? [String(c.text)] : [], notes: [], media: [], externalIds: [], extensions: [] };
@@ -399,7 +408,7 @@ export async function buildGedcomExport(
       base.quality = c.confidence === "HIGH" ? 3 : c.confidence === "MEDIUM" ? 2 : 1;
     }
     const k = keyOf.get(c.id);
-    return overlayCitation(base, k && idx ? idx.citations.get(k) : undefined, (c.text as string | null) ?? null, raw);
+    return withAppMedia(overlayCitation(base, k && idx ? idx.citations.get(k) : undefined, (c.text as string | null) ?? null, raw), c.media);
   };
   const eventsOfPerson = new Map<string, typeof d.events>();
   const eventsOfRel = new Map<string, typeof d.events>();
@@ -424,7 +433,7 @@ export async function buildGedcomExport(
     g.externalIds = extIdsOf.get(e.id) ?? [];
     g.citations = citationsBy("eventId", e.id).map((c) => citationOf(c, idx, raw));
     const k = keyOf.get(e.id);
-    return overlayEvent(g, k && idx ? idx.events.get(k) : undefined, raw, (e.notes as string | null) ?? null);
+    return withAppMedia(overlayEvent(g, k && idx ? idx.events.get(k) : undefined, raw, (e.notes as string | null) ?? null), e.media);
   };
 
   let extensionsFromRaw = 0;
@@ -719,7 +728,12 @@ export async function buildGedcomExport(
       } else src.notes = inlineNote(appNotes);
       extensionsFromRaw++;
     } else src.notes = inlineNote(appNotes);
-    if (srcMedia) src.media.unshift(srcMedia);
+    // Hauptscan zuerst, dann die weiteren Bilder der Quelle (OBJE unter SOUR).
+    const more = (s.media ?? [])
+      .filter((m) => m.mediaId !== s.mediaId)
+      .map((m) => appMediaLink(m.mediaId, false))
+      .filter((m): m is GedcomMediaLink => m !== null);
+    src.media.unshift(...(srcMedia ? [srcMedia] : []), ...more);
     if (s.repository) {
       const name = String(s.repository);
       let rid = repoByName.get(name);

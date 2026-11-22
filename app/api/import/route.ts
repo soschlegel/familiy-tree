@@ -490,6 +490,14 @@ export const POST = route("data:import", async (ctx, req) => {
       update: fields,
       create: { id: src.id, ...fields, createdById: ctx.userId },
     });
+    // Ab Version 4: weitere Bilder der Quelle (ergänzend, vorhandene bleiben).
+    const links = src.media.filter((m) => existingMediaIds.has(m.mediaId));
+    if (links.length) {
+      await prisma.sourceMedia.createMany({
+        data: links.map((m) => ({ sourceId: src.id, mediaId: m.mediaId, sortOrder: m.sortOrder })),
+        skipDuplicates: true,
+      });
+    }
   }
 
   const [personsNow, relationshipsNow, sourcesNow] = await Promise.all([
@@ -531,6 +539,13 @@ export const POST = route("data:import", async (ctx, req) => {
         relationshipId: e.relationshipId ?? null,
       },
     });
+    const links = e.media.filter((m) => existingMediaIds.has(m.mediaId));
+    if (links.length) {
+      await prisma.eventMedia.createMany({
+        data: links.map((m) => ({ eventId: e.id, mediaId: m.mediaId, sortOrder: m.sortOrder })),
+        skipDuplicates: true,
+      });
+    }
   }
   const eventOwnerNow = new Map(
     (await prisma.event.findMany({ select: { id: true, personId: true, relationshipId: true } })).map((e) => [e.id, e]),
@@ -569,6 +584,13 @@ export const POST = route("data:import", async (ctx, req) => {
       update: { fact: fields.fact, detail: fields.detail, url: fields.url, confidence: fields.confidence, text: fields.text },
       create: { id: c.id, ...fields },
     });
+    const links = c.media.filter((m) => existingMediaIds.has(m.mediaId));
+    if (links.length) {
+      await prisma.citationMedia.createMany({
+        data: links.map((m) => ({ citationId: c.id, mediaId: m.mediaId, sortOrder: m.sortOrder })),
+        skipDuplicates: true,
+      });
+    }
   }
 
   // Fremdkennungen und Rohdaten: nur mit vorhandenem Träger; unverändert

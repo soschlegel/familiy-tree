@@ -27,6 +27,7 @@ import {
   type FuzzyDate,
 } from "../dates";
 import { loadEventsFor, toEventDto, type EventDto } from "./events";
+import { imagesOfEvents } from "./attached-media";
 import { toPersonNameDto, type PersonNameDto } from "./names";
 import {
   forbiddenError,
@@ -500,6 +501,9 @@ export async function getPersonDetail(
       .map((e) => toEventDto(e, relEditable.get(rel.relationshipId) ?? false));
   }
   const events = eventRows.filter((e) => e.personId === id).map((e) => toEventDto(e, personEditable));
+  // Bilder an Ereignissen (README, „Bilder an Quellen, Ereignissen und Belegen“).
+  const eventImages = await imagesOfEvents(eventRows.map((e) => e.id));
+  for (const e of [...events, ...relations.flatMap((r) => r.events)]) e.media = eventImages.get(e.id) ?? [];
 
   return {
     person: toPersonSummary(scope, person, {
@@ -789,6 +793,9 @@ export async function deletePerson(
         OR: [
           { persons: { some: { personId: id } } },
           { relationships: { some: { relationship: { OR: [{ fromPersonId: id }, { toPersonId: id }] } } } },
+          // Bilder an Ereignissen und Belegen der Person bzw. ihrer Beziehungen
+          { eventLinks: { some: { event: { OR: [{ personId: id }, { relationship: { OR: [{ fromPersonId: id }, { toPersonId: id }] } }] } } } },
+          { citationLinks: { some: { citation: { OR: [{ personId: id }, { relationship: { OR: [{ fromPersonId: id }, { toPersonId: id }] } }] } } } },
         ],
       },
       select: { id: true },

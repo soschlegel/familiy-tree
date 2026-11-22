@@ -25,7 +25,7 @@ import { encode } from "next-auth/jwt";
 import { prisma } from "@/lib/prisma";
 import { generateToken } from "@/lib/ai-tokens";
 import * as mcpRoute from "@/app/api/mcp/route";
-import { MCP_AUTH_FAILURE_LIMIT, MCP_MAX_BODY_BYTES, resetMcpRateLimit } from "@/mcp/http";
+import { MCP_AUTH_FAILURE_LIMIT, MCP_MAX_BODY_BYTES, mcpWriteBodyLimit, resetMcpRateLimit } from "@/mcp/http";
 import type { MockApiTokenKey } from "@/prisma/mock-data";
 import { mockData } from "./helpers";
 
@@ -75,6 +75,7 @@ const READ_TOOLS = [
 ];
 const WRITE_TOOLS = [
   "add_event",
+  "add_media",
   "add_name_variant",
   "begin_change_set",
   "cite_source",
@@ -87,6 +88,7 @@ const WRITE_TOOLS = [
   "update_event",
   "update_person",
   "update_relationship",
+  "link_media",
 ];
 
 type Handler = (req: Request) => Response | Promise<Response>;
@@ -370,9 +372,14 @@ describe.skipIf(Boolean(skipReason))("MCP-Endpunkt /api/mcp (HTTP, Mock-Datenban
   it("Härtung: Körpergröße, Origin, Methoden, Sperre nach Fehlversuchen", async () => {
     const admin = bearer(secretOf("admin-write"));
 
-    // Zu großer Körper → 413, bevor etwas geparst wird.
+    // Zu großer Körper → 413, bevor etwas geparst wird. Lesende Schlüssel:
+    // 1 MiB; Schlüssel mit Schreibstufe: Platz für ein Bild als base64
+    // (add_media), aber nicht mehr.
     const big = JSON.stringify({ ...LIST, params: { pad: "x".repeat(MCP_MAX_BODY_BYTES) } });
-    expect((await post(big, admin)).status).toBe(413);
+    expect((await post(big, bearer(secretOf("viewer-read")))).status).toBe(413);
+    expect((await post(big, admin)).status).not.toBe(413);
+    const huge = JSON.stringify({ ...LIST, params: { pad: "x".repeat(mcpWriteBodyLimit()) } });
+    expect((await post(huge, admin)).status).toBe(413);
 
     // Fremder Origin → 403; eigener (AUTH_URL) und gar keiner sind erlaubt.
     expect((await post(LIST, { ...admin, Origin: "https://evil.example" })).status).toBe(403);

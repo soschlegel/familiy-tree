@@ -20,6 +20,8 @@ import {
 import { eventIssues, eventTitle, type EventOwner, type EventTypeName } from "../events";
 import { forbiddenError, notFoundError, parseOrThrow, validationError } from "./errors";
 import { iso } from "./dto";
+import { mediaAttachedTo, removeOrphanedMedia } from "./media";
+import { imagesOfEvents, type AttachedImage } from "./attached-media";
 
 /**
  * Lebensereignisse (Taufe, Beerdigung, Beruf, Wohnort, …) an einer Person
@@ -61,6 +63,8 @@ export type EventDto = {
   createdAt: string;
   updatedAt: string;
   canEdit: boolean;
+  /** Bilder am Ereignis (nur wo geladen, z.B. getPersonDetail). */
+  media?: AttachedImage[];
 };
 
 export function toEventDto(e: EventRow, canEdit: boolean): EventDto {
@@ -162,7 +166,14 @@ export async function listPersonEvents(scope: Scope, personId: string): Promise<
   const access = await personAccess(scope, personId);
   if (!access?.visible) return null;
   const rows = await prisma.event.findMany({ where: { personId } });
-  return rows.sort(compareEvents).map((e) => toEventDto(e, access.editable));
+  return withImages(rows.sort(compareEvents).map((e) => toEventDto(e, access.editable)));
+}
+
+/** Bilder an die Ereignisse hängen (Ereignis sichtbar ⇒ Bild sichtbar). */
+async function withImages(events: EventDto[]): Promise<EventDto[]> {
+  const images = await imagesOfEvents(events.map((e) => e.id));
+  for (const e of events) e.media = images.get(e.id) ?? [];
+  return events;
 }
 
 /** Ereignisse einer Beziehung (sichtbar, sobald eine Seite sichtbar ist). null = unsichtbar. */
@@ -170,7 +181,7 @@ export async function listRelationshipEvents(scope: Scope, relationshipId: strin
   const access = await relationshipAccess(scope, relationshipId);
   if (!access?.visible) return null;
   const rows = await prisma.event.findMany({ where: { relationshipId } });
-  return rows.sort(compareEvents).map((e) => toEventDto(e, access.editable));
+  return withImages(rows.sort(compareEvents).map((e) => toEventDto(e, access.editable)));
 }
 
 /** Ein Ereignis. null, wenn es fehlt oder sein Träger unsichtbar ist. */
@@ -281,7 +292,11 @@ export async function updateEvent(scope: Scope, id: string, patch: unknown): Pro
 /** Löscht ein Ereignis samt seiner Belege. */
 export async function deleteEvent(scope: Scope, id: string): Promise<{ ok: true }> {
   const { existing } = await loadForEdit(scope, id, "dieses Ereignis zu löschen");
+  // Bilder des Ereignisses und seiner Belege: die Zuordnungen gehen per
+  // Cascade, Bilder, die danach an nichts mehr hängen, werden entfernt.
+  const mediaIds = await mediaAttachedTo({ eventIds: [id] });
   await prisma.event.delete({ where: { id } });
+  await removeOrphanedMedia(mediaIds);
   await audit({
     ...auditActor(scope),
     action: "DELETE",
