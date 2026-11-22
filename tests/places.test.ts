@@ -6,7 +6,7 @@
  */
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { parseGazetteer, searchGazetteer, type Gazetteer } from "@/lib/places/gazetteer";
+import { entryLabel, labelForText, parseGazetteer, searchGazetteer, type Gazetteer } from "@/lib/places/gazetteer";
 import { loadGazetteerSync } from "@/lib/places/gazetteer-file";
 import { matchPlace } from "@/lib/places/match";
 import { normalizeForLookup, placeKey, splitPlaceText } from "@/lib/places/normalize";
@@ -130,9 +130,9 @@ describe("matchPlace mit dem mitgelieferten Ortsverzeichnis", () => {
     ["Breslau", { label: /^Wrocław/, precision: "PLACE", lat: 51.1, lon: 17.03 }],
     ["Breslau, Schlesien, Preußen", { label: /^Wrocław/, precision: "PLACE", lat: 51.1, lon: 17.03 }],
     ["Paane", { label: /^Peine, Saarland/, precision: "PLACE", lat: 49.31, lon: 6.75 }],
-    ["Temeswar", { label: /^Timişoara/, precision: "PLACE", lat: 46.02, lon: 20.95 }],
-    ["Temeswar, Banat", { label: /^Timişoara/, precision: "PLACE", lat: 46.02, lon: 20.95 }],
-    ["Timișoara, Timiș, Romania", { label: /^Timişoara/, precision: "PLACE", lat: 46.02, lon: 20.95 }],
+    ["Temeswar", { label: /^Timișoara/, precision: "PLACE", lat: 46.02, lon: 20.95 }],
+    ["Temeswar, Banat", { label: /^Timișoara/, precision: "PLACE", lat: 46.02, lon: 20.95 }],
+    ["Timișoara, Timiș, Romania", { label: /^Timișoara/, precision: "PLACE", lat: 46.02, lon: 20.95 }],
     ["Danzig, Westpreußen", { label: /Polen$/, precision: "PLACE", lat: 54.35, lon: 18.65 }],
     ["Königsberg, Ostpreußen", { label: /^Kaliningrad/, precision: "PLACE", lat: 54.71, lon: 20.51 }],
     ["Lemberg, Galizien", { label: /Ukraine$/, precision: "PLACE", lat: 49.84, lon: 24.02 }],
@@ -168,5 +168,56 @@ describe("matchPlace mit dem mitgelieferten Ortsverzeichnis", () => {
     expect(searchGazetteer(gaz, "Peine")[0].label).toMatch(/^Peine, Saarland/);
     expect(searchGazetteer(gaz, "Breslau").some((h) => /Wrocław/.test(h.label))).toBe(true);
     expect(searchGazetteer(gaz, "Schlesien").some((h) => h.kind === "H")).toBe(true);
+  });
+});
+
+describe("Anzeigename: heutiger Name, in Klammern der alte bzw. deutsche", () => {
+  let gaz: Gazetteer;
+  beforeAll(() => {
+    gaz = loadGazetteerSync();
+  });
+  const label = (text: string) => matchPlace(gaz, text)?.label;
+
+  it("Beispiele des Eigentümers", () => {
+    expect(label("Breslau, Schlesien, Preußen")).toBe("Wrocław (Breslau), Polen");
+    expect(label("Danzig, Westpreußen")).toBe("Gdańsk (Danzig), Polen");
+    expect(label("Temeswar, Banat")).toBe("Timișoara (Temeswar), Rumänien");
+  });
+
+  it("ohne alten Namen in den Daten: der deutsche bzw. historische Name", () => {
+    expect(label("Wrocław")).toBe("Wrocław (Breslau), Polen");
+    expect(label("Gdańsk")).toBe("Gdańsk (Danzig), Polen");
+    expect(label("Praha")).toBe("Praha (Prag), Tschechien");
+    expect(label("Königsberg, Ostpreußen")).toBe("Kaliningrad (Königsberg), Russland");
+    expect(label("Lemberg, Galizien")).toBe("Lviv (Lemberg), Ukraine");
+  });
+
+  it("keine Klammer, wenn der Name gleich ist oder es keinen anderen gibt", () => {
+    expect(label("Timișoara, Timiș, Romania")).toBe("Timișoara, Rumänien");
+    expect(label("Timişoara")).toBe("Timișoara, Rumänien"); // nur andere Schreibweise (ş/ș)
+    expect(label("Wroclaw")).toBe("Wrocław (Breslau), Polen");
+  });
+
+  it("Orte im deutschen Sprachraum: nie eine Klammer, mit Bundesland", () => {
+    expect(label("Peine")).toBe("Peine, Saarland, Deutschland");
+    expect(label("Paane")).toBe("Peine, Saarland, Deutschland");
+    expect(label("München")).toBe("München, Bayern, Deutschland");
+    expect(label("Berkum, Peine, Lk Peine, Saarland, Germany")).toBe("Berkum, Saarland, Deutschland");
+    expect(label("St. Wendel")).toBe("Sankt Wendel, Saarland, Deutschland");
+  });
+
+  it("Suche im Verzeichnis zeigt dieselbe Form", () => {
+    expect(searchGazetteer(gaz, "Breslau").map((h) => h.label)).toContain("Wrocław (Breslau), Polen");
+    expect(searchGazetteer(gaz, "Danzig").map((h) => h.label)).toContain("Gdańsk (Danzig), Polen");
+  });
+
+  it("Name aus den Daten zählt nur, wenn er ein Name des Ortes ist", () => {
+    const mini = parseGazetteer("6\tWrocław\tBreslau;Vratislavia\t51.1\t17.03\tPL\t72\t672000\tP\tBreslau\n21\tPolen\t\t52\t19\tPL\t\t\tC\t");
+    const e = mini.entries[0];
+    expect(entryLabel(mini, e)).toBe("Wrocław (Breslau), Polen");
+    expect(entryLabel(mini, e, "Vratislavia")).toBe("Wrocław (Vratislavia), Polen");
+    expect(entryLabel(mini, e, "Irgendwas")).toBe("Wrocław (Breslau), Polen");
+    expect(entryLabel(mini, e, "wroclaw")).toBe("Wrocław (Breslau), Polen");
+    expect(labelForText(mini, e, "Vratislavia, Schlesien")).toBe("Wrocław (Vratislavia), Polen");
   });
 });

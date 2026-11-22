@@ -88,7 +88,7 @@ export function matchPlace(gaz: Gazetteer, text: string): PlaceMatch | null {
   const result = (entry: GeoEntry, precision: MatchPrecision, part: PlacePart, ambiguous = 0): PlaceMatch => ({
     entry,
     precision,
-    label: entryLabel(gaz, entry),
+    label: entryLabel(gaz, entry, part.raw),
     matchedPart: part.raw,
     ambiguous,
   });

@@ -6,7 +6,7 @@
  * lib/places/gazetteer-file.ts (nur Server). Kein Dienst im Netz: die
  * Ortsnamen verlassen den Server nie.
  */
-import { normalizeForLookup } from "./normalize";
+import { normalizeForLookup, splitPlaceText } from "./normalize";
 
 /** P Ort, A Region erster Ebene, H historische Landschaft, C Land. */
 export type GeoKind = "P" | "A" | "H" | "C";
@@ -22,6 +22,8 @@ export type GeoEntry = {
   a1: string;
   pop: number;
   kind: GeoKind;
+  /** Deutscher bzw. historischer Name, wenn er sich vom heutigen unterscheidet („Breslau“ zu „Wrocław“). */
+  de: string;
 };
 
 export type Gazetteer = {
@@ -68,6 +70,7 @@ export function parseGazetteer(text: string): Gazetteer {
       a1: c[6],
       pop: Number(c[7]) || 0,
       kind,
+      de: (c[9] ?? "").trim(),
     };
     if (!Number.isFinite(entry.lat) || !Number.isFinite(entry.lon)) continue;
     const idx = entries.length;
@@ -80,10 +83,30 @@ export function parseGazetteer(text: string): Gazetteer {
   return { entries, byName, regions, countries, sorted: null };
 }
 
-/** Anzeigename: „Peine, Saarland, Deutschland“. */
-export function entryLabel(gaz: Gazetteer, e: GeoEntry): string {
-  const parts = [e.name];
-  if (e.kind === "P" && e.a1) {
+/** Deutscher Sprachraum: keine Klammer, Bundesland bzw. Kanton im Namen. */
+const GERMAN_SPEAKING = new Set(["DE", "AT", "CH"]);
+
+const stripParen = (s: string) => s.replace(/\s*\([^)]*\)\s*/g, " ").trim();
+
+/**
+ * Anzeigename (Entscheidung des Eigentümers): heutiger offizieller Name
+ * vorn, in Klammern der Name, unter dem der Ort in den Daten steht, sonst
+ * der deutsche bzw. historische Name — nur wenn er sich unterscheidet:
+ * „Wrocław (Breslau), Polen“, „Gdańsk (Danzig), Polen“, „Timișoara (Temeswar),
+ * Rumänien“. Orte im deutschen Sprachraum ohne Klammer, dafür mit
+ * Bundesland: „Peine, Saarland, Deutschland“.
+ *
+ * `dataName`: der Name aus den Daten (ein Teil des Ortstexts); zählt nur,
+ * wenn er wirklich ein Name dieses Eintrags ist.
+ */
+export function entryLabel(gaz: Gazetteer, e: GeoEntry, dataName?: string | null): string {
+  let name = e.name;
+  if (e.kind !== "C" && !GERMAN_SPEAKING.has(e.cc)) {
+    const alt = bracketName(gaz, e, dataName);
+    if (alt) name = `${e.name} (${alt})`;
+  }
+  const parts = [name];
+  if (e.kind === "P" && e.a1 && GERMAN_SPEAKING.has(e.cc)) {
     const r = gaz.regions.get(`${e.cc}.${e.a1}`);
     if (r !== undefined && gaz.entries[r].name !== e.name) parts.push(gaz.entries[r].name);
   }
@@ -92,6 +115,30 @@ export function entryLabel(gaz: Gazetteer, e: GeoEntry): string {
     if (c !== undefined) parts.push(gaz.entries[c].name);
   }
   return parts.join(", ");
+}
+
+function bracketName(gaz: Gazetteer, e: GeoEntry, dataName?: string | null): string | null {
+  const own = normalizeForLookup(e.name);
+  if (dataName) {
+    const clean = stripParen(dataName);
+    const key = normalizeForLookup(clean);
+    if (key && key !== own && (gaz.byName.get(key) ?? []).some((i) => gaz.entries[i] === e)) return clean;
+  }
+  return e.de && normalizeForLookup(e.de) !== own ? e.de : null;
+}
+
+/**
+ * Anzeigename für einen Ortstext: der erste Teil des Texts, der ein Name
+ * dieses Eintrags ist, kommt in die Klammer („Breslau, Schlesien“ →
+ * „Wrocław (Breslau), Polen“).
+ */
+export function labelForText(gaz: Gazetteer, e: GeoEntry, text: string): string {
+  for (const part of splitPlaceText(text)) {
+    for (const l of [...part.lookups, ...part.fallbacks]) {
+      if ((gaz.byName.get(l) ?? []).some((i) => gaz.entries[i] === e)) return entryLabel(gaz, e, part.raw);
+    }
+  }
+  return entryLabel(gaz, e);
 }
 
 function ensureSorted(gaz: Gazetteer) {
