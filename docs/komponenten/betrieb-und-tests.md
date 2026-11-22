@@ -171,7 +171,7 @@ Startskript des App-Containers:
    `DB_WAIT_SECONDS`, Standard 60 s),
 2. `prisma migrate deploy` — Ausgabe live ins Log; bekannte Fehlerbilder
    werden erklärt: Tabellen ohne Migrationshistorie (P3005, Baselining
-   nötig) und als fehlgeschlagen vermerkte Migration (P3009/P3018),
+   nötig — Anleitung in `docs/dev-history.md`) und als fehlgeschlagen vermerkte Migration (P3009/P3018),
 3. `INITIAL_ADMIN_EMAIL` per `docker/seed-admin.mjs` als Administrator
    sicherstellen,
 4. per `exec` den eigentlichen Befehl starten (Signale kommen direkt bei Node

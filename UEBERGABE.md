@@ -41,6 +41,7 @@ aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
 ```bash
 cp .env.example .env
 npm install
+npx prisma generate                               # npm blockiert Install-Skripte
 docker compose -f docker-compose.dev.yml up -d   # nur Postgres
 npm run mock:setup                                # Mock-Datenbank + Bilder
 npm run dev:mock                                  # http://localhost:3100
