@@ -15,7 +15,8 @@ export type Action =
   | "user:manage"
   | "audit:read"
   | "data:import"
-  | "family:manage";
+  | "family:manage"
+  | "place:manage";
 
 const ADMIN_ONLY: Action[] = [
   "user:read",
@@ -25,6 +26,8 @@ const ADMIN_ONLY: Action[] = [
   "data:import",
   // Familien anlegen und Zugriffe vergeben ist Rechtevergabe.
   "family:manage",
+  // Ortszuordnung: sieht alle Ortstexte, auch die gesperrter Personen.
+  "place:manage",
 ];
 
 const PERMISSIONS: Record<Role, Action[]> = {

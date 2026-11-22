@@ -70,6 +70,7 @@ const ENTITY: Record<string, [string, string]> = {
   ApiToken: ["KI-Schlüssel", "KI-Schlüssel"],
   ImportBatch: ["Import", "Importe"],
   ImportRawRecord: ["Rohdaten", "Rohdaten"],
+  Place: ["Ortszuordnung", "Ortszuordnungen"],
 };
 
 const SECTION_NOUN: Record<string, [string, string]> = {
@@ -117,6 +118,7 @@ const STATUS: Record<string, string> = {
   FAILED: "fehlgeschlagen",
 };
 const AI: Record<string, string> = { NONE: "kein Zugang", READ: "lesen", WRITE: "lesen und schreiben" };
+const PLACE_PRECISION: Record<string, string> = { PLACE: "Ort", REGION: "Region", COUNTRY: "Land" };
 
 /** Feldbeschriftungen je Art; nur diese Felder werden angezeigt (keine Kennungen). */
 const COMMON_FIELDS: Record<string, string> = {
@@ -200,6 +202,14 @@ const FIELDS: Record<string, Record<string, string>> = {
   User: { name: "Name", email: "E-Mail", role: "Rolle", status: "Status", aiAccess: "KI-Zugang" },
   ApiToken: { name: "Name", level: "Stufe", expiresAt: "Gültig bis", revokedAt: "Widerrufen" },
   ImportBatch: { status: "Status" },
+  Place: {
+    source: "Herkunft",
+    unresolvable: "Nicht zuordenbar",
+    precision: "Genauigkeit",
+    latitude: "Breite",
+    longitude: "Länge",
+    label: "Zugeordnet zu",
+  },
 };
 
 const DATE_KEYS: readonly FuzzyKey[] = ["birthDate", "deathDate", "startDate", "endDate", "date"];
@@ -338,6 +348,8 @@ function enumLabel(entityType: string, field: string, v: string): string {
   if (field === "role") return ROLE[v] ?? v;
   if (field === "status") return STATUS[v] ?? v;
   if (field === "aiAccess" || field === "level") return AI[v] ?? v;
+  if (entityType === "Place" && field === "source") return v === "MANUAL" ? "von Hand" : "automatisch";
+  if (entityType === "Place" && field === "precision") return PLACE_PRECISION[v] ?? v;
   return v;
 }
 
@@ -525,6 +537,17 @@ function describe(ctx: Ctx, row: Row): { what: string; note: string | null } {
         return { what: "Import ausgeführt", note: note || null };
       }
       return { what: `Import ${act}`, note: null };
+    }
+    case "Place": {
+      // Ortszuordnung (lib/services/places.ts) — nur in /admin/changes sichtbar.
+      const changes = obj(d.changes);
+      const label = strOf(d.label) ?? strOf(obj(changes.label).to);
+      const text = shorten(subject ?? "");
+      if (row.action === "DELETE") return { what: `Ortszuordnung entfernt: „${text}“`, note: null };
+      if (d.unresolvable === true || obj(changes.unresolvable).to === true) {
+        return { what: `Ort als nicht zuordenbar markiert: „${text}“`, note: null };
+      }
+      return { what: `Ort zugeordnet: „${text}“${label ? ` → ${shorten(label)}` : ""}`, note: null };
     }
     default:
       return { what: `${ENTITY[row.entityType]?.[0] ?? row.entityType} ${act}`, note: null };

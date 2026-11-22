@@ -7,6 +7,12 @@ const nextConfig = {
   output: "standalone",
   // sharp läuft im Route-Handler und darf nicht mitgebundelt werden.
   serverExternalPackages: ["sharp"],
+  // Das Ortsverzeichnis wird zur Laufzeit von der Platte gelesen
+  // (lib/places/gazetteer-file.ts) und muss deshalb ins Standalone-Image.
+  outputFileTracingIncludes: {
+    "/api/places/**": ["./geo/gazetteer.tsv.gz"],
+    "/admin/places": ["./geo/gazetteer.tsv.gz"],
+  },
 };
 
 export default nextConfig;

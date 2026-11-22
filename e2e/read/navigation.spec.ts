@@ -1,6 +1,6 @@
 import { test, expect, authFile } from "../support/fixtures";
 
-const ALL = ["Baum", "Personen", "Recherche", "Quellen", "Daten"];
+const ALL = ["Baum", "Karte", "Personen", "Recherche", "Quellen", "Daten"];
 const ADMIN_ONLY = ["Familien", "Benutzer", "Änderungen"];
 
 const nav = (page: import("@playwright/test").Page) =>

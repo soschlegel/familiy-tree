@@ -28,6 +28,10 @@ Bildarchiv und rollenbasierter Benutzerverwaltung.
 - **Bezugsperson** — „Das bin ich“ oder vorübergehend eine andere Person; der
   Baum zeigt an jeder Karte den Verwandtschaftsgrad zu ihr und färbt auf
   Wunsch die vier Großeltern-Linien ([Bezugsperson](#bezugsperson))
+- **Karte „Wurzeln nach Jahr“** — wo die Vorfahren in einem Jahr lebten, auf
+  einer eigenen Europa-/Weltkarte mit Jahresregler, nach Großeltern-Linien
+  eingefärbt; Ortstexte bekommen Koordinaten aus einem mitgelieferten
+  Ortsverzeichnis ([Karte und Orte](#karte-und-orte))
 - **Bilder** — Upload pro Person, frei wählbares Primärbild (erscheint im
   Stammbaum), eigene Bilder an Hochzeiten, automatische Vorschaubilder;
   abgelegt als WebP-Dateien in einem Ordner (`MEDIA_DIR`), ausgeliefert nur
@@ -299,7 +303,11 @@ Familie D, eine ist noch unbelegt. Die meisten Personen haben keinen Beleg.
 Dazu kommen Lebensereignisse (`mock-e-001` …: Taufe, Beruf, Beerdigung der
 Stammväter, ein Wohnort „von … bis …“, ein Abschluss „zwischen … und …“, eine
 Konfirmation nur mit Wortlaut, ein sonstiges Ereignis „Kapitänspatent“, eine
-Verlobung an einer Ehe, eine abweichende zweite Geburtsangabe), Heiratsorte
+Verlobung an einer Ehe, eine abweichende zweite Geburtsangabe; für die
+[Karte](#karte-und-orte) Wohnorte und eine Auswanderung in GEDCOM-Ortsformen,
+auch mit historischen Namen: „Breslau, Schlesien, Preußen“, „Temeswar,
+Banat“, „Berkum, Peine, Lk Peine, Saarland, Germany“, „New York, New
+York, USA“), Heiratsorte
 bei zwei von drei datierten Ehen, ein Scheidungsort, zwei Partnerschaften
 mit unbekanntem Ehestand, Rufname, Titel, Namenszusatz, eine Todesursache und
 zwei weitere Namen (`mock-n-01`, `mock-n-02`).
@@ -439,6 +447,120 @@ ohne Bezeichnung), eine gesperrte Person kann nicht Bezugsperson sein
 (unbekannt und gesperrt sehen gleich aus), und die Legende nennt nur
 sichtbare Großeltern („nicht erfasst“ sonst). Das ist strenger als die
 MCP-Abfrage `get_kinship`, die Wege durch Platzhalter zulässt.
+
+## Karte und Orte
+
+**Karte „Wurzeln nach Jahr“** (`/map`, Menüpunkt „Karte“): Wo lebten die
+Vorfahren in einem bestimmten Jahr? Eine eigene Welt-/Europakarte mit
+Jahresregler und „Abspielen“; je Ort ein Kreis, dessen Fläche mit der Zahl
+der Personen wächst, eingefärbt nach den vier Großeltern-Linien der
+[Bezugsperson](#bezugsperson) (gleiche Farben und Kurzzeichen VV/VM/MV/MM wie
+im Baum, zusätzlich ein Muster je Linie; gemischte Orte als Tortenstücke). Ein
+Klick auf einen Kreis listet die Personen mit Link zur Personenseite.
+
+- **Ausgangsperson** — ohne Angabe die Bezugsperson (Adresse vor Cookie
+  `tree-bezug` vor „das bin ich“), sonst „Andere Person …“ (`?person=<id>`;
+  ändert die Bezugsperson des Baums nicht). **Auswahl** „Vorfahren“
+  (Standard, samt Ausgangsperson) oder „Alle sichtbaren Personen“
+  (`?mode=vorfahren|alle`; ohne Ausgangsperson „alle“, dann ohne Linien).
+  `?jahr=` gibt das Jahr vor; beim Verstellen schreibt die Seite es in die
+  Adresse, ohne neu zu laden.
+- **Lebend** im Jahr J: Beginn ≤ J ≤ Ende. Beginn = Geburtsjahr, sonst das
+  früheste datierte Ereignis (Taufe, Heirat …). Ende = Todesjahr, sonst das
+  Jahr der Beerdigung/Einäscherung, sonst geschätzt: Beginn + 100 Jahre
+  (mindestens das letzte datierte Ereignis, höchstens das laufende Jahr).
+  Personen ganz ohne Datum stehen nur in der Zahl „ohne Lebensdaten“.
+- **Ort** im Jahr J: der zuletzt bekannte bis einschließlich J — Geburt,
+  Ereignisse mit Ort und Datum (Wohnort, Volkszählung, Beruf, Auswanderung …),
+  Heirat und Scheidung (Ort an der Beziehung, für beide Partner), Tod. Ein
+  Geburtsort ohne Geburtsdatum gilt ab dem Beginn, andere Angaben ohne Datum
+  zählen nicht, abweichende Zweitangaben auch nicht; im selben Jahr zählt die
+  letzte Angabe. Vor der ersten Ortsangabe: „ohne bekannten Ort“ (Zähler,
+  anklickbar). Ein Ortstext ohne Koordinaten zählt als „Ort, der nicht auf
+  der Karte ist“ — er verdrängt einen früheren Ort.
+- **Ungenaue Daten** zählen mit ihrem Jahr: „um 1850“, „vor 1850“, „nach
+  1850“ als 1850, „zwischen 1850 und 1854“ als 1852, ein Zeitraum „von …
+  bis …“ mit seinem Beginn. Orte, die nur als Region oder Land bekannt sind,
+  stehen in deren Mitte (in der Personenliste vermerkt).
+- **Bedienung** — Ziehen verschiebt (auch mit dem Finger), Mausrad bzw. zwei
+  Finger zoomen, Knöpfe „+“/„−“ und die Ausschnitte „Orte“ (alle Orte der
+  Auswahl, Standard), „Europa“, „Welt“; auf der fokussierten Karte
+  Pfeiltasten und +/−. Der Jahresregler ist ein normales Schiebefeld. Für
+  Screenreader und Tastatur stehen dieselben Angaben in der Liste „Orte im
+  Jahr …“ unter der Karte. Hinweis „heutige Grenzen“ auf der Karte.
+- **Datenschutz** — gerechnet wird nur mit Personen, die der Benutzer sehen
+  darf: Vorfahren und Linien auf dem Graphen der sichtbaren Personen
+  (`visibleIndex`, wie bei der Bezugsperson), Ereignisse und Heiraten nur
+  dieser Personen. Gesperrte erscheinen weder auf der Karte noch in einer
+  Zahl; eine gesperrte `?person=` wird still ignoriert. Dieselben Daten
+  liefert `GET /api/map?person=&mode=ancestors|all`.
+- **Leistung** — der Server rechnet einmal je Ausgangsperson
+  ([lib/services/map.ts](lib/services/map.ts),
+  [lib/map/build.ts](lib/map/build.ts)), der Browser wechselt die Jahre
+  selbst ([lib/map/year.ts](lib/map/year.ts)). Gemessen: Mock-Daten rund
+  25 ms; mit 12 000 zusätzlichen Personen in der Mock-Datenbank 1,1–1,4 s
+  auf dem Server (überwiegend das Laden des Graphen und der Ereignisse),
+  1,4 MB Daten; ohne Datenbank 63 ms Aufbau und 0,6 ms je Jahr
+  (`tests/map.test.ts`).
+
+**Orte zuordnen** (`/admin/places`, nur Administratoren; verlinkt auf der
+Karte und unter „Daten“): Orte sind Freitext. Die Tabelle `Place` (Migration
+`20261123000001_orte`) ordnet jedem normalisierten Ortstext (`placeKey`:
+Groß-/Kleinschreibung und Leerzeichen vereinheitlicht) Koordinaten zu, mit
+Herkunft (automatisch/von Hand), Genauigkeit (Ort/Region/Land) oder „nicht
+zuordenbar“. Die Seite listet alle vorkommenden Ortstexte (Geburt, Tod,
+Heirat, Scheidung, Ereignisse) mit Häufigkeit, Zuordnung und Vorschlag
+(„mehrdeutig“, wenn es einen ähnlich großen gleichnamigen Ort anderswo gibt).
+Von Hand: Vorschlag übernehmen bzw. bestätigen, im Verzeichnis suchen (auch
+alte Namen), Koordinaten eingeben, „nicht zuordenbar“, zurücksetzen.
+**Automatisch zuordnen** ordnet alle nicht von Hand bestätigten Texte neu zu;
+von Hand Bestätigtes wird nie überschrieben. Jede Änderung steht im
+`AuditLog` (`entityType` „Place“, vorher → nachher), die automatische
+Zuordnung als ein Paket „Orte automatisch zugeordnet“ (unter „Änderungen“).
+Die Ortstexte sieht nur der Admin — sie enthalten auch Angaben gesperrter
+Personen (`GET/PUT /api/places`, `POST /api/places/auto`,
+`GET /api/places/search?q=`, sonst 403). Der Mock-Seed ordnet alle
+Ortstexte automatisch zu.
+
+**Automatische Zuordnung** ([lib/places/match.ts](lib/places/match.ts)):
+GEDCOM-Ortsformen werden an Kommas zerlegt und vom spezifischen zum
+allgemeinen Teil gesucht („Berkum, Peine, Lk Peine, Saarland,
+Germany“). Vorsätze („Lk“, „Kreis“, „Amt“ …), reine Beschreibungen
+(„Kreisstadt“), Anschriften mit Hausnummer und Klammerzusätze fallen weg,
+„St.“ = „Sankt“, „Peine-Vöhrum“ zuletzt in Hälften. Ein heutiges
+Land im letzten Teil schränkt ein; ein historisches („Preußen“,
+„Österreich-Ungarn“) oder ein Land zusammen mit einer historischen Landschaft
+(„Breslau, Schlesien, Germany“) gibt nur einen Vorzug. Regionen (Bundesland,
+Bundesstaat) schränken ein, historische Landschaften („Schlesien“,
+„Ostpreußen“, „Banat“ …) bevorzugen Orte in ihrer Nähe. Nennt ein späterer
+Teil ebenfalls einen Ort, muss der Kandidat höchstens 50 km davon liegen.
+Ohne Ort: Region, dann Land. Ohne Länderhinweis entscheiden Heimatvorzug
+(Deutschland, Österreich/Schweiz, Europa) und Größe zusammen. Auf den
+Mock-Daten werden alle 36 Ortstexte (341 Angaben) als Ort zugeordnet.
+
+**Mitgelieferte Daten** — kein Dienst im Netz, die Karte lädt nichts von
+fremden Servern, die Ortsnamen verlassen den Server nie:
+
+| Datei | Inhalt | Größe |
+|---|---|---|
+| `geo/gazetteer.tsv.gz` | Ortsverzeichnis: Deutschland, Österreich, Schweiz mit allen bewohnten Orten (auch Ortsteile und historische), übriges Europa ab 1000 Einwohnern, Welt ab 15 000; Regionen erster Ebene, Länder, 43 historische Landschaften (von Hand, ungefähre Mitte). Weitere Namen in lateinischer Schrift, für Europa nach Sprache gefiltert (u.a. de, en, fr, pl, cs, hu, ro, la; historische wie „Breslau“, „Paane“, „Temeswar“); deutscher Anzeigename, wo es einen heutigen gibt („München“). 229 491 Einträge | 4,4 MB (12 MB entpackt); nur auf dem Server, erst bei Bedarf geladen (rund 1 s, gut 100 MB Speicher, nach 10 min ohne Benutzung freigegeben) |
+| `public/geo/countries.json` | Ländergrenzen, Natural Earth 1:50m, Mercator-projiziert und vereinfacht (Europa feiner) als SVG-Pfade | 337 KB (87 KB gzip) |
+
+Erzeugt mit `node scripts/build-geodata.mjs <geonames-ordner>
+<naturalearth-ordner>` (Eingaben und Bezugsquellen im Kopf des Skripts). Die
+Größe des Ortsverzeichnisses ist bewusst: eine kleinere Auswahl (nur Orte ab
+1000 Einwohnern) verfehlt Dörfer und Ortsteile wie „Berkum“ oder
+„Vöhrum“, die in Stammbäumen typisch sind.
+
+**Lizenzen:** Ortsverzeichnis aus [GeoNames](https://www.geonames.org/),
+Lizenz [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) — ausgewählt
+und umgeformt; Quellenangabe auf der Karte und hier. Ländergrenzen und
+Ländermittelpunkte aus [Natural Earth](https://www.naturalearthdata.com/),
+gemeinfrei.
+
+**MCP:** bewusst kein Werkzeug — Koordinaten und Kartendaten helfen einer KI
+bei der Recherche kaum, und Orte lassen sich über `search_persons` schon
+suchen.
 
 ## Ungenaue Daten
 
@@ -1317,6 +1439,8 @@ Das Schema liegt in `prisma/schema.prisma`, die Migrationen in
 | `20261120000000_dubletten_zusammenfuehren` | Mehrere Herkunftsangaben je Datensatz: die Unique-Indizes auf den sieben Träger-Spalten von `ImportLink` werden gewöhnliche Indizes; neue Spalten `ImportLink.mergedFromId`/`mergedAt`; Tabelle `DuplicateDismissal` — **nicht rein ergänzend** (`schema-diff-check` meldet die sieben `DROP INDEX`), aber ohne Datenänderung: aus „höchstens ein Link je Datensatz“ wird „beliebig viele“, jede bestehende Zeile erfüllt die gelockerte Regel |
 | `20261121000000_quellen_einordnen` | Quellenarten `ONLINE_TREE` und `ONLINE_COLLECTION`, `Source.provider`, `Citation.url` — rein ergänzend |
 | `20261122000000_changelog` | Änderungsgeschichte: Tabelle `ChangeSet` (Pakete), im `AuditLog` die Spalten `changeSetId` (Fremdschlüssel, beim Löschen des Pakets `NULL`), `personIds` und `familyIds` (Listen mit leerem Standardwert, GIN-Indizes) — rein ergänzend; ältere Einträge bleiben unverändert (ohne Paket, leere Listen) |
+| `20261122000001_bezugsperson` | Bezugsperson: `User.personId` (optional, Fremdschlüssel `ON DELETE SET NULL`, Index) — rein ergänzend |
+| `20261123000001_orte` | Ortszuordnung für die Karte: Tabelle `Place` (normalisierter Ortstext → Koordinaten, Herkunft automatisch/von Hand, Genauigkeit, „nicht zuordenbar“), Enums `PlaceSource` und `PlacePrecision` — rein ergänzend |
 
 Schemaänderungen künftig mit `npm run db:migrate` (`prisma migrate dev`) als
 Migration anlegen und mit einchecken. Vor dem Commit prüfen, ob sie rein
@@ -1364,6 +1488,8 @@ npx prisma migrate resolve --applied 20261119000000_genealogie_ereignisse_import
 npx prisma migrate resolve --applied 20261120000000_dubletten_zusammenfuehren
 npx prisma migrate resolve --applied 20261121000000_quellen_einordnen
 npx prisma migrate resolve --applied 20261122000000_changelog
+npx prisma migrate resolve --applied 20261122000001_bezugsperson
+npx prisma migrate resolve --applied 20261123000001_orte
 ```
 
 Auf der NAS (SSH, Stack `familytree`) geht Schritt 2 mit dem App-Image

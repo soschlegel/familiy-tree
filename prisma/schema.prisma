@@ -900,3 +900,51 @@ model ChangeSet {
   @@index([createdAt])
   @@index([userId, kind, lastActivityAt])
 }
+
+// ---------------------------------------------------------------------------
+// Orte (Karte „Wurzeln nach Jahr“, README „Karte und Orte“)
+// ---------------------------------------------------------------------------
+
+// Woher die Koordinaten eines Ortstexts stammen.
+enum PlaceSource {
+  AUTO // automatisch aus dem mitgelieferten Ortsverzeichnis (geo/gazetteer.tsv.gz)
+  MANUAL // von Hand bestätigt oder eingegeben — wird nie automatisch überschrieben
+}
+
+// Wie genau die Zuordnung ist: der Ort selbst, nur die Region (Bundesland,
+// historische Landschaft) oder nur das Land.
+enum PlacePrecision {
+  PLACE
+  REGION
+  COUNTRY
+}
+
+// Zuordnung eines Ortstexts (wie er an Personen, Beziehungen und Ereignissen
+// steht) zu Koordinaten. Schlüssel ist der normalisierte Text
+// (lib/places/normalize.ts, placeKey) — alle Schreibweisen, die sich nur in
+// Groß-/Kleinschreibung und Leerzeichen unterscheiden, teilen sich eine
+// Zeile. Ortstexte ohne Zeile sind „offen“. Nur Administratoren sehen und
+// ändern die Tabelle (lib/services/places.ts); die Karte liest nur
+// Koordinaten zu Ortstexten sichtbarer Personen.
+model Place {
+  id           String          @id @default(cuid())
+  key          String          @unique
+  // Eine Schreibweise des Texts (zuletzt zugeordnet), für die Anzeige.
+  text         String
+  source       PlaceSource
+  // Von Hand als „nicht zuordenbar“ markiert (dann ohne Koordinaten).
+  unresolvable Boolean         @default(false)
+  precision    PlacePrecision?
+  latitude     Float?
+  longitude    Float?
+  // Anzeigename der Zuordnung, z.B. „Peine, Saarland, Deutschland“.
+  label        String?
+  countryCode  String?
+  // Kennung im Ortsverzeichnis (GeoNames-ID bzw. „h…“ für historische
+  // Landschaften); leer bei von Hand eingegebenen Koordinaten.
+  gazetteerId  String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([source])
+}

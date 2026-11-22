@@ -55,6 +55,8 @@ setup("Routen vorwärmen", async ({ browser }) => {
     "/admin/data",
     "/admin/users",
     "/admin/families",
+    "/map",
+    "/admin/places",
     "/people/gibt-es-nicht",
   ];
   for (const url of pages) {
@@ -77,6 +79,10 @@ setup("Routen vorwärmen", async ({ browser }) => {
     "/api/media/x/primary",
     "/api/import",
     "/api/tree",
+    "/api/map",
+    "/api/places?q=kiel",
+    "/api/places/search?q=kiel",
+    "/api/places/auto",
     "/api/export?format=json",
     "/api/users",
     "/api/users/x",

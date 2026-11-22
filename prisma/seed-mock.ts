@@ -19,7 +19,45 @@ import { PrismaClient } from "@prisma/client";
 import sharp from "sharp";
 
 import { hashToken } from "../lib/ai-tokens";
-import { generateMockData, type MockImage } from "./mock-data";
+import { loadGazetteerSync } from "../lib/places/gazetteer-file";
+import { matchPlace } from "../lib/places/match";
+import { placeKey } from "../lib/places/normalize";
+import { generateMockData, type MockData, type MockImage } from "./mock-data";
+
+/** Automatische Ortszuordnung aller Ortstexte der Mock-Daten. */
+function mockPlaceAssignments(data: MockData) {
+  const texts = new Map<string, string>();
+  const add = (t: string | null | undefined) => {
+    if (t?.trim() && !texts.has(placeKey(t))) texts.set(placeKey(t), t.trim());
+  };
+  for (const p of data.persons) {
+    add(p.birthPlace);
+    add(p.deathPlace);
+  }
+  for (const r of data.relationships) {
+    add(r.startPlace);
+    add(r.endPlace);
+  }
+  for (const e of data.events) add(e.place);
+  const gaz = loadGazetteerSync();
+  const rows = [];
+  for (const [key, text] of texts) {
+    const m = matchPlace(gaz, text);
+    if (!m) continue;
+    rows.push({
+      key,
+      text,
+      source: "AUTO" as const,
+      precision: m.precision,
+      latitude: m.entry.lat,
+      longitude: m.entry.lon,
+      label: m.label,
+      countryCode: m.entry.cc || null,
+      gazetteerId: m.entry.id,
+    });
+  }
+  return rows;
+}
 
 const MOCK_NAME = /_(mock|test)$/;
 const MOCK_MEDIA_DIR = /-(mock|test)$/;
@@ -147,7 +185,7 @@ async function main() {
       `TRUNCATE TABLE "ImportLink", "ExternalId", "ImportRawRecord", "ImportBatch", "Event", "PersonName",
         "AuditLog", "Citation", "Source", "RelationshipMedia", "PersonMedia", "MediaAsset",
         "Relationship", "PersonFamily", "Person", "UserFamily", "Family",
-        "Session", "Account", "VerificationToken", "ApiToken", "User" CASCADE`,
+        "Session", "Account", "VerificationToken", "ApiToken", "User", "Place" CASCADE`,
     );
 
     const familyId = new Map(data.families.map((f) => [f.key, f.id]));
@@ -204,6 +242,12 @@ async function main() {
     await prisma.event.createMany({ data: data.events as never });
     await prisma.personName.createMany({ data: data.personNames });
 
+    // Ortszuordnung für die Karte: alle Ortstexte automatisch aus dem
+    // mitgelieferten Ortsverzeichnis (wie die Admin-Aktion „Automatisch
+    // zuordnen“, aber ohne Protokoll).
+    const placeRows = mockPlaceAssignments(data);
+    await prisma.place.createMany({ data: placeRows });
+
     let imageCount = 0;
     const createdImages = new Set<string>();
     await prepareMediaDir(mediaDir);
@@ -255,7 +299,7 @@ async function main() {
       `[mock] Fertig: ${data.persons.length} Personen über ${generations} Generationen, ` +
         `${data.relationships.length} Beziehungen, ${imageCount} Bilder, ` +
         `${data.sources.length} Quellen mit ${data.citations.length} Belegen, ` +
-        `${data.events.length} Ereignisse, ${data.personNames.length} weitere Namen.`,
+        `${data.events.length} Ereignisse, ${data.personNames.length} weitere Namen, ${placeRows.length} Ortszuordnungen.`,
     );
     console.log(`[mock] Je Familie: ${perFamily}; ohne Familie: ${data.landmarks.noFamily.length}`);
     console.log("[mock] Benutzer (Dev-Login):");

@@ -67,6 +67,27 @@
   }
 }
 
+/* Karte „Wurzeln nach Jahr“ (components/MapExplorer.tsx): ruhige Flächen,
+   damit die Kreise in den Linienfarben hervortreten. --map-neutral für
+   Personen ohne Ahnenlinie. */
+:root {
+  --map-sea: #dfe9ee;
+  --map-land: #f7f4ec;
+  --map-border: #b9b2a3;
+  --map-neutral: #78716c;
+  --map-ring: #1c1917;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --map-sea: #14202a;
+    --map-land: #2a2622;
+    --map-border: #57514a;
+    --map-neutral: #a8a29e;
+    --map-ring: #fafaf9;
+  }
+}
+
 /* Auch <html> in Papierfarbe: Was der Browser beim Überziehen des
    Bildlaufs oder beim Ein- und Ausblenden der Adressleiste außerhalb von
    <body> zeigt, ist dann kein schwarzer oder weißer Streifen. */

@@ -39,7 +39,7 @@ export function NavBar({
   useDismiss(open, close, [menuRef, toggleRef], toggleRef);
 
   const linkClass = (active: boolean) =>
-    `whitespace-nowrap rounded-full px-3 py-1 text-sm font-medium transition ${
+    `whitespace-nowrap rounded-full px-2 py-1 text-sm xl:px-3 font-medium transition ${
       active
         ? "bg-accent-700 text-white dark:bg-accent-300 dark:text-stone-950"
         : "text-stone-600 hover:bg-stone-900/5 hover:text-stone-900 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-stone-50"
