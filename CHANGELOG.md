@@ -17,8 +17,12 @@ Regeln für neue Einträge (AGENTS.md, Abschnitt 3 „Ausrollen“):
 - Geprüft von tests/release-notes.test.ts (lib/release-notes.ts).
 -->
 
-## 2026-11-22.3 — Neuigkeiten in der App
+## 2026-11-22.3 — Neuigkeiten und Hilfe in der App
 
+- Neue Seite „Hilfe“ (Link unten in der Fußzeile und im Menü „Verwaltung“):
+  kurze Erklärungen zu allen Bereichen — vom Anlegen von Personen über
+  Stammbaum, Karte und Dubletten bis zum KI-Zugang. An vielen Stellen führt
+  ein kleiner Link „Wie funktioniert das?“ direkt zur passenden Erklärung.
 - Nach einer neuen Version erscheint beim ersten Aufruf einmal das Fenster
   „Was ist neu?“ mit den Neuigkeiten seit deinem letzten Besuch.
 - Alle Neuigkeiten stehen jederzeit auf der Seite „Neuigkeiten“ — der Link

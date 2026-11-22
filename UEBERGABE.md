@@ -10,21 +10,26 @@ aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
   Portainer aktualisiert den Stack von dort. **Ein Merge ist ein
   Produktiv-Deployment auf echte Daten.**
 - `optimierung` = Arbeitsbranch, zum Zeitpunkt der Übergabe gleich `main`.
-- Zuletzt ausgerollt (22.11., zweites Release): Karte „Wurzeln nach Jahr“
-  mit Ortszuordnung (`/map`, `/admin/places`, Ortsnamen „heutiger Name (alter
-  Name)“), Belegbilder ohne doppelte Vorschau, KI-Schlüssel löschen und
-  Verlauf ausblenden, Komponenten-Doku `docs/komponenten/` mit AGENTS.md/
-  CLAUDE.md, Aufräumrunde (kleine Fehler, toter Code, doppelte Logik,
-  Beispielorte, README mit Quickstart, Historisches in
-  `docs/dev-history.md`), Demofamilie ohne echte Namen. Neue, rein
-  ergänzende Migration `20261123000001_orte` (letzter Migrationsordner).
-  Davor am 22.11.: Bilder an Einträgen (`20261123000000_medien_an_eintraegen`),
-  Linienfarben an Verbindungen, Untermenü „Verwaltung“, Handy-Anleitung.
-- Prüfstand des letzten Pakets: Typecheck, Lint, Vitest 827/827;
-  Migrationen ↔ Schema ohne Abweichung; schema-diff-check ergänzend;
-  lokaler Docker-Build ok (Ortsverzeichnis und Ländergrenzen im Image, keine
-  Tests); Playwright auf frischem Server, zwischen read und write neu
-  gestartet, ohne parallele Agenten: setup 6/6, read 182/182, write 97/97.
+- Zuletzt ausgerollt (22.11., drittes Release, Kennung 2026-11-22.3):
+  „Was ist neu?“ nach jeder Version und Seite `/neuigkeiten` (`CHANGELOG.md`,
+  Migration `20261124000000_neuigkeiten`, letzter Migrationsordner),
+  Anwender-Hilfe `/hilfe` (`docs/anwender/`), Anmelde-Hinweis
+  „Authorization: Bearer …“ in der KI-Anleitung, E2E gegen Produktions-Build
+  (`npm run test:e2e`). Davor am 22.11.: Karte/Orte, Schlüsselverwaltung,
+  Komponenten-Doku, Aufräumrunde (2026-11-22.2); Bilder an Einträgen
+  (2026-11-22.1).
+- Prüfstand des letzten Pakets: Typecheck, Lint, Vitest 864/864;
+  `npm run test:e2e` (Produktions-Build, ein Lauf): 314 bestanden, 1
+  übersprungen, 151 s; lokaler Docker-Build ok (Hilfe-Texte, Ortsverzeichnis
+  und Changelog im Image).
+- In Arbeit (Branch `orte-ki`, Worktree `familiy-tree-orte-ki`): Orte —
+  Vorschlag am Eingabefeld, automatische Zuordnung, MCP-Werkzeuge
+  (suggest/list/assign, KI-Kennzeichnung, eigene Orte), Ortsseite, Links im
+  Personenblatt, Auswahl echter Orte, GEDCOM-Export „Ort, Region, Land“.
+- Offen: Hydration-Fehler (React #418) tritt auch im Produktions-Build bei
+  wenigen Prozent der Seitenaufrufe auf (alle Seiten) — eigene Untersuchung
+  nötig; Git-Verlauf umschreiben (echte Namen in alter Demofamilie,
+  Autor-E-Mail, Beispielorte) — nur nach Bestätigung des Eigentümers.
 - Beim Ausrollen beachten: Der Reverse-Proxy muss für `/api/mcp` größere
   Anfragen durchlassen (Bilder als base64 über MCP, bis
   MAX_UPLOAD_BYTES × 4/3 + 1 MiB), sonst antwortet er mit 413.
