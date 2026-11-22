@@ -36,6 +36,21 @@ test("Zählung und Seiten", async ({ page }) => {
   await expect(page.getByTestId("people-count")).toHaveText(`${(pages - 1) * PAGE + 1}–${TOTAL} von ${TOTAL} Personen`);
 });
 
+test("Seite jenseits des Endes behält den Ortsfilter", async ({ page }) => {
+  await page.goto("/people?place=Celle");
+  const count = page.getByTestId("people-count");
+  await expect(count).toHaveText(/ von \d+ Treffern$/);
+  const hits = Number((await count.innerText()).match(/von (\d+) Treffern/)![1]);
+  expect(hits).toBeGreaterThan(0);
+  expect(hits).toBeLessThan(TOTAL);
+  const lastPage = Math.ceil(hits / PAGE);
+  const lastText = `${(lastPage - 1) * PAGE + 1}–${hits} von ${hits} Treffern`;
+
+  await page.goto("/people?place=Celle&page=99");
+  await expect(count).toHaveText(lastText);
+  await expect(page.locator("#people-place")).toHaveValue("Celle");
+});
+
 test("Namenssuche", async ({ page }) => {
   const word = "Koch";
   const expected = mock.persons.filter((p) =>

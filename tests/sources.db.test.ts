@@ -7,6 +7,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/prisma";
+import { mockDbSkipReason } from "./db-ready";
 import type { Scope } from "@/lib/scope";
 import {
   createCitation,
@@ -27,22 +28,7 @@ import {
 } from "@/lib/services";
 import { mockData } from "./helpers";
 
-async function mockDbReady(): Promise<string | null> {
-  try {
-    const admin = await Promise.race([
-      prisma.user.findUnique({ where: { id: "mock-user-admin" } }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Zeitüberschreitung")), 5000)),
-    ]);
-    if (!admin) return "Mock-Datenbank ist leer — bitte `npm run mock:setup` ausführen.";
-    if ((await prisma.source.count()) === 0) return "Mock-Datenbank ohne Quellen — bitte `npm run db:mock` ausführen.";
-    return null;
-  } catch (err) {
-    const detail = (err as Error).message.split("\n").map((l) => l.trim()).filter(Boolean).pop();
-    return `Mock-Datenbank nicht erreichbar (${detail}).`;
-  }
-}
-
-const skipReason = await mockDbReady();
+const skipReason = await mockDbSkipReason({ check: async () => (await prisma.source.count()) > 0, missing: "ohne Quellen" });
 if (skipReason) console.warn(`\n[tests] Quellen-Tests übersprungen: ${skipReason}\n`);
 
 const data = mockData();
@@ -192,6 +178,21 @@ describe.skipIf(Boolean(skipReason))("Quellen und Belege (Mock-Datenbank)", () =
       expect((await getSource(viewer, src.id))!.citations.map((c) => c.id)).toEqual([citation.id]);
 
       // Regeln: Angabe passend zum Bezug, Rechte am Bezug.
+      // Ohne Bezug: Eingabefehler mit passender Meldung, nicht „Ereignis nicht gefunden“.
+      await expect(createCitation(editor, { sourceId: src.id, fact: "BIRTH" })).rejects.toThrow(
+        /Person, einer Beziehung oder einem Ereignis/,
+      );
+      const orphan = await prisma.event.create({ data: { type: "OCCUPATION", value: "Vitest ohne Träger" } });
+      try {
+        await expect(createCitation(editor, { sourceId: src.id, eventId: orphan.id })).rejects.toMatchObject({
+          code: "VALIDATION",
+        });
+        await expect(createCitation(editor, { sourceId: src.id, eventId: orphan.id })).rejects.toThrow(
+          /braucht eine Person oder eine Beziehung/,
+        );
+      } finally {
+        await prisma.event.delete({ where: { id: orphan.id } });
+      }
       await expectServiceError(
         createCitation(editor, { sourceId: src.id, personId: person.id, fact: "PARTNERSHIP" }),
         "VALIDATION",

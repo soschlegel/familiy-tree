@@ -1,4 +1,5 @@
 import { prisma } from "../prisma";
+import { PRESUMED_LIFESPAN } from "../consistency";
 import { maskPerson, type Scope } from "../scope";
 import {
   ancestorsOf,
@@ -217,8 +218,6 @@ export type Statistics = {
   birthYears: { earliest: number | null; latest: number | null };
 };
 
-const LIKELY_DECEASED_AGE = 100;
-
 /**
  * Ohne Sterbedatum, aber sicher älter als 100 Jahre. Bei ungenauem
  * Geburtsdatum zählt der späteste mögliche Zeitpunkt („nach 1900“ also nie).
@@ -228,7 +227,7 @@ function probablyDeceased(p: GraphPerson, now: Date): boolean {
   const birth = fuzzyField(p, "birthDate")!;
   const latest = dateBounds(birth).end;
   if (!Number.isFinite(latest)) return false;
-  return now.getUTCFullYear() - new Date(latest - 1).getUTCFullYear() > LIKELY_DECEASED_AGE;
+  return now.getUTCFullYear() - new Date(latest - 1).getUTCFullYear() > PRESUMED_LIFESPAN;
 }
 
 export async function getStatistics(scope: Scope): Promise<Statistics> {
@@ -326,11 +325,6 @@ export type DataGapKind =
 export type RelationshipGapKind = "marriageWithoutPlace" | "partnershipUnknownStatus";
 
 export const RELATIONSHIP_GAP_KINDS: RelationshipGapKind[] = ["marriageWithoutPlace", "partnershipUnknownStatus"];
-
-export const RELATIONSHIP_GAP_LABEL: Record<RelationshipGapKind, string> = {
-  marriageWithoutPlace: "Ehe ohne Ort",
-  partnershipUnknownStatus: "Partnerschaft mit unbekanntem Ehestand",
-};
 
 export type RelationshipGapItem = {
   relationshipId: string;
@@ -517,20 +511,6 @@ export async function findDataGaps(
 // ---------------------------------------------------------------------------
 // Mögliche Dubletten
 // ---------------------------------------------------------------------------
-
-/** Vereinheitlicht Schreibweisen: Umlaute, ß, ph/f, th/t, Doppelbuchstaben. */
-export function normalizeName(name: string | null | undefined): string {
-  if (!name) return "";
-  return name
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, (m) => (m === "̈" ? "e" : ""))
-    .replace(/ß/g, "ss")
-    .replace(/ph/g, "f")
-    .replace(/th/g, "t")
-    .replace(/[^a-z]/g, "")
-    .replace(/(.)\1+/g, "$1");
-}
 
 /**
  * Paare sichtbarer Personen, die vermutlich doppelt erfasst sind — nach

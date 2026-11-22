@@ -8,6 +8,11 @@ Code bleibt aber die Wahrheit.
 **Pflege:** Nach jeder abgeschlossenen Änderung im selben Commit
 fortschreiben (siehe [AGENTS.md](../../AGENTS.md), Abschnitt 1).
 
+Bedienung, Betrieb und Tests beschreibt die [README](../../README.md) (mit
+Quickstart am Anfang); frühere Stände und Umstiege für alte Installationen
+(MinIO, `db-access`, Zwei-Image-Stack, privates Image, Baselining) stehen in
+[docs/dev-history.md](../dev-history.md).
+
 ## Wegweiser
 
 | Datei | Inhalt | Wann lesen |

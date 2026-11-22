@@ -11,6 +11,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/prisma";
+import { mockDbSkipReason } from "./db-ready";
 import type { Scope } from "@/lib/scope";
 import {
   createPerson,
@@ -33,26 +34,7 @@ import {
 } from "@/lib/services";
 import { mockData } from "./helpers";
 
-async function mockDbReady(): Promise<string | null> {
-  try {
-    const admin = await Promise.race([
-      prisma.user.findUnique({ where: { id: "mock-user-admin" } }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Zeitüberschreitung")), 5000)),
-    ]);
-    if (!admin) return "Mock-Datenbank ist leer — bitte `npm run mock:setup` ausführen.";
-    return null;
-  } catch (err) {
-    const detail =
-      (err as Error).message
-        .split("\n")
-        .map((l) => l.trim())
-        .filter(Boolean)
-        .pop() ?? "unbekannter Fehler";
-    return `Mock-Datenbank nicht erreichbar (${detail}). Start mit \`docker compose -f docker-compose.dev.yml up -d\` und \`npm run mock:setup\`.`;
-  }
-}
-
-const skipReason = await mockDbReady();
+const skipReason = await mockDbSkipReason();
 if (skipReason) {
   console.warn(`\n[tests] Dienst-Tests übersprungen: ${skipReason}\n`);
 }

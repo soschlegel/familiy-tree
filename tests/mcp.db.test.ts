@@ -21,30 +21,21 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 import { prisma } from "@/lib/prisma";
+import { mockDbSkipReason } from "./db-ready";
 import { mockData } from "./helpers";
 
 const ROOT = path.resolve(__dirname, "..");
 const TSX = path.join(ROOT, "node_modules", "tsx", "dist", "cli.mjs");
 const SERVER = path.join(ROOT, "mcp", "server.ts");
 
-async function mockDbReady(): Promise<string | null> {
-  try {
-    const admin = await Promise.race([
-      prisma.user.findUnique({ where: { id: "mock-user-admin" } }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Zeitüberschreitung")), 5000)),
-    ]);
-    return admin ? null : "Mock-Datenbank ist leer — bitte `npm run mock:setup` ausführen.";
-  } catch (err) {
-    const detail = (err as Error).message.split("\n").map((l) => l.trim()).filter(Boolean).pop();
-    return `Mock-Datenbank nicht erreichbar (${detail}).`;
-  }
-}
-
-const skipReason = await mockDbReady();
+const skipReason = await mockDbSkipReason();
 if (skipReason) console.warn(`\n[tests] MCP-Tests übersprungen: ${skipReason}\n`);
 
 const L = mockData().landmarks;
 const TIMEOUT = 60_000;
+
+/** Name der Mock-Datenbank, gegen die dieser Testlauf geht (vitest.config.ts setzt DATABASE_URL). */
+const MOCK_DB_NAME = decodeURIComponent(new URL(process.env.DATABASE_URL!).pathname.slice(1));
 
 function serverEnv(extra: Record<string, string | undefined>): Record<string, string> {
   const env: Record<string, string> = {};
@@ -873,7 +864,9 @@ describe.skipIf(Boolean(skipReason))("MCP-Server (stdio, Mock-Datenbank)", () =>
       expect(messages[0].result.serverInfo.name).toBe("familytree");
       expect(messages[1].result.tools.map((t: { name: string }) => t.name).sort()).toEqual(READ_TOOLS);
       expect(JSON.parse(messages[2].result.content[0].text).persons.total).toBe(await prisma.person.count());
-      expect(stderr).toContain("familytree_mock");
+      // Name der Mock-Datenbank dieses Laufs (vitest.config.ts) — in Worktrees
+      // z.B. familytree_<paket>_mock, nicht fest familytree_mock.
+      expect(stderr).toContain(MOCK_DB_NAME);
       expect(code).toBe(0);
     },
     TIMEOUT,

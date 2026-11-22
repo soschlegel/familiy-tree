@@ -20,6 +20,8 @@ import {
   shortYear,
 } from "@/lib/partner-labels";
 import { LineCodes, LineStripe, lineTint, linesText, ReferenceContext } from "./ReferenceLines";
+import { GENDER_INITIALS_BG, GENDER_RING } from "./gender-style";
+import { plural } from "@/lib/plural";
 
 /** Was jenseits des Ausschnitts liegt (nur Fokus-Ansicht). */
 export type HiddenKin = { parents: number; children: number };
@@ -79,29 +81,12 @@ export function OpenIcon({ className = "h-3.5 w-3.5" }: { className?: string }) 
   );
 }
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-
 /**
  * Mitte der linken bzw. rechten Karte einer Doppelkarte, in Prozent der
  * Gesamtbreite. Aufbau: 180px Karte + 56px Verbindungsstück + 180px Karte.
  */
 const LEFT_CARD = `${((NODE_WIDTH / 2) / (NODE_WIDTH * 2 + 56)) * 100}%`;
 const RIGHT_CARD = `${((NODE_WIDTH + 56 + NODE_WIDTH / 2) / (NODE_WIDTH * 2 + 56)) * 100}%`;
-
-/** Ring um das Porträt als dezente Geschlechtsmarkierung. */
-const RING: Record<TreePerson["gender"], string> = {
-  MALE: "ring-sky-300 dark:ring-sky-700",
-  FEMALE: "ring-rose-300 dark:ring-rose-700",
-  OTHER: "ring-violet-300 dark:ring-violet-700",
-  UNKNOWN: "ring-stone-200 dark:ring-stone-700",
-};
-
-const INITIALS_BG: Record<TreePerson["gender"], string> = {
-  MALE: "bg-sky-50 text-sky-800 dark:bg-sky-950 dark:text-sky-200",
-  FEMALE: "bg-rose-50 text-rose-800 dark:bg-rose-950 dark:text-rose-200",
-  OTHER: "bg-violet-50 text-violet-800 dark:bg-violet-950 dark:text-violet-200",
-  UNKNOWN: "bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300",
-};
 
 function initials(p: TreePerson) {
   return (
@@ -245,13 +230,13 @@ function Card({
           height={48}
           loading="lazy"
           decoding="async"
-          className={`h-12 w-12 shrink-0 rounded-full object-cover ring-2 ring-offset-2 ring-offset-surface ${RING[person.gender]} ${
+          className={`h-12 w-12 shrink-0 rounded-full object-cover ring-2 ring-offset-2 ring-offset-surface ${GENDER_RING[person.gender]} ${
             deceased ? "grayscale-[45%] sepia-[20%]" : ""
           }`}
         />
       ) : (
         <div
-          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full font-serif text-sm font-semibold ring-2 ring-offset-2 ring-offset-surface ${RING[person.gender]} ${INITIALS_BG[person.gender]}`}
+          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full font-serif text-sm font-semibold ring-2 ring-offset-2 ring-offset-surface ${GENDER_RING[person.gender]} ${GENDER_INITIALS_BG[person.gender]}`}
         >
           {initials(person)}
         </div>

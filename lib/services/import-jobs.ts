@@ -49,13 +49,3 @@ export async function importJobState(scope: Scope, batchId: string): Promise<Imp
   if (b?.status === "COMPLETED" && b.counts) return { state: "done", result: { ...(b.counts as unknown as GedcomApplyResult), alreadyApplied: true } };
   return { state: "idle" };
 }
-
-/** Auf das Ende eines Laufs warten (Tests, Skripte). */
-export async function waitForImportJob(scope: Scope, batchId: string, timeoutMs = 10 * 60_000): Promise<ImportJobState> {
-  const until = Date.now() + timeoutMs;
-  for (;;) {
-    const s = await importJobState(scope, batchId);
-    if (s.state !== "running" || Date.now() > until) return s;
-    await new Promise((r) => setTimeout(r, 100));
-  }
-}

@@ -12,6 +12,7 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/prisma";
+import { mockDbSkipReason } from "./db-ready";
 import type { Scope } from "@/lib/scope";
 import { findRelationshipPath, getKinship, scopeForEmail } from "@/lib/services";
 import { loadFocusTree } from "@/lib/services/tree";
@@ -27,18 +28,7 @@ import {
 import { putObject } from "@/lib/storage";
 import { buildGedcom, newTreeIds, randomSurname } from "./merge-fixtures";
 
-async function dbReady(): Promise<string | null> {
-  try {
-    const admin = await Promise.race([
-      prisma.user.findUnique({ where: { id: "mock-user-admin" } }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Zeitüberschreitung")), 5000)),
-    ]);
-    return admin ? null : "Testdatenbank ist leer — bitte `npm run mock:setup` ausführen.";
-  } catch (err) {
-    return `Testdatenbank nicht erreichbar (${(err as Error).message.split("\n").pop()}).`;
-  }
-}
-const skipReason = await dbReady();
+const skipReason = await mockDbSkipReason();
 
 /** Import A: Großeltern → Hans; Import B: Hans und Maria → Otto → Enkel Paul. Hans/Maria mit gleichen genauen Daten in beiden. */
 function files(sn: string) {

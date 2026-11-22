@@ -257,7 +257,8 @@ Karte „Wurzeln nach Jahr“ (README, „Karte und Orte“).
   einer eben gelöschten Person für die Erfolgsmeldung).
 - **Daten:** `listFamilies`, `searchPersons`; für Trefferhinweise zusätzlich
   die weiteren Namen der Treffer direkt aus der Datenbank. Eine Seitenzahl
-  jenseits des Endes zeigt die letzte Seite.
+  jenseits des Endes zeigt die letzte Seite — mit denselben Filtern (auch
+  `place`).
 - **Anzeige:** Suchformular (Familienauswahl nur bei mehr als einer
   Familie, `AutoSubmitSelect`), Karten je Person mit `Avatar`,
   Lebensspanne, Geburtsname, Trefferhinweis („Rufname …“, „auch: …“, Ort bei
@@ -353,8 +354,9 @@ Die Personenseite.
 - **Rechte:** angemeldet; nur sichtbare Quellen.
 - **Suchparameter:** `q`, `kind` (Quellenart aus `SOURCE_KINDS`), `page`
   (40 je Seite), `deleted` (Titel einer eben gelöschten Quelle).
-- **Daten:** `listSources`. **Anzeige:** Suchformular, Liste, „Quelle
-  anlegen“ nur bei `canCreateSources`.
+- **Daten:** `listSources`; eine Seitenzahl jenseits des Endes lädt die
+  letzte Seite mit denselben Filtern. **Anzeige:** Suchformular, Liste,
+  „Quelle anlegen“ nur bei `canCreateSources`.
 
 ### `/sources/new` — `app/sources/new/page.tsx`
 

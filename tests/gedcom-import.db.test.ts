@@ -15,6 +15,7 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/prisma";
+import { mockDbSkipReason } from "./db-ready";
 import type { Scope } from "@/lib/scope";
 import { createPerson, scopeForEmail, ServiceError, updatePerson } from "@/lib/services";
 import {
@@ -29,18 +30,7 @@ import {
 import { buildGedcomExport } from "@/lib/services/gedcom-export";
 import { parseGedcom } from "@/lib/gedcom";
 
-async function dbReady(): Promise<string | null> {
-  try {
-    const admin = await Promise.race([
-      prisma.user.findUnique({ where: { id: "mock-user-admin" } }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Zeitüberschreitung")), 5000)),
-    ]);
-    return admin ? null : "Testdatenbank ist leer — bitte `npm run mock:setup` ausführen.";
-  } catch (err) {
-    return `Testdatenbank nicht erreichbar (${(err as Error).message.split("\n").pop()}).`;
-  }
-}
-const skipReason = await dbReady();
+const skipReason = await mockDbSkipReason();
 if (skipReason) console.warn(`\n[tests] GEDCOM-Import-Tests übersprungen: ${skipReason}\n`);
 
 type Variant = {

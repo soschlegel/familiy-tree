@@ -6,6 +6,8 @@
  * Geburtsort, zusätzlich die Namen der Eltern. Rein, ohne Datenbank.
  */
 
+import { editDistance } from "../name-keys";
+
 export type SuggestPerson = {
   id: string;
   givenName: string;
@@ -20,7 +22,13 @@ export type SuggestPerson = {
 
 export type Suggestion = { personId: string; score: number; reasons: string[] };
 
-export function normalizeName(s: string | null | undefined): string {
+/**
+ * Vergleichsform für die Vorschläge. Bewusst NICHT `nameKey` aus
+ * lib/name-keys.ts: diese Form faltet Umlaute zu „u“ statt „ue“, lässt
+ * ph/th und Doppelbuchstaben stehen und behält Ziffern — ein Umstieg würde
+ * andere Vorschläge liefern (z.B. „Müller“ = „Muller“ hier, dort nicht).
+ */
+function suggestKey(s: string | null | undefined): string {
   return (s ?? "")
     .toLowerCase()
     .normalize("NFD")
@@ -31,20 +39,7 @@ export function normalizeName(s: string | null | undefined): string {
     .trim();
 }
 
-function levenshtein(a: string, b: string): number {
-  if (a === b) return 0;
-  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i++) {
-    const cur = [i];
-    for (let j = 1; j <= b.length; j++) {
-      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-    }
-    prev = cur;
-  }
-  return prev[b.length];
-}
-
-const firstGiven = (s: string) => normalizeName(s).split(" ")[0] ?? "";
+const firstGiven = (s: string) => suggestKey(s).split(" ")[0] ?? "";
 
 /** Bewertung eines Paares; null, wenn es nicht in Frage kommt. */
 export function scorePair(a: SuggestPerson, b: SuggestPerson, maxYearDiff = 2): Suggestion | null {
@@ -52,16 +47,16 @@ export function scorePair(a: SuggestPerson, b: SuggestPerson, maxYearDiff = 2): 
   if (firstGiven(a.givenName) !== firstGiven(b.givenName) || !firstGiven(a.givenName)) return null;
   const reasons: string[] = [];
   let score = 0;
-  const surnamesA = [a.familyName, a.birthName].map(normalizeName).filter(Boolean);
-  const surnamesB = [b.familyName, b.birthName].map(normalizeName).filter(Boolean);
+  const surnamesA = [a.familyName, a.birthName].map(suggestKey).filter(Boolean);
+  const surnamesB = [b.familyName, b.birthName].map(suggestKey).filter(Boolean);
   if (surnamesA.some((x) => surnamesB.includes(x))) {
     score += 0.4;
     reasons.push("gleicher Nachname");
-  } else if (surnamesA.some((x) => surnamesB.some((y) => levenshtein(x, y) <= 1))) {
+  } else if (surnamesA.some((x) => surnamesB.some((y) => editDistance(x, y) <= 1))) {
     score += 0.3;
     reasons.push("ähnlicher Nachname");
   } else return null;
-  if (normalizeName(a.givenName) === normalizeName(b.givenName)) {
+  if (suggestKey(a.givenName) === suggestKey(b.givenName)) {
     score += 0.2;
     reasons.push("gleicher Vorname");
   } else {
@@ -79,12 +74,12 @@ export function scorePair(a: SuggestPerson, b: SuggestPerson, maxYearDiff = 2): 
     score += 0.05;
     reasons.push("Geburtsjahr nur bei einer Person bekannt");
   }
-  if (a.birthPlace && b.birthPlace && normalizeName(a.birthPlace) === normalizeName(b.birthPlace)) {
+  if (a.birthPlace && b.birthPlace && suggestKey(a.birthPlace) === suggestKey(b.birthPlace)) {
     score += 0.1;
     reasons.push("gleicher Geburtsort");
   }
-  const pa = new Set(a.parentNames.map(normalizeName).filter(Boolean));
-  const shared = b.parentNames.map(normalizeName).filter((x) => x && pa.has(x)).length;
+  const pa = new Set(a.parentNames.map(suggestKey).filter(Boolean));
+  const shared = b.parentNames.map(suggestKey).filter((x) => x && pa.has(x)).length;
   if (shared > 0) {
     score += 0.15 * Math.min(2, shared);
     reasons.push(shared > 1 ? "gleiche Eltern" : "ein Elternteil gleich");

@@ -11,7 +11,8 @@
  */
 import { createHash } from "node:crypto";
 
-import type { EventTypeName, PersonNameTypeName } from "../events";
+import { eventTypeAllowed, type EventTypeName, type PersonNameTypeName } from "../events";
+import { DERIVED_SOURCE_KINDS } from "../source-labels";
 import type { SourceKindName } from "../validation";
 import { classifySource, plainText, safeHttpUrl, splitCitationPage } from "../source-classify";
 import { deriveRelationships } from "../gedcom/relationships";
@@ -31,6 +32,7 @@ import type {
   GedcomAddress,
 } from "../gedcom/types";
 import { certainlyBefore } from "../dates";
+import { PRESUMED_LIFESPAN } from "../consistency";
 import { bulkToFuzzy, convertEventDate, convertLifeDates, type BulkDateValue, type DateConversion } from "./dates";
 
 // ---------------------------------------------------------------------------
@@ -275,26 +277,11 @@ const EVENT_TYPE_MAP: Partial<Record<GedcomEventType, EventTypeName>> = {
   CUSTOM_ATTRIBUTE: "CUSTOM",
 };
 
-const PARTNERSHIP_ONLY: EventTypeName[] = [
-  "MARRIAGE",
-  "DIVORCE",
-  "ENGAGEMENT",
-  "MARRIAGE_BANNS",
-  "MARRIAGE_CONTRACT",
-  "MARRIAGE_LICENSE",
-  "MARRIAGE_SETTLEMENT",
-  "DIVORCE_FILED",
-  "ANNULMENT",
-];
-const SHARED: EventTypeName[] = ["CENSUS", "RESIDENCE", "CUSTOM"];
-
 const GERMAN_TYPE: Partial<Record<GedcomEventType, string>> = {
   SOCIAL_SECURITY_NUMBER: "Sozialversicherungsnummer",
   CHILDREN_COUNT: "Zahl der Kinder",
 };
 
-/** Quellenarten ohne unabhängigen Beweiswert (Belege ohne Verlässlichkeit). */
-const DERIVED_KINDS: readonly SourceKindName[] = ["ONLINE_TREE"];
 /** EVEN-Angabe eines allgemeinen Belegs → Fakt. */
 const PERSON_EVENT_FACT: Record<string, MappedCitation["fact"]> = { BIRT: "BIRTH", CHR: "BIRTH", BAPM: "BIRTH", DEAT: "DEATH", BURI: "DEATH", CREM: "DEATH", NAME: "NAME" };
 const FAMILY_EVENT_FACT: Record<string, MappedCitation["fact"]> = { MARR: "PARTNERSHIP", MARB: "PARTNERSHIP", ENGA: "PARTNERSHIP", DIV: "PARTNERSHIP" };
@@ -551,7 +538,7 @@ export function mapGedcomDocument(doc: GedcomDocument, options: MapOptions = {})
     sourceKeyTaken.add(key);
     sourceRefById.set(s.id, key);
     out.sources.push(mapSource(s, key));
-    if (DERIVED_KINDS.includes(out.sources[out.sources.length - 1].kind)) derivedSource.add(key);
+    if (DERIVED_SOURCE_KINDS.includes(out.sources[out.sources.length - 1].kind)) derivedSource.add(key);
     out.sourceMeta.push({ ref: key, xref: s.id, title: out.sources[out.sources.length - 1].title, author: clean(s.author), inline: false });
     for (const x of s.externalIds) {
       if (x.value?.trim()) out.externalIds.push({ system: x.type, value: x.value.trim().slice(0, 500), sourceRef: key });
@@ -907,7 +894,8 @@ export function mapGedcomDocument(doc: GedcomDocument, options: MapOptions = {})
     if (type === "CUSTOM" && label && /^(military|militär|_milt)/i.test(label)) type = "MILITARY_SERVICE";
     if (e.type === "SOCIAL_SECURITY_NUMBER" && !label) label = GERMAN_TYPE.SOCIAL_SECURITY_NUMBER!;
     // Art passt nicht zum Träger → frei benanntes Ereignis
-    const allowed = isFamily ? PARTNERSHIP_ONLY.includes(type) || SHARED.includes(type) : !PARTNERSHIP_ONLY.includes(type);
+    // Dieselbe Regel wie in der App (FAM = Partnerschaft, INDI = Person).
+    const allowed = eventTypeAllowed(type, isFamily ? { kind: "relationship", type: "PARTNER_OF" } : { kind: "person" });
     if (!allowed) {
       note("EVENT_TYPE_ADJUSTED", `Ereignis ${e.type} passt nicht an ${isFamily ? "eine Partnerschaft" : "eine Person"} — als sonstiges Ereignis übernommen`, ek);
       label = label ?? GERMAN_TYPE[e.type] ?? e.type;
@@ -1106,7 +1094,7 @@ export function mapGedcomDocument(doc: GedcomDocument, options: MapOptions = {})
 }
 
 /** Personen ohne Sterbeangabe, die vor weniger als `years` Jahren geboren sind (nur Information). */
-export function recentWithoutDeath(meta: PersonMeta[], now = new Date(), years = 100): number {
+export function recentWithoutDeath(meta: PersonMeta[], now = new Date(), years = PRESUMED_LIFESPAN): number {
   const limit = now.getUTCFullYear() - years;
   return meta.filter((m) => !m.hasDeath && m.birthYear !== null && m.birthYear >= limit).length;
 }

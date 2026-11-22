@@ -479,13 +479,16 @@ export type AppPrecision = "DAY" | "MONTH" | "YEAR";
 export type AppQualifier = "EXACT" | "ABOUT" | "BEFORE" | "AFTER";
 
 /**
- * Vorschlag für die Speicherung in der App (gregorianisch):
- * - `start`/`precision`/`qualifier` passen auf die heutigen Spalten.
- * - Bei Bereichen (BET…AND) und Zeiträumen (FROM…TO) zusätzlich `end`
- *   und `range` — für die Bereichsunterstützung, die G1 ergänzt.
- * - `lossy` sagt, dass die App-Form weniger aussagt als das Original
+ * Vereinfachte App-Form eines GEDCOM-Datums (gregorianisch) mit nur vier
+ * Zusätzen — genutzt von den Diagnosen (`diagnostics.ts`). Der App-Import
+ * rechnet nicht hiermit, sondern mit der vollständigen Umsetzung in
+ * lib/gedcom-import/dates.ts (alle Zusätze der App inkl. BETWEEN/PERIOD/UNTIL).
+ * - `start`/`precision`/`qualifier`: Anfang, Genauigkeit, Zusatz.
+ * - Bei Bereichen (BET…AND) und Zeiträumen (FROM…TO) zusätzlich `end`,
+ *   `endPrecision` und `range`.
+ * - `lossy` sagt, dass diese Form weniger aussagt als das Original
  *   (CAL/EST → „um“, Bereich → Anfang, Erläuterung bei INT). Das Original
- *   bleibt in `GedcomDate.original` und sollte mitgespeichert werden.
+ *   steht in `GedcomDate.original`.
  * `null`, wenn nichts Rechnbares vorliegt (Text, ungültig, v. Chr.,
  * nicht umrechenbarer Kalender).
  */

@@ -44,7 +44,11 @@ function fullDate(p: PickerPerson): string {
  * Geburtsdatum auseinanderhalten — deshalb steht es in jeder Zeile.
  *
  * Findet die Suche niemanden, kann die Person direkt hier angelegt werden,
- * ohne die Seite zu verlassen und die begonnene Zuordnung zu verlieren.
+ * ohne die Seite zu verlassen und die begonnene Zuordnung zu verlieren. Die
+ * neue Person kommt in `createFamilyIds` (z.B. die Familien der
+ * Ausgangsperson); ohne Angabe entscheidet der Server (Bearbeiter: erste
+ * bearbeitbare Familie, Administratoren: keine Familie). `createNote` nennt
+ * das im Anlege-Eintrag, damit niemand überrascht wird.
  */
 export function PersonPicker({
   people,
@@ -53,6 +57,8 @@ export function PersonPicker({
   onCreated,
   placeholder = "Name eingeben…",
   labelledBy,
+  createFamilyIds,
+  createNote,
 }: {
   people: PickerPerson[];
   value: string;
@@ -61,6 +67,10 @@ export function PersonPicker({
   placeholder?: string;
   /** id des sichtbaren Feldnamens (für Screenreader). */
   labelledBy?: string;
+  /** Familien für eine hier neu angelegte Person. */
+  createFamilyIds?: string[];
+  /** Kurzer Hinweis im Anlege-Eintrag, z.B. „in Familie Becker“. */
+  createNote?: string;
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -111,7 +121,11 @@ export function PersonPicker({
     setCreating(true);
     setError(null);
 
-    const res = await apiFetch<PickerPerson>("/api/persons", jsonBody("POST", { givenName, familyName }));
+    const res = await apiFetch<PickerPerson>("/api/persons", jsonBody("POST", {
+        givenName,
+        familyName,
+        ...(createFamilyIds && createFamilyIds.length > 0 ? { familyIds: createFamilyIds } : {}),
+      }));
 
     setCreating(false);
 
@@ -223,6 +237,11 @@ export function PersonPicker({
                 {creating ? "Wird angelegt…" : "Neu anlegen: "}
                 {!creating && (
                   <strong className="font-medium">{query.trim()}</strong>
+                )}
+                {!creating && createNote && (
+                  <span className="block text-xs text-stone-500" data-testid="picker-create-note">
+                    {createNote}
+                  </span>
                 )}
               </span>
             </button>

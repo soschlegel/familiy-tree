@@ -33,8 +33,7 @@ aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
 - Parallel in Worktrees arbeiten: je Worktree eigene `.env` mit
   `MOCK_DATABASE_URL=…/familytree_<name>_mock`; den Port nur in der Shell
   setzen (`$env:MOCK_PORT`, `scripts/mock.mjs` liest ihn vor der `.env`).
-  `tests/mcp.db.test.ts` erwartet den Namen `familytree_mock` und schlägt in
-  solchen Worktrees deshalb immer fehl. Achtung: `npx prisma db push` ohne
+  `tests/mcp.db.test.ts` läuft seit dem Aufräumen auch dort. Achtung: `npx prisma db push` ohne
   Mock-Skript nimmt `DATABASE_URL` (die normale Dev-Datenbank).
 
 ## Lokal einrichten
@@ -42,6 +41,7 @@ aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
 ```bash
 cp .env.example .env
 npm install
+npx prisma generate                               # npm blockiert Install-Skripte
 docker compose -f docker-compose.dev.yml up -d   # nur Postgres
 npm run mock:setup                                # Mock-Datenbank + Bilder
 npm run dev:mock                                  # http://localhost:3100

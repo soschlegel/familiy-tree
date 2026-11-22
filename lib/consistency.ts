@@ -28,7 +28,18 @@ import {
 export const MIN_PARENT_AGE = 12;
 export const MAX_FATHER_AGE = 70;
 export const MAX_MOTHER_AGE = 50;
+/**
+ * Prüfgrenze: Wer laut Daten älter als 110 Jahre wurde (bzw. heute wäre),
+ * ist ein Widerspruch — großzügig, damit echte Hochbetagte nicht auffallen.
+ */
 export const MAX_LIFESPAN = 110;
+/**
+ * Annahme, wenn das Lebensende unbekannt ist: nach 100 Jahren gilt jemand
+ * als verstorben (Statistik „vermutlich verstorben“, geschätztes Lebensende
+ * auf der Karte, Hinweis „vielleicht noch lebend“ beim GEDCOM-Import).
+ * Bewusst kleiner als MAX_LIFESPAN: eine Schätzung, keine Prüfgrenze.
+ */
+export const PRESUMED_LIFESPAN = 100;
 export const MIN_PARTNERSHIP_AGE = 14;
 /** Ein Kind kann bis etwa zehn Monate nach dem Tod des Vaters geboren werden. */
 const POSTHUMOUS_BIRTH_DAYS = 300;

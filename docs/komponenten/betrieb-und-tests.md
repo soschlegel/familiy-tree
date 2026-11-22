@@ -157,9 +157,11 @@ Ein einziges Image mit App, Migrationen und Admin-Abgleich.
    Einstieg `docker/entrypoint.sh`, Befehl `node server.js`.
 
 `.dockerignore` hält u.a. `node_modules`, Build-Ordner, `data/`, `.env*`
-(außer dem Beispiel), Markdown außer der README, `e2e/`, Testergebnisse,
-Compose-Dateien, `scripts/backup.sh`, `stack.env*` und `.mcp.json` aus dem
-Build-Kontext. Der Ordner `tests/` wird nicht ausgeschlossen.
+(außer dem Beispiel), Markdown außer der README, `tests/`, `e2e/`, die
+Test-Konfigurationen (`vitest.config.ts`, `playwright.config.ts`),
+Testergebnisse, Compose-Dateien, `scripts/backup.sh`, `stack.env*` und
+`.mcp.json` aus dem Build-Kontext. Nichts davon braucht Build oder
+Laufzeit (kein App-Code importiert aus `tests/`).
 
 ### `docker/entrypoint.sh`
 
@@ -169,7 +171,7 @@ Startskript des App-Containers:
    `DB_WAIT_SECONDS`, Standard 60 s),
 2. `prisma migrate deploy` — Ausgabe live ins Log; bekannte Fehlerbilder
    werden erklärt: Tabellen ohne Migrationshistorie (P3005, Baselining
-   nötig) und als fehlgeschlagen vermerkte Migration (P3009/P3018),
+   nötig — Anleitung in `docs/dev-history.md`) und als fehlgeschlagen vermerkte Migration (P3009/P3018),
 3. `INITIAL_ADMIN_EMAIL` per `docker/seed-admin.mjs` als Administrator
    sicherstellen,
 4. per `exec` den eigentlichen Befehl starten (Signale kommen direkt bei Node
@@ -405,7 +407,7 @@ selbst gelesen, nicht im eigenen Code.
 | `MEDIA_DIR` | Ordner der Bilddateien (zur Laufzeit gelesen, Standard `data/media`) | `lib/storage.ts`, `prisma/seed-mock.ts`, Tests |
 | `MAX_UPLOAD_BYTES` | größte Bilddatei (Standard 15 MiB) | `lib/services/media-links.ts`, `lib/services/gedcom-photos.ts`, `mcp/http.ts` |
 | `MCP_CONNECTOR_URL` | öffentliche Adresse des MCP-Gateways, nur für die Anleitung auf `/ai-access` | `app/ai-access/page.tsx`, `components/AiConnectGuide` |
-| `MCP_ALLOWED_ORIGINS` | weitere erlaubte `Origin`-Werte für `/api/mcp` (kommagetrennt) | `mcp/http.ts` — steht in keiner Beispieldatei |
+| `MCP_ALLOWED_ORIGINS` | weitere erlaubte `Origin`-Werte für `/api/mcp` (kommagetrennt) | `mcp/http.ts` — nur lokal (`.env.example`, auskommentiert); der Stack reicht sie bewusst nicht durch |
 | `NODE_ENV` | Produktion/Entwicklung (Dev-Login, Prisma-Logging, Client-Singleton) | `lib/auth.ts`, `lib/prisma.ts` |
 | `NEXT_PUBLIC_BUILD_DATE` / `NEXT_PUBLIC_BUILD_SHA` | Build-Angabe in der Fußzeile, beim Build fest eingesetzt | `lib/build-info.ts` |
 | `NEXT_DIST_DIR` | eigener Build-Ordner (Mock-Server) | `next.config.mjs` |
@@ -417,7 +419,7 @@ selbst gelesen, nicht im eigenen Code.
 | Variable | Zweck |
 |---|---|
 | `RUN_MIGRATIONS` | `false` überspringt Datenbankwarten, Migrationen und Admin (`docker/entrypoint.sh`) |
-| `DB_WAIT_SECONDS` | Wartezeit auf die Datenbank (`docker/entrypoint.sh`, nicht in den Beispieldateien) |
+| `DB_WAIT_SECONDS` | Wartezeit auf die Datenbank in Sekunden (`docker/entrypoint.sh`, Standard 60; `docker-compose.yml` reicht sie durch, `stack.env.example` auskommentiert) |
 | `PRISMA_QUERY_ENGINE_LIBRARY` | Pfad der Query-Engine für das CLI im Image (`docker/prisma.sh`) |
 | `DATA_ROOT` | Wurzel aller Bind-Mounts (Pflicht) |
 | `POSTGRES_PASSWORD` / `POSTGRES_USER` / `POSTGRES_DB` | Zugang der Datenbank; daraus baut Compose `DATABASE_URL` |
@@ -427,7 +429,7 @@ selbst gelesen, nicht im eigenen Code.
 | `BACKUP_KEEP_DAYS` | Aufbewahrung der Dumps |
 | `COMPOSE_PROFILES` | `caddy` schaltet den eigenen Proxy zu |
 | `CADDY_SITE`, `CADDY_TLS`, `CADDY_HTTP_PORT`, `CADDY_HTTPS_PORT`, `CADDY_BIND`, `CADDY_MAX_BODY` | Einstellungen des optionalen Caddy |
-| `STACK_NAME` | Stackname für `scripts/backup.sh` (nicht in den Beispieldateien) |
+| `STACK_NAME` | Stackname für `scripts/backup.sh` — Shell-Variable auf der NAS, kein Stack-Wert (in `stack.env.example` auskommentiert erklärt) |
 | `BUILD_DATE` / `BUILD_SHA` | Build-Argumente des Images (von der Action gesetzt) |
 
 ### Mock, MCP-Entwicklung und Tests
@@ -456,9 +458,10 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
 - **Reine Tests** (`*.test.ts` ohne `.db`) brauchen keine Datenbank und
   laufen auch in CI.
 - **Datenbank-Tests** (`*.db.test.ts`) laufen gegen die Mock-Datenbank
-  (vorher `npm run mock:setup`). Jede Datei prüft zu Beginn selbst (mit
-  Zeitgrenze), ob die Mock-Datenbank erreichbar und befüllt ist, und
-  überspringt sich sonst mit Hinweis. Lesende Tests verlassen sich auf die
+  (vorher `npm run mock:setup`). Jede Datei prüft zu Beginn über
+  `mockDbSkipReason` (`tests/db-ready.ts`, Zeitgrenze 5 s, optional eine
+  Zusatzprüfung wie „es gibt Quellen“), ob die Mock-Datenbank erreichbar und
+  befüllt ist, und überspringt sich sonst mit Hinweis. Lesende Tests verlassen sich auf die
   deterministischen Mock-Daten; schreibende legen eigene, erfundene
   Datensätze an und räumen sie (samt Audit, Paketen, Importdateien) wieder
   ab. Dateien laufen nacheinander.
@@ -646,7 +649,7 @@ Benutzer bekommt keinen gespeicherten Zustand.
 - **`navigation.spec.ts`** — Navigation und Untermenü „Verwaltung“ je Rolle
   und Breite.
 - **`people-list.spec.ts`** — Personenliste: Suche, Familienfilter,
-  Sortierung, Seiten, Zählung.
+  Sortierung, Seiten, Zählung; Seite jenseits des Endes behält den Ortsfilter.
 - **`permissions.spec.ts`** — keine Information über fremde Familien, weder
   im Text noch im ausgelieferten HTML, über direkte Adressen oder die API.
 - **`person-families.spec.ts`** — letzte bearbeitbare Familie lässt sich
@@ -656,6 +659,8 @@ Benutzer bekommt keinen gespeicherten Zustand.
 - **`reference.spec.ts`** — Bezugsperson und Ahnenlinien, keine
   Durchsickerung, Telefon.
 - **`research.spec.ts`** — Recherche-Seite als Admin und Betrachter.
+- **`sources-list.spec.ts`** — Quellenliste: eine Seite jenseits des Endes
+  zeigt die letzte Seite mit Einträgen.
 - **`tree-focus.spec.ts`** — Fokus-Ansicht ab fester Person, Startperson.
 - **`tree-whole.spec.ts`** — Gesamtansichten Generationen und Zeitstrahl.
 
@@ -693,7 +698,8 @@ zum nächsten Setup).
 - **`merge.spec.ts`** — Dubletten zusammenführen als Bearbeiter, „kein
   Duplikat“, sichere Paare, Blockade, Betrachter ohne Zugriff.
 - **`person-lifecycle.spec.ts`** — Person anlegen, bearbeiten, Beziehungen,
-  Familien, löschen.
+  Familien, löschen; als Administrator im Personenwähler angelegte Person
+  landet in der Familie der Ausgangsperson.
 - **`places.spec.ts`** — Orte zuordnen (nicht zuordenbar, zurücksetzen,
   automatisch, aus Verzeichnis, von Hand, Protokoll), stellt den
   Ausgangszustand wieder her.
@@ -722,8 +728,9 @@ zum nächsten Setup).
 - **Sperre nach Fehlversuchen** am MCP-Endpunkt: `mcp-http.spec` schickt
   abgelehnte Anfragen mit zufälliger `X-Forwarded-For`-Adresse, damit
   wiederholte Läufe gegen denselben Server nicht gesperrt werden.
-- **Worktrees mit eigener Mock-Datenbank** — `tests/mcp.db.test.ts` erwartet
-  in der Ausgabe den Namen `familytree_mock` und schlägt dort immer fehl.
+- **Worktrees mit eigener Mock-Datenbank** — `tests/mcp.db.test.ts` liest den
+  Namen der Mock-Datenbank aus der Testumgebung (`vitest.config.ts`) und
+  läuft deshalb auch mit `MOCK_DATABASE_URL=…/familytree_<paket>_mock`.
 - **Windows** — `prisma generate` scheitert mit EPERM, solange ein
   Dev-Server die Engine geladen hat. Nach `npm install` mit neueren
   npm-Versionen einmal `npx prisma generate` ausführen.

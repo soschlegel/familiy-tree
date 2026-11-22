@@ -55,7 +55,7 @@ migrate() {
     err "vermutlich mit \`prisma db push\` angelegt (Installation aus der Zeit"
     err "vor den Migrationen). Dieses Image wendet nur Migrationen an und"
     err "verändert eine solche Datenbank nicht — es wurde nichts geändert."
-    err "Abhilfe: Baselining (README, \"Schema und Migrationen\") oder mit"
+    err "Abhilfe: Baselining (docs/dev-history.md, \"Baselining\") oder mit"
     err "leerem DATA_ROOT/postgres neu beginnen."
   elif grep -q -e "P3009" -e "P3018" "$out"; then
     err "FEHLER: Eine Migration ist fehlgeschlagen und in der Datenbank als"

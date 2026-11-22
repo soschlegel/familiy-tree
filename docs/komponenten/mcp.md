@@ -116,7 +116,7 @@ Fehlversuchen → Schlüssel → MCP.
 | 401 | Schlüssel fehlt, Format falsch, unbekannt, widerrufen, abgelaufen, Benutzer unbekannt oder gesperrt — einheitlich ohne Grund, mit `WWW-Authenticate: Bearer realm="familytree"` (bei gesendetem Schlüssel zusätzlich `error="invalid_token"`) |
 | 403 | Schlüssel gültig, aber kein KI-Recht (`NO_PERMISSION`, `WWW-Authenticate` mit `insufficient_scope`), oder fremder `Origin` |
 | 405 | andere Methode als `POST` |
-| 413 | Anfragekörper zu groß (vom Transport des SDK) |
+| 413 | Anfragekörper zu groß (vom Transport des SDK): über 1 MiB, mit Schlüssel der Schreibstufe über `mcpWriteBodyLimit()` (`MAX_UPLOAD_BYTES` × 4/3 + 1 MiB) |
 | 429 | Sperre nach Fehlversuchen, mit `Retry-After` |
 | 500 | unerwarteter Fehler im Transport |
 | 503 | Schlüsselprüfung fehlgeschlagen (z.B. Datenbank nicht erreichbar) |

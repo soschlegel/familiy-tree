@@ -6,7 +6,8 @@
 import { describe, expect, it } from "vitest";
 
 import { toFuzzyDate, type FuzzyDate } from "@/lib/dates";
-import { buildMapData, factYear, LINE_BIT, MAX_LIFESPAN, type MapFactInput, type MapPersonInput, type MapPlace } from "@/lib/map/build";
+import { PRESUMED_LIFESPAN } from "@/lib/consistency";
+import { buildMapData, factYear, LINE_BIT, type MapFactInput, type MapPersonInput, type MapPlace } from "@/lib/map/build";
 import { fitViewBox, project, VIEWS, zoomAt } from "@/lib/map/projection";
 import { placeInYear, snapshot } from "@/lib/map/year";
 import { placeKey } from "@/lib/places/normalize";
@@ -56,7 +57,7 @@ describe("buildMapData: wer lebt wann", () => {
     expect(burial.persons[0]).toMatchObject({ y1: 1911 });
     expect(burial.persons[0].est).toBeUndefined();
     const est = build([person({ id: "c", birth: d("1850") })]);
-    expect(est.persons[0]).toMatchObject({ y1: 1850 + MAX_LIFESPAN, est: 1 });
+    expect(est.persons[0]).toMatchObject({ y1: 1850 + PRESUMED_LIFESPAN, est: 1 });
     const young = build([person({ id: "y", birth: d("1990") })], [], 2025);
     expect(young.persons[0].y1).toBe(2025);
     // Ein späteres datiertes Ereignis verlängert die Schätzung.

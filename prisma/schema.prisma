@@ -902,7 +902,7 @@ model AuditLog {
   id         String        @id @default(cuid())
   userId     String?
   action     String // CREATE | UPDATE | DELETE | MERGE | CONNECT
-  entityType String // Person | Relationship | MediaAsset | User | Family | Source | Citation | ApiToken | Event | PersonName | ImportBatch | ImportRawRecord
+  entityType String // Person | Relationship | MediaAsset | User | Family | Source | Citation | ApiToken | Event | PersonName | ImportBatch | ImportRawRecord | Place
   entityId   String
   // UPDATE seit dem Changelog: { changes: { feld: { from, to } } } (lib/audit.ts,
   // fieldChanges); ältere Einträge enthalten meist nur die neuen Werte.
@@ -993,7 +993,7 @@ model Place {
   precision    PlacePrecision?
   latitude     Float?
   longitude    Float?
-  // Anzeigename der Zuordnung, z.B. „Peine, Saarland, Deutschland“.
+  // Anzeigename der Zuordnung, z.B. „Peine, Niedersachsen, Deutschland“.
   label        String?
   countryCode  String?
   // Kennung im Ortsverzeichnis (GeoNames-ID bzw. „h…“ für historische

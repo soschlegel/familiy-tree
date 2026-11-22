@@ -724,6 +724,9 @@ export default async function PersonPage({
             relations={relations}
             people={allPersons}
             canEdit={canEdit}
+            newPersonFamilies={detail.families.filter(
+              (f) => scope.isAdmin || editableFamilyIds(scope).includes(f.id),
+            )}
           />
 
           <PersonFamilies

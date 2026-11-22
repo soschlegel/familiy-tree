@@ -618,7 +618,11 @@ async function assertCitationTarget(
   scope: Scope,
   target: { personId?: string | null; relationshipId?: string | null },
 ): Promise<readonly CitationFact[]> {
-  if (!target.personId && !target.relationshipId) throw notFoundError("Ereignis");
+  // Ohne Träger (Eingabe ohne Bezug bzw. ein Ereignis, das an nichts hängt)
+  // gibt es nichts, woran sich Rechte prüfen ließen — ein Eingabefehler.
+  if (!target.personId && !target.relationshipId) {
+    throw validationError([{ path: "personId", message: "Ein Beleg braucht eine Person oder eine Beziehung" }]);
+  }
   if (target.personId) {
     const person = await prisma.person.findUnique({
       where: { id: target.personId },

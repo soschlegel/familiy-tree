@@ -3,6 +3,78 @@
 Webanwendung zur Pflege und Visualisierung eines Familienstammbaums mit
 Bildarchiv und rollenbasierter Benutzerverwaltung.
 
+## Quickstart
+
+### Lokal ausprobieren (Mock-Daten)
+
+Voraussetzungen: Node.js 22 oder neuer, Docker (für Postgres), Git.
+
+```bash
+cp .env.example .env                              # Standardwerte genügen für die Mock-Daten
+npm install
+npx prisma generate                               # nötig, wenn npm Install-Skripte blockiert
+docker compose -f docker-compose.dev.yml up -d    # nur Postgres
+npm run mock:setup                                # Mock-Datenbank, Bilder, Testbenutzer
+npm run dev:mock                                  # http://localhost:3100
+```
+
+Anmelden per Dev-Login nur mit der E-Mail, z.B. `admin@example.test`
+(weitere Rollen: `editor@…`, `viewer@…`). Neuere npm-Versionen führen
+Install-Skripte nicht mehr automatisch aus; ohne `npx prisma generate` fehlt
+dann der Prisma-Client. Mehr: [Mock-Daten](#mock-daten),
+[Lokal starten](#lokal-starten) (eigene Daten statt Mock),
+[Entwicklung: Prüfen und Testen](#entwicklung-prüfen-und-testen).
+
+### Produktiv betreiben (Kurzform)
+
+1. Image bauen lassen (Push auf `main`, GitHub Actions) und das Paket auf
+   ghcr.io öffentlich machen.
+2. In Portainer einen Stack aus dem Repository anlegen (Branch `deploy`,
+   [docker-compose.yml](docker-compose.yml)).
+3. Variablen aus [stack.env.example](stack.env.example) eintragen — Pflicht:
+   `DATA_ROOT`, `POSTGRES_PASSWORD`, `AUTH_SECRET`, `PUBLIC_URL`,
+   `INITIAL_ADMIN_EMAIL` und mindestens ein OAuth-Paar (GitHub/Google).
+4. Reverse-Proxy auf die App zeigen lassen, mit dem Konto von
+   `INITIAL_ADMIN_EMAIL` anmelden (erster Administrator), weitere Benutzer
+   unter *Benutzer* einladen, Sicherung planen.
+
+Ausführlich: [Betrieb auf der NAS](#betrieb-auf-der-nas-portainer),
+Schritt für Schritt unter [Erste Installation](#erste-installation),
+[Updates](#updates), [Sicherung](#sicherung).
+
+### KI verbinden (Kurzform)
+
+Als Administrator unter *Benutzer* das KI-Recht vergeben; dann auf
+*KI-Zugang* (`/ai-access`) einen persönlichen Schlüssel anlegen. Die Seite
+zeigt die Adresse (`<PUBLIC_URL>/api/mcp`) und Anleitungen für Claude Code,
+Claude Desktop/Browser und das Telefon. Ausführlich:
+[KI-Zugang (MCP)](#ki-zugang-mcp), besonders
+[Einrichten: Schritt für Schritt](#einrichten-schritt-für-schritt).
+
+## Inhalt
+
+- [Funktionsumfang](#funktionsumfang) · [Technik](#technik) ·
+  [Lokal starten](#lokal-starten) ·
+  [Entwicklung: Prüfen und Testen](#entwicklung-prüfen-und-testen) ·
+  [Mock-Daten](#mock-daten)
+- Bedienung und Fachliches: [Fokus-Ansicht](#fokus-ansicht) ·
+  [Bezugsperson](#bezugsperson) · [Karte und Orte](#karte-und-orte) ·
+  [Ungenaue Daten](#ungenaue-daten) · [Quellen und Belege](#quellen-und-belege) ·
+  [Bilder an Quellen, Ereignissen und Belegen](#bilder-an-quellen-ereignissen-und-belegen) ·
+  [Austauschformat](#austauschformat) ·
+  [GEDCOM](#gedcom-import-und-export) ·
+  [Dubletten zusammenführen](#dubletten-zusammenführen) ·
+  [Änderungsgeschichte](#änderungsgeschichte)
+- Technik und Betrieb: [Dienstschicht](#dienstschicht) ·
+  [KI-Zugang (MCP)](#ki-zugang-mcp) ·
+  [Betrieb auf der NAS](#betrieb-auf-der-nas-portainer) ·
+  [Schema und Migrationen](#schema-und-migrationen) ·
+  [Sicherung](#sicherung) · [Datenmodell](#datenmodell) ·
+  [Berechtigungen](#berechtigungen) · [Grenzen](#grenzen)
+- Weiteres: Komponenten-Doku [docs/komponenten/](docs/komponenten/README.md),
+  frühere Stände und Umstiege für alte Installationen
+  [docs/dev-history.md](docs/dev-history.md)
+
 ## Funktionsumfang
 
 - **Rollen** — Administrator, Bearbeiter, Betrachter
@@ -87,6 +159,7 @@ Bildarchiv und rollenbasierter Benutzerverwaltung.
 ```bash
 cp .env.example .env      # AUTH_SECRET und INITIAL_ADMIN_EMAIL anpassen
 npm install
+npx prisma generate                               # falls npm Install-Skripte blockiert
 
 docker compose -f docker-compose.dev.yml up -d   # Postgres
 npm run db:push                                   # Schema anlegen
@@ -102,30 +175,6 @@ Schlüssel in der Datenbank (`MediaAsset.storageKey`, z.B.
 `originals/<uuid>.webp`, Vorschau unter `thumbs/`) ist der relative Pfad
 darunter. `GET /api/health` meldet `error`, wenn der Ordner nicht beschreibbar
 ist; der genaue Grund steht im Server-Log.
-
-### Umstieg von MinIO (ältere Installationen)
-
-Frühere Versionen legten die Bilder in einem MinIO-Bucket ab. Die Schlüssel
-sind unverändert, die Dateien müssen nur einmal aus dem Bucket in den
-Medienordner kopiert werden. MinIOs Datenordner (z.B. `data/dev-minio`)
-enthält keine normalen Dateien — kopiert wird deshalb über den noch laufenden
-MinIO-Container (Namen mit `docker ps` ermitteln; Zugangsdaten und Bucket wie
-bisher in der `.env`, lokal `minioadmin`/`familytree`):
-
-```bash
-C=familiy-tree-storage-1           # Name des MinIO-Containers
-docker exec $C sh -c 'mc alias set alt http://localhost:9000 minioadmin minioadmin >/dev/null &&
-  rm -rf /tmp/media-export && mc mirror alt/familytree /tmp/media-export'
-mkdir -p data/media
-docker cp $C:/tmp/media-export/. data/media/
-docker exec $C rm -rf /tmp/media-export
-```
-
-Zur Kontrolle muss die Zahl der Dateien unter `data/media` zur Zahl der
-Schlüssel in der Datenbank passen
-(`SELECT count(*) + count("thumbnailKey") FROM "MediaAsset";`). Danach werden
-Container und `data/dev-minio` nicht mehr gebraucht; `docker compose up`
-meldet den Container bis dahin als verwaist („orphan“).
 
 Ohne konfiguriertes OAuth greift der **Dev-Login** (`ENABLE_DEV_LOGIN=true`):
 E-Mail eingeben, kein Passwort. Er funktioniert nur mit `NODE_ENV=development`
@@ -309,7 +358,7 @@ Konfirmation nur mit Wortlaut, ein sonstiges Ereignis „Kapitänspatent“, ein
 Verlobung an einer Ehe, eine abweichende zweite Geburtsangabe; für die
 [Karte](#karte-und-orte) Wohnorte und eine Auswanderung in GEDCOM-Ortsformen,
 auch mit historischen Namen: „Breslau, Schlesien, Preußen“, „Temeswar,
-Banat“, „Berkum, Peine, Lk Peine, Saarland, Germany“, „New York, New
+Banat“, „Berkum, Peine, Lk Peine, Niedersachsen, Germany“, „New York, New
 York, USA“), Heiratsorte
 bei zwei von drei datierten Ehen, ein Scheidungsort, zwei Partnerschaften
 mit unbekanntem Ehestand, Rufname, Titel, Namenszusatz, eine Todesursache und
@@ -532,7 +581,7 @@ Ortstexte automatisch zu.
 
 **Automatische Zuordnung** ([lib/places/match.ts](lib/places/match.ts)):
 GEDCOM-Ortsformen werden an Kommas zerlegt und vom spezifischen zum
-allgemeinen Teil gesucht („Berkum, Peine, Lk Peine, Saarland,
+allgemeinen Teil gesucht („Berkum, Peine, Lk Peine, Niedersachsen,
 Germany“). Vorsätze („Lk“, „Kreis“, „Amt“ …), reine Beschreibungen
 („Kreisstadt“), Anschriften mit Hausnummer und Klammerzusätze fallen weg,
 „St.“ = „Sankt“, „Peine-Vöhrum“ zuletzt in Hälften. Ein heutiges
@@ -553,8 +602,8 @@ dem der Ort in den Daten steht, sonst der deutsche bzw. historische Name —
 nur wenn er sich unterscheidet: „Wrocław (Breslau), Polen“, „Gdańsk
 (Danzig), Polen“, „Timișoara (Temeswar), Rumänien“, „Kaliningrad (Königsberg),
 Russland“. Orte in Deutschland, Österreich und der Schweiz nie mit Klammer,
-dafür mit Bundesland bzw. Kanton: „Peine, Saarland, Deutschland“ (auch
-für „Paane“). Gespeicherte automatische Zuordnungen bekommen die neue
+dafür mit Bundesland bzw. Kanton: „Aachen, Nordrhein-Westfalen,
+Deutschland“ (auch für „Aix-la-Chapelle“). Gespeicherte automatische Zuordnungen bekommen die neue
 Form mit dem nächsten „Automatisch zuordnen“; von Hand Bestätigte behalten
 ihre Bezeichnung.
 
@@ -563,7 +612,7 @@ fremden Servern, die Ortsnamen verlassen den Server nie:
 
 | Datei | Inhalt | Größe |
 |---|---|---|
-| `geo/gazetteer.tsv.gz` | Ortsverzeichnis: Deutschland, Österreich, Schweiz mit allen bewohnten Orten (auch Ortsteile und historische), übriges Europa ab 1000 Einwohnern, Welt ab 15 000; Regionen erster Ebene, Länder, 43 historische Landschaften (von Hand, ungefähre Mitte). Weitere Namen in lateinischer Schrift, für Europa nach Sprache gefiltert (u.a. de, en, fr, pl, cs, hu, ro, la; historische wie „Breslau“, „Paane“, „Temeswar“); Hauptname der heutige offizielle (Landessprache statt englischer Form: „München“, nicht „Munich“), dazu je Ort außerhalb des deutschen Sprachraums der deutsche bzw. historische Name („Breslau“). 229 491 Einträge | 4,4 MB (12 MB entpackt); nur auf dem Server, erst bei Bedarf geladen (rund 1 s, gut 100 MB Speicher, nach 10 min ohne Benutzung freigegeben) |
+| `geo/gazetteer.tsv.gz` | Ortsverzeichnis: Deutschland, Österreich, Schweiz mit allen bewohnten Orten (auch Ortsteile und historische), übriges Europa ab 1000 Einwohnern, Welt ab 15 000; Regionen erster Ebene, Länder, 43 historische Landschaften (von Hand, ungefähre Mitte). Weitere Namen in lateinischer Schrift, für Europa nach Sprache gefiltert (u.a. de, en, fr, pl, cs, hu, ro, la; historische wie „Breslau“, „Aix-la-Chapelle“, „Temeswar“); Hauptname der heutige offizielle (Landessprache statt englischer Form: „München“, nicht „Munich“), dazu je Ort außerhalb des deutschen Sprachraums der deutsche bzw. historische Name („Breslau“). 229 491 Einträge | 4,4 MB (12 MB entpackt); nur auf dem Server, erst bei Bedarf geladen (rund 1 s, gut 100 MB Speicher, nach 10 min ohne Benutzung freigegeben) |
 | `public/geo/countries.json` | Ländergrenzen, Natural Earth 1:50m, Mercator-projiziert und vereinfacht (Europa feiner) als SVG-Pfade | 337 KB (87 KB gzip) |
 
 Erzeugt mit `node scripts/build-geodata.mjs <geonames-ordner>
@@ -690,7 +739,7 @@ und Belege gelten als „in der Datei geändert“ und werden berichtigt — au�
 dem, was in der App von Hand geändert wurde. Ohne Datei zur Hand: im
 Importverlauf (`/admin/data`) **„Aus der aufbewahrten Datei neu einlesen“** —
 das Original des Laufs geht durch die normale Vorschau; geschrieben wird erst
-nach „Importieren“, der alte Lauf bleibt unverändert. Doppelte Belege aus
+nach „GEDCOM-Import ausführen“, der alte Lauf bleibt unverändert. Doppelte Belege aus
 älteren Importen erscheinen dabei unter „Fehlt in der Datei“ und lassen sich
 dort entfernen.
 
@@ -949,7 +998,7 @@ lebenden Personen bedenken.
    (`/ai-access`, jeder Benutzer verwaltet dort seine eigenen Schlüssel).
    Namen vergeben, der sagt, wo der Schlüssel liegt (z.B. „Laptop – Claude
    Code“), Stufe und Gültigkeit wählen (Standard 90, höchstens 365 Tage),
-   *Anlegen*. Der Schlüssel (`ftk_…`) wird **genau einmal** angezeigt —
+   *Schlüssel anlegen*. Der Schlüssel (`ftk_…`) wird **genau einmal** angezeigt —
    gleich kopieren. Die Seite zeigt dazu die Adresse der Schnittstelle
    (`<PUBLIC_URL>/api/mcp`) und den fertigen Befehl für Claude Code.
 3. **Claude Code verbinden** (in einem Terminal, einmal je Rechner):
@@ -1056,7 +1105,7 @@ lebenden Personen bedenken.
 | Adresse | `<PUBLIC_URL>/api/mcp` |
 | Verfahren | MCP „Streamable HTTP“, nur `POST`, zustandslos, Antworten als JSON (kein SSE, kein WebSocket) |
 | Anmeldung | nur `Authorization: Bearer ftk_…` — die Anmeldung der Weboberfläche (Cookie) zählt nicht, Schlüssel in der URL ebenso wenig |
-| Origin | Anfragen ohne `Origin`-Header (Claude Code, `mcp-remote`) sind erlaubt; mit `Origin` nur die eigene Adresse (`PUBLIC_URL`) oder Einträge in `MCP_ALLOWED_ORIGINS` (kommagetrennt). Das braucht nur ein MCP-Client, der im Browser läuft (z.B. der MCP Inspector) — die Variable reicht der Stack nicht durch |
+| Origin | Anfragen ohne `Origin`-Header (Claude Code, `mcp-remote`) sind erlaubt; mit `Origin` nur die eigene Adresse der App (`AUTH_URL`; im Produktivstack setzt `docker-compose.yml` sie aus `PUBLIC_URL`, lokal steht sie in `.env`) oder Einträge in `MCP_ALLOWED_ORIGINS` (kommagetrennt, ganze Origins wie `http://localhost:6274`). Das braucht nur ein MCP-Client, der im Browser läuft (z.B. der MCP Inspector) — `docker-compose.yml` reicht die Variable bewusst nicht durch, sie ist für die lokale Entwicklung gedacht |
 | Größe | Anfrage höchstens 1 MiB; mit Schreibstufe bis `MAX_UPLOAD_BYTES` × 4/3 + 1 MiB (Bild als base64 für `add_media`), geprüft erst nach dem Schlüssel |
 
 | Status | Bedeutung |
@@ -1065,7 +1114,9 @@ lebenden Personen bedenken.
 | 401 | Schlüssel fehlt, ist falsch, widerrufen oder abgelaufen, oder der Benutzer ist gesperrt — bewusst ohne Angabe des Grundes |
 | 403 | Schlüssel gültig, aber der Benutzer hat kein KI-Recht (mehr); oder fremder `Origin` |
 | 405 | andere Methode als `POST` |
-| 413 | Anfrage größer als 1 MiB |
+| 413 | Anfrage zu groß: höchstens 1 MiB, mit einem Schlüssel der Schreibstufe bis `MAX_UPLOAD_BYTES` × 4/3 + 1 MiB (Bild als base64) |
+| 500 | unerwarteter Fehler bei der Verarbeitung (Einzelheiten nur im Log der App) |
+| 503 | Schlüssel konnte nicht geprüft werden, meist weil die Datenbank nicht erreichbar ist — später erneut versuchen |
 | 429 | nach 20 fehlgeschlagenen Anmeldungen von derselben Adresse innerhalb von 10 Minuten — bis zum Ende dieser 10 Minuten, auch mit richtigem Schlüssel (`Retry-After` nennt die Sekunden). Ein Neustart der App hebt die Sperre auf |
 
 ### Fehlersuche KI-Zugang
@@ -1179,11 +1230,7 @@ unverändert von Docker Hub.
 | `proxy` | *optional* (Profil `caddy`): eigener Reverse-Proxy, falls keiner vorhanden ist |
 
 Der KI-Zugang braucht keinen eigenen Dienst und keinen zusätzlichen Port: er
-läuft in der App unter `/api/mcp` ([KI-Zugang](#ki-zugang-mcp)). Wer früher
-das Profil `db-access` für den MCP-Server am PC eingeschaltet hatte:
-`db-access` aus `COMPOSE_PROFILES` und `DB_ACCESS_*` aus den
-Stack-Variablen streichen (der Dienst existiert nicht mehr; ein verbliebener
-Eintrag schadet nicht, startet aber auch nichts).
+läuft in der App unter `/api/mcp` ([KI-Zugang](#ki-zugang-mcp)).
 
 Alle Daten liegen als Bind-Mounts unter **einem** Pfad — genau dieses
 Verzeichnis muss die NAS-Sicherung erfassen:
@@ -1246,16 +1293,8 @@ Umgebungsvariablen und Docker Compose v2), ausgehender Internetzugang der NAS
    das Image ohne Anmeldung; eine Registry muss dort nicht eingetragen
    werden.
 
-   *Alternative: Paket privat halten.* Dann braucht Portainer ein Token
-   (classic) mit nur `read:packages` — *fine-grained* Tokens unterstützt die
-   Container-Registry laut GitHub-Doku nicht (geprüft November 2026) — und
-   unter *Registries → Add registry → Custom registry* einen Eintrag mit
-   *Registry URL* `ghcr.io`, *Authentication* an, GitHub-Benutzername und
-   Token als Passwort; Portainer nutzt ihn für alle `ghcr.io/…`-Images
-   (nicht auf der NAS ausprobiert). Das Token läuft ab: laufende Container
-   bleiben davon unberührt, aber jedes folgende Update scheitert am Laden
-   (`denied`/`unauthorized`) und der Stack bleibt still auf dem alten
-   Stand — Ablaufdatum in den Kalender, rechtzeitig erneuern.
+   Wer das Paket lieber privat hält, findet den früheren Weg mit
+   Registry-Zugang in [docs/dev-history.md](docs/dev-history.md#privates-image-mit-registry-zugang-bis-19112026).
 3. **Adresse festlegen.** Unter welcher Adresse die Familie den Stammbaum
    aufruft, z.B. `https://stammbaum.example.de` — das wird `PUBLIC_URL`.
    Der Name muss im Heimnetz (und im VPN) auf die NAS zeigen: lokaler
@@ -1462,13 +1501,6 @@ einfach weiter; migriert wird nichts. Startet nur der App-Container neu
 demselben Image gibt es dann nichts einzuspielen („No pending migrations to
 apply.“, kostet 2–3 s).
 
-**Umstieg vom Zwei-Image-Stack** (Stand mit eigenem `migrate`-Dienst): Die
-Datenbank hat bereits ihre Migrationshistorie; die neue App meldet beim
-ersten Start „No pending migrations to apply.“ (lokal nachgeprüft). Der alte,
-beendete Container `familytree-migrate-1` bleibt „verwaist“ liegen (Compose
-warnt „Found orphan containers“), stört nicht und kann in Portainer unter
-*Containers* gelöscht werden.
-
 ### Fehlersuche
 
 Logs: Portainer → *Stacks → familytree* → Container → *Logs*, oder auf der
@@ -1479,10 +1511,10 @@ Die Ausgabe der Migrationen steht im Log von **`app`**, vor dem Serverstart
 | Symptom | Ursache / Abhilfe |
 |---|---|
 | Deploy bricht ab mit „… fehlt“ | Pflichtvariable nicht gesetzt (Meldung nennt sie) |
-| „pull access denied“ / „denied“ / „unauthorized“ für `ghcr.io/…` | Paket noch privat ([Erste Installation](#erste-installation), Schritt 2) bzw. bei privatem Paket Token falsch oder abgelaufen, oder der Workflow ist noch nie gelaufen |
+| „pull access denied“ / „denied“ / „unauthorized“ für `ghcr.io/…` | Paket noch privat ([Erste Installation](#erste-installation), Schritt 2) oder der Workflow ist noch nie gelaufen; bei bewusst privatem Paket Token falsch oder abgelaufen ([docs/dev-history.md](docs/dev-history.md#privates-image-mit-registry-zugang-bis-19112026)) |
 | Portainer findet `refs/heads/deploy` nicht | Workflow auf `main` noch nie erfolgreich durchgelaufen |
 | `app` „restarting“, Log `[start] FEHLER: Eine Migration ist fehlgeschlagen …` | → [Fehlgeschlagene Migration](#fehlgeschlagene-migration) |
-| `app` „restarting“, Log `[start] FEHLER: Die Datenbank enthält bereits Tabellen, aber keine Migrationshistorie` | Datenbank stammt aus einer `db push`-Installation → [Schema und Migrationen](#schema-und-migrationen), Baselining |
+| `app` „restarting“, Log `[start] FEHLER: Die Datenbank enthält bereits Tabellen, aber keine Migrationshistorie` | Datenbank stammt aus einer `db push`-Installation → Baselining, siehe [Schema und Migrationen](#schema-und-migrationen) |
 | `app` „restarting“, Log `[start] FEHLER: Datenbank nach 60s nicht erreichbar` | `db` läuft nicht, oder die Zugangsdaten passen nicht zur Datenbank (`POSTGRES_PASSWORD` nach der Ersteinrichtung geändert — Postgres übernimmt es nur beim allerersten Start) |
 | `app` startet nicht, `backup-db` Exit ≠ 0 | Sicherung fehlgeschlagen (Platz, Rechte auf `backups/`) — App und Migration starten absichtlich nicht ohne Sicherung |
 | `db` startet nicht: „invalid permissions“ / „Operation not permitted“ | Rechte von `postgres/` verändert (File Station/ACL). Bei Neuinstallation den leeren Ordner löschen und neu deployen; sonst per SSH `chown -R 70:70` und `chmod 700` darauf |
@@ -1613,45 +1645,12 @@ derselben Datenbank) sind beim Migrieren unkritisch: Prisma nimmt für
 `migrate deploy` eine Sperre in PostgreSQL (Advisory Lock), der zweite wartet
 und findet danach nichts mehr einzuspielen.
 
-Eine Installation aus der Zeit vor den Migrationen (Datenbank per `db push`)
-gibt es im Betrieb nicht; wer trotzdem eine solche Datenbank anschließt,
-stellt sie einmalig auf Migrationen um (Baselining) — **vorher sichern**.
-Lokal mit Repo-Kopie und `DATABASE_URL`:
-
-```bash
-# 1. Prüfen, dass die Datenbank exakt dem Schema entspricht
-#    (Ausgabe muss "This is an empty migration." sein — sonst erst
-#    "npx prisma db push" für den aktuellen Stand):
-npx prisma migrate diff --from-url "$DATABASE_URL" \
-  --to-schema-datamodel prisma/schema.prisma --script
-
-# 2. Alle vorhandenen Migrationen als bereits angewendet markieren:
-npx prisma migrate resolve --applied 0_init
-npx prisma migrate resolve --applied 20261116000000_ungenaue_daten_und_quellen
-npx prisma migrate resolve --applied 20261117000000_ki_zugang
-npx prisma migrate resolve --applied 20261119000000_genealogie_ereignisse_import
-npx prisma migrate resolve --applied 20261120000000_dubletten_zusammenfuehren
-npx prisma migrate resolve --applied 20261121000000_quellen_einordnen
-npx prisma migrate resolve --applied 20261122000000_changelog
-npx prisma migrate resolve --applied 20261122000001_bezugsperson
-npx prisma migrate resolve --applied 20261123000000_medien_an_eintraegen
-npx prisma migrate resolve --applied 20261123000001_orte
-```
-
-Auf der NAS (SSH, Stack `familytree`) geht Schritt 2 mit dem App-Image
-(Schritt 1 braucht das volle Prisma-CLI mit Repo-Kopie und ist dort nicht
-vorgesehen):
-
-```sh
-docker run --rm --network familytree_default -e RUN_MIGRATIONS=false \
-  -e DATABASE_URL='postgresql://familytree:<POSTGRES_PASSWORD>@db:5432/familytree' \
-  ghcr.io/soschlegel/familiy-tree:latest prisma migrate resolve --applied 0_init
-# … ebenso für die drei anderen Migrationen
-```
-
-Danach startet die App normal. Lokal (`docker-compose.dev.yml`) bleibt
-`npm run db:push` möglich; eine so angelegte Datenbank lässt sich aber nicht
-mit dem Produktiv-Image betreiben, ohne sie wie oben zu baselinen.
+Eine Datenbank aus der Zeit vor den Migrationen (per `db push` angelegt)
+gibt es im Betrieb nicht. Stößt man doch auf eine — oder will eine lokal
+mit `npm run db:push` angelegte Datenbank mit dem Produktiv-Image
+betreiben —, muss sie einmalig auf Migrationen umgestellt werden
+(Baselining, **vorher sichern**): Anleitung in
+[docs/dev-history.md](docs/dev-history.md#baselining-einer-db-push-datenbank-bis-17112026).
 
 **Prisma-CLI im Image:** Das Image enthält nur das Paket `prisma` mit seinen
 Abhängigkeiten in den Versionen aus `package-lock.json` (unter
@@ -2102,8 +2101,9 @@ Verbindungspersonen und führt sie nach Bestätigung zusammen — aus den
 Importen wird ein gemeinsamer Stammbaum.
 
 Schneller Weg: Seite öffnen (Auswahl „alle Importe“ steht schon), **Abgleichen**
-(läuft im Hintergrund), oben steht „Jetzt N getrennte Teile — mit den sicheren
-Verbindungen M“ und je Import-Paar die Zahl der Verbindungspersonen;
+(läuft im Hintergrund), oben steht „Jetzt N Familienverbände — mit den
+sicheren Verbindungen M Familienverbände“ und je Import-Paar die Zahl der
+Verbindungspersonen;
 **Gemeinsame Vorschau** (was umzieht, zusammenfällt, Zweitangabe wird, was
 blockiert ist, wie viele Personen danach zu weiteren Familien gehören und
 damit für deren Mitglieder sichtbar werden), **Jetzt zusammenführen**,

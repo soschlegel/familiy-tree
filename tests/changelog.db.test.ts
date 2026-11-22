@@ -7,6 +7,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/prisma";
+import { mockDbSkipReason } from "./db-ready";
 import type { Scope } from "@/lib/scope";
 import { appChangeSet, beginMcpChangeSet, mcpChangeSet } from "@/lib/change-sets";
 import {
@@ -26,16 +27,7 @@ import {
   updatePerson,
 } from "@/lib/services";
 
-async function mockDbReady(): Promise<string | null> {
-  try {
-    const admin = await prisma.user.findUnique({ where: { id: "mock-user-admin" } });
-    return admin ? null : "Mock-Datenbank ist leer — bitte `npm run mock:setup` ausführen.";
-  } catch (err) {
-    return `Mock-Datenbank nicht erreichbar (${(err as Error).message.split("\n").pop()})`;
-  }
-}
-
-const skipReason = await mockDbReady();
+const skipReason = await mockDbSkipReason();
 if (skipReason) console.warn(`\n[tests] Changelog-Tests übersprungen: ${skipReason}\n`);
 
 const FAMILY_A = "mock-family-a";

@@ -30,6 +30,7 @@ import {
 import { personDateIssues, MAX_BIOLOGICAL_PARENTS, PARENT_SUBTYPES, PARTNER_SUBTYPES } from "../validation";
 import { conflictError, forbiddenError, notFoundError, parseOrThrow, validationError } from "./errors";
 import { newId } from "./imports";
+import { plural } from "../plural";
 import { importLabel } from "./dto";
 import { auditActor, auditData, fieldChanges } from "../audit";
 import { nameChangeSet } from "../change-sets";
@@ -524,7 +525,6 @@ export type MergeSummary = {
 function altText(a: AlternateFact): string {
   return [formatDateWithPhrase(a.date, a.datePhrase), a.place, a.cause ? `Ursache: ${a.cause}` : null].filter(Boolean).join(", ") || "ohne Datum";
 }
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 export function summarizePlan(scope: Scope, plan: MergePlan): MergeSummary {
   const { keep, other } = plan.snapshot;
@@ -704,17 +704,6 @@ function side(scope: Scope, p: PersonBundle, rels: RelBundle[]): MergePersonSide
   };
 }
 
-const SUBTYPE_LABEL: Record<string, string> = {
-  BIOLOGICAL: "leiblich",
-  ADOPTIVE: "Adoption",
-  STEP: "Stief",
-  FOSTER: "Pflege",
-  MARRIED: "verheiratet",
-  UNMARRIED: "unverheiratet",
-  DIVORCED: "geschieden",
-  PARTNER_UNKNOWN: "Ehestand unbekannt",
-};
-
 function toPreview(scope: Scope, plan: MergePlan): MergePreview {
   const { keep, other, relationships } = plan.snapshot;
   return {
@@ -737,8 +726,6 @@ function toPreview(scope: Scope, plan: MergePlan): MergePreview {
     token: plan.token,
   };
 }
-
-export { SUBTYPE_LABEL as MERGE_SUBTYPE_LABEL };
 
 /** Was beim Zusammenführen geschähe — schreibt nichts. */
 export async function previewPersonMerge(

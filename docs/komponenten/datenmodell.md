@@ -635,5 +635,5 @@ zuordnen“, von Hand Bestätigtes nie überschreiben).
 - **Im Betrieb** wendet der App-Container beim Start `prisma migrate deploy`
   an (`docker/entrypoint.sh`), nach einer automatischen Sicherung
   (`backup-db`). Eine Datenbank mit Tabellen, aber ohne Migrationshistorie
-  (früher per `db push`) führt zum Abbruch; Baselining beschreibt die README
-  („Schema und Migrationen“).
+  (früher per `db push`) führt zum Abbruch; Baselining beschreibt
+  `docs/dev-history.md` (die README verweist darauf).

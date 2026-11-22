@@ -8,6 +8,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/prisma";
+import { mockDbSkipReason } from "./db-ready";
 import type { Scope } from "@/lib/scope";
 import { scopeForEmail } from "@/lib/services";
 import { loadMapView } from "@/lib/services/map";
@@ -15,19 +16,7 @@ import { assignPlace, autoAssignPlaces, listPlaces, searchPlaceDirectory } from 
 import { placeKey } from "@/lib/places/normalize";
 import { mockData } from "./helpers";
 
-async function mockDbReady(): Promise<string | null> {
-  try {
-    const admin = await Promise.race([
-      prisma.user.findUnique({ where: { id: "mock-user-admin" } }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Zeitüberschreitung")), 5000)),
-    ]);
-    return admin ? null : "Mock-Datenbank ist leer — bitte `npm run mock:setup` ausführen.";
-  } catch (err) {
-    return `Mock-Datenbank nicht erreichbar (${(err as Error).message.split("\n").pop()}).`;
-  }
-}
-
-const skipReason = await mockDbReady();
+const skipReason = await mockDbSkipReason();
 if (skipReason) console.warn(`\n[tests] Karten-Tests übersprungen: ${skipReason}\n`);
 
 const data = mockData();
@@ -100,7 +89,7 @@ describe.skipIf(Boolean(skipReason))("Karte (Mock-Datenbank)", () => {
     const admin = await scope("admin@example.test");
     const view = await loadMapView(admin, { mode: "all" });
     const labels = view.payload.places.map((p) => p.label);
-    expect(labels).toEqual(expect.arrayContaining(["Wrocław (Breslau), Polen", "Timișoara (Temeswar), Rumänien", "Berkum, Saarland, Deutschland"]));
+    expect(labels).toEqual(expect.arrayContaining(["Wrocław (Breslau), Polen", "Timișoara (Temeswar), Rumänien", "Berkum, Niedersachsen, Deutschland"]));
     expect(view.payload.unmappedTexts).toBe(0);
   });
 });

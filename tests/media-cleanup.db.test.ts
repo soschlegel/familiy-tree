@@ -18,16 +18,10 @@ vi.mock("@/lib/storage", () => ({
 }));
 
 import { prisma } from "@/lib/prisma";
+import { mockDbSkipReason } from "./db-ready";
 import { createPerson, createRelationship, deletePerson, deleteRelationship, scopeForEmail } from "@/lib/services";
 
-async function ready(): Promise<boolean> {
-  try {
-    return Boolean(await prisma.user.findUnique({ where: { id: "mock-user-admin" } }));
-  } catch {
-    return false;
-  }
-}
-const dbReady = await ready();
+const dbReady = !(await mockDbSkipReason());
 if (!dbReady) console.warn("\n[tests] Bild-Aufräumtests übersprungen: Mock-Datenbank nicht erreichbar.\n");
 
 const tag = `cleanup-${Date.now().toString(36)}`;

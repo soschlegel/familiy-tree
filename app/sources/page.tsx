@@ -27,14 +27,20 @@ export default async function SourcesPage({ searchParams }: { searchParams: Prom
     : undefined;
   const requestedPage = Math.max(1, Math.floor(Number(params.page) || 1));
 
-  const { items, total } = await listSources(scope, {
-    q: needle,
-    kind,
-    limit: PAGE_SIZE,
+  const query = { q: needle, kind, limit: PAGE_SIZE };
+  let { items, total } = await listSources(scope, {
+    ...query,
     offset: (requestedPage - 1) * PAGE_SIZE,
   });
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const page = Math.min(requestedPage, pages);
+  // Seitenzahl jenseits des Endes (z.B. nach dem Löschen): letzte Seite laden.
+  if (page !== requestedPage) {
+    ({ items, total } = await listSources(scope, {
+      ...query,
+      offset: (page - 1) * PAGE_SIZE,
+    }));
+  }
   const filtered = Boolean(needle || kind);
   const hrefFor = (p: number) => {
     const sp = new URLSearchParams();

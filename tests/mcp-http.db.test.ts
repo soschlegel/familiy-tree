@@ -23,30 +23,14 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { encode } from "next-auth/jwt";
 
 import { prisma } from "@/lib/prisma";
+import { mockDbSkipReason } from "./db-ready";
 import { generateToken } from "@/lib/ai-tokens";
 import * as mcpRoute from "@/app/api/mcp/route";
 import { MCP_AUTH_FAILURE_LIMIT, MCP_MAX_BODY_BYTES, mcpWriteBodyLimit, resetMcpRateLimit } from "@/mcp/http";
 import type { MockApiTokenKey } from "@/prisma/mock-data";
 import { mockData } from "./helpers";
 
-async function mockDbReady(): Promise<string | null> {
-  try {
-    const admin = await Promise.race([
-      prisma.user.findUnique({ where: { id: "mock-user-admin" } }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Zeitüberschreitung")), 5000)),
-    ]);
-    if (!admin) return "Mock-Datenbank ist leer — bitte `npm run mock:setup` ausführen.";
-    if ((await prisma.apiToken.count()) === 0) {
-      return "Mock-Datenbank ohne KI-Testschlüssel — bitte `npm run mock:setup` ausführen.";
-    }
-    return null;
-  } catch (err) {
-    const detail = (err as Error).message.split("\n").map((l) => l.trim()).filter(Boolean).pop();
-    return `Mock-Datenbank nicht erreichbar (${detail}).`;
-  }
-}
-
-const skipReason = await mockDbReady();
+const skipReason = await mockDbSkipReason({ check: async () => (await prisma.apiToken.count()) > 0, missing: "ohne KI-Testschlüssel" });
 if (skipReason) console.warn(`\n[tests] MCP-HTTP-Tests übersprungen: ${skipReason}\n`);
 
 const data = mockData();

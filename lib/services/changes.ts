@@ -7,6 +7,7 @@ import { EVENT_TYPE_LABEL, PERSON_NAME_TYPE_LABEL } from "../events";
 import { CITATION_FACT_LABEL, CONFIDENCE_LABEL, SOURCE_KIND_LABEL } from "../source-labels";
 import { PARTNER_SUBTYPE_LABEL } from "../partner-labels";
 import { forbiddenError, notFoundError, validationError } from "./errors";
+import { plural } from "../plural";
 
 /**
  * Changelog lesen: Verlauf einer Person (für ihre Bearbeiter) und Übersicht
@@ -92,7 +93,7 @@ const ACTION: Record<string, string> = {
   CONNECT: "verbunden",
 };
 
-const count = (n: number, [one, many]: [string, string]) => `${n} ${n === 1 ? one : many}`;
+const count = (n: number, [one, many]: [string, string]) => plural(n, one, many);
 
 const GENDER: Record<string, string> = { MALE: "männlich", FEMALE: "weiblich", OTHER: "divers", UNKNOWN: "unbekannt" };
 const REL_TYPE: Record<string, string> = { PARENT_OF: "Eltern-Kind", PARTNER_OF: "Partnerschaft" };

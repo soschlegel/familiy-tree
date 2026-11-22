@@ -13,7 +13,10 @@ data
 *.log
 *.tsbuildinfo
 
-# Tests und Testergebnisse gehören nicht ins Image.
+# Tests und Testergebnisse gehören nicht ins Image (weder Build noch
+# Laufzeit brauchen sie; Next prüft beim Build nur, was im Kontext liegt).
+tests
+vitest.config.ts
 e2e
 playwright.config.ts
 playwright-report

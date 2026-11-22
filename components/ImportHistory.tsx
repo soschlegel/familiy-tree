@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { apiFetch, jsonBody } from "./api-client";
+import { plural } from "@/lib/plural";
 
 type Entry = {
   id: string;
@@ -20,7 +21,6 @@ type Entry = {
 };
 
 const STATUS: Record<string, string> = { PENDING: "Vorschau, nicht ausgeführt", COMPLETED: "ausgeführt", FAILED: "fehlgeschlagen" };
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const when = (iso: string) => new Date(iso).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" });
 
 /**
