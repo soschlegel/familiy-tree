@@ -150,7 +150,7 @@ test.describe("Karte: weitere Rollen", () => {
     const admin = await apiAs("admin");
     const list = await (await admin.get("/api/places?q=breslau")).json();
     expect(list.rows[0]).toMatchObject({ text: "Breslau, Schlesien, Preußen", status: "auto" });
-    expect(list.rows[0].assignment.label).toMatch(/^Wrocław/);
+    expect(list.rows[0].assignment.label).toBe("Wrocław (Breslau), Polen");
     await admin.dispose();
   });
 });

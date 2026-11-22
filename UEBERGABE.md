@@ -261,12 +261,15 @@ Freigabe (21.11.): „bauen und Gas geben“ — die Wünsche werden umgesetzt.
   wiederholt grün, Aufzeichnung außerhalb des Repos gesichert), nach Neustart
   write 87/87 (der erste Lauf fand eine Wettlaufsituation auf der neuen
   Seite — behoben, Knöpfe bis zum Neuladen gesperrt).
-  Offen zur Entscheidung: Startausschnitt „Orte“ (alle Orte der Auswahl)
-  statt „Europa“; Kreise ab 70 px begrenzt; deutsche Anzeigenamen auch für
-  heute polnische Städte, wenn GeoNames den deutschen Namen nicht als
-  historisch kennzeichnet („Danzig“, aber „Wrocław“); 4,4 MB Ortsverzeichnis
-  im öffentlichen Repo; kein MCP-Werkzeug; Kartendaten für „alle“ bei 12 000
-  Personen 1,4 MB und gut 1 s auf dem Server.
+  Entschieden (22.11.): Start bleibt „Orte der Auswahl“; Ortsverzeichnis
+  4,4 MB bleibt; Ortsnamen „heutiger Name (alter/deutscher Name)“, z.B.
+  „Wrocław (Breslau), Polen“, im deutschen Sprachraum ohne Klammer — auf
+  `karte` umgesetzt (README „Karte und Orte“, Ortsnamen). Bekannte
+  Grenzfälle: ohne alten Namen in den Daten steht der deutsche Name von
+  GeoNames in der Klammer („Lviv (Lwiw)“, erst mit „Lemberg“ in den Daten
+  „Lviv (Lemberg)“); in der Schweiz ist der Hauptname der deutsche („Genf“).
+  Weiter offen: Kreise ab 70 px begrenzt; kein MCP-Werkzeug; Kartendaten für
+  „alle“ bei 12 000 Personen 1,4 MB und gut 1 s auf dem Server.
 - **Stammbaum auf dem Telefon**: Kopf und Werkzeugleiste belegen bei
   360×740 gut 40 % der Höhe, die Karten sind beim Standardzoom klein.
   Braucht eine Gestaltungsentscheidung (Leiste einklappen, Vollbild, Titel

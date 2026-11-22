@@ -96,7 +96,9 @@ const round = (v, d = 2) => Number(Number(v).toFixed(d));
 const countryInfo = new Map(); // ISO2 -> { name, continent, geonameId }
 for (const line of readLines(path.join(geonamesDir, "countryInfo.txt"))) {
   const c = line.split("\t");
-  countryInfo.set(c[0], { name: c[4], continent: c[8], geonameId: c[16] });
+  // Amtssprachen, erste zuerst („pl“, „de-CH“ → „de“).
+  const langs = (c[15] ?? "").split(",").map((l) => l.split("-")[0]).filter(Boolean);
+  countryInfo.set(c[0], { name: c[4], continent: c[8], geonameId: c[16], langs });
 }
 const isEurope = (cc) => countryInfo.get(cc)?.continent === "EU";
 
@@ -163,7 +165,7 @@ function addPlace(c, kind = "P") {
         .sort((a, b) => a.s - b.s)
         .slice(0, 4)
         .map((x) => x.n);
-  rows.push([c[0], name, alts.join(";"), round(c[4]), round(c[5]), c[8], c[10] || "", pop || "", kind]);
+  rows.push([c[0], name, alts.join(";"), round(c[4]), round(c[5]), c[8], c[10] || "", pop || "", kind, ""]);
   if (kind === "P" && c[10]) {
     const k = `${c[8]}.${c[10]}`;
     const w = Math.max(pop, 1000);
@@ -233,59 +235,91 @@ for (const [code, { name, ascii, id }] of admin1Names) {
     lat = w.sy / w.w;
     lon = w.sx / w.w;
   }
-  rows.push([id, name, alts.join(";"), round(lat), round(lon), cc, a1, "", "A"]);
+  rows.push([id, name, alts.join(";"), round(lat), round(lon), cc, a1, "", "A", ""]);
 }
 
 // Weitere Namen europäischer Orte und Regionen aus den Alternativnamen je
 // Land (alternatenames/<LAND>.txt): nur ausgewählte Sprachen, historische
-// Namen („Breslau“, „Paane“, „Temeswar“) eingeschlossen. Der heutige
-// deutsche Name wird Anzeigename („München“ statt „Munich“), historische
-// deutsche Namen nicht („Wrocław“ bleibt, „Breslau“ wird weiterer Name).
+// Namen („Breslau“, „Paane“, „Temeswar“) eingeschlossen.
+// Anzeige (Entscheidung des Eigentümers): heutiger offizieller Name vorn,
+// der deutsche bzw. historische Name in Klammern — „Wrocław (Breslau)“.
+// Hauptname = GeoNames-Name; ist der nur der englische („Munich“), der Name
+// in der Landessprache („München“). Spalte 10 = deutscher Name (heutig vor
+// historisch), leer wenn er dem Hauptnamen entspricht.
 const placeRows = new Map(rows.map((r) => [r[0], r]));
 const altDir = path.join(geonamesDir, "alt");
 let altCount = 0;
+let localNames = 0;
 let germanNames = 0;
-for (const [cc] of countryInfo) {
+/** Vergleich ohne Umlaut-Umschreibung: „Muenchen“ ist kein eigener Name. */
+const foldDe = (n) => norm(n.replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/Ä/g, "Ae").replace(/Ö/g, "Oe").replace(/Ü/g, "Ue"));
+const fixRomanian = (n) => n.replace(/ş/g, "ș").replace(/Ş/g, "Ș").replace(/ţ/g, "ț").replace(/Ţ/g, "Ț");
+for (const [cc, info] of countryInfo) {
   if (!isEurope(cc)) continue;
   const file = path.join(altDir, `${cc}.txt`);
   if (!fs.existsSync(file)) continue;
   const extra = new Map();
-  const german = new Map(); // geonameid -> { name, rank }
+  const english = new Map(); // geonameid -> Set englischer Namen
+  const local = new Map(); // geonameid -> { name, rank }
+  const german = new Map(); // geonameid -> [{ name, rank }]
+  const better = (map, id, name, rank) => {
+    const prev = map.get(id);
+    if (!prev || rank < prev.rank) map.set(id, { name, rank });
+  };
   for (const line of readLines(file)) {
     // alternateNameId, geonameid, isolanguage, alternate name, isPreferred, isShort, isColloquial, isHistoric, from, to
     const a = line.split("	");
-    if (!placeRows.has(a[1]) || !ALT_LANGS.has(a[2])) continue;
+    if (!placeRows.has(a[1])) continue;
+    if (a[2] === "en") {
+      const set = english.get(a[1]) ?? new Set();
+      set.add(a[3]);
+      english.set(a[1], set);
+    }
+    if (!ALT_LANGS.has(a[2])) continue;
     if (a[6] === "1" && a[7] !== "1") continue; // umgangssprachlich
     const list = extra.get(a[1]) ?? [];
     list.push(a[3]);
     extra.set(a[1], list);
-    if (a[2] === "de" && a[7] !== "1" && a[6] !== "1" && goodAlt(a[3])) {
-      const rank = a[4] === "1" ? 0 : a[5] === "1" ? 1 : 2;
-      const prev = german.get(a[1]);
-      if (!prev || rank < prev.rank) german.set(a[1], { name: a[3], rank });
-    }
+    if (!goodAlt(a[3])) continue;
+    const pref = a[4] === "1" ? 0 : a[5] === "1" ? 1 : 2;
+    const historic = a[7] === "1";
+    const li = info.langs.indexOf(a[2]);
+    // Nur die erste Amtssprache: „Lviv“ soll nicht zum polnischen „Lwów“ werden.
+    if (li === 0 && !historic) better(local, a[1], a[3], pref);
+    if (a[2] === "de") german.set(a[1], [...(german.get(a[1]) ?? []), { name: a[3], rank: (historic ? 10 : 0) + pref }]);
   }
   for (const [id, names] of extra) {
     const r = placeRows.get(id);
-    const de = german.get(id)?.name;
     // Regionen im deutschen Sprachraum haben schon deutsche Namen (ADMIN1_DE).
     const keepMain = r[8] === "A" && FULL_COUNTRIES.has(r[5]);
-    // Nur echte deutsche Namen, keine Schreibweise ohne Sonderzeichen („Wroclaw“).
-    const main = de && !keepMain && norm(de) !== norm(r[1]) ? de : r[1];
-    if (main !== r[1]) germanNames++;
+    let main = r[1];
+    const loc = local.get(id)?.name;
+    if (!keepMain && loc && english.get(id)?.has(main) && loc !== main) {
+      main = loc;
+      localNames++;
+    }
+    if (cc === "RO") main = fixRomanian(main);
+    // Deutscher Name, der sich wirklich unterscheidet (nicht „Wroclaw“ für
+    // „Wrocław“): heutige vor historischen, bevorzugte zuerst.
+    // Deutscher Sprachraum: keine Klammer (Entscheidung des Eigentümers).
+    const de = FULL_COUNTRIES.has(r[5])
+      ? ""
+      : ((german.get(id) ?? []).filter((g) => foldDe(g.name) !== foldDe(main)).sort((x, y) => x.rank - y.rank)[0]?.name ?? "");
+    if (de) germanNames++;
     const merged = altNames(main, [r[1], r[2].replace(/;/g, ","), ...names].join(","));
     altCount += merged.length;
     r[1] = main;
     r[2] = merged.join(";");
+    r[9] = de;
   }
 }
-console.log(`Weitere Namen (Europa): ${altCount}, deutsche Anzeigenamen: ${germanNames}`);
+console.log(`Weitere Namen (Europa): ${altCount}, Namen in Landessprache: ${localNames}, deutsche Namen: ${germanNames}`);
 
 // Länder
 for (const [iso, c] of countries) {
   const info = countryInfo.get(iso);
   const main = c.names[0];
-  rows.push([info?.geonameId ?? "", main, altNames(main, c.names.join(","), true).join(";"), round(c.lat), round(c.lon), iso, "", "", "C"]);
+  rows.push([info?.geonameId ?? "", main, altNames(main, c.names.join(","), true).join(";"), round(c.lat), round(c.lon), iso, "", "", "C", ""]);
 }
 
 // Historische Landschaften (ungefähre Mitte, von Hand; Präzision „Region“).
@@ -335,7 +369,7 @@ const HISTORIC = [
   ["Pommern (Vorpommern)", "Vorpommern;Western Pomerania", 54.0, 13.4, "DE"],
 ];
 HISTORIC.forEach(([name, alts, lat, lon, cc], i) => {
-  rows.push([`h${i + 1}`, name, altNames(name, alts.replace(/;/g, ",")).join(";"), lat, lon, cc, "", "", "H"]);
+  rows.push([`h${i + 1}`, name, altNames(name, alts.replace(/;/g, ",")).join(";"), lat, lon, cc, "", "", "H", ""]);
 });
 
 // ---------------------------------------------------------------------------
@@ -346,7 +380,7 @@ const header = [
   "# Ortsverzeichnis für die Ortszuordnung (scripts/build-geodata.mjs).",
   "# Quelle: GeoNames (https://www.geonames.org/), Lizenz CC BY 4.0;",
   "# Länder-Mittelpunkte: Natural Earth (gemeinfrei). Historische Landschaften von Hand.",
-  "# Spalten: id, name, weitere Namen (;), lat, lon, Land, Region-Code, Einwohner, Art (P Ort, A Region, H hist. Landschaft, C Land)",
+  "# Spalten: id, name, weitere Namen (;), lat, lon, Land, Region-Code, Einwohner, Art (P Ort, A Region, H hist. Landschaft, C Land), deutscher Name (wenn abweichend)",
 ];
 const text = [...header, ...rows.map((r) => r.join("\t"))].join("\n") + "\n";
 fs.mkdirSync(path.join(ROOT, "geo"), { recursive: true });

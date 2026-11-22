@@ -5,7 +5,7 @@ import { auditActor, auditData, fieldChanges } from "../audit";
 import { nameChangeSet } from "../change-sets";
 import { prisma } from "../prisma";
 import type { Scope } from "../scope";
-import { entryLabel, searchGazetteer } from "../places/gazetteer";
+import { labelForText, searchGazetteer } from "../places/gazetteer";
 import { getGazetteer } from "../places/gazetteer-file";
 import { matchPlace } from "../places/match";
 import { placeKey } from "../places/normalize";
@@ -298,7 +298,7 @@ export async function assignPlace(scope: Scope, input: PlaceAssignInput): Promis
         precision: PRECISION_OF_KIND[e.kind],
         latitude: e.lat,
         longitude: e.lon,
-        label: entryLabel(gaz, e),
+        label: labelForText(gaz, e, input.text),
         countryCode: e.cc || null,
         gazetteerId: e.id,
       };

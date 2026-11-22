@@ -546,12 +546,24 @@ Ohne Ort: Region, dann Land. Ohne Länderhinweis entscheiden Heimatvorzug
 (Deutschland, Österreich/Schweiz, Europa) und Größe zusammen. Auf den
 Mock-Daten werden alle 36 Ortstexte (341 Angaben) als Ort zugeordnet.
 
+**Ortsnamen** (Entscheidung des Eigentümers; Karte, Ortsliste, Seitenleiste,
+„Orte zuordnen“; [lib/places/gazetteer.ts](lib/places/gazetteer.ts),
+`entryLabel`): der heutige offizielle Name vorn, in Klammern der Name, unter
+dem der Ort in den Daten steht, sonst der deutsche bzw. historische Name —
+nur wenn er sich unterscheidet: „Wrocław (Breslau), Polen“, „Gdańsk
+(Danzig), Polen“, „Timișoara (Temeswar), Rumänien“, „Kaliningrad (Königsberg),
+Russland“. Orte in Deutschland, Österreich und der Schweiz nie mit Klammer,
+dafür mit Bundesland bzw. Kanton: „Peine, Saarland, Deutschland“ (auch
+für „Paane“). Gespeicherte automatische Zuordnungen bekommen die neue
+Form mit dem nächsten „Automatisch zuordnen“; von Hand Bestätigte behalten
+ihre Bezeichnung.
+
 **Mitgelieferte Daten** — kein Dienst im Netz, die Karte lädt nichts von
 fremden Servern, die Ortsnamen verlassen den Server nie:
 
 | Datei | Inhalt | Größe |
 |---|---|---|
-| `geo/gazetteer.tsv.gz` | Ortsverzeichnis: Deutschland, Österreich, Schweiz mit allen bewohnten Orten (auch Ortsteile und historische), übriges Europa ab 1000 Einwohnern, Welt ab 15 000; Regionen erster Ebene, Länder, 43 historische Landschaften (von Hand, ungefähre Mitte). Weitere Namen in lateinischer Schrift, für Europa nach Sprache gefiltert (u.a. de, en, fr, pl, cs, hu, ro, la; historische wie „Breslau“, „Paane“, „Temeswar“); deutscher Anzeigename, wo es einen heutigen gibt („München“). 229 491 Einträge | 4,4 MB (12 MB entpackt); nur auf dem Server, erst bei Bedarf geladen (rund 1 s, gut 100 MB Speicher, nach 10 min ohne Benutzung freigegeben) |
+| `geo/gazetteer.tsv.gz` | Ortsverzeichnis: Deutschland, Österreich, Schweiz mit allen bewohnten Orten (auch Ortsteile und historische), übriges Europa ab 1000 Einwohnern, Welt ab 15 000; Regionen erster Ebene, Länder, 43 historische Landschaften (von Hand, ungefähre Mitte). Weitere Namen in lateinischer Schrift, für Europa nach Sprache gefiltert (u.a. de, en, fr, pl, cs, hu, ro, la; historische wie „Breslau“, „Paane“, „Temeswar“); Hauptname der heutige offizielle (Landessprache statt englischer Form: „München“, nicht „Munich“), dazu je Ort außerhalb des deutschen Sprachraums der deutsche bzw. historische Name („Breslau“). 229 491 Einträge | 4,4 MB (12 MB entpackt); nur auf dem Server, erst bei Bedarf geladen (rund 1 s, gut 100 MB Speicher, nach 10 min ohne Benutzung freigegeben) |
 | `public/geo/countries.json` | Ländergrenzen, Natural Earth 1:50m, Mercator-projiziert und vereinfacht (Europa feiner) als SVG-Pfade | 337 KB (87 KB gzip) |
 
 Erzeugt mit `node scripts/build-geodata.mjs <geonames-ordner>
