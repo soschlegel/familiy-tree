@@ -84,6 +84,8 @@ import {
   suggestPlaces,
   type PlaceStatus,
 } from "../lib/services/places";
+import { getPlacePage, placeLinksFor, placeRefForText } from "../lib/services/place-pages";
+import { placeKey } from "../lib/places/normalize";
 
 export type ToolContext = {
   /** Wer zugreift — nur für Meldungen (E-Mail bzw. Schlüssel-Präfix). */
@@ -174,6 +176,26 @@ const changeSetIdInput = z
   .describe(
     "Change set from begin_change_set. Optional: without it, writes of this key within 30 minutes are bundled into the most recent change set.",
   );
+
+/**
+ * Zugeordnete Orte zu den Ortstexten eines Ergebnisses: Freitext → Ort
+ * (Kennung für get_place, Anzeigename, Koordinaten). Der Freitext selbst
+ * bleibt in den Feldern unverändert; nicht zugeordnete Texte fehlen hier.
+ */
+const placesOutput = z
+  .record(z.object({ placeId: z.string(), label: z.string(), latitude: z.number(), longitude: z.number() }))
+  .optional()
+  .describe("Assigned place per place text: placeId (for get_place), label, coordinates.");
+
+async function placesOut(texts: (string | null | undefined)[]): Promise<Record<string, { placeId: string; label: string; latitude: number; longitude: number }> | null> {
+  const links = await placeLinksFor(texts);
+  const out: Record<string, { placeId: string; label: string; latitude: number; longitude: number }> = {};
+  for (const t of texts) {
+    const l = t ? links[placeKey(t)] : undefined;
+    if (t && l) out[t] = { placeId: l.ref, label: l.label, latitude: l.latitude, longitude: l.longitude };
+  }
+  return Object.keys(out).length ? out : null;
+}
 
 const READ_ONLY = {
   readOnlyHint: true,
@@ -607,13 +629,20 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
         // Lebensereignisse (Taufe, Beruf, Beerdigung …) und weitere Namen — nur, wenn vorhanden.
         events: z.array(z.object({ id: z.string(), type: z.string(), title: z.string() }).passthrough()).optional(),
         otherNames: z.array(z.object({ id: z.string(), type: z.string(), name: z.string() }).passthrough()).optional(),
+        places: placesOutput,
       },
       annotations: { title: "Person abrufen", ...READ_ONLY },
     },
     run(ctx, async (scope, a) => {
       const d = await getPersonDetail(scope, a.person_id);
       if (!d) throw notFound();
-      return personDetailOut(d);
+      const places = await placesOut([
+        d.person.birthPlace,
+        d.person.deathPlace,
+        ...d.relations.flatMap((r) => (r.other.restricted ? [] : [r.startPlace, r.endPlace, ...r.events.map((e) => e.place)])),
+        ...d.events.map((e) => e.place),
+      ]);
+      return { ...personDetailOut(d), ...(places ? { places } : {}) };
     }),
   );
 
@@ -1014,6 +1043,7 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
       },
       outputSchema: {
         events: z.array(z.object({ id: z.string(), type: z.string(), title: z.string() }).passthrough()),
+        places: placesOutput,
       },
       annotations: { title: "Lebensereignisse", ...READ_ONLY },
     },
@@ -1025,7 +1055,9 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
         ? await listPersonEvents(scope, a.person_id)
         : await listRelationshipEvents(scope, a.relationship_id!);
       if (!list) throw notFound(a.person_id ? "Person" : "Beziehung");
+      const places = await placesOut(list.map((e) => e.place));
       return {
+        ...(places ? { places } : {}),
         events: list.map((e) => ({
           ...storedEventOut(e),
           ...(e.personId ? { personId: e.personId } : {}),
@@ -1957,6 +1989,59 @@ const placeCandidateSchema = z
   .passthrough();
 
 function registerPlaceReadTools(server: McpServer, ctx: ToolContext): void {
+  server.registerTool(
+    "get_place",
+    {
+      title: "Ort abrufen",
+      description:
+        "One assigned place as on its page in the app: today's name with former/German name, region, country, coordinates, " +
+        "how it was assigned (auto/AI/manual), other names from the gazetteer, the free texts in the data that point to it " +
+        "(several texts can mean the same place) and the persons with facts there (birth, death, marriage, divorce, events — " +
+        "kind and year), 50 per page. Only persons the user may see; texts occurring only at hidden persons are left out. " +
+        "Pass `place_id` (placeId from get_person/list_events `places`) or a place `text` as written in the data.",
+      inputSchema: {
+        place_id: z.string().min(3).max(80).optional(),
+        text: z.string().min(1).max(500).optional(),
+        page: z.number().int().min(1).optional().describe("Page of persons, 50 each. Default 1."),
+      },
+      outputSchema: {
+        placeId: z.string(),
+        label: z.string(),
+        latitude: z.number(),
+        longitude: z.number(),
+        texts: z.array(z.object({ text: z.string(), count: z.number() })),
+        total: z.number(),
+        entries: z.array(z.object({ person: refSchema, kind: z.string() }).passthrough()),
+      },
+      annotations: { title: "Ort abrufen", ...READ_ONLY },
+    },
+    run(ctx, async (scope, a) => {
+      if (Boolean(a.place_id) === Boolean(a.text)) {
+        throw validationError([{ path: "place_id", message: "Genau eines von place_id und text angeben" }]);
+      }
+      let ref = a.place_id ?? null;
+      if (a.text) {
+        ref = await placeRefForText(a.text);
+        if (!ref) throw notFound("Ort (dieser Text ist keinem Ort zugeordnet)");
+      }
+      const p = await getPlacePage(scope, ref!, { page: a.page });
+      if (!p) throw notFound("Ort");
+      const { ref: placeId, entries, ...rest } = p;
+      return {
+        placeId,
+        ...rest,
+        entries: entries.map((e) => ({
+          person: { id: e.person.id, name: e.person.name, ...(e.person.birthYear || e.person.deathYear ? { lifespan: `${e.person.birthYear ?? "?"} – ${e.person.deathYear ?? "?"}` } : {}) },
+          kind: e.kind,
+          label: e.label,
+          ...(e.year ? { year: e.year } : {}),
+          text: e.text,
+          ...(e.alternative ? { alternative: true } : {}),
+        })),
+      };
+    }),
+  );
+
   server.registerTool(
     "suggest_place",
     {

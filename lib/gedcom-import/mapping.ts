@@ -28,6 +28,7 @@ import type {
   GedcomName,
   GedcomNoteRef,
   GedcomPerson,
+  GedcomPlace,
   GedcomSource,
   GedcomAddress,
 } from "../gedcom/types";
@@ -305,6 +306,22 @@ const clean = (s: string | undefined | null, max = 2000): string | null => {
   if (!t) return null;
   return t.length > max ? t.slice(0, max) : t;
 };
+
+/**
+ * Ortstext beim Import. Der eigene GEDCOM-Export schreibt für zugeordnete
+ * Orte die heutige Form in PLAC und den Freitext der App als NOTE
+ * „Originaltext: …“ darunter (lib/services/place-export.ts) — dieser geht
+ * vor, damit der Wiederimport der eigenen Datei nichts als geändert meldet.
+ */
+export function originalPlaceText(p: GedcomPlace | undefined): string | null {
+  if (!p) return null;
+  for (const n of p.notes ?? []) {
+    const t = n.content?.text?.trim();
+    if (t?.startsWith(ORIGINAL_PLACE_PREFIX)) return clean(t.slice(ORIGINAL_PLACE_PREFIX.length));
+  }
+  return clean(p.name);
+}
+const ORIGINAL_PLACE_PREFIX = "Originaltext: ";
 
 /** JSON-sauber (undefined in Listen → null), wie es in der Datenbank landet. */
 export const jsonClean = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
@@ -712,9 +729,9 @@ export function mapGedcomDocument(doc: GedcomDocument, options: MapOptions = {})
       nameSuffix: clean(primary?.suffix, 200),
       gender: p.sex,
       birth: life.birth.value,
-      birthPlace: clean(mainBirth?.place?.name),
+      birthPlace: originalPlaceText(mainBirth?.place),
       death: life.death.value,
-      deathPlace: clean(mainDeath?.place?.name),
+      deathPlace: originalPlaceText(mainDeath?.place),
       deathCause: clean(mainDeath?.cause),
       notes: noteText(p.notes),
     };
@@ -916,7 +933,7 @@ export function mapGedcomDocument(doc: GedcomDocument, options: MapOptions = {})
       label,
       isAlternative: isAlt,
       date: date.value,
-      place: clean(e.place?.name),
+      place: originalPlaceText(e.place),
       address: addressText(e.address),
       value,
       cause: clean(e.cause),
@@ -981,9 +998,9 @@ export function mapGedcomDocument(doc: GedcomDocument, options: MapOptions = {})
       fromRef: a,
       toRef: b,
       start: start.value,
-      startPlace: clean(marr?.place?.name),
+      startPlace: originalPlaceText(marr?.place),
       end: end.value,
-      endPlace: clean(div?.place?.name),
+      endPlace: originalPlaceText(div?.place),
       notes: noteText(f.notes),
     });
     for (const x of f.externalIds) {

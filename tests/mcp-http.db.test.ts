@@ -49,6 +49,7 @@ const READ_TOOLS = [
   "get_descendants",
   "get_kinship",
   "get_person",
+  "get_place",
   "get_source",
   "get_statistics",
   "get_timeline",

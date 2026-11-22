@@ -1356,11 +1356,22 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
   - `GET /api/places/search` (direkt mit `fetch`, nicht über `apiFetch`; Fehler werden still verschluckt)
 - **Tests:** `e2e/write/places.spec.ts` (automatisch zuordnen, Editor, Koordinaten, Status); `e2e/read/map.spec.ts` (Link von der Karte). Die Logik prüfen `tests/places.test.ts` und `tests/map.db.test.ts`.
 
+### components/PlaceText.tsx
+
+- **Zweck:** Ortsangabe als Freitext der Person, bei zugeordnetem Ort als Link auf die Ortsseite (Titel = Anzeigename) und — wenn der Ort anders heißt — dezent „→ Wrocław, Polen“. Ohne Zuordnung reiner Text.
+- **Wo eingesetzt:** Personenseite (Geburt, Tod, Orte der Partnerschaften), `EventSection` (Ort je Ereignis).
+- **Props:** `text`, `links` (aus `placeLinksFor`, Schlüssel `placeKey`). Ohne Hooks, für Server- und Client-Komponenten.
+
+### components/PlaceMiniMap.tsx
+
+- **Zweck:** Kleine Lagekarte der Ortsseite: Ländergrenzen aus `public/geo/countries.json` (wie die große Karte, kein fremder Server), Punkt an den Koordinaten, `role="img"`.
+- **Server oder Client:** Client.
+
 ### components/PlaceHint.tsx
 
 - **Zweck:** Dezenter Hinweis unter einem Ortsfeld, welcher Ort beim Tippen erkannt wird: „→ Wrocław (Breslau), Polen · früherer bzw. deutscher Name: Breslau“, mit „(nur Region)“/„(nur Land)“, „eigener Ort“, „anderer Name: …“, Abzeichen „mehrdeutig“ oder „Ort nicht gefunden“. Der eingegebene Text bleibt unverändert — reine Anzeige.
 - **Wo eingesetzt:** `PersonForm` (Geburts- und Sterbeort), `EventSection` (Ort im Ereignisformular), `RelationshipEditor` (Orte von Beginn/Ende beim Anlegen und Korrigieren einer Beziehung).
-- **Props:** `text` (aktueller Feldinhalt), optional `id`.
+- **Props:** `text` (aktueller Feldinhalt), optional `id`; `chosen` und `onChoose` für die **Auswahl echter Orte**: „Ort wählen …“ lädt Kandidaten (`?candidates=1`: Verzeichnis und eigene Orte) zum Anklicken; die Wahl (`PlaceChoice`, gebunden an den Text — ändert er sich, verfällt sie) zeigt „→ … · ausgewählt“ mit „Auswahl aufheben“. `savePlaceChoices(target, choices)` speichert sie nach dem Speichern des Eintrags (`POST /api/places/choose`) und liefert Meldungen zurück (z.B. bereits von Hand anders zugeordnet). Wer nichts wählt, bekommt die automatische Zuordnung.
 - **Verhalten:** ab 2 Zeichen, entprellt um 350 ms, ältere Anfragen werden abgebrochen; ein veralteter Hinweis wird nicht gezeigt. Das erste Ortsfeld einer Seite lädt das Ortsverzeichnis vorab (`GET /api/places/suggest` ohne `q`). Bei 403 (kein Bearbeitungsrecht) oder Netzfehler kein Hinweis. `aria-live="polite"`.
 - **Server oder Client:** Client.
 - **Ruft auf:** `GET /api/places/suggest` (direkt mit `fetch`).

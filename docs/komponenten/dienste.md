@@ -1193,6 +1193,16 @@ aus `lib/places/`), Pflege durch Administratoren.
 - `placeTextContext(scope, keys)` — nur Admins: je Ortstext Feldarten
   (birth, death, marriage, divorce, `event:<Art>`) mit Anzahl und
   Jahresspanne, ohne Personen (Kontext für `list_places`).
+- `choosePlaceForEntry(scope, input)` — **Auswahl im Ortsfeld**
+  (`POST /api/places/choose`): ordnet genau den Freitext eines Eintrags
+  (Person, Ereignis oder Beziehung, `placeChoiceSchema`) einem
+  Verzeichniseintrag oder eigenen Ort zu, Herkunft „von Hand“. Rechte: wer
+  den Eintrag bearbeiten darf; der Text muss an ihm stehen. Bewusst nicht
+  über die Admin-Route `/api/places` (die alle Ortstexte zeigt) — der enge
+  Fall ändert nur die Zuordnung dieses einen Texts. Eine von Hand bestätigte
+  Zuordnung desselben Texts mit anderem Ziel ändert nur ein Admin
+  (`CONFLICT`), weil sie auch für Angaben anderer Personen gilt; andere
+  Texte bleiben unberührt. Paket „Ort ausgewählt: …“.
 - `assignPlacesByAi(scope, items)` — `assign_place`: bis `AI_ASSIGN_MAX` (50)
   Zuordnungen je Aufruf (`aiPlaceAssignSchema`: Verzeichniseintrag, eigener
   Ort mit Koordinaten und Bezeichnung, oder „nicht zuordenbar“; optional
@@ -1247,6 +1257,76 @@ Typen in `components/PlaceAdmin.tsx`, `components/PlaceHint.tsx`.
 samt Route und Rechten, Automatik nach Speichern/Import ohne MANUAL/KI zu
 überschreiben, Fehler ohne Folgen, MCP-Werkzeuge, Bestätigen) (Regeln:
 `tests/places.test.ts`); `e2e/write/places.spec.ts`.
+
+---
+
+### lib/services/place-pages.ts
+
+**Zweck:** Ortsseiten (`/places/<ref>`) und Ortsverweise für die
+Personenseite und den KI-Zugang.
+
+**Wichtige Funktionen:**
+- `placeRefOf(row)` — Kennung eines Orts: `g-<gazetteerId>` bzw. bei eigenen
+  Orten `c-<Breite>_<Länge>` (5 Nachkommastellen); keine Kennung für „nicht
+  zuordenbar“ oder ohne Koordinaten. `placeRefForText(text)`.
+- `placeLinksFor(texts)` — EINE Abfrage je Seite: Schlüssel (`placeKey`) →
+  Kennung, Anzeigename, Kurzform ohne Klammer, Koordinaten und `same` (der
+  Freitext nennt den Ort schon so, dann kein Zusatz „→ …“).
+- `placeRowsOf(ref)`, `getPlacePage(scope, ref, {page})` — Ort mit heutigem
+  Namen, Region, Land (aus dem Verzeichnis), Koordinaten, Art, Einwohnerzahl,
+  Herkunft der Zuordnung(en), Begründungen (nur Admins), weiteren Namen aus
+  dem Verzeichnis (darunter der frühere/deutsche), den vorkommenden
+  Freitexten mit Anzahl und den Angaben sichtbarer Personen (Geburt, Tod,
+  Heirat/Partnerschaft, Scheidung, Ereignisse mit Art und Jahr), 50 je Seite.
+
+**Regel „ein Ort“ (Entscheidung):** Alle Zuordnungen mit demselben
+Verzeichniseintrag bilden einen Ort, eigene Orte ohne Verzeichniseintrag
+mit denselben Koordinaten (wie gespeichert, 5 Nachkommastellen). So zeigen
+„Breslau“, „Breslau, Schlesien“ und „Wrocław“ auf eine Seite.
+
+**Kein Fremdschlüssel:** Personen, Beziehungen und Ereignisse tragen nur den
+Freitext; die Verbindung zum Ort läuft über den normalisierten Text
+(`Place.key`).
+
+**Rechte/Datenschutz:** Jeder Angemeldete sieht Ortsseiten — aber nur
+Angaben sichtbarer Personen (`personVisibilityFilter`; Ehen je sichtbarem
+Partner, Ereignisse an Beziehungen je sichtbarem Partner). Gesperrte
+erscheinen weder als Eintrag noch in einer Zahl; Freitexte, die nur bei
+ihnen vorkommen, fehlen. Ohne jede sichtbare Angabe gilt der Ort für
+Nicht-Admins als nicht vorhanden (404), damit die Seite nichts über
+verborgene Personen verrät. Admins sehen alles samt Begründungen.
+
+**Benutzt von:** `app/places/[ref]/page.tsx`, `app/people/[id]/page.tsx`,
+`mcp/tools.ts` (`get_place`, `places` in `get_person`/`list_events`).
+
+**Tests:** `tests/place-pages.db.test.ts`; `e2e/write/places.spec.ts`.
+
+### lib/services/place-export.ts
+
+**Zweck:** Orte im Export.
+
+**Wichtige Funktionen:** `gedcomPlaceResolver(texts)` (Ortstext → GEDCOM-PLAC,
+eine Abfrage), `presentDayName` („Ort, Region, Land“ aus dem Verzeichnis,
+heutiger Name ohne Klammer), `ORIGINAL_TEXT_PREFIX`, `exchangePlacesFor`.
+
+**Regeln (Entscheidung des Eigentümers, immer, ohne Schalter):** Für einen
+zugeordneten Ortstext schreibt der GEDCOM-Export die heutige Form „Ort,
+Region, Land“ (Bestandteile wie im Verzeichnis, also in der Landessprache:
+„Wrocław, Województwo dolnośląskie, Polen“; eigene Orte: ihre Bezeichnung
+ohne Klammer), darunter `MAP`/`LATI`/`LONG` (N/S/E/W) und — wenn er
+abweicht — `NOTE Originaltext: …`. Nicht zugeordnete und „nicht
+zuordenbare“ Orte bleiben Freitext. Gilt für alle PLAC-Stellen (Geburt,
+Tod, Ereignisse, Heirat, Scheidung). Der eigene Import liest den
+Originaltext zurück (`originalPlaceText`). Das Austauschformat behält den
+Freitext und nimmt die Zuordnungen der exportierten Texte zusätzlich mit
+(`places`, Version 5; Begründungen nur, wenn ein Admin exportiert); beim
+Einspielen werden nur Texte ohne vorhandene Zuordnung übernommen
+(`app/api/import/route.ts`, protokolliert als „Place“).
+
+**Benutzt von:** `lib/services/gedcom-export.ts`,
+`lib/services/exchange-export.ts`.
+
+**Tests:** `tests/place-pages.db.test.ts`.
 
 ---
 
@@ -1712,6 +1792,8 @@ Typen in `components/ConnectImports.tsx`.
 
 **Zweck:** Baut den Export im Austauschformat (`lib/exchange.ts`) aus dem für
 den Benutzer sichtbaren Bestand; Grundlage auch des GEDCOM-Exports.
+Nimmt die Ortszuordnungen der exportierten Ortstexte mit (`places`,
+`exchangePlacesFor`; Begründungen nur bei Admin-Export).
 
 **Wichtige Funktionen:**
 - `buildExport(scope, auswahl?)` — Personen, Beziehungen, Ereignisse, weitere
@@ -1759,6 +1841,9 @@ oder ZIP mit Bildern.
 - `appDateToGedcom(zeile, schlüssel)` — App-Datum → GEDCOM-Datum.
 
 **Regeln und Entscheidungen:**
+- Zugeordnete Orte: PLAC in der heutigen Form „Ort, Region, Land“ mit MAP
+  und dem Originaltext als NOTE (`lib/services/place-export.ts`); ein
+  ursprünglicher PLAC aus den Rohdaten wird dann nicht darübergelegt.
 - Dieselbe Grenze wie `buildExport`; die App-Werte sind maßgeblich. Aus dem
   beim Import aufbewahrten Originaldatensatz kommt zurück, was die App nicht
   abbildet (fremde Tags, Koordinaten, strukturierte Anschriften,

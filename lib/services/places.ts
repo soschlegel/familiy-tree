@@ -9,7 +9,7 @@ import { distanceKm, labelForText, nameKindOf, searchGazetteer, type GeoEntry, t
 import { getGazetteer } from "../places/gazetteer-file";
 import { matchPlace } from "../places/match";
 import { normalizeForLookup, placeKey, splitPlaceText } from "../places/normalize";
-import { editableFamilyIds } from "../scope";
+import { canEditPerson, canEditRelationshipBetween, canViewPerson, editableFamilyIds, familyIdsOf } from "../scope";
 import type { ChangeSetHandle } from "../change-sets";
 import { forbiddenError, notFoundError, ServiceError, validationError } from "./errors";
 
@@ -1021,4 +1021,140 @@ export async function assignPlacesByAi(scope: Scope, raw: unknown[]): Promise<Ai
     });
   }
   return results;
+}
+
+// ---------------------------------------------------------------------------
+// Ort im Eingabefeld auswählen (Bearbeiter)
+// ---------------------------------------------------------------------------
+
+export const placeChoiceSchema = z
+  .object({
+    text: z.string().trim().min(1).max(500),
+    personId: z.string().min(1).max(64).optional(),
+    eventId: z.string().min(1).max(64).optional(),
+    relationshipId: z.string().min(1).max(64).optional(),
+    gazetteerId: z.string().min(1).max(32).optional(),
+    latitude: z.number().min(-90).max(90).optional(),
+    longitude: z.number().min(-180).max(180).optional(),
+    label: z.string().trim().min(1).max(200).optional(),
+    precision: z.enum(["PLACE", "REGION", "COUNTRY"]).optional(),
+  })
+  .refine((v) => [v.personId, v.eventId, v.relationshipId].filter(Boolean).length === 1, {
+    message: "Genau einen Eintrag angeben (personId, eventId oder relationshipId).",
+  })
+  .refine((v) => Boolean(v.gazetteerId) !== (v.latitude !== undefined && v.longitude !== undefined && Boolean(v.label)), {
+    message: "Entweder gazetteerId oder latitude, longitude und label (eigener Ort).",
+  });
+export type PlaceChoiceInput = z.infer<typeof placeChoiceSchema>;
+
+/** Ortstexte eines Eintrags, wenn der Benutzer ihn bearbeiten darf (sonst Fehler). */
+async function editablePlaceTexts(scope: Scope, input: PlaceChoiceInput): Promise<string[]> {
+  if (input.personId) {
+    const p = await prisma.person.findUnique({
+      where: { id: input.personId },
+      select: { birthPlace: true, deathPlace: true, families: { select: { familyId: true } } },
+    });
+    const fam = p?.families.map((f) => f.familyId) ?? [];
+    if (!p || !canViewPerson(scope, fam)) throw notFoundError("Person");
+    if (!canEditPerson(scope, fam)) throw forbiddenError("diese Person zu ändern");
+    return [p.birthPlace, p.deathPlace].filter((t): t is string => Boolean(t));
+  }
+  const relAccess = async (fromId: string, toId: string) => {
+    const fam = await familyIdsOf([fromId, toId]);
+    const from = fam.get(fromId) ?? [];
+    const to = fam.get(toId) ?? [];
+    if (!canViewPerson(scope, from) && !canViewPerson(scope, to)) return "hidden";
+    return canEditRelationshipBetween(scope, from, to) ? "edit" : "read";
+  };
+  if (input.relationshipId) {
+    const r = await prisma.relationship.findUnique({ where: { id: input.relationshipId } });
+    if (!r) throw notFoundError("Beziehung");
+    const a = await relAccess(r.fromPersonId, r.toPersonId);
+    if (a === "hidden") throw notFoundError("Beziehung");
+    if (a === "read") throw forbiddenError("diese Beziehung zu ändern");
+    return [r.startPlace, r.endPlace].filter((t): t is string => Boolean(t));
+  }
+  const e = await prisma.event.findUnique({
+    where: { id: input.eventId! },
+    select: { place: true, personId: true, relationship: { select: { fromPersonId: true, toPersonId: true } } },
+  });
+  if (!e) throw notFoundError("Ereignis");
+  if (e.personId) {
+    const fam = (await familyIdsOf([e.personId])).get(e.personId) ?? [];
+    if (!canViewPerson(scope, fam)) throw notFoundError("Ereignis");
+    if (!canEditPerson(scope, fam)) throw forbiddenError("dieses Ereignis zu ändern");
+  } else if (e.relationship) {
+    const a = await relAccess(e.relationship.fromPersonId, e.relationship.toPersonId);
+    if (a === "hidden") throw notFoundError("Ereignis");
+    if (a === "read") throw forbiddenError("dieses Ereignis zu ändern");
+  }
+  return e.place ? [e.place] : [];
+}
+
+/**
+ * Auswahl im Ortsfeld: ordnet GENAU den Freitext dieses Eintrags dem
+ * gewählten Ort zu (Verzeichniseintrag oder eigener Ort mit Koordinaten),
+ * Herkunft „von Hand“. Der Freitext bleibt unverändert; die Verbindung läuft
+ * wie immer über den normalisierten Text (kein Fremdschlüssel).
+ *
+ * Rechte: Wer den Eintrag (Person, Ereignis, Beziehung) bearbeiten darf —
+ * bewusst nicht die Admin-Route `/api/places`, die alle Ortstexte zeigt.
+ * Der Text muss an diesem Eintrag stehen. Eine von Hand bestätigte
+ * Zuordnung desselben Texts mit anderem Ziel ändert nur ein Administrator
+ * (CONFLICT) — sie gilt auch für Angaben anderer Personen. Andere Texte
+ * werden nie berührt.
+ */
+export async function choosePlaceForEntry(scope: Scope, raw: unknown): Promise<PlaceAssignmentDto> {
+  const parsed = placeChoiceSchema.safeParse(raw);
+  if (!parsed.success) throw validationError(parsed.error.issues.map((i) => ({ path: i.path.join(".") || "text", message: i.message })));
+  const input = parsed.data;
+  const key = placeKey(input.text);
+  const texts = await editablePlaceTexts(scope, input);
+  const own = texts.find((t) => placeKey(t) === key);
+  if (!own) throw validationError([{ path: "text", message: "Dieser Ortstext steht nicht an diesem Eintrag." }]);
+
+  let next: PlaceFields;
+  if (input.gazetteerId) {
+    const gaz = await getGazetteer();
+    const e = gaz.entries.find((x) => x.id === input.gazetteerId);
+    if (!e) throw notFoundError("Ort im Verzeichnis");
+    next = {
+      source: "MANUAL",
+      unresolvable: false,
+      precision: PRECISION_OF_KIND[e.kind],
+      latitude: e.lat,
+      longitude: e.lon,
+      label: labelForText(gaz, e, own),
+      countryCode: e.cc || null,
+      gazetteerId: e.id,
+      note: null,
+      uncertain: false,
+    };
+  } else {
+    next = {
+      source: "MANUAL",
+      unresolvable: false,
+      precision: input.precision ?? "PLACE",
+      latitude: Math.round(input.latitude! * 1e5) / 1e5,
+      longitude: Math.round(input.longitude! * 1e5) / 1e5,
+      label: input.label!.trim(),
+      countryCode: null,
+      gazetteerId: null,
+      note: null,
+      uncertain: false,
+    };
+  }
+  const existing = await prisma.place.findUnique({ where: { key } });
+  if (existing?.source === "MANUAL" && !existing.unresolvable) {
+    const same = existing.gazetteerId === next.gazetteerId && existing.latitude === next.latitude && existing.longitude === next.longitude;
+    if (same) return toAssignment(existing);
+    if (!scope.isAdmin) {
+      throw new ServiceError(
+        "CONFLICT",
+        `„${existing.text}“ ist bereits von Hand ${existing.label ?? "einem Ort"} zugeordnet — das ändert nur ein Administrator (Orte zuordnen).`,
+      );
+    }
+  }
+  nameChangeSet(scope, `Ort ausgewählt: „${own.slice(0, 80)}“`);
+  return toAssignment(await upsertPlace(scope, key, own, existing, next));
 }

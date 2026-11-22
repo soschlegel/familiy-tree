@@ -24,6 +24,8 @@ export type GeoEntry = {
   kind: GeoKind;
   /** Deutscher bzw. historischer Name, wenn er sich vom heutigen unterscheidet („Breslau“ zu „Wrocław“). */
   de: string;
+  /** Weitere Namen wie in der Datei (durch „;“ getrennt) — für die Ortsseite. */
+  alt: string;
 };
 
 export type Gazetteer = {
@@ -71,6 +73,7 @@ export function parseGazetteer(text: string): Gazetteer {
       pop: Number(c[7]) || 0,
       kind,
       de: (c[9] ?? "").trim(),
+      alt: c[2] ?? "",
     };
     if (!Number.isFinite(entry.lat) || !Number.isFinite(entry.lon)) continue;
     const idx = entries.length;

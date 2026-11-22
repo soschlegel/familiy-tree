@@ -150,6 +150,7 @@ Dienst über den `Scope`.
 | `POST /api/places/auto` | Automatisch zuordnen | `place:manage` |
 | `GET /api/places/search` | Suche im Ortsverzeichnis | `place:manage` |
 | `GET /api/places/suggest` | Vorschlag am Ortsfeld | angemeldet, Admin oder Bearbeiter |
+| `POST /api/places/choose` | Ort im Ortsfeld auswählen | wer den Eintrag bearbeiten darf |
 
 ---
 
@@ -436,6 +437,19 @@ Die Personenseite.
 - **Anzeige:** Filterformular, `ChangeSetList` (eine Zeile je Paket,
   aufklappbar über `GET /api/changes/[key]`), Seitennavigation.
 
+### `/places/[ref]` — `app/places/[ref]/page.tsx`
+
+- **Rechte:** angemeldet; Daten über `getPlacePage` (nur Angaben sichtbarer
+  Personen; ohne sichtbare Angabe 404 für Nicht-Admins).
+- **Parameter:** `ref` (`g-<gazetteerId>` bzw. `c-<Breite>_<Länge>`),
+  `?page=` für die Personenliste (50 je Seite).
+- **Anzeige:** Anzeigename, früherer/deutscher Name, Lage und Zuordnung
+  (heutiger Name, Region, Land, Koordinaten, Einwohner, Herkunft;
+  Begründungen nur für Admins), kleine Lagekarte (`PlaceMiniMap`), Link zur
+  Karte und (Admin) zu „Orte zuordnen“, Schreibweisen (Freitexte mit Anzahl,
+  weitere Namen aus dem Verzeichnis), Personen mit Art und Jahr der Angabe.
+- **Verlinkt von:** Personenseite (jeder zugeordnete Ort), MCP `get_place`.
+
 ### `/admin/places` — `app/admin/places/page.tsx`
 
 - **Rechte:** `place:manage`, sonst `/tree?denied=1`.
@@ -718,7 +732,15 @@ Fehlercodes aus den Grundregeln.
   Bearbeiter (sonst 403), `q` höchstens 500 Zeichen, `Cache-Control:
   private, no-store`. Ohne `q`: lädt das Ortsverzeichnis vorab
   (`{ warming: true }`). Liefert nur Verzeichnisdaten bzw. eigene Orte, nichts
-  über Personen.
+  über Personen. Mit `candidates=1` zusätzlich bis zu 10 Kandidaten zum
+  Auswählen (Verzeichnis und eigene Orte: Bezeichnung, Art, Koordinaten,
+  Einwohnerzahl, `own`, `recommended`).
+- **`POST /api/places/choose`** (`route(null)`, Dienst `choosePlaceForEntry`):
+  `{ text, personId | eventId | relationshipId, gazetteerId |
+  latitude+longitude+label(+precision) }` — Zuordnung „von Hand“ für genau
+  diesen Freitext; 403 ohne Bearbeitungsrecht, 400 wenn der Text nicht am
+  Eintrag steht, 409 bei abweichender, von Hand bestätigter Zuordnung
+  (außer Admin). Antwort `{ assignment }`.
 - **`GET /api/places/search`**: Suche im mitgelieferten Ortsverzeichnis,
   `q` höchstens 100 Zeichen.
 

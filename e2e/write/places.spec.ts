@@ -1,7 +1,7 @@
 import type { APIRequestContext } from "@playwright/test";
 
 import { test, expect, authFile } from "../support/fixtures";
-import { apiAs } from "../support/api";
+import { apiAs, deletePerson, uniq } from "../support/api";
 import { mock } from "../support/mock";
 
 /**
@@ -118,6 +118,40 @@ test.describe("Vorschlag am Ortsfeld", () => {
     await expect(field).toHaveValue("Breslau, Schlesien");
     await page.getByLabel("Sterbeort").fill("Qxzvwy Nirgendwo");
     await expect(page.getByTestId("place-hint").nth(1)).toContainText("Ort nicht gefunden");
+  });
+});
+
+test.describe("Ort auswählen, Personenseite, Ortsseite", () => {
+  test.use({ storageState: authFile("editor") });
+  test("Auswahl im Ortsfeld wird gespeichert; Freitext bleibt, Link zur Ortsseite", async ({ page }) => {
+    const surname = `Ortswahl${uniq().replace(/[^a-z]/g, "")}`;
+    await page.goto("/people/new");
+    await page.getByLabel("Vorname").fill("E2E Ida");
+    await page.getByLabel("Nachname").fill(surname);
+    await page.getByLabel("Geburtsort").fill("Danzig");
+    const hint = page.getByTestId("place-hint").first();
+    await expect(hint).toContainText("Gdańsk (Danzig)");
+    await hint.getByTestId("place-choose").click();
+    await hint.getByTestId("place-candidates").getByRole("button", { name: /^Gdańsk/ }).first().click();
+    await expect(hint).toHaveAttribute("data-status", "chosen");
+    await page.getByRole("button", { name: "Person anlegen" }).click();
+    await expect(page).toHaveURL(/\/people\/[^/]+$/);
+    const id = page.url().split("/").pop()!;
+    try {
+      const birth = page.getByTestId("person-birth");
+      await expect(birth.getByTestId("place-link")).toHaveText("Danzig");
+      await expect(birth).toContainText("→ Gdańsk, Polen");
+      await birth.getByTestId("place-link").click();
+      await expect(page.getByTestId("place-title")).toHaveText("Gdańsk (Danzig), Polen");
+      await expect(page.getByTestId("place-entries")).toContainText(surname);
+      await expect(page.getByTestId("place-texts")).toContainText("Danzig");
+      await expect(page.getByTestId("place-sources")).toContainText("von Hand");
+    } finally {
+      const api = await apiAs("admin");
+      await deletePerson(api, id);
+      await api.put("/api/places", { data: { action: "reset", text: "Danzig" } });
+      await api.dispose();
+    }
   });
 });
 

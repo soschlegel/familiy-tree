@@ -6,7 +6,7 @@ import { useState } from "react";
 
 import { apiFetch, jsonBody } from "./api-client";
 import { DateInput, dateInputError, datePayload } from "./DateInput";
-import { PlaceHint } from "./PlaceHint";
+import { PlaceHint, savePlaceChoices, type PlaceChoice } from "./PlaceHint";
 import { parseFuzzyDate } from "@/lib/dates";
 import { personDateIssues } from "@/lib/validation";
 
@@ -97,6 +97,8 @@ export function PersonForm({
     families.length > 0 ? [families[0].id] : [],
   );
   const isEdit = Boolean(initial?.id);
+  // Im Ortsfeld ausgewählte Orte (gespeichert nach der Person).
+  const [placeChoice, setPlaceChoice] = useState<Partial<Record<"birthPlace" | "deathPlace", PlaceChoice | null>>>({});
 
   const set = <K extends keyof PersonFormValues>(
     key: K,
@@ -146,6 +148,9 @@ export function PersonForm({
       return;
     }
 
+    const choiceErrors = await savePlaceChoices({ personId: res.data.id }, [placeChoice.birthPlace, placeChoice.deathPlace]);
+    if (choiceErrors.length) window.alert(`Gespeichert. ${choiceErrors.join(" ")}`);
+
     // `saving` bleibt gesetzt, bis die Folgeseite da ist — kein Doppelklick.
     router.push(`/people/${res.data.id}`);
     router.refresh();
@@ -189,7 +194,13 @@ export function PersonForm({
           value={raw}
           onChange={(e) => set(key, e.target.value)}
         />
-        {opts.place && <PlaceHint text={raw} />}
+        {opts.place && (
+          <PlaceHint
+            text={raw}
+            chosen={placeChoice[key as "birthPlace" | "deathPlace"]}
+            onChoose={(c) => setPlaceChoice((pc) => ({ ...pc, [key]: c }))}
+          />
+        )}
         {err && (
           <span id={`${id}-error`} className="field-error">
             {err}

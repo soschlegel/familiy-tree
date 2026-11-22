@@ -871,7 +871,7 @@ Gruppenpaar, Dauer), `LinkOptions`, `linkImports`, `evidenceSentence`.
 **Zweck:** Austauschformat (JSON/ZIP) für Export **und** Import in einer
 Datei, damit beide Richtungen nicht auseinanderlaufen.
 
-**Wichtige Funktionen/Typen:** `EXCHANGE_VERSION` (4), Zod-Schemata für
+**Wichtige Funktionen/Typen:** `EXCHANGE_VERSION` (5), `placeSchema`, Zod-Schemata für
 Medien, Personen, Beziehungen, Quellen, Belege, Ereignisse, Namen,
 Fremdkennungen, Rohdaten und die ganze Datei (`exchangeSchema`), Typen
 `Exchange…`, `exchangeDateColumns` (Datumsspalten aus der Datei; ältere
@@ -881,7 +881,9 @@ Kollision mit ID-Endung).
 
 **Regeln:** Versionen: 2 Genauigkeit/Zusatz, Quellen/Belege; 3 Bereiche,
 Wortlaut, Namensteile, Ereignisse, Namen, Fremdkennungen, Rohdaten; 4
-Bilder an Quellen, Ereignissen und Belegen. Neue Felder sind optional —
+Bilder an Quellen, Ereignissen und Belegen; 5 Ortszuordnungen (`places`:
+je Ortstext Herkunft, Koordinaten, Bezeichnung, Verzeichniskennung; der
+Freitext an Personen, Beziehungen und Ereignissen bleibt). Neue Felder sind optional —
 ältere Dateien bleiben importierbar. Importläufe und Herkunftsangaben
 (`ImportLink`) gehören zur Instanz und werden nicht exportiert.
 
@@ -1131,8 +1133,12 @@ Personen-/Quellen-Metadaten, Fotos, Hinweise, Eigentümer), `resolveNames`,
 `pickMain`, `pickPrimaryName`, `sourceKind`, `personKey`, `pairKey`,
 `parentKey`, `eventKeys`, `recentWithoutDeath`, `indexOriginalPerson`,
 `indexOriginalFamily`, `UNKNOWN_GIVEN_NAME` („N.N.“), `RAW_TYPES`,
-`RAW_FORMAT`, `jsonClean`.
+`RAW_FORMAT`, `jsonClean`, `originalPlaceText`.
 **Regeln:**
+- Ortstexte: Steht unter einem PLAC eine NOTE „Originaltext: …“ (so schreibt
+  der eigene GEDCOM-Export zugeordnete Orte, `lib/services/place-export.ts`),
+  gilt dieser Text statt des PLAC — die Rundreise Export → Import lässt den
+  Freitext unverändert, nichts wird als geändert gemeldet.
 - Schlüssel (`externalKey`): Person `UID:` → `RIN:` → `XREF:`; Paar
   `PAIR:a|b`; Eltern-Kind `PARENT:a>b`; Ereignis eigene `_UID`, sonst
   `<Träger>/<Art>#<n>`; Belege `…/SOUR#n`.
@@ -1372,7 +1378,8 @@ GeoNames CC BY 4.0 und Natural Earth) als Datenstruktur und Suche — kein
 Dienst im Netz, Ortsnamen verlassen den Server nie.
 
 **Wichtige Funktionen/Typen:** `GeoKind` (Ort, Region erster Ebene,
-historische Landschaft, Land), `GeoEntry`, `Gazetteer` (Einträge, Namen →
+historische Landschaft, Land), `GeoEntry` (mit `de` — deutscher bzw.
+früherer Name — und `alt`, den weiteren Namen für die Ortsseite), `Gazetteer` (Einträge, Namen →
 Einträge inkl. weiterer Namen, Regionen, Länder, sortierte Liste für
 Präfixsuche), `parseGazetteer`, `entryLabel` und `labelForText`
 (Anzeigename, siehe unten), `searchGazetteer` (Präfixsuche; genaue Treffer

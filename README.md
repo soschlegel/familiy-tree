@@ -584,6 +584,28 @@ Automatik überschreibt sie nie, der Admin **bestätigt** sie (→ von Hand) ode
 ändert sie. Mit eigenen Koordinaten angelegte Orte (Wüstung, Hof, Weiler)
 sind **eigene Orte** und werden bei späteren Texten wieder vorgeschlagen.
 
+**Ortsseiten** (`/places/<Kennung>`, für alle Angemeldeten): Jeder
+zugeordnete Ort hat eine Seite mit heutigem Namen (früherer/deutscher Name),
+Region, Land, Koordinaten und kleiner Lagekarte, Herkunft der Zuordnung
+(Begründung nur für Admins), den Freitexten, die auf ihn zeigen, weiteren
+Namen aus dem Verzeichnis und den Personen mit Angaben dort (Geburt, Tod,
+Heirat, Scheidung, Ereignisse — mit Art und Jahr), 50 je Seite. Ein Ort sind
+alle Zuordnungen mit demselben Verzeichniseintrag bzw. bei eigenen Orten
+denselben Koordinaten. Es erscheinen nur Personen, die der Benutzer sehen
+darf; Freitexte nur gesperrter Personen fehlen, ein Ort ohne sichtbare
+Angabe gilt als nicht vorhanden. Auf der **Personenseite** wird jeder
+zugeordnete Ort zum Link, angezeigt bleibt der Freitext, dazu dezent der
+erkannte Ort, wenn er anders heißt („Breslau → Wrocław, Polen“).
+
+**Echte Orte auswählen:** Unter jedem Ortsfeld öffnet „Ort wählen …“ die
+Kandidaten (Verzeichnis und eigene Orte). Die Wahl wird nach dem Speichern
+als Zuordnung „von Hand“ genau für diesen Freitext gespeichert
+(`POST /api/places/choose`, für jeden, der den Eintrag bearbeiten darf);
+der Text bleibt wie eingegeben. Ohne Auswahl ordnet die App automatisch zu.
+Es gibt keinen Fremdschlüssel an Person oder Ereignis — die Verbindung läuft
+über den normalisierten Ortstext. Eine von Hand bestätigte, andere
+Zuordnung desselben Texts ändert nur ein Admin.
+
 **Vorschlag am Ortsfeld:** Unter Geburts- und Sterbeort, dem Ort eines
 Ereignisses und den Orten einer Ehe/Beziehung zeigt die App beim Tippen
 dezent, welcher Ort erkannt wird — dieselbe Regel wie die automatische
@@ -929,6 +951,7 @@ vorbei direkt zur Datenbank gibt es nicht.
 | `search_sources` | Quellen suchen (Titel, Verfasser, Archiv, Signatur; Art) mit Zahl der sichtbaren Belege |
 | `get_source` | Quelle mit Abschrift und allem, wofür sie zitiert wird (verborgene Belege nur gezählt), dazu `images` (Bilder der Quelle) und `citations[].media` |
 | `suggest_place` | Kandidaten für einen Ortstext („A, B oder C“): Wahl der automatischen Zuordnung, gleichnamige Orte mit Land, Einwohnerzahl, Entfernung, welcher Name gepasst hat (früherer/deutscher Name wie „Breslau“), eigene Orte; nur Verzeichnisdaten |
+| `get_place` | Ein zugeordneter Ort wie auf seiner Seite (Name, Region, Land, Koordinaten, weitere Namen, Freitexte, Personen mit Angaben dort — nur sichtbare); `get_person` und `list_events` nennen zu jedem Ortstext den zugeordneten Ort (`places`) |
 | `list_places` | Nur Administratoren: alle Ortstexte mit Anzahl, Status (offen, automatisch, von KI, von Hand, nicht zuordenbar) und Kontext (Feldarten, Jahre — ohne Personen), 50 je Seite |
 
 Nur mit der Stufe „lesen und schreiben“ (siehe unten) kommen hinzu:
@@ -1996,6 +2019,16 @@ er sehen darf — verborgene Personen fehlen samt aller Verweise auf sie:
   dem Ereignis (`EVENT_DETAIL`) und unter dem Beleg (`SOURCE_CITATION`), wie
   GEDCOM 5.5.1 es an diesen Stellen erlaubt. Bilder am Beleg einer
   Eltern-Kind-Beziehung stehen am Beleg beim Kind.
+- **Orte im GEDCOM** (Entscheidung des Eigentümers, immer): Ein zugeordneter
+  Ortstext steht als heutige Form „Ort, Region, Land“ im `PLAC` (Namen aus
+  dem Ortsverzeichnis, z.B. „Wrocław, Województwo dolnośląskie, Polen“),
+  darunter `MAP`/`LATI`/`LONG` und — wenn er abweicht — der Originaltext als
+  `NOTE Originaltext: Breslau`. Nicht zugeordnete Orte bleiben Freitext. Der
+  eigene GEDCOM-Import liest den Originaltext zurück; eine wieder
+  eingespielte eigene Datei ändert die Ortsangaben deshalb nicht. Das
+  Austauschformat (JSON/ZIP, Version 5) behält den Freitext und nimmt die
+  Zuordnungen zusätzlich mit; beim Einspielen werden nur Ortstexte ohne
+  vorhandene Zuordnung übernommen.
 
 Beide Knöpfe öffnen einen Dialog mit den Familien, die der Benutzer sehen
 darf (alle vorausgewählt, „Alle“/„Keine“, für Administratoren zusätzlich

@@ -7,7 +7,7 @@ import { useId, useState } from "react";
 import { PersonPicker, type PickerPerson } from "./PersonPicker";
 import { apiFetch, jsonBody } from "./api-client";
 import { DateInput, dateFieldFrom, dateInputError, datePayload } from "./DateInput";
-import { PlaceHint } from "./PlaceHint";
+import { PlaceHint, savePlaceChoices, type PlaceChoice } from "./PlaceHint";
 import { formatDateOf } from "@/lib/tree-layout";
 import { toDateInput, toFuzzyDate } from "@/lib/dates";
 import { PARTNER_SUBTYPE_LABEL, since } from "@/lib/partner-labels";
@@ -117,7 +117,7 @@ function RelationDateEditor({
   relation: RelationRow;
   busy: boolean;
   fields: Record<string, string>;
-  onSave: (data: PatchData) => void;
+  onSave: (data: PatchData, placeChoices: (PlaceChoice | null)[]) => void;
   onCancel: () => void;
 }) {
   const [subtype, setSubtype] = useState(relation.subtype);
@@ -147,6 +147,8 @@ function RelationDateEditor({
   const [endAsPhrase, setEndAsPhrase] = useState(initialEnd.asPhrase);
   const [startPlace, setStartPlace] = useState(relation.startPlace ?? "");
   const [endPlace, setEndPlace] = useState(relation.endPlace ?? "");
+  const [startChoice, setStartChoice] = useState<PlaceChoice | null>(null);
+  const [endChoice, setEndChoice] = useState<PlaceChoice | null>(null);
 
   const labels = DATE_FIELDS[subtype] ?? NO_FIELDS;
   const invalid =
@@ -165,7 +167,7 @@ function RelationDateEditor({
           ...datePayload("endDate", labels.end ? end : "", endAsPhrase),
           startPlace: labels.startPlace ? startPlace.trim() || null : null,
           endPlace: labels.endPlace ? endPlace.trim() || null : null,
-        });
+        }, [labels.startPlace ? startChoice : null, labels.endPlace ? endChoice : null]);
       }}
       className="mt-2 flex flex-wrap items-end gap-2 border-t border-stone-200 pt-3 max-sm:[&>div]:w-full max-sm:[&_.field]:w-full dark:border-stone-800"
     >
@@ -201,7 +203,7 @@ function RelationDateEditor({
           {(id) => (
             <>
               <input id={id} className="field w-48" value={startPlace} onChange={(e) => setStartPlace(e.target.value)} />
-              <PlaceHint text={startPlace} />
+              <PlaceHint text={startPlace} chosen={startChoice} onChoose={setStartChoice} />
             </>
           )}
         </Field>
@@ -227,7 +229,7 @@ function RelationDateEditor({
           {(id) => (
             <>
               <input id={id} className="field w-48" value={endPlace} onChange={(e) => setEndPlace(e.target.value)} />
-              <PlaceHint text={endPlace} />
+              <PlaceHint text={endPlace} chosen={endChoice} onChoose={setEndChoice} />
             </>
           )}
         </Field>
@@ -274,6 +276,8 @@ export function RelationshipEditor({
   const [endDate, setEndDate] = useState("");
   const [startPlace, setStartPlace] = useState("");
   const [endPlace, setEndPlace] = useState("");
+  const [startChoice, setStartChoice] = useState<PlaceChoice | null>(null);
+  const [endChoice, setEndChoice] = useState<PlaceChoice | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
@@ -301,6 +305,8 @@ export function RelationshipEditor({
     setEndDate("");
     setStartPlace("");
     setEndPlace("");
+    setStartChoice(null);
+    setEndChoice(null);
   }
 
   async function add(e: React.FormEvent) {
@@ -324,7 +330,7 @@ export function RelationshipEditor({
           ? { type: "PARENT_OF", fromPersonId: personId, toPersonId: otherId }
           : { type: "PARTNER_OF", fromPersonId: personId, toPersonId: otherId };
 
-    const res = await apiFetch(
+    const res = await apiFetch<{ id: string }>(
       "/api/relationships",
       jsonBody("POST", {
         ...body,
@@ -335,13 +341,18 @@ export function RelationshipEditor({
         endPlace: dateLabels.endPlace ? endPlace.trim() || null : null,
       }),
     );
-    setBusy(false);
-
     if (!res.ok) {
+      setBusy(false);
       setError(res.message);
       setFields(res.fields);
       return;
     }
+    const choiceErrors = await savePlaceChoices({ relationshipId: res.data.id }, [
+      dateLabels.startPlace ? startChoice : null,
+      dateLabels.endPlace ? endChoice : null,
+    ]);
+    setBusy(false);
+    if (choiceErrors.length) setError(choiceErrors.join(" "));
 
     const other = options.find((p) => p.id === otherId);
     setNotice(
@@ -351,17 +362,20 @@ export function RelationshipEditor({
     router.refresh();
   }
 
-  async function save(id: string, data: PatchData) {
+  async function save(id: string, data: PatchData, choices: (PlaceChoice | null)[] = []) {
     if (busy) return;
     begin();
     const res = await apiFetch(`/api/relationships/${id}`, jsonBody("PATCH", data));
-    setBusy(false);
 
     if (!res.ok) {
+      setBusy(false);
       setError(res.message);
       setFields(res.fields);
       return;
     }
+    const choiceErrors = await savePlaceChoices({ relationshipId: id }, choices);
+    setBusy(false);
+    if (choiceErrors.length) setError(choiceErrors.join(" "));
     setEditing(null);
     setNotice("Änderung gespeichert.");
     router.refresh();
@@ -446,7 +460,7 @@ export function RelationshipEditor({
                   relation={r}
                   busy={busy}
                   fields={fields}
-                  onSave={(data) => void save(r.id, data)}
+                  onSave={(data, choices) => void save(r.id, data, choices)}
                   onCancel={() => setEditing(null)}
                 />
               )}
@@ -529,7 +543,7 @@ export function RelationshipEditor({
               {(id) => (
                 <>
                   <input id={id} className="field w-48" value={startPlace} onChange={(e) => setStartPlace(e.target.value)} />
-                  <PlaceHint text={startPlace} />
+                  <PlaceHint text={startPlace} chosen={startChoice} onChoose={setStartChoice} />
                 </>
               )}
             </Field>
@@ -551,7 +565,7 @@ export function RelationshipEditor({
               {(id) => (
                 <>
                   <input id={id} className="field w-48" value={endPlace} onChange={(e) => setEndPlace(e.target.value)} />
-                  <PlaceHint text={endPlace} />
+                  <PlaceHint text={endPlace} chosen={endChoice} onChoose={setEndChoice} />
                 </>
               )}
             </Field>
