@@ -56,7 +56,12 @@ Anwender** (Familienmitglieder ohne Technikwissen), je Thema eine Datei
   Screenshots ansehen, Tests wiederholen), zusammenführen, ausrollen,
   berichten.
 - Die **Umsetzung übernehmen Sub-Agenten**: je in sich geschlossenem Paket
-  einer, unabhängige Pakete parallel. Kleinigkeiten (wenige Zeilen,
+  einer, unabhängige Pakete parallel — **höchstens zwei gleichzeitig**
+  (Tokenverbrauch), weitere nacheinander. Sub-Agenten laufen auf **Opus**
+  (beim Start ausdrücklich angeben, nicht das Modell der Hauptsitzung
+  erben lassen). Einen Agenten mit großem Verlauf nicht fortsetzen:
+  kurze Übergabenotiz im Worktree schreiben lassen und einen frischen mit
+  knappem Auftrag starten. Kleinigkeiten (wenige Zeilen,
   Konfliktlösung beim Zusammenführen, Doku-Nachträge) darf die Hauptsitzung
   selbst erledigen.
 - **Jeder Sub-Agent arbeitet in einem eigenen Git-Worktree** (z.B.
@@ -68,6 +73,9 @@ Anwender** (Familienmitglieder ohne Technikwissen), je Thema eine Datei
   Ziel, Entscheidungen des Eigentümers, Grenzen (nicht pushen, nicht mergen,
   keinen fremden Ordner ändern), Prüfauftrag, gewünschter Bericht — und
   immer: Komponenten-Doku fortschreiben (Abschnitt 1).
+- **Sub-Agenten testen gezielt:** Typecheck, Lint, Vitest und nur die
+  Playwright-Specs der Bereiche, die sie geändert haben. Den
+  Playwright-Gesamtlauf startet kein Sub-Agent.
 - Berichte von Sub-Agenten sind Behauptungen, keine Belege: Kernaussagen
   (Tests grün, Migration ergänzend, nichts Fremdes geändert) selbst
   nachprüfen, bevor ausgerollt wird.
@@ -84,6 +92,10 @@ Anwender** (Familienmitglieder ohne Technikwissen), je Thema eine Datei
   setup → read → write ausführt und den Server wieder beendet (kein
   Neustart zwischen read und write nötig). Vorher keinen von Hand
   gestarteten Server auf dem Port laufen lassen (er würde mitbenutzt).
+- **Größere E2E-Läufe nie von selbst starten:** Der Gesamtlauf (und große
+  Teilläufe) läuft nur auf Anfrage des Eigentümers — oder die Hauptsitzung
+  schlägt ihn vor dem Ausrollen als geführte Frage vor und startet ihn erst
+  nach Bestätigung, einmal auf dem zusammengeführten Stand.
 - Veröffentlichte Migrationen nie nachträglich ändern.
 - **Neuigkeiten:** Jedes Release nach `main` bekommt einen neuen Eintrag
   ganz oben in [CHANGELOG.md](CHANGELOG.md) — im selben Stand wie die

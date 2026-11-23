@@ -17,6 +17,39 @@ Regeln für neue Einträge (AGENTS.md, Abschnitt 3 „Ausrollen“):
 - Geprüft von tests/release-notes.test.ts (lib/release-notes.ts).
 -->
 
+## 2026-11-23.1 — Zusammenführen leichter, Herkunft sichtbar, KI prüft Dubletten vor
+
+- Personenseite: Der neue Knopf „Zusammenführen …“ zeigt mögliche Dubletten
+  dieser Person mit Begründung und darunter eine Suche nach jeder anderen
+  Person. Zusammengeführt wird weiterhin erst im Vergleich.
+- Nach dem Zusammenführen nennt die Ergebnisseite Verwandte, die jetzt
+  doppelt dastehen. Die sicheren lassen sich nach einer Vorschau gemeinsam
+  zusammenführen.
+- Sind nur die Eltern doppelt erfasst, geht „Erst die Eltern, dann dieses
+  Paar“ in einem Schritt.
+- Alte Links und Lesezeichen einer zusammengeführten Person führen von
+  selbst zur bleibenden Person.
+- Stammbaum: Der Schalter „Herkunft“ zeigt an jeder Karte, aus welchem
+  Import eine Person stammt (Buchstaben A, B, C …; „H“ = von Hand erfasst).
+  Ein Klick in der Legende hebt alle Personen eines Imports hervor.
+- Personenseite: Der Block „Herkunft“ nennt die Importe der Person und ob
+  sie aus mehreren Einträgen zusammengeführt wurde.
+- Importe haben lesbare Namen: Administratoren benennen sie unter
+  „Verwaltung“ → „Daten“. „Importe verbinden“ zeigt dazu eine Übersicht, wie
+  viele Personen zwei Importe schon verbinden.
+- Der KI-Assistent kann mögliche Dubletten vorprüfen und hinterlässt am Paar
+  eine Einschätzung mit Begründung: „zusammenführen“, „strittig“ oder „kein
+  Duplikat“. Du siehst sie unter „Mögliche Dubletten“ (mit Filter), im
+  Hinweis auf der Personenseite und im Dialog „Zusammenführen …“.
+  Zusammenführen kann die KI nie — das entscheidest immer du.
+- Wurde ein Eintrag seit der Einschätzung geändert, steht „veraltet“ daran.
+- Seiten laden zuverlässiger: Das gelegentliche kurze Neuaufbauen einer
+  Seite direkt nach dem Laden ist behoben.
+- Mehr Schutz für deine Daten: Scans einer gemeinsam genutzten Quelle kann
+  nur noch löschen, wer auch die Quelle löschen dürfte. Die KI lehnt das
+  Löschen ab, wenn dabei ein Bild verloren ginge. In der Änderungsgeschichte
+  sind Namen fremder KI-Schlüssel nicht mehr zu sehen.
+
 ## 2026-11-22.5 — Orte in der Anzeige
 
 - Auf der Personenseite steht bei zugeordneten Orten jetzt der vollständige

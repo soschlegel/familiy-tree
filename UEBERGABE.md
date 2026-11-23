@@ -1,4 +1,4 @@
-# Übergabe (Stand 22.11.2026)
+# Übergabe (Stand 23.11.2026)
 
 Arbeitsnotiz für die Fortsetzung auf einem anderen Rechner. Beim Weiterarbeiten
 aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
@@ -10,15 +10,22 @@ aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
   Portainer aktualisiert den Stack von dort. **Ein Merge ist ein
   Produktiv-Deployment auf echte Daten.**
 - `optimierung` = Arbeitsbranch, zum Zeitpunkt der Übergabe gleich `main`.
-- Zuletzt ausgerollt (22.11., viertes Release, Kennung 2026-11-22.4): Orte
-  ohne Knopfdruck und mit KI (siehe nächster Punkt), Migration
-  `20261124000001_orte_ki` (letzter Migrationsordner). Davor am 22.11.:
-  Neuigkeiten, Hilfe, E2E gegen Produktions-Build (2026-11-22.3); Karte/Orte,
-  Schlüsselverwaltung, Komponenten-Doku, Aufräumrunde (2026-11-22.2); Bilder
-  an Einträgen (2026-11-22.1).
-- Prüfstand des letzten Pakets: Migrationen ↔ Schema ohne Abweichung,
-  Typecheck, Lint, Vitest 877/877; `npm run test:e2e` (Produktions-Build):
-  317 bestanden, 1 übersprungen, 149 s; lokaler Docker-Build ok.
+- Release 2026-11-23.1 (23.11.): Zusammenführen-Komfort mit Umleitung alter
+  Kennungen (`20261125000000_person_redirect`), KI-Vorprüfung von Dubletten
+  (`20261125000001_duplicate_review`), Herkunft der Importe
+  (`20261125000002_import_anzeigename`, letzter Migrationsordner),
+  Hydration-Fehler behoben (Rückportierung einer React-Korrektur beim Bauen,
+  `lib/next-patches/`), Sicherheitsprüfung (`docs/sicherheit.md`). Davor am
+  22.11.: Orte in der Anzeige (2026-11-22.5), Orte ohne Knopfdruck und mit
+  KI (2026-11-22.4), Neuigkeiten/Hilfe/E2E gegen Produktions-Build (.3),
+  Karte/Orte, Schlüsselverwaltung, Komponenten-Doku (.2), Bilder an
+  Einträgen (.1).
+- Prüfstand: Migrationen ↔ Schema ohne Abweichung, alle drei neuen
+  Migrationen rein ergänzend, Typecheck, Lint, Vitest 956/956.
+- Arbeitsweise seit 23.11. (AGENTS.md, Abschnitt 2 und 3): höchstens zwei
+  Sub-Agenten gleichzeitig, auf Opus, mit kurzem Auftrag; Agenten testen
+  gezielt; der Playwright-Gesamtlauf läuft nur auf Anfrage des Eigentümers
+  bzw. nach seiner Bestätigung vor dem Ausrollen.
 - Paket **Orte ohne Knopfdruck und mit KI** (ausgerollt 22.11.): Vorschlag am Ortsfeld (`components/PlaceHint.tsx`,
   `GET /api/places/suggest`), automatische Zuordnung neuer Ortstexte nach
   dem Speichern und nach Importen im Hintergrund (`queuePlaceAutoAssign`,
@@ -37,10 +44,11 @@ aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
   Version 5 mit `places`, MCP `get_place` und `places` in
   `get_person`/`list_events`. Prüfstand: Vitest 877/877, Playwright
   (Produktions-Build) 317/317, `gedcom:check` ohne Warnungen.
-- Offen: Hydration-Fehler (React #418) tritt auch im Produktions-Build bei
-  wenigen Prozent der Seitenaufrufe auf (alle Seiten) — eigene Untersuchung
-  nötig; Git-Verlauf umschreiben (echte Namen in alter Demofamilie,
-  Autor-E-Mail, Beispielorte) — nur nach Bestätigung des Eigentümers.
+- Offen: Git-Verlauf umschreiben (echte Namen in alter Demofamilie,
+  Autor-E-Mail, Beispielorte) — vom Eigentümer bestätigt, als letzter
+  Schritt ohne aktive Worktrees. Aus der Sicherheitsprüfung: eine
+  Content-Security-Policy für die Seiten als eigenes Paket; Anfragegrenzen
+  für Unangemeldete und HSTS gehören in den Reverse-Proxy.
 - Beim Ausrollen beachten: Der Reverse-Proxy muss für `/api/mcp` größere
   Anfragen durchlassen (Bilder als base64 über MCP, bis
   MAX_UPLOAD_BYTES × 4/3 + 1 MiB), sonst antwortet er mit 413.
