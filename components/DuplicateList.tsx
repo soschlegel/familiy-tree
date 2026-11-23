@@ -6,6 +6,8 @@ import { useState } from "react";
 
 import { apiFetch, jsonBody } from "./api-client";
 import { lifeSpan } from "@/lib/tree-layout";
+import { VERDICT_LABEL } from "@/lib/duplicate-verdicts";
+import { formatDateTime } from "./ai-access-labels";
 import type { DuplicateCandidate } from "@/lib/services/duplicates";
 import type { BulkPreview, BulkResult } from "@/lib/services/merge-bulk";
 import type { PersonBrief } from "@/lib/services/dto";
@@ -19,6 +21,13 @@ const fullName = (p: PersonBrief) => [p.givenName, p.familyName].filter(Boolean)
  * Liste möglicher Dubletten mit Aktionen: Zusammenführen (Vergleich), „kein
  * Duplikat“ (dauerhaft ausblenden) und — nur für die Klasse „sicher“ —
  * mehrere auswählen, gemeinsame Vorschau, in einem Rutsch zusammenführen.
+ *
+ * KI-Vorprüfung: Liegt zu einem Paar eine Einschätzung vor (MCP
+ * review_duplicate), steht sie als Hinweis am Paar — Urteil, Begründung, wer
+ * und wann, „veraltet“ nach einer Änderung. Sie wählt NIE etwas vor: Die
+ * Auswahl zum Sammel-Zusammenführen hängt allein an der Klasse „sicher“, der
+ * Link zum Vergleich bleibt unverändert, und ein KI-Urteil „kein Duplikat“
+ * blendet nichts aus — das tut erst der Mensch mit „übernehmen“.
  */
 export function DuplicateList({ items, emptyText }: { items: DuplicateCandidate[]; emptyText?: string }) {
   const router = useRouter();
@@ -166,6 +175,50 @@ export function DuplicateList({ items, emptyText }: { items: DuplicateCandidate[
             </div>
             <p className="mt-1 text-xs muted">{d.reasons.join(" · ")}</p>
             {d.conflicts.length > 0 && <p className="mt-1 text-xs text-red-700 dark:text-red-300">Widerspruch: {d.conflicts.join(" · ")}</p>}
+            {d.review && (
+              <div
+                className="mt-2 rounded-md border border-stone-200 px-2 py-1.5 dark:border-stone-700"
+                data-testid="dup-review"
+                data-verdict={d.review.verdict}
+                data-stale={d.review.stale ? "true" : "false"}
+              >
+                <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                  <span className="badge-alt">KI-Einschätzung: {VERDICT_LABEL[d.review.verdict]}</span>
+                  {d.review.stale && (
+                    <span className="badge" data-testid="dup-review-stale">
+                      veraltet
+                    </span>
+                  )}
+                  <span className="muted">
+                    {[d.review.userName && `über den KI-Zugang von ${d.review.userName}`, d.review.tokenName && `Schlüssel „${d.review.tokenName}“`]
+                      .filter(Boolean)
+                      .join(", ")}
+                    {(d.review.userName || d.review.tokenName) && " · "}
+                    <time dateTime={d.review.reviewedAt} suppressHydrationWarning>
+                      {formatDateTime(d.review.reviewedAt)}
+                    </time>
+                  </span>
+                </p>
+                <p className="mt-1 whitespace-pre-line text-xs">{d.review.reason}</p>
+                {d.review.suggestedKeepId && (
+                  <p className="mt-1 text-xs muted">
+                    Vorschlag der KI: Es bleibt „{fullName(d.review.suggestedKeepId === d.a.id ? d.a : d.b)}
+                    {lifeSpan(d.review.suggestedKeepId === d.a.id ? d.a : d.b) ? `, ${lifeSpan(d.review.suggestedKeepId === d.a.id ? d.a : d.b)}` : ""}“. Welcher Eintrag
+                    bleibt, wählen Sie im Vergleich.
+                  </p>
+                )}
+                <p className="mt-1 text-xs muted">
+                  {d.review.stale
+                    ? "Seit dieser Einschätzung wurde mindestens einer der beiden Einträge geändert — sie passt vielleicht nicht mehr."
+                    : "Nur ein Hinweis: Die KI führt nichts zusammen und ändert die Klasse nicht. Bitte selbst prüfen."}
+                </p>
+                {d.review.verdict === "NOT_DUPLICATE" && !d.review.stale && d.canMerge && (
+                  <button type="button" className="btn-link btn-sm mt-1" disabled={busy === key(d)} onClick={() => void dismiss(d)} data-testid="dup-review-adopt">
+                    Als „kein Duplikat“ übernehmen
+                  </button>
+                )}
+              </div>
+            )}
             {d.canMerge && (
               <div className="mt-2 flex flex-wrap gap-2">
                 <Link href={`/people/merge?keep=${d.a.id}&other=${d.b.id}`} className="btn-secondary btn-sm" data-testid="dup-merge">

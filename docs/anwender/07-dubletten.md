@@ -43,8 +43,29 @@ Auf „Mögliche Dubletten“ lassen sich mehrere **sichere** Paare auswählen (
 
 > **Vorsicht:** Ein falsches Zusammenführen ist der schlimmste Fehler im Stammbaum — es vermischt zwei Menschen. Einen Knopf „rückgängig“ gibt es nicht; nur der Administrator kann es mühsam aus dem Protokoll oder einer Sicherung wiederherstellen. Im Zweifel: nicht zusammenführen, sondern erst in den Quellen nachsehen. Gleichnamige Cousins mit ähnlichen Daten sind häufiger, als man denkt.
 
+## Von der KI vorgeprüfte Paare
+
+Ein KI-Assistent mit [KI-Zugang](10-ki-zugang.md) kann die möglichen Dubletten für dich **vorprüfen**: Er liest beide Einträge, sieht sich dieselbe Vorschau an wie du und hinterlässt am Paar eine Einschätzung mit Begründung. Zusammenführen kann er nicht — das tust immer du.
+
+Auf „Mögliche Dubletten“ steht die Einschätzung dann direkt am Paar:
+
+| KI-Einschätzung | Bedeutung |
+|---|---|
+| **zusammenführen** | Die KI hält beide Einträge für dieselbe Person und nennt ihre Gründe. |
+| **strittig** | Es spricht etwas dafür und etwas dagegen, oder die Daten reichen nicht — hier lohnt der Blick in die Quellen. |
+| **kein Duplikat** | Die KI hält beide für verschiedene Personen. |
+
+Dazu siehst du die Begründung, über wessen KI-Zugang und wann sie entstand und — wenn die KI einen Vorschlag hat — welcher Eintrag bleiben sollte. Mit **„Von der KI vorgeprüft“** über der Liste filterst du nach Einschätzung oder auf die noch nicht vorgeprüften Paare.
+
+Wichtig zu wissen:
+
+- Die Einschätzung ist **nur ein Hinweis**. Sie wählt nichts vor, und sie ändert die Klasse nicht: Ein „zusammenführen“ der KI macht aus einem „wahrscheinlichen“ Paar kein „sicheres“. In einem Rutsch zusammenführen lassen sich weiterhin nur „sichere“ Paare, und immer erst nach der gemeinsamen Vorschau.
+- Ein „kein Duplikat“ der KI blendet das Paar **nicht** aus. Wenn du zustimmst, klickst du **Als „kein Duplikat“ übernehmen** — erst das blendet es aus, wie der Knopf „Kein Duplikat“.
+- **veraltet** steht an einer Einschätzung, wenn einer der beiden Einträge seither geändert wurde (Angaben, Namen, Ereignisse, Beziehungen oder Familien). Dann passt die Begründung vielleicht nicht mehr; die KI kann das Paar neu einschätzen.
+- Die Einschätzung sieht nur, wer beide Personen bearbeiten darf. Auf der Personenseite steht sie kurz im Dubletten-Hinweis („KI-Einschätzung: strittig“).
+
 ## Importe verbinden (Administratoren)
 
 Wurden mehrere Stammbäume importiert (z.B. die MyHeritage-Bäume zweier Verwandter), findet **Recherche → Importe verbinden** die Personen, die in mehreren Importen vorkommen, und führt sie nach Bestätigung zusammen — so wird aus mehreren Importen ein gemeinsamer Stammbaum. Dort gibt es zusätzlich die Klasse „sehr wahrscheinlich“; vorausgewählt sind nur die sicheren Verbindungen.
 
-Die KI (siehe [KI-Zugang](10-ki-zugang.md)) kann mögliche Dubletten finden und begründen, aber **nie selbst zusammenführen** — das geht nur hier in der App.
+Die KI (siehe [KI-Zugang](10-ki-zugang.md)) kann mögliche Dubletten finden, vorprüfen und ihre Einschätzung begründen (siehe [Von der KI vorgeprüfte Paare](#von-der-ki-vorgepruefte-paare)), aber **nie selbst zusammenführen** — das geht nur hier in der App.

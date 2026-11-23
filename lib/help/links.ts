@@ -11,6 +11,7 @@ export const HELP_LINKS = {
   bezugsperson: "/hilfe/stammbaum#bezugsperson",
   dubletten: "/hilfe/dubletten",
   dublettenKlassen: "/hilfe/dubletten#was-bedeuten-sicher-wahrscheinlich-und-unklar",
+  dublettenKi: "/hilfe/dubletten#von-der-ki-vorgepruefte-paare",
   kiZugang: "/hilfe/ki-zugang",
 } as const;
 

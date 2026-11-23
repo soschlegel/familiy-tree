@@ -8,6 +8,8 @@ Mit einem **persönlichen Schlüssel** arbeitet ein KI-Assistent (Claude) direkt
 
 Dabei handelt die KI **als du**: Sie sieht nur, was du siehst, und ändert nur, was du ändern darfst. Personen, Quellen oder Bilder löschen und Personen zusammenführen kann sie nie. Jede Änderung durch die KI steht in der [Änderungsgeschichte](09-aenderungen.md) mit dem Namen des Schlüssels.
 
+**Dubletten vorprüfen:** Die KI kann die Liste „Mögliche Dubletten“ durchgehen, beide Einträge eines Paares lesen, sich dieselbe Vorschau ansehen wie du vor dem Zusammenführen und am Paar eine Einschätzung hinterlassen — „zusammenführen“, „strittig“ oder „kein Duplikat“, immer mit Begründung. Dafür braucht der Schlüssel die Stufe „lesen und schreiben“ und du das Bearbeitungsrecht an beiden Personen. Gespeichert wird nur die Einschätzung; zusammengeführt wird nichts. Wie du damit arbeitest, steht unter [Von der KI vorgeprüfte Paare](07-dubletten.md#von-der-ki-vorgepruefte-paare). Bitte die KI zum Beispiel: „Prüfe die möglichen Dubletten vor“ (in Claude gibt es dafür die Vorlage „Dubletten vorprüfen“).
+
 > **Bedenke:** Alles, was der Assistent abruft, geht an den KI-Anbieter. Besonders bei lebenden Personen lohnt es sich, das zu bedenken.
 
 ## Wer darf was
