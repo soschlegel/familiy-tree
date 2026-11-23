@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { checkMediaDir } from "@/lib/storage";
+import { cachedHealth } from "@/lib/health-cache";
 
 /**
  * Lebenszeichen für Container-Healthchecks und den Reverse-Proxy.
@@ -17,7 +18,7 @@ export const runtime = "nodejs";
 
 const TIMEOUT_MS = 3000;
 
-const HEADERS = { "Cache-Control": "no-store" };
+const HEADERS = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
 
 /** Erste Zeile der Fehlermeldung, ergänzt um den Fehlercode (z.B. EACCES), falls nicht schon enthalten. */
 function oneLine(err: unknown): string {
@@ -47,13 +48,19 @@ async function check(name: string, task: () => Promise<unknown>): Promise<boolea
   }
 }
 
-export async function GET() {
+async function probe(): Promise<boolean> {
   const results = await Promise.all([
     check("Datenbank nicht erreichbar", () => prisma.$queryRaw`SELECT 1`),
     // Der Fehler nennt den betroffenen Ordner (Wurzel, originals/, thumbs/).
     check("Medienordner", checkMediaDir),
   ]);
-  if (results.every(Boolean)) {
+  return results.every(Boolean);
+}
+
+export async function GET() {
+  // Ergebnis gilt einige Sekunden (lib/health-cache.ts) — die Route ist
+  // ohne Anmeldung erreichbar.
+  if (await cachedHealth(probe)) {
     return Response.json({ status: "ok" }, { headers: HEADERS });
   }
   return Response.json({ status: "error" }, { status: 503, headers: HEADERS });

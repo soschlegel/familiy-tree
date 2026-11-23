@@ -209,7 +209,14 @@ export function registerPrompts(server: McpServer, ctx: ToolContext): void {
       const id = String(Array.isArray(variables.id) ? variables.id[0] : variables.id);
       const auth = await ctx.authorize("READ");
       if (!auth.ok) throw new Error(`Zugriff verweigert: ${auth.message}`);
-      const data = await personResource(auth.scope, id);
+      let data;
+      try {
+        data = await personResource(auth.scope, id);
+      } catch (err) {
+        // Keine Datenbankmeldungen an den Client (wie bei den Werkzeugen).
+        console.error("[mcp] Fehler beim Lesen der Ressource:", err);
+        throw new Error("Interner Fehler. Einzelheiten stehen im Server-Log.");
+      }
       if (!data) throw new Error("Person nicht gefunden (oder für diesen Benutzer nicht sichtbar)");
       return {
         contents: [{ uri: uri.href, mimeType: "application/json", text: JSON.stringify(data) }],

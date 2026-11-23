@@ -84,7 +84,9 @@ der `.env`.
   - `start` — `next start` auf dem Mock-Port gegen `.next-e2e`, mit der
     Mock-Umgebung und zusätzlich `E2E_PRODUCTION_DEV_LOGIN=mock-only`
     (eng begrenzte Freigabe des Dev-Logins im Produktionsmodus, siehe
-    `lib/dev-login.ts` in [bibliotheken.md](bibliotheken.md)). Warnt, wenn
+    `lib/dev-login.ts` in [bibliotheken.md](bibliotheken.md)) sowie
+    `RATE_LIMIT=off` (viele parallele Testläufer teilen sich wenige
+    Testbenutzer; die Grenzen prüft Vitest). Warnt, wenn
     die Quellen neuer sind als der Build. Die Warnung von Next.js, `next
     start` passe nicht zu `output: "standalone"`, ist hier harmlos: der
     Server läuft; nur das Image nimmt `server.js`.
@@ -310,6 +312,12 @@ Workflow nicht — die Prüfungen dort sind Handarbeit (AGENTS.md, Abschnitt 3).
   `.next-e2e`), sonst `.next`. `tsconfig.json` nennt die `types`-Ordner
   aller drei, sonst trüge `next build` sie selbst nach.
 - `output: "standalone"` für ein kleines Image.
+- `poweredByHeader: false` und `headers()` für jede Antwort:
+  `X-Frame-Options: DENY` (nicht in fremde Seiten einbetten),
+  `Referrer-Policy: same-origin` (externe Links bekommen keine Adresse der
+  App samt Kennungen), `X-Content-Type-Options: nosniff`. Keine globale
+  Content-Security-Policy — die Bildroute setzt ihre eigene. Test:
+  `tests/request-guard.test.ts`.
 - `sharp` als externes Server-Paket (nicht gebündelt).
 - `outputFileTracingIncludes`: `geo/gazetteer.tsv.gz` für alle API-Routen
   (`/api/**` — Admin-Seite, Vorschlag am Ortsfeld, automatische Zuordnung
@@ -508,6 +516,7 @@ selbst gelesen, nicht im eigenen Code.
 | `E2E_SERVER` | von `scripts/e2e.mjs` gesetzt: `prod` (Standard) oder `dev`; wählt Web-Server, Worker und Vorwärmen |
 | `E2E_WRITE_WORKERS` | Obergrenze der Worker für das Projekt `write` (Standard 2) übersteuern, für Messungen |
 | `E2E_PRODUCTION_DEV_LOGIN` | nur `scripts/mock.mjs start` setzt `mock-only`: Dev-Login im Produktions-Build — wirkt nur zusammen mit Datenbank `…_mock`/`…_test` und Medienordner `…-mock`/`…-test` (`lib/dev-login.ts`); im Stack nie gesetzt |
+| `RATE_LIMIT` | `off` schaltet die Anfragegrenzen ab (`lib/rate-limit.ts`); nur `scripts/mock.mjs start` setzt es für den E2E-Build, im Stack nie |
 | `E2E_AREA` | von `scripts/e2e.mjs` gesetzt; `write` hängt dann nur am Setup |
 | `CI` | Playwright: 2 Worker, `forbidOnly` |
 | `MERGE_SCREENS` | Ordner für Bildschirmfotos in `e2e/write/merge.spec.ts`, `merge-comfort.spec.ts` und `connect.spec.ts` |
@@ -585,7 +594,13 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
 - **`graph.test.ts`** — Vorfahren/Nachfahren, kürzester Weg, Zyklen- und
   Geschwisterprüfung, auch auf den Mock-Daten.
 - **`health.test.ts`** — `/api/health` mit Datenbank-Attrappe, auch bei nicht
-  beschreibbarem Medienordner.
+  beschreibbarem Medienordner; Zwischenspeicher des Ergebnisses.
+- **`gedcom-html.test.ts`** — HTML-Fragmente in Text: Verhalten und Laufzeit
+  bei bösartig gebauten Eingaben (ReDoS).
+- **`request-guard.test.ts`** — Herkunftsprüfung schreibender Anfragen und
+  Größengrenzen des Anfragekörpers.
+- **`rate-limit.test.ts`** — Anfragegrenzen: Zeitfenster, Zuordnung der
+  Pfade, KI-Schlüssel, Abschalten.
 - **`import-linking.test.ts`** — Genauigkeit und Trefferquote von „Importe
   verbinden“ gegen erfundene Wahrheit („sicher“ muss fehlerfrei sein).
 - **`kinship.test.ts`** — Verwandtschaftsbegriffe und Wegbeschreibung.
@@ -655,6 +670,14 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   nicht mehr benutzte Bilder ab (Dateiablage als Attrappe).
 - **`media-links.db.test.ts`** — Bilder an Ereignissen, Belegen und Quellen:
   Rechte, Regeln, Audit, MCP-Werkzeuge, Export.
+- **`sicherheit.db.test.ts`** — Befunde der Sicherheitsprüfung
+  ([../sicherheit.md](../sicherheit.md)): Löschregel für Quellen-Scans auch
+  beim Lösen, verborgene Personen beim Anlegen von Beziehungen, keine
+  Bildverluste über den KI-Zugang, `add_media` prüft Ziele vor dem Abruf,
+  keine internen Fehlermeldungen an KI-Clients.
+- **`api-guard.db.test.ts`** — `route()` wie von Next.js aufgerufen (Anmeldung
+  als Attrappe): fremde Herkunft, 413, 429, Kopfzeilen; `/api/tree` ohne
+  Familie; Bildauslieferung nur als Bild.
 - **`merge.db.test.ts`** — Zusammenführen ohne stillen Datenverlust,
   Blockaden, erneuter Import danach, Export.
 - **`merge-followups.db.test.ts`** — Folgedubletten (Klassen wie die Liste,

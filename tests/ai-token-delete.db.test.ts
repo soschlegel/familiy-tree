@@ -201,6 +201,22 @@ describe.skipIf(Boolean(skipReason))("KI-Schlüssel löschen (Mock-Datenbank)", 
 
     const before = await listPersonChanges(await request("editor@example.test"), person, { limit: 5 });
     expect(before.items[0]).toMatchObject({ channel: "MCP", tokenName: "Laptop KI", tokenDeleted: false });
+    // Andere Bearbeiter derselben Familie sehen weder den Namen des fremden
+    // Schlüssels noch den Paket-Titel, der ihn nennt. (Den Verlauf sehen nur
+    // Bearbeiter: der Betrachter wird dafür kurz zum Bearbeiter.)
+    const viewerUser = await prisma.user.findUniqueOrThrow({ where: { email: "viewer@example.test" } });
+    await prisma.user.update({ where: { id: viewerUser.id }, data: { role: "EDITOR" } });
+    await prisma.userFamily.update({ where: { userId_familyId: { userId: viewerUser.id, familyId: FAMILY_A } }, data: { role: "EDITOR" } });
+    try {
+      const foreign = await listPersonChanges(await request("viewer@example.test"), person, { limit: 5 });
+      const foreignMcp = foreign.items.filter((i) => i.channel === "MCP");
+      expect(foreignMcp.length).toBeGreaterThan(0);
+      for (const e of foreignMcp) expect(e.tokenName ?? null).toBeNull();
+      expect(foreignMcp.find((e) => e.changeSet)?.changeSet?.title).toBe("KI-Änderungen");
+    } finally {
+      await prisma.user.update({ where: { id: viewerUser.id }, data: { role: viewerUser.role } });
+      await prisma.userFamily.update({ where: { userId_familyId: { userId: viewerUser.id, familyId: FAMILY_A } }, data: { role: "VIEWER" } });
+    }
 
     const editor = await request("editor@example.test");
     await revokeApiToken(editor, created.token.id);

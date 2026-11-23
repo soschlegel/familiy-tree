@@ -50,7 +50,10 @@ Schlüsselverwaltung in der Oberfläche: Seite `/ai-access` und die Routen
 - Fehler kommen als Ergebnis mit `isError`: verweigerter Zugang als
   „Zugriff verweigert (…): Meldung [Grund]“, `ServiceError` als Meldung mit
   betroffenen Feldern und Code (`NOT_FOUND`, `FORBIDDEN`, `CONFLICT`,
-  `VALIDATION`), alles andere als „Interner Fehler: …“.
+  `VALIDATION`), alles andere als „Interner Fehler (Kennung …)“ — ohne
+  die eigentliche Meldung (Datenbankfehler samt Abfrage, Pfade); die
+  Einzelheiten stehen unter derselben Kennung im Server-Log. Die
+  Personen-Ressource verfährt ebenso.
 - Personen erscheinen überall gleich als `{ id, name, lifespan }`;
   verborgene als `{ id, name: "Nicht freigegeben", restricted: true }`.
   Unsichtbare Personen/Quellen gelten als nicht gefunden („… (oder für
@@ -73,7 +76,7 @@ Schlüsselverwaltung in der Oberfläche: Seite `/ai-access` und die Routen
 ### HTTP-Endpunkt `/api/mcp` (regulärer Zugang)
 
 Ablauf je Anfrage (`handleMcpPost`): Methode → Origin → Sperre nach
-Fehlversuchen → Schlüssel → MCP.
+Fehlversuchen → Schlüssel → Anfragegrenze je Schlüssel → MCP.
 
 - **Zustandslos:** Für jede `POST`-Anfrage entstehen ein neuer Server und
   ein neuer Transport (Streamable HTTP ohne Sitzungskennung, Antworten als
@@ -94,6 +97,10 @@ Fehlversuchen → Schlüssel → MCP.
   `X-Forwarded-For` (vom eigenen Proxy angehängt). Die Tabelle liegt im
   Speicher des Prozesses (höchstens 10 000 Absender), ein Neustart leert
   sie.
+- **Anfragegrenze je Schlüssel:** nach erfolgreicher Anmeldung höchstens
+  300 Anfragen je Minute und Schlüssel (`checkMcpRate` in
+  `lib/rate-limit.ts`), sonst 429 mit `Retry-After`. Mit `RATE_LIMIT=off`
+  abgeschaltet (nur E2E-Build).
 - **Stufe:** Die wirksame Stufe ist die niedrigere aus Schlüsselstufe und
   KI-Recht des Benutzers (`User.aiAccess`: kein Zugang / lesen / lesen und
   schreiben). Bei wirksamer Stufe `READ` werden die Schreibwerkzeuge gar
@@ -118,7 +125,7 @@ Fehlversuchen → Schlüssel → MCP.
 | 403 | Schlüssel gültig, aber kein KI-Recht (`NO_PERMISSION`, `WWW-Authenticate` mit `insufficient_scope`), oder fremder `Origin` |
 | 405 | andere Methode als `POST` |
 | 413 | Anfragekörper zu groß (vom Transport des SDK): über 1 MiB, mit Schlüssel der Schreibstufe über `mcpWriteBodyLimit()` (`MAX_UPLOAD_BYTES` × 4/3 + 1 MiB) |
-| 429 | Sperre nach Fehlversuchen, mit `Retry-After` |
+| 429 | Sperre nach Fehlversuchen oder Anfragegrenze des Schlüssels, mit `Retry-After` |
 | 500 | unerwarteter Fehler im Transport |
 | 503 | Schlüsselprüfung fehlgeschlagen (z.B. Datenbank nicht erreichbar) |
 
@@ -254,7 +261,11 @@ Jedes nimmt optional `change_set_id`:
 Alle Änderungen landen im Audit-Log mit Kanal `MCP` und Schlüssel-ID.
 Rechte: Die Dienstschicht verlangt Bearbeitungsrecht in der Familie der
 betroffenen Person bzw. Beziehung. Personen, Quellen und Bilder löschen
-kann die KI bewusst nicht.
+kann die KI bewusst nicht — auch nicht als Nebenwirkung: `delete_event`
+und `delete_relationship` werden mit `CONFLICT` (`WOULD_DELETE_MEDIA`)
+abgelehnt, wenn danach ein Bild an nichts mehr hinge
+(`assertNoMediaLossViaAi` in `lib/services/media.ts`); in der App, mit
+Rückfrage, geht es weiterhin.
 
 | Werkzeug | Zweck | Parameter (in Worten) | Ergebnis / Besonderheiten |
 |---|---|---|---|
@@ -271,7 +282,7 @@ kann die KI bewusst nicht.
 | `update_event` | Ereignis korrigieren (`updateEvent`) | `event_id`, Art, `is_alternative`, Ereignisfelder (`null` leert) | `event`. Datumsänderung ohne neuen Datumstext verwirft den alten Wortlaut; Besitzer (Person/Beziehung) nicht änderbar |
 | `delete_event` | Falsch erfasstes Ereignis samt seinen Belegen entfernen (`deleteEvent`) | `event_id` | `deleted`, `eventId`; die Quellen bleiben |
 | `add_name_variant` | Weiteren Namen erfassen (`createPersonName`) | `person_id`, `type` (Geburtsname, Ehename, Alias, religiöser Name, Name nach Einwanderung, Schreibvariante, sonstiger mit Bezeichnung), Vor-/Familienname, Vorsatz, Zusatz, Rufname, Bezeichnung, Notiz | `name`. Mindestens Vor-, Familien- oder Rufname; der Hauptname bleibt an der Person |
-| `add_media` | Neues Bild speichern und anhängen (`addMedia`) | **genau eines** von `url` oder `data_base64`; `mime_type`, `file_name`, `caption` (wird Alt-Text); Ziele `person_ids`, `relationship_ids`, `event_ids`, `citation_ids`, `source_ids` (mindestens eines, je Liste begrenzt durch `MAX_MEDIA_TARGETS`) | `media`, `linked`. Jedes Ziel muss bearbeitbar sein. Einziges Werkzeug mit „Außenwelt“-Hinweis |
+| `add_media` | Neues Bild speichern und anhängen (`addMedia`) | **genau eines** von `url` oder `data_base64`; `mime_type`, `file_name`, `caption` (wird Alt-Text); Ziele `person_ids`, `relationship_ids`, `event_ids`, `citation_ids`, `source_ids` (mindestens eines, je Liste begrenzt durch `MAX_MEDIA_TARGETS`) | `media`, `linked`. Jedes Ziel muss bearbeitbar sein — geprüft **vor** dem Abruf einer `url`, damit kein Schlüssel den Server Adressen abrufen lässt, ohne ein Ziel ändern zu dürfen. Einziges Werkzeug mit „Außenwelt“-Hinweis |
 | `assign_place` | Ortstexten Koordinaten zuordnen (`assignPlacesByAi`) — **nur Administratoren**, wie `/admin/places`; der Freitext bleibt unverändert | entweder eine Zuordnung (`text` + genau eines von `gazetteer_id` \| `latitude`+`longitude`+`label` (eigener Ort, `precision` Standard Ort) \| `unresolvable`) oder `assignments` mit bis zu 50 solchen; je optional `uncertain`, `note` (Begründung, bis 1000 Zeichen); `change_set_id` | `assigned`, `failed`, `results` je mit `ok`, Status, Bezeichnung, Koordinaten, `replaced` (vorherige Herkunft) bzw. `error`. Herkunft `AI` („von KI“), gilt sofort für die Karte; überschreibt automatische und frühere KI-Zuordnungen, nie von Hand bestätigte (Eintrag mit Fehler, die übrigen laufen weiter); Text muss in den Daten vorkommen. Protokoll mit Kanal `MCP` und Schlüssel; Paket „Ort zugeordnet (KI): …“ bzw. „Orte zugeordnet (KI)“ ohne Kennung |
 | `review_duplicate` | Einschätzung **eines** Dublettenpaares speichern — sonst nichts (`reviewDuplicate`) | `person_a_id`, `person_b_id`, `verdict` (`MERGE` sicher dieselbe Person, `NOT_DUPLICATE` sicher verschiedene, `DISPUTED` alles andere — im Zweifel immer), `reason` (deutsch, 10 bis 2000 Zeichen, mit den konkreten Belegen und Widersprüchen), `suggested_keep_id` (nur bei `MERGE`, eine der beiden — nur ein Hinweis) | `personAId`, `personBId` (kanonisch), Urteil, Begründung, Vorschlag, `reviewedAt`, `replacedVerdict`, immer `merged: false`. Eine neue Einschätzung ersetzt die alte; ein von einem Menschen als „kein Duplikat“ markiertes Paar wird abgewiesen. Bearbeitungsrecht an beiden Personen nötig. Paket „Mögliche Dubletten vorgeprüft (KI)“ ohne Kennung |
 | `link_media` | Vorhandenes Bild an weitere Einträge hängen oder lösen (`linkMedia` / `unlinkMedia`) | `media_id`, `action` (verknüpfen, Standard, oder lösen), Ziele wie bei `add_media` | `mediaId`, `action`, `targets`, `changed`. Das Bild muss sichtbar, jedes Ziel bearbeitbar sein; die letzte Zuordnung lässt sich nicht lösen — die KI löscht nie ein Bild |

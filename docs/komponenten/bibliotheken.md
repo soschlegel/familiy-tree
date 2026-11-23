@@ -16,7 +16,7 @@ Netz nur `storage`, `media-processing`, `places/gazetteer-file`,
 
 | Bereich | Module |
 |---|---|
-| Anmeldung, Rechte, Anfrage-Rahmen | `auth`, `dev-login`, `authz`, `session`, `api`, `scope`, `ai-tokens`, `prisma` |
+| Anmeldung, Rechte, Anfrage-Rahmen | `auth`, `dev-login`, `authz`, `session`, `api`, `request-guard`, `rate-limit`, `health-cache`, `scope`, `ai-tokens`, `prisma` |
 | Protokoll | `audit`, `change-sets`, `change-time` |
 | Daten und Regeln | `dates`, `date-fields`, `events`, `event-labels`, `validation`, `consistency`, `partner-labels`, `source-labels`, `source-classify` |
 | Graph und Verwandtschaft | `graph`, `kinship`, `reference` |
@@ -142,14 +142,22 @@ Quellen, Recherche, Karte, Admin, KI-Zugang).
 **Tests:** keine eigenen.
 
 ### lib/api.ts
-**Zweck:** Einheitlicher Rahmen für API-Route-Handler: Anmeldung,
-globales Recht, Scope, Changelog-Paket, Fehlerübersetzung.
+**Zweck:** Einheitlicher Rahmen für API-Route-Handler: Herkunftsprüfung,
+Anmeldung, Größen- und Anfragegrenzen, globales Recht, Scope,
+Changelog-Paket, Fehlerübersetzung, Kopfzeilen der Antwort.
 
 **Wichtige Funktionen/Typen:**
-- `route(action, handler)` — prüft die Sitzung (sonst 401), optional ein
-  globales Recht, lädt den Scope und hängt **je Anfrage ein Paket**
-  (`appChangeSet`) an; `action = null` bei inhaltlichen Routen, die selbst
-  über den Scope prüfen.
+- `route(action, handler)` — Reihenfolge: schreibende Anfrage fremder
+  Herkunft → 403 (`isCrossSiteWrite`, noch vor der Anmeldung, damit eine
+  fremde Seite nicht erfährt, ob jemand angemeldet ist); Sitzung (sonst
+  401); Körpergröße laut `Content-Length` (413, ohne Länge 411,
+  `bodyTooLarge`); Drosselung je Benutzer (429 mit `Retry-After`,
+  `checkApiRate`); optional ein globales Recht; lädt den Scope und hängt
+  **je Anfrage ein Paket** (`appChangeSet`) an; `action = null` bei
+  inhaltlichen Routen, die selbst über den Scope prüfen. Jede Antwort
+  (auch Fehler) bekommt `Cache-Control: private, no-store` — außer die
+  Route setzt selbst einen Wert (Bilder) — und `X-Content-Type-Options:
+  nosniff`.
 - `errorResponse(err)` — `ServiceError` → 404/403/409/400 mit Meldung,
   Prüffehlern und Details; `ForbiddenError` → 403; ungültiges JSON → 400;
   Prisma P2025 → 404, P2002 → 409 „existiert bereits“, P2003 → 409; alles
@@ -157,9 +165,59 @@ globales Recht, Scope, Changelog-Paket, Fehlerübersetzung.
   (keine Tabellen- oder Pfadnamen nach außen).
 - `badRequest`, `forbidden`, `notFound`; Typ `Ctx`.
 
-**Benutzt von:** allen Routen unter `app/api/` außer Auth und Health.
+**Benutzt von:** allen Routen unter `app/api/` außer Auth, Health und MCP.
 
-**Tests:** keine eigenen.
+**Tests:** `tests/api-guard.db.test.ts` (Herkunft, 413, 429, Kopfzeilen;
+Baum ohne Familie; Bildauslieferung).
+
+### lib/request-guard.ts
+**Zweck:** Reine Prüfungen an einer Anfrage, bevor ein Route-Handler
+arbeitet (kein `next/*`, keine Datenbank).
+
+- `isCrossSiteWrite(req)` — schreibende Methoden (alles außer
+  GET/HEAD/OPTIONS) mit `Sec-Fetch-Site: cross-site` oder einem `Origin`,
+  der weder zur Adresse der Anfrage (`Host`, `X-Forwarded-Host`, auch als
+  Liste) noch zu `AUTH_URL` passt, gelten als fremd. Verglichen wird
+  Rechnername samt Port, nicht das Schema (TLS endet am Reverse-Proxy).
+  `Origin: null` gilt als fremd. Ohne `Origin` und `Sec-Fetch-Site` (kein
+  Browser: Skripte, Tests) erlaubt — ohne Browser gibt es kein CSRF. Zweite
+  Sicherung neben dem Sitzungs-Cookie mit `SameSite=Lax`.
+- `bodyTooLarge(req, pathname)` / `bodyLimitFor(pathname)` — Grenze laut
+  `Content-Length` **vor** dem Lesen: JSON 2 MiB, `/api/media`
+  `MAX_UPLOAD_BYTES` + 1 MiB, Importe 201 MiB. Ohne Längenangabe (chunked)
+  oder mit unlesbarer Länge: „Länge verlangt“.
+
+**Benutzt von:** `lib/api.ts`. **Tests:** `tests/request-guard.test.ts`.
+
+### lib/rate-limit.ts
+**Zweck:** Einfache Anfragebegrenzung im Speicher des Prozesses (festes
+Zeitfenster je Schlüssel, Tabelle mit Obergrenze). Bewusst ohne Datenbank:
+die App läuft als ein Container; nach einem Neustart ist sie leer. Schützt
+vor Schleifen und einfachem Missbrauch durch angemeldete Benutzer bzw.
+gültige KI-Schlüssel — Massenanfragen Unbekannter gehören in den
+Reverse-Proxy.
+
+- `checkApiRate(userId, method, pathname)` — Web-API je Benutzer und Regel
+  (`apiBucket`): `export` 10/min, `heavy` 90/min (Baum, Karte, Dubletten
+  einschließlich Dubletten einer Person und Folgedubletten, Importe
+  verbinden, Zusammenführen, Orte automatisch, Herkunft), `upload` 120/min
+  (Bilder, Importdateien), `write` 600/min, `read` 3000/min. Großzügig:
+  normale Bedienung erreicht die Grenzen nicht.
+- `checkMcpRate(key)` — KI-Zugang je Schlüssel, 300 Anfragen/min, gezählt
+  nach erfolgreicher Anmeldung in `mcp/http.ts` (Fehlversuche begrenzt
+  `mcp/http.ts` getrennt je Absender).
+- `RATE_LIMIT=off` schaltet beides ab — gesetzt nur für den
+  Produktions-Build der E2E-Tests (`scripts/mock.mjs`), weil viele
+  parallele Testläufer sich wenige Testbenutzer teilen.
+
+**Benutzt von:** `lib/api.ts`, `mcp/http.ts`. **Tests:**
+`tests/rate-limit.test.ts`, `tests/api-guard.db.test.ts`.
+
+### lib/health-cache.ts
+**Zweck:** Ergebnis von `/api/health` 5 s zwischenspeichern; gleichzeitige
+Aufrufe teilen sich die laufende Prüfung. Eigene Datei, weil eine
+Route-Datei nur Handler und Routen-Einstellungen exportieren darf.
+**Benutzt von:** `app/api/health/route.ts`. **Tests:** `tests/health.test.ts`.
 
 ### lib/scope.ts
 **Zweck:** **Einzige Stelle** für familienbezogene Rechte („darf dieser
@@ -1118,9 +1176,15 @@ verwendet.
 #### lib/gedcom/html.ts
 **Zweck:** HTML-Fragmente in Notizen sicher in Text umwandeln (nichts wird
 ausgeführt): `looksLikeHtml`, `decodeEntities`, `htmlToText`,
-`noteContent` (Original bleibt erhalten).
+`noteContent` (Original bleibt erhalten). Die Texte stammen aus Importen
+und Eingaben, deshalb läuft die Umwandlung in **einem** Durchlauf über die
+Zeichenkette (Suche nach `<`/`>` und schließenden Tags) statt über
+verschachtelte reguläre Ausdrücke — die liefen bei vielen offenen Tags
+quadratisch bis kubisch und konnten den Server minutenlang blockieren
+(ReDoS). Auch `looksLikeHtml` prüft in zwei linearen Schritten.
 **Benutzt von:** `interpret`, `index`, `lib/source-classify.ts`.
-**Tests:** `tests/gedcom-interpret.test.ts`.
+**Tests:** `tests/gedcom-interpret.test.ts`, `tests/gedcom-html.test.ts`
+(Verhalten und Laufzeit bei bösartigen Eingaben).
 
 #### lib/gedcom/diagnostics.ts
 **Zweck:** Strukturprüfungen für die Importvorschau, ändern nichts;
@@ -1310,12 +1374,17 @@ sichtbar für Admin, Ersteller und jeden, der einen ihrer Belege sieht,
 änderbar entsprechend. Verwaiste Bilder nur für Admins (sonst wäre ein
 Upload ohne Zuordnung ein Weg an der Rechteprüfung vorbei). Ganz löschen:
 an Ereignissen/Belegen/Quellen muss **jede** Zuordnung änderbar sein, an
-Personen/Beziehungen genügt eine.
+Personen/Beziehungen genügt eine. Für den Scan einer Quelle gilt zusätzlich
+deren Löschregel (`sourceRights(...).deletable`, wie „Quelle löschen“): der
+Benutzer muss **jeden** Beleg der Quelle ändern dürfen — ein eigener Beleg
+an einer gemeinsam genutzten Quelle genügt zum Bearbeiten, nicht zum
+endgültigen Löschen ihrer Scans. `unlinkMedia` wendet `canDeleteMedia` an,
+sobald das Lösen ein Bild endgültig entfernen würde.
 
 **Benutzt von:** Medienrouten, Dienste `exchange-export`, `media-links`,
 `sources`.
 
-**Tests:** `tests/media-links.db.test.ts`.
+**Tests:** `tests/media-links.db.test.ts`, `tests/sicherheit.db.test.ts`.
 
 ### lib/safe-fetch.ts
 **Zweck:** Bilder von Adressen aus einer hochgeladenen Datei (bzw. über

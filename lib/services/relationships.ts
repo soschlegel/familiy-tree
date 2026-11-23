@@ -15,7 +15,7 @@ import {
   validationError,
 } from "./errors";
 import { toRelationshipDto, type RelationshipDto } from "./dto";
-import { removeOrphanedMedia } from "./media";
+import { assertNoMediaLossViaAi, mediaAttachedTo, removeOrphanedMedia } from "./media";
 import { queuePlaceAutoAssign } from "./places";
 import { phraseColumns } from "./persons";
 import { fuzzyColumns, fuzzyField, type FuzzyDate } from "../dates";
@@ -123,6 +123,15 @@ export async function createRelationship(
     where: { id: { in: [fromPersonId, toPersonId] } },
   });
   if (found !== 2) throw notFoundError("Person");
+
+  // Eine nicht freigegebene Person gilt wie eine nicht vorhandene (dieselbe
+  // Antwort) — sonst verriete 403 statt 404, dass es sie gibt.
+  if (!scope.isAdmin) {
+    const families = await familyIdsOf([fromPersonId, toPersonId]);
+    for (const pid of [fromPersonId, toPersonId]) {
+      if (!canViewPerson(scope, families.get(pid) ?? [])) throw notFoundError("Person");
+    }
+  }
 
   await assertCanEdit(scope, fromPersonId, toPersonId, "diese Beziehung anzulegen");
 
@@ -279,9 +288,24 @@ export async function deleteRelationship(
   );
 
   // Hochzeitsbilder hängen nur an der Beziehung — ohne sie wären sie verwaist.
-  const mediaIds = (
-    await prisma.relationshipMedia.findMany({ where: { relationshipId: id }, select: { mediaId: true } })
-  ).map((m) => m.mediaId);
+  // Mit der Beziehung gehen (Cascade) auch ihre Ereignisse und Belege; deren
+  // Bilder zählen deshalb mit.
+  const [events, citations, own] = await Promise.all([
+    prisma.event.findMany({ where: { relationshipId: id }, select: { id: true } }),
+    prisma.citation.findMany({
+      where: { OR: [{ relationshipId: id }, { event: { relationshipId: id } }] },
+      select: { id: true },
+    }),
+    prisma.relationshipMedia.findMany({ where: { relationshipId: id }, select: { mediaId: true } }),
+  ]);
+  const eventIds = events.map((e) => e.id);
+  const citationIds = citations.map((c) => c.id);
+  const mediaIds = [
+    ...new Set([...own.map((m) => m.mediaId), ...(await mediaAttachedTo({ eventIds, citationIds }))]),
+  ];
+
+  // Über den KI-Zugang wird nie ein Bild gelöscht (wie bei link_media).
+  await assertNoMediaLossViaAi(scope, mediaIds, { relationshipIds: [id], eventIds, citationIds });
 
   await prisma.relationship.delete({ where: { id } });
 

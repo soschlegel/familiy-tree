@@ -25,7 +25,14 @@ import {
  */
 
 export type MediaOwnerKind = "person" | "relationship" | "event" | "citation" | "source";
-export type MediaOwnerRights = { kind: MediaOwnerKind; id: string; visible: boolean; editable: boolean };
+export type MediaOwnerRights = {
+  kind: MediaOwnerKind;
+  id: string;
+  visible: boolean;
+  editable: boolean;
+  /** Nur bei Quellen: darf der Benutzer deren Scans endgültig löschen? */
+  deletable?: boolean;
+};
 
 type Fam = { families: { familyId: string }[] };
 const famSel = { families: { select: { familyId: true } } } as const;
@@ -54,18 +61,26 @@ const carrierSel = {
 } as const;
 
 /** Rechte an einer Quelle (dieselbe Regel wie loadSourceAccess in lib/services/sources.ts). */
-export async function sourceRights(scope: Scope, sourceId: string): Promise<{ visible: boolean; editable: boolean } | null> {
+export async function sourceRights(
+  scope: Scope,
+  sourceId: string,
+): Promise<{ visible: boolean; editable: boolean; deletable: boolean } | null> {
   const s = await prisma.source.findUnique({
     where: { id: sourceId },
     select: { createdById: true, citations: { select: carrierSel } },
   });
   if (!s) return null;
-  if (scope.isAdmin) return { visible: true, editable: true };
+  if (scope.isAdmin) return { visible: true, editable: true, deletable: true };
   const isCreator = s.createdById !== null && s.createdById === scope.userId;
   const rated = s.citations.map((c) => carrierRights(scope, c));
+  const editable = isCreator || rated.some((r) => r.visible && r.editable);
   return {
     visible: isCreator || rated.some((r) => r.visible),
-    editable: isCreator || rated.some((r) => r.visible && r.editable),
+    editable,
+    // Wie „Quelle löschen“: nur, wer JEDEN ihrer Belege ändern dürfte. Ein
+    // einzelner eigener Beleg an einer gemeinsam genutzten Quelle genügt
+    // zum Bearbeiten, nicht zum endgültigen Löschen ihrer Scans.
+    deletable: editable && rated.every((r) => r.editable) && (rated.length > 0 || isCreator),
   };
 }
 
@@ -118,7 +133,8 @@ export async function canViewMedia(scope: Scope, mediaId: string): Promise<boole
  * Benutzer eine der Personen bzw. Beziehungen bearbeiten darf, an denen es
  * hängt — hängt es zusätzlich an Ereignissen, Belegen oder Quellen, muss er
  * auch jede dieser Zuordnungen bearbeiten dürfen (sonst nähme das Löschen
- * anderen ein Belegbild weg, das sie nicht ändern dürften). Ein Bild nur an
+ * anderen ein Belegbild weg, das sie nicht ändern dürften); bei einer Quelle
+ * gilt deren Löschregel (jeder Beleg bearbeitbar). Ein Bild nur an
  * Ereignissen, Belegen oder Quellen: alle Zuordnungen bearbeitbar.
  */
 export async function canDeleteMedia(scope: Scope, mediaId: string): Promise<boolean> {
@@ -128,6 +144,8 @@ export async function canDeleteMedia(scope: Scope, mediaId: string): Promise<boo
   const classic = owners.filter((o) => o.kind === "person" || o.kind === "relationship");
   const extra = owners.filter((o) => o.kind !== "person" && o.kind !== "relationship");
   if (extra.some((o) => !o.editable)) return false;
+  // Scans einer Quelle: Löschregel der Quelle (alle Belege bearbeitbar).
+  if (extra.some((o) => o.kind === "source" && !o.deletable)) return false;
   return classic.length === 0 ? true : classic.some((o) => o.editable);
 }
 

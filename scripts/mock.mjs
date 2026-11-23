@@ -105,6 +105,10 @@ const e2eEnv = {
   E2E_PRODUCTION_DEV_LOGIN: "mock-only",
   // Keine Telemetrie-Hinweise im Testprotokoll.
   NEXT_TELEMETRY_DISABLED: "1",
+  // Anfragegrenzen (lib/rate-limit.ts) aus: Viele parallele Testläufer teilen
+  // sich wenige Testbenutzer und würden sonst gedrosselt. Geprüft werden die
+  // Grenzen in Vitest (tests/rate-limit.test.ts).
+  RATE_LIMIT: "off",
 };
 delete e2eEnv.NODE_ENV; // setzt next build/start selbst
 

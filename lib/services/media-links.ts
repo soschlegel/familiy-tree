@@ -4,6 +4,7 @@ import { prisma } from "../prisma";
 import { audit, auditActor } from "../audit";
 import { deleteObject } from "../storage";
 import {
+  canDeleteMedia,
   canViewMedia,
   citationRights,
   eventRights,
@@ -511,6 +512,13 @@ export async function unlinkMedia(
       "Das Bild hinge danach an nichts mehr. Entfernen geht nur, solange es noch an einem anderen Eintrag hängt — ganz löschen lässt es sich nur in der App.",
       { reason: "LAST_LINK" },
     );
+  }
+
+  // Würde das Bild dabei endgültig gelöscht, gilt die Löschregel des Bildes
+  // (lib/media-scope.ts) — sonst ließe sich der Scan einer gemeinsam
+  // genutzten Quelle über „lösen“ entfernen, obwohl „löschen“ verboten ist.
+  if (options.deleteOrphan && (await mediaLinkCount(mediaId)) - removedCount <= 0 && !(await canDeleteMedia(scope, mediaId))) {
+    throw forbiddenError("dieses Bild endgültig zu löschen");
   }
 
   await prisma.$transaction(async (tx) => {

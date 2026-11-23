@@ -38,6 +38,7 @@ export const GET = route<Params>(null, async (ctx, req, { id }) => {
     ETag: file.etag,
     // private: Zwischenspeicher nur im Browser des angemeldeten Nutzers.
     "Cache-Control": "private, max-age=31536000, immutable",
+    "X-Content-Type-Options": "nosniff",
   };
 
   // Bedingte Anfrage: hat der Browser die Datei schon, reicht ein 304.
@@ -49,11 +50,22 @@ export const GET = route<Params>(null, async (ctx, req, { id }) => {
   return new Response(file.stream(), {
     headers: {
       ...headers,
-      "Content-Type": asset.mimeType,
+      // Nur Bildarten ausliefern — nie etwas, das ein Browser als Seite
+      // (HTML, SVG) ausführen würde, selbst wenn ein Datensatz es behauptet.
+      "Content-Type": safeImageType(asset.mimeType),
+      "Content-Disposition": "inline",
+      "Content-Security-Policy": "default-src 'none'; sandbox",
       "Content-Length": String(file.size),
     },
   });
 });
+
+const IMAGE_TYPES = new Set(["image/webp", "image/jpeg", "image/png", "image/gif", "image/avif", "image/tiff"]);
+
+function safeImageType(mime: string): string {
+  const m = mime.trim().toLowerCase();
+  return IMAGE_TYPES.has(m) ? m : "application/octet-stream";
+}
 
 /** If-None-Match mit schwachem Vergleich (RFC 9110, 13.1.2). */
 function etagMatches(header: string | null, etag: string): boolean {
