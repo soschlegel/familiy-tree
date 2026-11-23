@@ -111,16 +111,26 @@ README, Abschnitt „Tests“.
   Zeile `[umleitungen] … nachgetragen` prüfen. `/tree` hat dafür kein
   `loading.tsx` mehr (die Ladeanzeige kommt aus einem `Suspense` in der
   Seite), sonst ließe sich kein 308 setzen.
-- **KI-Vorprüfung**: Tabelle `DuplicateReview` (Paar als Schlüssel, `verdict`
-  MERGE | DISPUTED | NOT_DUPLICATE, `reason`, `suggestedKeepId`, Benutzer,
-  Schlüssel, Zeitpunkt, Stand beider Personen zur Erkennung „veraltet“).
-  MCP-Werkzeuge `list_duplicate_candidates`, `preview_person_merge`
-  (Trockenlauf, genau die Vorschau der Oberfläche), `review_duplicate`
-  (Schreibstufe; speichert nur die Einschätzung). Prompt `review_duplicates`.
-  In den Server-Hinweis ausdrücklich: Es gibt kein `merge_persons`.
-  Oberfläche: Einschätzung je Paar anzeigen, Filter „von der KI vorgeprüft“
-  je Urteil, Sammelaktionen nur über die normale Vorschau; nie vorausgewählt,
-  die Klasse bleibt unverändert.
+- **KI-Vorprüfung** — erledigt (Migration `20261125000001_duplicate_review`,
+  Tabelle `DuplicateReview`; `reviewDuplicate` in
+  `lib/services/duplicates.ts`, Bausteine in
+  `lib/services/duplicate-reviews.ts`). MCP-Werkzeuge
+  `list_duplicate_candidates`, `preview_person_merge` (Trockenlauf, genau
+  die Vorschau der App), `review_duplicate` (Schreibstufe; speichert nur die
+  Einschätzung, Ergebnis immer `merged: false`), Prompt `review_duplicates`;
+  der Server-Hinweis sagt ausdrücklich: kein `merge_persons`. Oberfläche:
+  Einschätzung je Paar in der Dublettenliste (Urteil, Begründung, wer/wann,
+  Vorschlag, „veraltet“), Filter „Von der KI vorgeprüft“ je Urteil, im
+  Banner nur das Urteil; nie vorausgewählt, Klasse unverändert. Ein
+  KI-„kein Duplikat“ blendet nichts aus — erst „Als „kein Duplikat“
+  übernehmen“ durch den Menschen. „Veraltet“ über einen Fingerabdruck
+  beider Personen (Stammdaten, Namen, Ereignisse, Familien, Beziehungen;
+  Belege und Bilder bewusst nicht). Sehen und Schreiben nur mit
+  Bearbeitungsrecht an beiden Personen; ein von Menschen als „kein
+  Duplikat“ markiertes Paar lässt sich nicht einschätzen. Beim
+  Zusammenführen geht die Einschätzung mit der aufgehenden Person unter
+  (Cascade). Im Dialog „Zusammenführen …“ steht die Einschätzung bisher
+  nicht.
 - **„Erst die Eltern, dann dieses Paar zusammenführen“** — erledigt
   (`parentsFirst` in `mergePersons`, eine Transaktion; nur für Elternpaare,
   die mindestens „wahrscheinlich“ dieselbe Person sind).

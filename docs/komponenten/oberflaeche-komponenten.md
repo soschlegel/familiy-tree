@@ -1313,11 +1313,12 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
   - Gibt es keine Dubletten, erscheint nichts.
   - Je Kandidat: Name (mit Geburtsname), Lebensdaten, Herkunft, Sicherheitsstufe und der Link „Vergleichen“. Der Link öffnet die Vergleichsseite für genau dieses Paar; der Screenreader hört dazu den Namen.
   - Gibt es mehr Kandidaten als angezeigt, verweist der Hinweis auf „Mögliche Dubletten“.
+  - Liegt zu einem Paar eine KI-Einschätzung vor, steht dezent „KI-Einschätzung: …“ (mit „(veraltet)“) dabei — nur Urteil, keine Begründung; an Klasse und Reihenfolge ändert sie nichts.
   - Ausgezeichnet als `<aside>` mit Überschrift.
   - Rechts neben der Überschrift Kontexthilfe „Was bedeuten „sicher“ und „wahrscheinlich“?“ (Ziel aus `HELP_LINKS.dublettenKlassen`); in der Schriftfarbe des Hinweises statt der Akzentfarbe, wegen des Kontrasts auf dem Messing-Hintergrund.
 - **Server oder Client:** Server (kein `"use client"`).
 - **Ruft auf:** nichts. Nur Links.
-- **Tests:** `e2e/read/duplicate-banner.spec.ts` und `e2e/write/duplicate-banner.spec.ts`. Den Dienst prüft `tests/person-duplicates.db.test.ts`.
+- **Tests:** `e2e/read/duplicate-banner.spec.ts` und `e2e/write/duplicate-banner.spec.ts`, KI-Einschätzung in `e2e/write/duplicate-review.spec.ts`. Den Dienst prüft `tests/person-duplicates.db.test.ts`.
 
 ### components/DuplicateList.tsx
 
@@ -1331,9 +1332,10 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
   - Die gemeinsame Vorschau nennt je Paar „bleibt / geht darin auf“ und den Zustand: bereit, erst nach den Eltern oder blockiert. Übersprungene Paare und die Summen (umziehende Beziehungen, Ereignisse, Belege, Bilder, zusätzliche Familienzugehörigkeiten) stehen dabei.
   - Es folgt keine weitere Rückfrage. Der Knopf „N Paare zusammenführen“ ist die Bestätigung.
   - Das Ergebnis steht in einer Erfolgszeile (`role="status"`). Fehler haben `role="alert"`.
+  - **KI-Einschätzung** (falls vorhanden, nur für Benutzer, die beide bearbeiten dürfen): Kasten am Paar mit Urteil, „veraltet“, über wessen KI-Zugang und mit welchem Schlüssel, Zeitpunkt, Begründung, ggf. „Vorschlag der KI: Es bleibt …“ und einem Satz, dass sie nur ein Hinweis ist. Sie wählt nie etwas vor: Kontrollkästchen hängen allein an der Klasse „sicher“, der Vergleichslink bleibt gleich. Bei einem aktuellen KI-Urteil „kein Duplikat“ gibt es „Als „kein Duplikat“ übernehmen“ — derselbe Aufruf wie „Kein Duplikat“; erst der Mensch blendet aus.
 - **Server oder Client:** Client.
-- **Ruft auf:** `POST /api/duplicates/dismiss` („Kein Duplikat“); `POST /api/persons/merge/bulk`, erst mit `dryRun` für die Vorschau, dann zum Ausführen.
-- **Tests:** `e2e/write/merge.spec.ts` (`dup-item`, `dup-merge`, `dup-dismiss`, Sammel-Zusammenführen). Die Logik prüfen `tests/duplicates.test.ts`, `tests/merge.db.test.ts` und `tests/merge-rules.test.ts`.
+- **Ruft auf:** `POST /api/duplicates/dismiss` („Kein Duplikat“, auch „übernehmen“); `POST /api/persons/merge/bulk`, erst mit `dryRun` für die Vorschau, dann zum Ausführen.
+- **Tests:** `e2e/write/merge.spec.ts` (`dup-item`, `dup-merge`, `dup-dismiss`, Sammel-Zusammenführen), `e2e/write/duplicate-review.spec.ts` (`dup-review`, `dup-review-stale`, `dup-review-adopt`, Filter). Die Logik prüfen `tests/duplicates.test.ts`, `tests/merge.db.test.ts` und `tests/merge-rules.test.ts`.
 
 ### components/MergeView.tsx
 

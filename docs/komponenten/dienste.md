@@ -902,9 +902,12 @@ MCP) und die Markierung „kein Duplikat“. Bewertung und Klassen
   Namen der Eltern und Partner in Vergleichsform, Quell-Bäume aus der
   Herkunft).
 - `listDuplicateCandidates(scope, {offset, limit, confidence, minScore,
-  maxYearDiff})` — Paare nach Klasse und Punkten, seitenweise (Standard 25,
+  maxYearDiff, review})` — Paare nach Klasse und Punkten, seitenweise (Standard 25,
   höchstens 500), mit Zählung je Klasse, Zahl der ausgeblendeten Paare und
-  `canMerge` je Paar.
+  `canMerge` je Paar. Dazu je Paar die KI-Einschätzung (`review`, siehe
+  unten) und `reviewCounts` (vorgeprüft, nicht vorgeprüft, veraltet, je
+  Urteil — innerhalb der gewählten Klasse); `review` filtert (`any`,
+  `none`, `open` = keine oder veraltete, oder ein Urteil).
 - `listDuplicatesOfPerson(scope, personId, {limit, includeUnclear})` — Kandidaten einer
   Person (Standard 3, höchstens 50) mit Herkunft („von Hand erfasst“ bzw.
   Import als „Buchstabe · Name“ aus `loadImportDirectory` in `origin.ts`).
@@ -913,6 +916,38 @@ MCP) und die Markierung „kein Duplikat“. Bewertung und Klassen
   „Zusammenführen …“, den jemand ausdrücklich öffnet.
 - `dismissDuplicate(scope, a, b)`, `undismissDuplicate(scope, a, b)` — Paar
   dauerhaft als „kein Duplikat“ markieren bzw. die Markierung aufheben.
+- `reviewDuplicate(scope, {personAId, personBId, verdict, reason,
+  suggestedKeepId})` — KI-Vorprüfung: speichert die Einschätzung eines
+  Paares (MCP `review_duplicate`) samt Fingerabdruck beider Personen; eine
+  neue ersetzt die alte (`replacedVerdict` im Ergebnis). Begründung 10 bis
+  2000 Zeichen; `suggestedKeepId` nur bei `MERGE` und nur eine der beiden.
+- Bausteine in `lib/services/duplicate-reviews.ts`: `personStates`
+  (Fingerabdruck je Person aus Stammdaten-`updatedAt`, Namensvarianten,
+  Ereignissen, Familien und Beziehungen — Belege und Bilder zählen bewusst
+  nicht), `loadDuplicateReviews` (Einschätzungen mit `stale`, Name des
+  Benutzers und des Schlüssels), `matchesReviewFilter`, `canonicalPair`,
+  `reviewKey`. Urteile und Bezeichnungen rein in `lib/duplicate-verdicts.ts`
+  (auch für Client-Komponenten).
+
+**KI-Vorprüfung — Regeln (Leitlinie: vorprüfen und vorschlagen, nicht
+selbst zusammenführen):**
+- Eine Einschätzung ist nur ein Hinweis. `reviewDuplicate` ändert keine
+  Person, führt nichts zusammen und legt kein „kein Duplikat“ an; Klasse,
+  Punkte und Reihenfolge kommen allein aus `lib/duplicates.ts`. Es gibt
+  keinen Dienstweg, über den ein Urteil etwas zusammenführt.
+- Ein Paar, das ein Mensch als „kein Duplikat“ markiert hat, lässt sich
+  nicht mehr einschätzen (`CONFLICT`) — die Entscheidung des Menschen gilt.
+- „Veraltet“: Weicht der heutige Fingerabdruck einer der beiden Personen vom
+  gespeicherten ab, gilt die Einschätzung als `stale`; der Filter `open`
+  zählt sie wieder zu den offenen.
+- Rechte: Schreiben nur mit Bearbeitungsrecht an beiden Personen (wie
+  „Kein Duplikat“). Sehen: nur wer beide bearbeiten darf — die Begründung
+  kann Einzelheiten beider Personen nennen; Betrachter sehen das Paar ohne
+  Einschätzung. Im Hinweis auf der Personenseite nur Urteil und „veraltet“.
+- Protokoll: `UPDATE Person` mit `duplicateReview` (`with`, `verdict`,
+  `reason`, `suggestedKeepId`, `replacedVerdict`), beide Personen
+  betroffen; im Changelog als „Mögliche Dublette vorgeprüft“, die Begründung
+  nur, wenn beide Personen sichtbar sind (`lib/services/changes.ts`).
 
 **Regeln und Entscheidungen:**
 - Als „kein Duplikat“ markierte Paare erscheinen nicht mehr; die Markierung
@@ -947,12 +982,14 @@ MCP) und die Markierung „kein Duplikat“. Bewertung und Klassen
 `app/research/duplicates/page.tsx`, `app/people/[id]/page.tsx` (Hinweis),
 `app/api/persons/[id]/duplicates/route.ts` (Dialog „Zusammenführen …“);
 `research.ts`, `merge-bulk.ts`, `merge-followups.ts`, `import-linking.ts`; MCP indirekt über
-`find_possible_duplicates`.
+`find_possible_duplicates`, direkt über `list_duplicate_candidates` und
+`review_duplicate`.
 
 **Tests:** `tests/person-duplicates.db.test.ts`, `tests/services.db.test.ts`
 (über `findPossibleDuplicates`), MCP-Tests (Regeln: `tests/duplicates.test.ts`);
+KI-Vorprüfung `tests/duplicate-review.db.test.ts`;
 `e2e/read/duplicate-banner.spec.ts`, `e2e/write/duplicate-banner.spec.ts`,
-`e2e/write/merge.spec.ts`.
+`e2e/write/merge.spec.ts`, `e2e/write/duplicate-review.spec.ts`.
 
 ### lib/services/merge.ts
 

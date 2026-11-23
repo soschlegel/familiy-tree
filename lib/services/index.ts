@@ -20,6 +20,7 @@ export * from "./persons";
 export * from "./relationships";
 export * from "./research";
 export * from "./duplicates";
+export * from "./duplicate-reviews";
 export * from "./merge";
 export * from "./merge-bulk";
 export * from "./merge-followups";

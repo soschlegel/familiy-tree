@@ -9,8 +9,22 @@ import { firstGivenKey, nameKey } from "../name-keys";
 import { MANUAL_ORIGIN_LABEL, toPersonBrief, type PersonBrief } from "./dto";
 import { loadImportDirectory } from "./origin";
 import { loadGraph, type LoadedGraph } from "./graph-data";
-import { forbiddenError, notFoundError, validationError } from "./errors";
+import { conflictError, forbiddenError, notFoundError, validationError } from "./errors";
 import { audit, auditActor } from "../audit";
+import { nameChangeSet } from "../change-sets";
+import {
+  canonicalPair,
+  DUPLICATE_VERDICTS,
+  loadDuplicateReviews,
+  matchesReviewFilter,
+  personStates,
+  REVIEW_REASON_MAX,
+  REVIEW_REASON_MIN,
+  reviewKey,
+  type DuplicateReviewDto,
+  type DuplicateVerdict,
+  type ReviewFilter,
+} from "./duplicate-reviews";
 
 /**
  * Mögliche Dubletten (Recherche-Seite, MCP find_possible_duplicates):
@@ -33,13 +47,24 @@ export type DuplicateCandidate = {
   crossTree: boolean;
   /** Darf der Benutzer beide bearbeiten (und damit zusammenführen)? */
   canMerge: boolean;
+  /**
+   * Einschätzung der KI-Vorprüfung, falls vorhanden — nur für Benutzer, die
+   * beide Personen bearbeiten dürfen. Reiner Hinweis: ändert weder Klasse
+   * noch Reihenfolge und wählt nichts vor.
+   */
+  review?: DuplicateReviewDto;
 };
+
+/** Zahl der Paare je Stand der KI-Vorprüfung (innerhalb der gewählten Klasse). */
+export type ReviewCounts = { any: number; none: number; stale: number } & Record<DuplicateVerdict, number>;
 
 export type DuplicateList = {
   total: number;
   counts: Record<Confidence, number>;
   /** Als „kein Duplikat“ markierte Paare unter den sichtbaren Personen. */
   dismissed: number;
+  /** KI-Vorprüfung: Zahlen innerhalb der gewählten Klasse (vor dem Filter `review`). */
+  reviewCounts: ReviewCounts;
   items: DuplicateCandidate[];
 };
 
@@ -114,11 +139,13 @@ const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 
 /**
  * Mögliche Dubletten, nach Klasse („sicher“ zuerst) und Punkten sortiert,
- * seitenweise. `confidence` filtert auf eine Klasse.
+ * seitenweise. `confidence` filtert auf eine Klasse, `review` auf den Stand
+ * der KI-Vorprüfung. Die Einschätzung hängt nur an — Klasse, Punkte und
+ * Reihenfolge kommen allein aus lib/duplicates.ts.
  */
 export async function listDuplicateCandidates(
   scope: Scope,
-  options: { offset?: number; limit?: number; confidence?: Confidence; minScore?: number; maxYearDiff?: number } = {},
+  options: { offset?: number; limit?: number; confidence?: Confidence; minScore?: number; maxYearDiff?: number; review?: ReviewFilter } = {},
 ): Promise<DuplicateList> {
   const limit = Math.max(1, Math.min(500, Math.floor(options.limit ?? 25)));
   const offset = Math.max(0, Math.floor(options.offset ?? 0));
@@ -137,10 +164,28 @@ export async function listDuplicateCandidates(
   });
   const counts: Record<Confidence, number> = { high: 0, medium: 0, low: 0 };
   for (const p of pairs) counts[p.confidence]++;
-  const filtered = options.confidence ? pairs.filter((p) => p.confidence === options.confidence) : pairs;
+  const inClass = options.confidence ? pairs.filter((p) => p.confidence === options.confidence) : pairs;
+  const canMerge = (p: { a: string; b: string }) =>
+    canEditPerson(scope, graph.persons.get(p.a)!.familyIds) && canEditPerson(scope, graph.persons.get(p.b)!.familyIds);
+  // Einschätzungen nur zu Paaren der Liste — und nur für Benutzer, die beide
+  // Personen bearbeiten dürfen (die Begründung kann Einzelheiten nennen).
+  const listed = new Set(inClass.filter(canMerge).map((p) => reviewKey(p.a, p.b)));
+  const reviews = await loadDuplicateReviews(ids, (a, b) => listed.has(reviewKey(a, b)));
+  const reviewCounts: ReviewCounts = { any: 0, none: 0, stale: 0, MERGE: 0, DISPUTED: 0, NOT_DUPLICATE: 0 };
+  for (const p of inClass) {
+    const r = reviews.get(reviewKey(p.a, p.b));
+    if (!r) reviewCounts.none++;
+    else {
+      reviewCounts.any++;
+      reviewCounts[r.verdict]++;
+      if (r.stale) reviewCounts.stale++;
+    }
+  }
+  const filtered = options.review ? inClass.filter((p) => matchesReviewFilter(reviews.get(reviewKey(p.a, p.b)), options.review)) : inClass;
   const items = filtered.slice(offset, offset + limit).map((p) => {
     const a = graph.persons.get(p.a)!;
     const b = graph.persons.get(p.b)!;
+    const review = reviews.get(reviewKey(p.a, p.b));
     return {
       a: toPersonBrief(a),
       b: toPersonBrief(b),
@@ -149,10 +194,11 @@ export async function listDuplicateCandidates(
       reasons: p.reasons,
       conflicts: p.conflicts,
       crossTree: p.crossTree,
-      canMerge: canEditPerson(scope, a.familyIds) && canEditPerson(scope, b.familyIds),
+      canMerge: canMerge(p),
+      ...(review ? { review } : {}),
     };
   });
-  return { total: filtered.length, counts, dismissed: dismissedRows.length, items };
+  return { total: filtered.length, counts, dismissed: dismissedRows.length, reviewCounts, items };
 }
 
 export type PersonDuplicateCandidate = {
@@ -165,6 +211,8 @@ export type PersonDuplicateCandidate = {
   conflicts: string[];
   /** Die Gründe als ein Satz (evidenceSentence), für den Dialog „Zusammenführen …“. */
   sentence: string;
+  /** KI-Vorprüfung dieses Paares, falls vorhanden (nur Urteil und „veraltet“). */
+  review?: Pick<DuplicateReviewDto, "verdict" | "stale">;
 };
 
 export type PersonDuplicates = {
@@ -319,10 +367,14 @@ export async function listDuplicatesOfPerson(
     // Alle Paare enthalten diese Person (include) — Abstammung aus der Abfrage oben.
     lineage: (a, b) => lineal.has(a === personId ? b : a),
   }).filter((p) => options.includeUnclear || p.confidence !== "low");
+  const shown = pairs.slice(0, limit);
+  const shownKeys = new Set(shown.map((p) => reviewKey(p.a, p.b)));
+  const reviews = await loadDuplicateReviews([...new Set(shown.flatMap((p) => [p.a, p.b]))], (a, b) => shownKeys.has(reviewKey(a, b)));
   return {
     total: pairs.length,
-    items: pairs.slice(0, limit).map((p) => {
+    items: shown.map((p) => {
       const otherId = p.a === personId ? p.b : p.a;
+      const review = reviews.get(reviewKey(p.a, p.b));
       return {
         person: toPersonBrief(rowOf.get(otherId)!),
         origin: [...(originOf.get(otherId) ?? [MANUAL_ORIGIN_LABEL])],
@@ -331,6 +383,7 @@ export async function listDuplicatesOfPerson(
         reasons: p.reasons,
         conflicts: p.conflicts,
         sentence: evidenceSentence(p.reasons),
+        ...(review ? { review: { verdict: review.verdict, stale: review.stale } } : {}),
       };
     }),
   };
@@ -403,4 +456,89 @@ export async function undismissDuplicate(scope: Scope, aId: string, bId: string)
   await prisma.duplicateDismissal.deleteMany({ where: { personAId, personBId } });
   await audit({ ...auditActor(scope), action: "UPDATE", entityType: "Person", entityId: personAId, diff: { notDuplicateOfRemoved: personBId }, personIds: [personBId] });
   return { ok: true };
+}
+
+export type ReviewDuplicateInput = {
+  personAId: string;
+  personBId: string;
+  verdict: DuplicateVerdict;
+  reason: string;
+  suggestedKeepId?: string | null;
+};
+
+export type ReviewDuplicateResult = {
+  personAId: string;
+  personBId: string;
+  verdict: DuplicateVerdict;
+  reason: string;
+  suggestedKeepId: string | null;
+  reviewedAt: string;
+  /** Urteil einer früheren Einschätzung dieses Paares, die damit ersetzt wurde. */
+  replacedVerdict: DuplicateVerdict | null;
+};
+
+/**
+ * KI-Vorprüfung: Einschätzung zu einem Paar speichern (MCP review_duplicate).
+ * Speichert NUR die Einschätzung — es wird nichts zusammengeführt, nichts
+ * ausgeblendet und keine Person geändert. Je Paar gibt es eine Einschätzung;
+ * eine neue ersetzt die alte. Festgehalten wird der Stand beider Personen,
+ * damit die Oberfläche eine überholte Einschätzung als „veraltet“ zeigt.
+ *
+ * Rechte: Bearbeitungsrecht an beiden Personen (wie „Kein Duplikat“). Ein
+ * Paar, das ein Mensch schon als „kein Duplikat“ markiert hat, wird nicht
+ * mehr eingeschätzt — die Entscheidung des Menschen gilt.
+ */
+export async function reviewDuplicate(scope: Scope, input: ReviewDuplicateInput): Promise<ReviewDuplicateResult> {
+  const reason = (input.reason ?? "").trim();
+  const issues: { path: string; message: string }[] = [];
+  if (!DUPLICATE_VERDICTS.includes(input.verdict)) issues.push({ path: "verdict", message: "Urteil muss MERGE, DISPUTED oder NOT_DUPLICATE sein" });
+  if (reason.length < REVIEW_REASON_MIN) issues.push({ path: "reason", message: `Begründung angeben (mindestens ${REVIEW_REASON_MIN} Zeichen)` });
+  if (reason.length > REVIEW_REASON_MAX) issues.push({ path: "reason", message: `Begründung höchstens ${REVIEW_REASON_MAX} Zeichen` });
+  const keep = input.suggestedKeepId || null;
+  if (keep && keep !== input.personAId && keep !== input.personBId) {
+    issues.push({ path: "suggestedKeepId", message: "Der Vorschlag muss eine der beiden Personen sein" });
+  }
+  if (keep && input.verdict !== "MERGE") issues.push({ path: "suggestedKeepId", message: "Ein Vorschlag, wer bleibt, gehört nur zum Urteil MERGE" });
+  if (issues.length) throw validationError(issues);
+  await assertBothEditable(scope, input.personAId, input.personBId);
+  const [personAId, personBId] = canonicalPair(input.personAId, input.personBId);
+  const [dismissed, before, states] = await Promise.all([
+    prisma.duplicateDismissal.findUnique({ where: { personAId_personBId: { personAId, personBId } }, select: { personAId: true } }),
+    prisma.duplicateReview.findUnique({ where: { personAId_personBId: { personAId, personBId } }, select: { verdict: true } }),
+    personStates([personAId, personBId]),
+  ]);
+  if (dismissed) throw conflictError("Dieses Paar wurde in der App bereits als „kein Duplikat“ markiert — diese Entscheidung gilt.");
+  const data = {
+    verdict: input.verdict,
+    reason,
+    suggestedKeepId: keep,
+    userId: scope.userId,
+    apiTokenId: scope.via?.tokenId ?? null,
+    stateA: states.get(personAId) ?? "",
+    stateB: states.get(personBId) ?? "",
+    reviewedAt: new Date(),
+  };
+  const row = await prisma.duplicateReview.upsert({
+    where: { personAId_personBId: { personAId, personBId } },
+    create: { personAId, personBId, ...data },
+    update: data,
+  });
+  nameChangeSet(scope, "Mögliche Dubletten vorgeprüft (KI)");
+  await audit({
+    ...auditActor(scope),
+    action: "UPDATE",
+    entityType: "Person",
+    entityId: personAId,
+    diff: { duplicateReview: { with: personBId, verdict: input.verdict, reason, suggestedKeepId: keep, replacedVerdict: before?.verdict ?? null } },
+    personIds: [personBId],
+  });
+  return {
+    personAId,
+    personBId,
+    verdict: row.verdict,
+    reason: row.reason,
+    suggestedKeepId: row.suggestedKeepId,
+    reviewedAt: row.reviewedAt.toISOString(),
+    replacedVerdict: before?.verdict ?? null,
+  };
 }

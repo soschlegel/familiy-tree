@@ -59,6 +59,7 @@ model User {
   apiTokens      ApiToken[]
   importBatches  ImportBatch[]        @relation("ImportUser")
   dismissals     DuplicateDismissal[]
+  dupReviews     DuplicateReview[]
 
   @@index([personId])
 }
@@ -278,6 +279,8 @@ model Person {
   // Als „kein Duplikat“ markierte Paare (lib/services/duplicates.ts).
   dismissedAsA DuplicateDismissal[] @relation("DismissalA")
   dismissedAsB DuplicateDismissal[] @relation("DismissalB")
+  reviewsAsA   DuplicateReview[]    @relation("ReviewA")
+  reviewsAsB   DuplicateReview[]    @relation("ReviewB")
   // Benutzer, die diese Person als „das bin ich“ gewählt haben.
   selfOfUsers  User[]               @relation("UserSelf")
   // Alte Kennungen, die nach einem Zusammenführen auf diese Person zeigen.
@@ -852,6 +855,44 @@ model DuplicateDismissal {
 
   personA Person @relation("DismissalA", fields: [personAId], references: [id], onDelete: Cascade)
   personB Person @relation("DismissalB", fields: [personBId], references: [id], onDelete: Cascade)
+  user    User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@id([personAId, personBId])
+  @@index([personBId])
+}
+
+// Urteil einer KI-Vorprüfung (MCP review_duplicate). Nur eine Einschätzung:
+// Sie führt nichts zusammen, blendet nichts aus und ändert die Klasse
+// (sicher/wahrscheinlich/unklar) eines Paares nicht.
+enum DuplicateVerdict {
+  MERGE
+  DISPUTED
+  NOT_DUPLICATE
+}
+
+// Einschätzung des KI-Assistenten zu einem möglichen Dublettenpaar — je Paar
+// höchstens eine (eine neue ersetzt die alte). Kanonisch gespeichert
+// (personAId < personBId). stateA/stateB halten den Stand beider Personen zum
+// Zeitpunkt der Einschätzung fest (Fingerabdruck, lib/services/
+// duplicate-reviews.ts); weicht der heutige Stand ab, gilt sie als „veraltet“.
+// apiTokenId bewusst ohne Fremdschlüssel (wie im AuditLog): der Verweis bleibt
+// auch nach dem Löschen des Schlüssels erhalten.
+model DuplicateReview {
+  personAId       String
+  personBId       String
+  verdict         DuplicateVerdict
+  reason          String
+  // Vorschlag, welcher Eintrag bleiben soll (eine der beiden Personen) — nur
+  // Text in der Oberfläche, wählt nie etwas vor.
+  suggestedKeepId String?
+  userId          String?
+  apiTokenId      String?
+  stateA          String
+  stateB          String
+  reviewedAt      DateTime         @default(now())
+
+  personA Person @relation("ReviewA", fields: [personAId], references: [id], onDelete: Cascade)
+  personB Person @relation("ReviewB", fields: [personBId], references: [id], onDelete: Cascade)
   user    User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@id([personAId, personBId])

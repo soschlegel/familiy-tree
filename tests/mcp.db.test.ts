@@ -113,9 +113,11 @@ const READ_TOOLS = [
   "get_source",
   "get_statistics",
   "get_timeline",
+  "list_duplicate_candidates",
   "list_events",
   "list_families",
   "list_places",
+  "preview_person_merge",
   "search_persons",
   "search_sources",
   "suggest_place",
@@ -137,6 +139,7 @@ const WRITE_TOOLS = [
   "update_person",
   "update_relationship",
   "link_media",
+  "review_duplicate",
 ];
 
 describe.skipIf(Boolean(skipReason))("MCP-Server (stdio, Mock-Datenbank)", () => {
@@ -286,7 +289,7 @@ describe.skipIf(Boolean(skipReason))("MCP-Server (stdio, Mock-Datenbank)", () =>
 
       // Prompts und Ressource
       const prompts = (await s.client.listPrompts()).prompts.map((p) => p.name).sort();
-      expect(prompts).toEqual(["orte_zuordnen", "research_person", "review_data_quality"]);
+      expect(prompts).toEqual(["orte_zuordnen", "research_person", "review_data_quality", "review_duplicates"]);
       const prompt = await s.client.getPrompt({ name: "research_person", arguments: { person_id: L.adoptee } });
       expect(JSON.stringify(prompt.messages)).toContain(L.adoptee);
       expect(JSON.stringify(prompt.messages)).toContain("citations");

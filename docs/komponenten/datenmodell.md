@@ -21,7 +21,7 @@ Querverweise: Datumslogik `lib/dates.ts`, Rechte `lib/scope.ts` und
 | Lebensereignisse | `Event` | `EventType` |
 | Medien | `MediaAsset`, `PersonMedia`, `RelationshipMedia`, `SourceMedia`, `EventMedia`, `CitationMedia` | — |
 | Quellen und Belege | `Source`, `Citation` | `SourceKind`, `CitationFact`, `CitationConfidence` |
-| Import und Herkunft | `ImportBatch`, `ImportLink`, `ImportSource`, `ExternalId`, `ImportRawRecord`, `DuplicateDismissal`, `PersonRedirect` | `ImportStatus` |
+| Import und Herkunft | `ImportBatch`, `ImportLink`, `ImportSource`, `ExternalId`, `ImportRawRecord`, `DuplicateDismissal`, `DuplicateReview`, `PersonRedirect` | `ImportStatus`, `DuplicateVerdict` |
 | Audit und Änderungsgeschichte | `AuditLog`, `ChangeSet` | `AuditChannel` |
 | Orte (Karte) | `Place` | `PlaceSource`, `PlacePrecision` |
 
@@ -549,6 +549,27 @@ gelöscht → `userId` `NULL`.
 **Index:** `personBId` (Abfragen von der B-Seite; die A-Seite deckt der
 Primärschlüssel ab).
 
+### `DuplicateReview`
+**Bedeutung:** Einschätzung des KI-Assistenten zu einem möglichen
+Dublettenpaar (MCP `review_duplicate`, Dienst `reviewDuplicate`). Reiner
+Hinweis für den Menschen: Sie führt nichts zusammen, blendet nichts aus und
+ändert die Klasse des Paares nicht. Je Paar höchstens eine — eine neue
+ersetzt die alte. Kanonisch gespeichert (`personAId` < `personBId`).
+
+**Felder:** `personAId`, `personBId` (Primärschlüssel), `verdict` (Enum
+`DuplicateVerdict`: `MERGE`, `DISPUTED`, `NOT_DUPLICATE`), `reason`,
+`suggestedKeepId` (optional, eine der beiden Personen, nur bei `MERGE`),
+`userId`, `apiTokenId` (bewusst ohne Fremdschlüssel, wie im `AuditLog`),
+`stateA`/`stateB` (Fingerabdruck des Stands beider Personen zum Zeitpunkt
+der Einschätzung, `personStates` in `lib/services/duplicate-reviews.ts`),
+`reviewedAt`.
+
+**Löschverhalten:** Cascade mit jeder der beiden Personen — auch beim
+Zusammenführen geht die Einschätzung mit der aufgehenden Person unter (die
+bleibende hat sich ohnehin geändert); Benutzer gelöscht → `userId` `NULL`.
+
+**Index:** `personBId`.
+
 ### `PersonRedirect`
 **Bedeutung:** Alte Kennung einer Person, die beim Zusammenführen in einer
 anderen aufgegangen ist, mit der bleibenden Person als Ziel
@@ -656,6 +677,7 @@ zuordnen“, von Hand Bestätigtes nie überschreiben).
 | `20261124000000_neuigkeiten` | `User.lastSeenReleaseId` (Text, optional) — nur `ADD COLUMN`. |
 | `20261124000001_orte_ki` | `PlaceSource` um `AI` (`ALTER TYPE … ADD VALUE`); `Place.note` (optional) und `Place.uncertain` (Standard `false`). |
 | `20261125000000_person_redirect` | Tabelle `PersonRedirect` mit Index und Fremdschlüssel (Cascade). Bewusst ohne Daten: Die Rückfüllung aus dem Audit geschieht im Code (`backfillPersonRedirects`). |
+| `20261125000001_duplicate_review` | Enum `DuplicateVerdict` und Tabelle `DuplicateReview` mit Index und Fremdschlüsseln (Personen Cascade, Benutzer SetNull) — rein ergänzend. |
 | `20261125000002_import_anzeigename` | Tabelle `ImportSource` (Anzeigename je Quell-Baum) — nur `CREATE TABLE`, keine Rückfüllung. |
 
 `migration_lock.toml` legt den Anbieter (PostgreSQL) fest.

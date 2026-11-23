@@ -16,7 +16,17 @@ import type { Scope } from "../lib/scope";
 import { resolvePersonRedirects } from "../lib/services/redirects";
 
 /** Eingaben, die eine Personen-Kennung tragen. */
-const SINGLE_KEYS = ["person_id", "other_person_id", "from_person_id", "to_person_id"] as const;
+const SINGLE_KEYS = [
+  "person_id",
+  "other_person_id",
+  "from_person_id",
+  "to_person_id",
+  // KI-Vorprüfung möglicher Dubletten (preview_person_merge, review_duplicate)
+  "keep_id",
+  "merge_id",
+  "person_a_id",
+  "person_b_id",
+] as const;
 /** Eingaben mit einer Liste von Personen-Kennungen. */
 const LIST_KEYS = ["person_ids"] as const;
 
