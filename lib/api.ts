@@ -6,6 +6,8 @@ import { assertCan, ForbiddenError, type Action } from "./authz";
 import { loadScope, type Scope } from "./scope";
 import { appChangeSet } from "./change-sets";
 import { ServiceError } from "./services/errors";
+import { bodyTooLarge, isCrossSiteWrite } from "./request-guard";
+import { checkApiRate } from "./rate-limit";
 
 export type Ctx = { userId: string; role: Role; scope: Scope };
 
@@ -77,29 +79,83 @@ export function route<T>(
   action: Action | null,
   handler: (ctx: Ctx, req: Request, params: T) => Promise<Response>,
 ) {
-  return async (req: Request, segment: { params: Promise<T> }) => {
-    try {
-      const session = await auth();
-      if (!session?.user?.id) {
-        return NextResponse.json({ error: "Nicht angemeldet" }, { status: 401 });
-      }
+  return async (req: Request, segment: { params: Promise<T> }) =>
+    privateResponse(await guarded(action, handler, req, segment));
+}
 
-      if (action) assertCan(session.user.role, action);
-
-      // Jede Anfrage bildet ein Changelog-Paket — angelegt erst mit der
-      // ersten Änderung (lib/change-sets.ts).
-      const scope: Scope = { ...(await loadScope(session.user.id, session.user.role)), changeSet: appChangeSet() };
-      const params = segment?.params ? await segment.params : ({} as T);
-
-      return await handler(
-        { userId: session.user.id, role: session.user.role, scope },
-        req,
-        params,
-      );
-    } catch (err) {
-      return errorResponse(err);
+async function guarded<T>(
+  action: Action | null,
+  handler: (ctx: Ctx, req: Request, params: T) => Promise<Response>,
+  req: Request,
+  segment: { params: Promise<T> },
+): Promise<Response> {
+  try {
+    // Schreibende Anfragen von fremden Webseiten (CSRF) — vor allem anderen,
+    // damit eine fremde Seite nicht einmal erfährt, ob jemand angemeldet ist.
+    if (isCrossSiteWrite(req)) {
+      return NextResponse.json({ error: "Anfrage von fremder Herkunft abgelehnt." }, { status: 403 });
     }
-  };
+
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Nicht angemeldet" }, { status: 401 });
+    }
+
+    const pathname = new URL(req.url).pathname;
+
+    // Größe des Anfragekörpers VOR dem Lesen prüfen (lib/request-guard.ts).
+    const size = bodyTooLarge(req, pathname);
+    if (size === "too-large") {
+      return NextResponse.json({ error: "Anfrage zu groß." }, { status: 413 });
+    }
+    if (size === "length-required") {
+      return NextResponse.json({ error: "Anfrage ohne Längenangabe (Content-Length)." }, { status: 411 });
+    }
+
+    // Drosselung je Benutzer (lib/rate-limit.ts).
+    const rate = checkApiRate(session.user.id, req.method, pathname);
+    if (!rate.ok) {
+      return NextResponse.json(
+        { error: "Zu viele Anfragen — bitte kurz warten." },
+        { status: 429, headers: { "Retry-After": String(rate.retryAfter) } },
+      );
+    }
+
+    if (action) assertCan(session.user.role, action);
+
+    // Jede Anfrage bildet ein Changelog-Paket — angelegt erst mit der
+    // ersten Änderung (lib/change-sets.ts).
+    const scope: Scope = { ...(await loadScope(session.user.id, session.user.role)), changeSet: appChangeSet() };
+    const params = segment?.params ? await segment.params : ({} as T);
+
+    return await handler(
+      { userId: session.user.id, role: session.user.role, scope },
+      req,
+      params,
+    );
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+
+/**
+ * Antworten der API enthalten personenbezogene Daten: nie in einem
+ * Zwischenspeicher ablegen (Proxy, Browser-Verlauf), außer die Route legt
+ * selbst etwas fest (Bilder: `private, immutable`). `nosniff` verhindert,
+ * dass ein Browser eine Antwort als etwas anderes deutet als angegeben.
+ */
+function privateResponse(res: Response): Response {
+  try {
+    if (!res.headers.has("Cache-Control")) res.headers.set("Cache-Control", "private, no-store");
+    if (!res.headers.has("X-Content-Type-Options")) res.headers.set("X-Content-Type-Options", "nosniff");
+    return res;
+  } catch {
+    // Unveränderliche Kopfzeilen (z.B. Response.redirect): Antwort neu fassen.
+    const headers = new Headers(res.headers);
+    if (!headers.has("Cache-Control")) headers.set("Cache-Control", "private, no-store");
+    if (!headers.has("X-Content-Type-Options")) headers.set("X-Content-Type-Options", "nosniff");
+    return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+  }
 }
 
 export function badRequest(issues: unknown) {

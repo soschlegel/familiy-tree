@@ -228,7 +228,7 @@ const MAX_TEXT = 300;
 type Row = Prisma.AuditLogGetPayload<{
   include: {
     user: { select: { name: true; email: true } };
-    changeSet: { select: { id: true; title: true } };
+    changeSet: { select: { id: true; title: true; kind: true } };
   };
 }>;
 
@@ -603,8 +603,13 @@ function toEntry(ctx: Ctx, row: Row): ChangeEntryDto {
   const { what, note } = describe(ctx, row);
   // Eintrag über eine andere, nicht sichtbare Person (z.B. Zusammenführen
   // eines Verwandten): keine Feldwerte.
+  // Gibt es die Person nicht mehr (gelöscht oder später selbst aufgegangen),
+  // lässt sich ihre Sichtbarkeit nicht mehr feststellen — für Nicht-Admins
+  // gilt sie dann als verborgen, sonst erschienen ihre Feldwerte unmaskiert.
+  const subject = ctx.persons.get(row.entityId);
   const hiddenPerson =
-    row.entityType === "Person" && row.action !== "CONNECT" && ctx.persons.get(row.entityId)?.visible === false;
+    row.entityType === "Person" && row.action !== "CONNECT" && (subject ? !subject.visible : !ctx.scope.isAdmin);
+  const ownToken = ctx.scope.isAdmin || (row.userId !== null && row.userId === ctx.scope.userId);
   return {
     id: row.id,
     at: row.createdAt.toISOString(),
@@ -612,16 +617,36 @@ function toEntry(ctx: Ctx, row: Row): ChangeEntryDto {
     what,
     user: userLabel(row.user),
     channel: row.channel === "MCP" ? "MCP" : "APP",
-    ...tokenFields(row.channel === "MCP" && row.apiTokenId ? ctx.tokens.get(row.apiTokenId) : undefined),
-    changeSet: row.changeSet ? { id: row.changeSet.id, title: row.changeSet.title } : null,
+    // Den Namen eines KI-Schlüssels sehen nur sein Besitzer und Admins.
+    ...tokenFields(row.channel === "MCP" && row.apiTokenId && ownToken ? ctx.tokens.get(row.apiTokenId) : undefined),
+    changeSet: row.changeSet
+      ? { id: row.changeSet.id, title: ctx.scope.isAdmin ? row.changeSet.title : neutralChangeSetTitle(row.changeSet.title, row.changeSet.kind) }
+      : null,
     fields: hiddenPerson ? [] : fieldsOf(ctx, row),
     note: hiddenPerson ? null : note,
   };
 }
 
+/**
+ * Paket-Titel für Nicht-Admins. Titel können Dinge nennen, die ein
+ * Bearbeiter sonst nicht sähe: den Dateinamen eines Imports (sonst nur für
+ * Admins, `importLabel`), einen frei gewählten Text der KI
+ * (`begin_change_set` — das Paket kann Personen mehrerer Familien berühren),
+ * den Namen eines fremden KI-Schlüssels oder einen Ortstext. Bearbeiter
+ * sehen deshalb nur die Art des Pakets; alles ab dem ersten Anführungszeichen
+ * entfällt.
+ */
+export function neutralChangeSetTitle(title: string, kind: string): string {
+  if (kind === "IMPORT") return "Import";
+  if (kind === "MCP" || kind === "MCP_AUTO") return "KI-Änderungen";
+  const cut = title.search(/[„“”"‚‘’'«»]/);
+  const head = (cut >= 0 ? title.slice(0, cut) : title).replace(/[\s:(–-]+$/, "").trim();
+  return head || "Änderungen";
+}
+
 const ROW_INCLUDE = {
   user: { select: { name: true, email: true } },
-  changeSet: { select: { id: true, title: true } },
+  changeSet: { select: { id: true, title: true, kind: true } },
 } as const;
 
 async function loadEntries(scope: Scope, ids: string[]): Promise<ChangeEntryDto[]> {

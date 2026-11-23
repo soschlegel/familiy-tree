@@ -61,6 +61,7 @@ import {
   decodeBase64Image,
   fetchImageFromUrl,
   linkMedia,
+  resolveTargets,
   maxUploadBytes,
   unlinkMedia,
   MAX_MEDIA_TARGETS,
@@ -142,8 +143,11 @@ function run<A>(ctx: ToolContext, fn: (scope: Scope, args: A) => Promise<Data>, 
       return textResult(await fn(auth.scope, args));
     } catch (err) {
       if (err instanceof ServiceError) return errorResult(serviceErrorText(err));
-      console.error("[mcp] Werkzeugfehler:", err);
-      return errorResult(`Interner Fehler: ${(err as Error).message ?? String(err)}`);
+      // Einzelheiten (Datenbankfehler samt Abfrage, Pfade, Rechnernamen) nur
+      // ins Server-Log — der Client bekommt eine Kennung zum Wiederfinden.
+      const ref = Math.random().toString(36).slice(2, 10);
+      console.error(`[mcp] Werkzeugfehler (${ref}):`, err);
+      return errorResult(`Interner Fehler (Kennung ${ref}). Einzelheiten stehen im Server-Log.`);
     }
   };
 }
@@ -1886,6 +1890,10 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         throw validationError([{ path: "url", message: "Genau eines von url oder data_base64 angeben" }]);
       }
       const targets = targetsOf(a);
+      // Ziele und Rechte VOR dem Abruf prüfen: sonst ließe jeder Schlüssel
+      // mit Schreibstufe den Server beliebige Adressen abrufen, auch ohne
+      // ein einziges Ziel bearbeiten zu dürfen.
+      await resolveTargets(scope, targets);
       let bytes: Buffer;
       let fileName = a.file_name ?? null;
       let declaredMime = a.mime_type ?? null;

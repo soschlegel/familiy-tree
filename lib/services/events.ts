@@ -21,7 +21,7 @@ import { eventIssues, eventTitle, type EventOwner, type EventTypeName } from "..
 import { forbiddenError, notFoundError, parseOrThrow, validationError } from "./errors";
 import { iso } from "./dto";
 import { queuePlaceAutoAssign } from "./places";
-import { mediaAttachedTo, removeOrphanedMedia } from "./media";
+import { assertNoMediaLossViaAi, mediaAttachedTo, removeOrphanedMedia } from "./media";
 import { imagesOfEvents, type AttachedImage } from "./attached-media";
 
 /**
@@ -298,6 +298,9 @@ export async function deleteEvent(scope: Scope, id: string): Promise<{ ok: true 
   // Bilder des Ereignisses und seiner Belege: die Zuordnungen gehen per
   // Cascade, Bilder, die danach an nichts mehr hängen, werden entfernt.
   const mediaIds = await mediaAttachedTo({ eventIds: [id] });
+  // Über den KI-Zugang wird nie ein Bild gelöscht (wie bei link_media).
+  const citationIds = (await prisma.citation.findMany({ where: { eventId: id }, select: { id: true } })).map((c) => c.id);
+  await assertNoMediaLossViaAi(scope, mediaIds, { eventIds: [id], citationIds });
   await prisma.event.delete({ where: { id } });
   await removeOrphanedMedia(mediaIds);
   await audit({

@@ -17,7 +17,7 @@ export const runtime = "nodejs";
 
 const TIMEOUT_MS = 3000;
 
-const HEADERS = { "Cache-Control": "no-store" };
+const HEADERS = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
 
 /** Erste Zeile der Fehlermeldung, ergänzt um den Fehlercode (z.B. EACCES), falls nicht schon enthalten. */
 function oneLine(err: unknown): string {
@@ -47,13 +47,34 @@ async function check(name: string, task: () => Promise<unknown>): Promise<boolea
   }
 }
 
-export async function GET() {
+/**
+ * Das Ergebnis gilt einige Sekunden: Die Route ist ohne Anmeldung
+ * erreichbar, und jede Prüfung kostet eine Datenbankabfrage und Probedateien
+ * im Medienordner. Viele Aufrufe von außen lösen so höchstens eine Prüfung
+ * je Zeitfenster aus; gleichzeitige Aufrufe teilen sich die laufende.
+ */
+export const HEALTH_CACHE_MS = 5000;
+
+let cached: { at: number; ok: Promise<boolean> } | null = null;
+
+async function probe(): Promise<boolean> {
   const results = await Promise.all([
     check("Datenbank nicht erreichbar", () => prisma.$queryRaw`SELECT 1`),
     // Der Fehler nennt den betroffenen Ordner (Wurzel, originals/, thumbs/).
     check("Medienordner", checkMediaDir),
   ]);
-  if (results.every(Boolean)) {
+  return results.every(Boolean);
+}
+
+/** Nur für Tests. */
+export function resetHealthCache(): void {
+  cached = null;
+}
+
+export async function GET() {
+  const now = Date.now();
+  if (!cached || now - cached.at >= HEALTH_CACHE_MS) cached = { at: now, ok: probe() };
+  if (await cached.ok) {
     return Response.json({ status: "ok" }, { headers: HEADERS });
   }
   return Response.json({ status: "error" }, { status: 503, headers: HEADERS });
