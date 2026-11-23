@@ -4,8 +4,10 @@ import { prisma } from "../prisma";
 import { canEditPerson, canViewPerson, editableFamilyIds, viewableFamilyIds, type Scope } from "../scope";
 import { fuzzyField } from "../dates";
 import { findDuplicatePairs, scoreDuplicate, type Confidence, type DupPerson } from "../duplicates";
+import { evidenceSentence } from "../import-linking";
 import { firstGivenKey, nameKey } from "../name-keys";
-import { importLabel, MANUAL_ORIGIN_LABEL, toPersonBrief, type PersonBrief } from "./dto";
+import { MANUAL_ORIGIN_LABEL, toPersonBrief, type PersonBrief } from "./dto";
+import { loadImportDirectory } from "./origin";
 import { loadGraph, type LoadedGraph } from "./graph-data";
 import { forbiddenError, notFoundError, validationError } from "./errors";
 import { audit, auditActor } from "../audit";
@@ -155,12 +157,14 @@ export async function listDuplicateCandidates(
 
 export type PersonDuplicateCandidate = {
   person: PersonBrief;
-  /** Herkunft des Kandidaten: Importe (Dateiname nur für Administratoren) oder „von Hand erfasst“. */
+  /** Herkunft des Kandidaten: Importe („A · Anzeigename“; Dateiname nur für Administratoren) oder „von Hand erfasst“. */
   origin: string[];
   score: number;
   confidence: Confidence;
   reasons: string[];
   conflicts: string[];
+  /** Die Gründe als ein Satz (evidenceSentence), für den Dialog „Zusammenführen …“. */
+  sentence: string;
 };
 
 export type PersonDuplicates = {
@@ -205,7 +209,18 @@ const DUP_SELECT = {
  * Kandidaten bearbeiten darf (wie `canMerge` in der Liste). Alle anderen
  * erfahren nichts — auch keine Anzahl.
  */
-export async function listDuplicatesOfPerson(scope: Scope, personId: string, options: { limit?: number } = {}): Promise<PersonDuplicates> {
+export async function listDuplicatesOfPerson(
+  scope: Scope,
+  personId: string,
+  options: {
+    limit?: number;
+    /**
+     * Auch die Klasse „unklar“ — nur für den Dialog „Zusammenführen …“, den
+     * jemand ausdrücklich öffnet. Der Hinweis auf der Seite bleibt ohne.
+     */
+    includeUnclear?: boolean;
+  } = {},
+): Promise<PersonDuplicates> {
   const limit = Math.max(1, Math.min(50, Math.floor(options.limit ?? 3)));
   const self = await prisma.person.findUnique({
     where: { id: personId },
@@ -252,7 +267,7 @@ export async function listDuplicatesOfPerson(scope: Scope, personId: string, opt
     }),
     prisma.importLink.findMany({
       where: { personId: { in: ids } },
-      select: { personId: true, sourceTreeId: true, lastBatch: { select: { fileName: true, createdAt: true } } },
+      select: { personId: true, sourceTreeId: true },
     }),
     prisma.duplicateDismissal.findMany({
       where: { OR: [{ personAId: personId }, { personBId: personId }] },
@@ -288,9 +303,10 @@ export async function listDuplicatesOfPerson(scope: Scope, personId: string, opt
   }
   const treesOf = new Map<string, Set<string>>();
   const originOf = new Map<string, Set<string>>();
+  const importDir = await loadImportDirectory(links.map((l) => l.sourceTreeId));
   for (const l of links) {
     if (l.sourceTreeId) treesOf.set(l.personId!, new Set([...(treesOf.get(l.personId!) ?? []), l.sourceTreeId]));
-    originOf.set(l.personId!, new Set([...(originOf.get(l.personId!) ?? []), importLabel(scope, l.lastBatch)]));
+    originOf.set(l.personId!, new Set([...(originOf.get(l.personId!) ?? []), importDir.label(scope, l.sourceTreeId)]));
   }
 
   const people = [...rowOf.values()].map((r) => toDupPerson(r, rel(r.id), (id) => relKey(nameRows.get(id)), r.names, [...(treesOf.get(r.id) ?? [])]));
@@ -302,7 +318,7 @@ export async function listDuplicatesOfPerson(scope: Scope, personId: string, opt
     include: (a, b) => (a.id === personId || b.id === personId) && !dismissed.has(pairKey(a.id, b.id)),
     // Alle Paare enthalten diese Person (include) — Abstammung aus der Abfrage oben.
     lineage: (a, b) => lineal.has(a === personId ? b : a),
-  }).filter((p) => p.confidence !== "low");
+  }).filter((p) => options.includeUnclear || p.confidence !== "low");
   return {
     total: pairs.length,
     items: pairs.slice(0, limit).map((p) => {
@@ -314,6 +330,7 @@ export async function listDuplicatesOfPerson(scope: Scope, personId: string, opt
         confidence: p.confidence,
         reasons: p.reasons,
         conflicts: p.conflicts,
+        sentence: evidenceSentence(p.reasons),
       };
     }),
   };

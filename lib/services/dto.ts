@@ -226,17 +226,10 @@ export function toRelationshipDto(r: Relationship): RelationshipDto {
 }
 
 /**
- * Herkunft eines Datensatzes aus einem Import, wie sie die Oberfläche nennt
- * (Vergleichsseite, Dubletten-Hinweis): Datei und Datum nur für
- * Administratoren, sonst „importiert“.
+ * Bezeichnung für Personen ohne Herkunft aus einem Import. Wie ein Import
+ * heißt (Buchstabe, Anzeigename; Dateiname nur für Administratoren), sagt
+ * `loadImportDirectory` in ./origin.ts.
  */
-export function importLabel(scope: Scope, lastBatch: { fileName: string; createdAt: Date } | null | undefined): string {
-  return scope.isAdmin && lastBatch
-    ? `„${lastBatch.fileName}“ (${lastBatch.createdAt.toLocaleDateString("de-DE", { timeZone: "Europe/Berlin" })})`
-    : "importiert";
-}
-
-/** Bezeichnung für Personen ohne Herkunft aus einem Import. */
 export const MANUAL_ORIGIN_LABEL = "von Hand erfasst";
 
 export const fullName = (p: { givenName: string; familyName: string | null }) =>

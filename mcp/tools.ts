@@ -87,6 +87,9 @@ import {
 } from "../lib/services/places";
 import { getPlacePage, placeLinksFor, placeRefForText } from "../lib/services/place-pages";
 import { placeKey } from "../lib/places/normalize";
+import { resolvePersonRedirect } from "../lib/services/redirects";
+import { getPersonOrigin } from "../lib/services/origin";
+import { resolvePersonArgs, withResolvedFrom } from "./person-redirects";
 
 export type ToolContext = {
   /** Wer zugreift — nur für Meldungen (E-Mail bzw. Schlüssel-Präfix). */
@@ -140,7 +143,10 @@ function run<A>(ctx: ToolContext, fn: (scope: Scope, args: A) => Promise<Data>, 
       if (!auth.ok) {
         return errorResult(`Zugriff verweigert (${ctx.label}): ${auth.message} [${auth.reason}]`);
       }
-      return textResult(await fn(auth.scope, args));
+      // Alte Kennungen aufgegangener Personen still auflösen (mcp/person-redirects.ts).
+      const resolved = await resolvePersonArgs(auth.scope, args);
+      const data = await fn(auth.scope, resolved.args);
+      return textResult(resolved.resolvedFrom ? { ...data, resolvedFrom: resolved.resolvedFrom } : data);
     } catch (err) {
       if (err instanceof ServiceError) return errorResult(serviceErrorText(err));
       // Einzelheiten (Datenbankfehler samt Abfrage, Pfade, Rechnernamen) nur
@@ -520,7 +526,8 @@ const GAP_KINDS = [
 ] as const satisfies readonly DataGapKind[];
 const REL_GAP_KINDS = ["marriageWithoutPlace", "partnershipUnknownStatus"] as const satisfies readonly RelationshipGapKind[];
 
-export function registerReadTools(server: McpServer, ctx: ToolContext): void {
+export function registerReadTools(baseServer: McpServer, ctx: ToolContext): void {
+  const server = withResolvedFrom(baseServer);
   server.registerTool(
     "search_persons",
     {
@@ -618,7 +625,12 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
         "images of the cited source shown here as document image (not assigned to another citation of that source). " +
         "Each image has a `mediaId` usable with link_media. " +
         "Relatives the user may not see appear as {restricted: true} placeholders. " +
-        "`subtype` on relatives: BIOLOGICAL/ADOPTIVE/STEP/FOSTER for parents/children, MARRIED/UNMARRIED/DIVORCED/PARTNER_UNKNOWN (marital status unknown) for partners.",
+        "`subtype` on relatives: BIOLOGICAL/ADOPTIVE/STEP/FOSTER for parents/children, MARRIED/UNMARRIED/DIVORCED/PARTNER_UNKNOWN (marital status unknown) for partners. " +
+        "`origin` (only if the user may edit the person): which imports delivered this record — `imports[]` with `letter` " +
+        "(A, B, C … in order of first import), `name` (display name of the import), `firstImportedAt`/`lastImportedAt`, " +
+        "`records` and `viaMerge`; `manual: true` = entered in the app, no import; `merged` = the person was merged " +
+        "from `entries` records (`lastAt`). Origin is additional information only: the app is the truth, imports are " +
+        "sources — there is no per-field origin for name, birth and death.",
       inputSchema: { person_id: personId },
       outputSchema: {
         person: refSchema,
@@ -634,6 +646,14 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
         events: z.array(z.object({ id: z.string(), type: z.string(), title: z.string() }).passthrough()).optional(),
         otherNames: z.array(z.object({ id: z.string(), type: z.string(), name: z.string() }).passthrough()).optional(),
         places: placesOutput,
+        // Herkunft (Importe, Zusammenführungen) — nur, wenn der Benutzer die Person bearbeiten darf.
+        origin: z
+          .object({
+            manual: z.boolean(),
+            imports: z.array(z.object({ letter: z.string(), name: z.string() }).passthrough()),
+            merged: z.object({ entries: z.number(), firstAt: z.string().nullable(), lastAt: z.string().nullable() }).optional(),
+          })
+          .optional(),
       },
       annotations: { title: "Person abrufen", ...READ_ONLY },
     },
@@ -646,7 +666,27 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
         ...d.relations.flatMap((r) => (r.other.restricted ? [] : [r.startPlace, r.endPlace, ...r.events.map((e) => e.place)])),
         ...d.events.map((e) => e.place),
       ]);
-      return { ...personDetailOut(d), ...(places ? { places } : {}) };
+      const origin = d.canEdit ? await getPersonOrigin(scope, a.person_id) : null;
+      return {
+        ...personDetailOut(d),
+        ...(places ? { places } : {}),
+        ...(origin
+          ? {
+              origin: {
+                manual: origin.manual,
+                imports: origin.imports.map((i) => ({
+                  letter: i.letter,
+                  name: i.name,
+                  firstImportedAt: i.firstImportedAt,
+                  lastImportedAt: i.lastImportedAt,
+                  records: i.records,
+                  viaMerge: i.viaMerge,
+                })),
+                ...(origin.merged ? { merged: origin.merged } : {}),
+              },
+            }
+          : {}),
+      };
     }),
   );
 
@@ -1235,7 +1275,8 @@ const summaryOut = (p: PersonLike & Record<string, unknown>) => ({
 const WRITE_NOTE =
   "Acts with the configured user's permissions; every change is written to the audit log (optionally into a change set, see begin_change_set).";
 
-export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
+export function registerWriteTools(baseServer: McpServer, ctx: ToolContext): void {
+  const server = withResolvedFrom(baseServer);
   server.registerTool(
     "begin_change_set",
     {
@@ -1968,7 +2009,11 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
 /** Für die Ressource familytree://person/{id}. */
 export async function personResource(scope: Scope, id: string): Promise<Data | null> {
   const d = await getPersonDetail(scope, id);
-  return d ? personDetailOut(d) : null;
+  if (d) return personDetailOut(d);
+  // Alte Kennung einer aufgegangenen Person: die bleibende liefern und es sagen.
+  const to = await resolvePersonRedirect(scope, id);
+  const merged = to ? await getPersonDetail(scope, to) : null;
+  return merged ? { ...personDetailOut(merged), resolvedFrom: { [id]: to } } : null;
 }
 
 // ---------------------------------------------------------------------------

@@ -511,7 +511,7 @@ selbst gelesen, nicht im eigenen Code.
 | `E2E_PRODUCTION_DEV_LOGIN` | nur `scripts/mock.mjs start` setzt `mock-only`: Dev-Login im Produktions-Build — wirkt nur zusammen mit Datenbank `…_mock`/`…_test` und Medienordner `…-mock`/`…-test` (`lib/dev-login.ts`); im Stack nie gesetzt |
 | `E2E_AREA` | von `scripts/e2e.mjs` gesetzt; `write` hängt dann nur am Setup |
 | `CI` | Playwright: 2 Worker, `forbidOnly` |
-| `MERGE_SCREENS` | Ordner für Bildschirmfotos in `e2e/write/merge.spec.ts` und `connect.spec.ts` |
+| `MERGE_SCREENS` | Ordner für Bildschirmfotos in `e2e/write/merge.spec.ts`, `merge-comfort.spec.ts` und `connect.spec.ts` |
 | `GEDCOM_PERF` / `GEDCOM_PERF_N` | große GEDCOM-Leistungsmessung in `tests/gedcom-performance.test.ts` |
 
 ---
@@ -658,6 +658,13 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   Rechte, Regeln, Audit, MCP-Werkzeuge, Export.
 - **`merge.db.test.ts`** — Zusammenführen ohne stillen Datenverlust,
   Blockaden, erneuter Import danach, Export.
+- **`merge-followups.db.test.ts`** — Folgedubletten (Klassen wie die Liste,
+  gleichnamige Geschwister „unklar“, Rechte, „kein Duplikat“, gemeinsam nur
+  „sicher“) und „Erst die Eltern, dann dieses Paar“ (nur vorgeschlagene
+  Paare, kein schwacher Treffer, bei jedem Hindernis ändert sich nichts).
+- **`person-redirect.db.test.ts`** — alte Kennung als Umleitung: Anlegen,
+  Kette, Sichtbarkeit, gelöschtes Ziel, Rückfüllung aus dem Audit (einzeln,
+  gesammelt, Kette, „Importe verbinden“, unbrauchbare Einträge), KI-Zugang.
 - **`person-duplicates.db.test.ts`** — mögliche Dubletten einer Person mit
   Rechten (nichts, auch keine Anzahl, ohne Bearbeitungsrecht an beiden).
 - **`reference.db.test.ts`** — „Das bin ich“, Auflösung der Bezugsperson,
@@ -782,6 +789,10 @@ zum nächsten Setup).
   des alten Formats, beschränkt auf eigene Datensätze.
 - **`media.spec.ts`** — Bild hochladen, Porträt, ZIP-Export, Löschen und
   Wiederherstellen per Import.
+- **`merge-comfort.spec.ts`** — Dialog „Zusammenführen …“, alte Kennung
+  (308 für Seite, Stammbaum und API, auch über eine Kette; 409 beim
+  Schreiben; 404 bei nicht sichtbarer Zielperson), Folgedubletten mit
+  gemeinsamer Vorschau, „Erst die Eltern, dann dieses Paar“.
 - **`merge.spec.ts`** — Dubletten zusammenführen als Bearbeiter, „kein
   Duplikat“, sichere Paare, Blockade, Betrachter ohne Zugriff.
 - **`person-lifecycle.spec.ts`** — Person anlegen, bearbeiten, Beziehungen,

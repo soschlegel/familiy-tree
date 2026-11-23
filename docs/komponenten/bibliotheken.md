@@ -609,6 +609,25 @@ Ausgangsperson („B ist der Onkel von A“).
 **Tests:** `tests/kinship.test.ts`, `tests/genealogy.test.ts`,
 `tests/reference.test.ts`.
 
+### lib/origin.ts
+**Zweck:** Reine Regeln der **Herkunft** (Paket „Herkunft sichtbar
+machen“) ohne Datenbank, für Server und Browser: Buchstabe und Farbe je
+Import, „von Hand erfasst“, Texte und Typen. Den Dienst dazu beschreibt
+[dienste.md](dienste.md) unter `lib/services/origin.ts`.
+
+**Wichtige Funktionen/Typen:** `importLetter` (A, B, C … ohne „H“, nach Z
+zweistellig), `originColor`/`ORIGIN_COLORS` (Okabe-Ito ohne Schwarz, mit
+passender Schriftfarbe), `MANUAL_KEY`/`MANUAL_ORIGIN` („H“, „von Hand
+erfasst“), `UNKNOWN_KEY` („?“ für Vermerke ohne Quell-Baum-Kennung),
+`ORIGIN_PARAM` (`herkunft`), `ORIGIN_CHIP_LIMIT`/`limitChips` (höchstens
+drei Chips, dann „+n“), `originText`, Typen `OriginEntry`, `TreeOrigin`,
+`OriginChipMap`; `luminance`/`contrast` für den Kontrast-Test.
+
+**Regeln:** Farbe steht nie allein (Buchstabe und Text immer dabei); ab dem
+achten Import wiederholen sich die Farben, der Buchstabe bleibt eindeutig.
+
+**Tests:** `tests/origin.test.ts`.
+
 ### lib/reference.ts
 **Zweck:** **Bezugsperson**: Verwandtschaft aller Personen zu einer Person
 und Zuordnung der Vorfahren zu den vier Großeltern-Linien. Rein, auch im
@@ -861,6 +880,7 @@ für Vorschau, Zusammenführen, Sammel-Zusammenführen und Tests. Dienst:
 
 **Wichtige Funktionen/Typen:** `LinkPerson`, `LinkPair` (Klasse, Punkte,
 Gründe, Widersprüche, `viaRelative`, `bridge`, `veryLikely`),
+`relaxedMatch` (gelockerte Prüfung für Verwandte; vergibt nie eine Klasse),
 `LinkResult` (Paare, sichere Cluster, Teile vorher/nachher, Brücken je
 Gruppenpaar, Dauer), `LinkOptions`, `linkImports`, `evidenceSentence`.
 
@@ -889,7 +909,8 @@ Gruppenpaar, Dauer), `LinkOptions`, `linkImports`, `evidenceSentence`.
 - `evidenceSentence` macht aus den Gründen einen Satz („Gleicher Name,
   gleiches Geburtsdatum …; aus verschiedenen Importen.“).
 
-**Benutzt von:** `lib/services/import-linking.ts`,
+**Benutzt von:** `lib/services/import-linking.ts`, `lib/services/duplicates.ts`
+und `lib/services/merge-followups.ts` (`evidenceSentence`, `relaxedMatch`),
 `components/ConnectImports.tsx`, `tests/fixtures/linking-generator.ts`.
 
 **Tests:** `tests/import-linking.test.ts` (erzeugte Testbäume),

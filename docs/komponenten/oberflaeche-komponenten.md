@@ -17,14 +17,14 @@ Abschnitt 1). Seiten und API-Routen selbst stehen in
 ## Inhalt
 
 - [Stammbaum und Karte](#stammbaum-und-karte) — `FamilyTree`, `PersonNode`,
-  `MarriageNode`, `MarriageEdge`, `ParentEdge`, `ReferenceLines`,
+  `OriginChips`, `MarriageNode`, `MarriageEdge`, `ParentEdge`, `ReferenceLines`,
   `ReferenceChip`, `ReferencePanel`, `MapExplorer`, `MapPersonChooser`, `Avatar`,
   `gender-style`
 - [Gestaltungssystem: app/globals.css](#gestaltungssystem-appglobalscss)
 - [Personen, Ereignisse, Quellen und Medien](#personen-ereignisse-quellen-und-medien)
   — `PersonForm`, `DateInput`, `EventSection`, `CitationSection`,
   `CitationLink`, `NameVariants`, `PersonFamilies`, `RelationshipEditor`,
-  `PersonChanges`, `PersonPicker`, `AttachedMedia`, `MediaGallery`,
+  `PersonChanges`, `PersonOrigin`, `PersonPicker`, `AttachedMedia`, `MediaGallery`,
   `DeletePersonButton`, `SelfPersonButton`, `SourceForm`, `DeleteSourceButton`
 - [Rahmen und Helfer](#rahmen-und-helfer) — `NavBar`, `PageLoading`,
   `AutoSubmit`, `api-client`, `useDismiss`, `ai-access-labels`,
@@ -32,8 +32,8 @@ Abschnitt 1). Seiten und API-Routen selbst stehen in
   `help-render`
 - [Import, Export, Dubletten und Zusammenführen](#import-export-dubletten-und-zusammenführen)
   — `GedcomImport`, `GedcomExportDialog`, `DataTransfer`, `ImportHistory`,
-  `ConnectImports`, `DuplicateBanner`, `DuplicateList`, `MergeView`,
-  `MergeWithPicker`, `ChangeSetList`, `ChangeEntryList`
+  `ImportSources`, `ConnectImports`, `OriginOverview`, `DuplicateBanner`, `DuplicateList`, `MergeView`,
+  `MergeDialog`, `FollowUpDuplicates`, `ChangeSetList`, `ChangeEntryList`
 - [Verwaltung und KI-Zugang](#verwaltung-und-ki-zugang) — `UserAdmin`,
   `FamilyAdmin`, `PlaceAdmin` (exportiert `PlaceAutoAssign` und `PlaceTable`),
   `AiAccessManager`, `AiConnectGuide`, `ApiTokenList`
@@ -50,6 +50,7 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 - `focus` — Fokusperson (Fokus-Ansicht) bzw. Person, auf die der ganze Baum zentriert wird. Geprüft gegen ein ID-Muster.
 - `up`, `down` — Tiefe der Vorfahren bzw. Nachkommen in der Fokus-Ansicht (1–4, Standard 2, `FOCUS_DEPTH` in `lib/focus-tree.ts`). Standardwerte lässt `treeUrl` (exportiert aus `FamilyTree.tsx`) weg, damit Adressen kurz bleiben.
 - `bezug` — vorübergehende Bezugsperson; `bezug=ich` kehrt zur eigenen Person zurück.
+- `herkunft=1` — Schalter „Herkunft“ (`ORIGIN_PARAM` in `lib/origin.ts`). Nur für Bearbeiter und Administratoren (`canSeeOrigin`); bei anderen wirkt die Adresse nicht. Nur dann lädt der Server die Zuordnung (`loadTreeOrigin`, in der Fokus-Ansicht nur für den Ausschnitt). `treeUrl` trägt den Parameter bei allen Baum-Links mit, solange der Schalter an ist; kein Cookie.
 - `denied` — nur für den Hinweis „fehlende Berechtigung“ der Seite.
 - Cookies: `tree-focus` (zuletzt fokussierte Person, `FOCUS_COOKIE`), `tree-lines` (Schalter „Linien“, `LINES_COOKIE`), `tree-bezug` (vorübergehende Bezugsperson, `REFERENCE_COOKIE`). Gesetzt werden sie im Browser von `FamilyTree` bzw. `ReferenceChip`, gelesen vom Server.
 
@@ -93,13 +94,20 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 - Mit „Linien“ tragen Vorfahren Tönung, Randstreifen und Kurzzeichen ihrer Großeltern-Linie; die Legende nennt die vier Großeltern (`LineLegend`).
 - Oben auf der Seite zeigt `ReferenceChip`, aus wessen Sicht der Baum gerade gezeigt wird.
 
+**Herkunft (Schalter „Herkunft“)**
+
+- Verteilt über `TreeOriginContext` (aus `OriginChips.tsx`), nicht über Knotendaten — Hervorheben legt keine Knoten neu an.
+- Jede bearbeitbare Karte trägt unten rechts Chips mit dem Buchstaben ihrer Importe (bzw. gestricheltes „H“ für „von Hand erfasst“); Personen aus mehreren Importen (Verbindungspersonen) bekommen außen einen doppelten Rand. Nur lesbare Personen bleiben ohne Herkunft.
+- „Linien“ und „Herkunft“ gehen gleichzeitig und belegen getrennte Stellen: Linien = Tönung, Streifen links, Kurzzeichen oben; Herkunft = Chips unten rechts, Ring außen.
+- Die Legende (`OriginLegend`) nennt nur Importe, die in der Ansicht vorkommen, mit Zahl der Personen; ein Klick hebt deren Personen hervor (alle anderen treten zurück), ein zweiter hebt es auf.
+
 ### components/FamilyTree.tsx
 
 **Zweck:** Interaktive Stammbaumfläche für alle drei Ansichten (Fokus, Generationen, Zeitstrahl) samt Werkzeugleiste, Suche, Familienfilter, Legende, Fokus-Verlauf und Jahresachse. Exportiert außerdem `treeUrl` (Adressbau der Baumseite).
 
 **Wo eingesetzt:** `app/tree/page.tsx` — je einmal für die Fokus-Ansicht und für den ganzen Baum (mit unterschiedlichem `key`, damit beim Wechsel neu aufgebaut wird).
 
-**Props/Daten:** Baumdaten (ganzer Baum oder Fokus-Ausschnitt mit Mitgliedsangaben), die aktive Ansicht, die Liste der sichtbaren Familien für den Filter, optional eine zu zentrierende Person, die Bezugsperson samt Verwandtschaft (oder keine) und den Anfangszustand des Schalters „Linien“ aus dem Cookie.
+**Props/Daten:** Baumdaten (ganzer Baum oder Fokus-Ausschnitt mit Mitgliedsangaben), die aktive Ansicht, die Liste der sichtbaren Familien für den Filter, optional eine zu zentrierende Person, die Bezugsperson samt Verwandtschaft (oder keine), den Anfangszustand des Schalters „Linien“ aus dem Cookie, `canOrigin` (Schalter „Herkunft“ zeigen) und `origin` (Herkunft der gezeigten Personen, nur bei eingeschaltetem Schalter).
 
 **Verhalten:**
 
@@ -110,7 +118,8 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 - *Familienfilter* (nur ganzer Baum, Mehrfachauswahl, bleibt beim Ankreuzen offen; „Alle Familien“ hebt auf und schließt). Beziehungen bleiben nur, wenn beide Personen übrig sind. In der Fokus-Ansicht deaktiviert und auf dem Telefon ausgeblendet. Schließen bei Klick daneben, Escape oder Fokusverlust über `useDismiss`.
 - *„Ehen zeigen“:* aus = Partnerbeziehungen entfernt, Paare werden getrennt und Generationen richten sich nur nach Abstammung; in der Fokus-Ansicht blendet es Partner ohne gemeinsames Kind im Ausschnitt aus (Logik in `layoutFocus`).
 - *„Linien“* (nur mit Bezugsperson): färbt Ahnenketten, merkt sich den Zustand im Cookie und klappt die Legende auf.
-- *Legende* (unten links, aufklappbar): Arten der Elternschaft, Partnerschaftsarten, „nicht freigegeben“, Geschlechtsfarben, Klickverhalten je Ansicht; bei aktiven Linien zuerst die Großeltern-Legende. Anfangs offen nur auf breiten Bildschirmen und nicht in der Fokus-Ansicht (außer Linien sind beim Laden an).
+- *„Herkunft“* (nur mit `canOrigin`): Kontrollkästchen, das zur Adresse mit bzw. ohne `herkunft=1` navigiert — der Haken folgt der Adresse, wechselt also erst, wenn der Server die Zuordnung geladen hat. An klappt auf breiten Bildschirmen die Legende auf; hervorgehobener Import nur im Speicher der Seite.
+- *Legende* (unten links, aufklappbar): Arten der Elternschaft, Partnerschaftsarten, „nicht freigegeben“, Geschlechtsfarben, Klickverhalten je Ansicht; bei aktiver Herkunft zuerst die Herkunfts-Legende, bei aktiven Linien die Großeltern-Legende. Auf dem Telefon bleibt bei Linien oder Herkunft nur deren Legende; sind beide an, entfällt die allgemeine Liste auch auf breiten Bildschirmen. Anfangs offen nur auf breiten Bildschirmen und nicht in der Fokus-Ansicht (außer Linien sind beim Laden an).
 - *Anfangsausschnitt im ganzen Baum:* passt der Baum lesbar hinein, wird eingepasst; sonst beginnt die Ansicht lesbar bei der obersten Generation mit einer sichtbaren Person. Verschieben ist auf den Baum plus Rand begrenzt.
 - *Zeitstrahl:* Jahresachse als feste Leiste links, die beim Verschieben stehen bleibt und Zoom/Verschiebung direkt aus dem React-Flow-Speicher liest.
 - *Leistung:* Knotenobjekte werden zwischengespeichert, solange sich ihr Zustand nicht ändert; Kanten hängen nur davon ab, *ob* gesucht wird. Im ganzen Baum werden nur sichtbare Elemente gezeichnet, in der Fokus-Ansicht alle (damit Tab alle Karten erreicht).
@@ -123,7 +132,7 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 **Ruft auf:** `GET /api/persons?q=…&limit=8` (Suche in der Fokus-Ansicht); Porträts indirekt über die Karten (`/api/media/<id>?variant=thumb`). Navigation über den Next-Router.
 
-**Tests:** `e2e/read/tree-focus.spec.ts` (Startperson, Fokus-Klick, Verlauf, Tiefe, Zurück/Vor, Suche, „Ganzer Baum“, gesperrte Personen), `e2e/read/tree-whole.spec.ts` (Ansichtswechsel, Hochzeitsknoten im Zeitstrahl, Suche, Familienfilter, „Ehen zeigen“, Legende), `e2e/read/reference.spec.ts` (Schalter „Linien“, farbige Kanten, Linienlegende), `e2e/read/permissions.spec.ts` (keine fremden Namen, Suche), `e2e/read/mobile.spec.ts` und `e2e/read/quality.spec.ts` (Tippziele, Bildschirmhöhe, axe), `e2e/read/navigation.spec.ts` (Fußzeile auf der Baumseite). Layout-Logik: `tests/layout.test.ts`, `tests/focus.test.ts`, `tests/focus.db.test.ts`.
+**Tests:** `e2e/read/tree-focus.spec.ts` (Startperson, Fokus-Klick, Verlauf, Tiefe, Zurück/Vor, Suche, „Ganzer Baum“, gesperrte Personen), `e2e/read/tree-whole.spec.ts` (Ansichtswechsel, Hochzeitsknoten im Zeitstrahl, Suche, Familienfilter, „Ehen zeigen“, Legende), `e2e/read/reference.spec.ts` (Schalter „Linien“, farbige Kanten, Linienlegende), `e2e/read/origin.spec.ts` und `e2e/write/origin.spec.ts` (Schalter „Herkunft“, Rechte, Legende, Hervorheben, mit „Linien“ zugleich, Telefonbreite), `e2e/read/permissions.spec.ts` (keine fremden Namen, Suche), `e2e/read/mobile.spec.ts` und `e2e/read/quality.spec.ts` (Tippziele, Bildschirmhöhe, axe), `e2e/read/navigation.spec.ts` (Fußzeile auf der Baumseite). Layout-Logik: `tests/layout.test.ts`, `tests/focus.test.ts`, `tests/focus.db.test.ts`.
 
 ### components/PersonNode.tsx
 
@@ -139,6 +148,7 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 - *Klickverhalten:* Im ganzen Baum führt die Karte zur Personenseite, das Ecksymbol in die Fokus-Ansicht. In der Fokus-Ansicht stellt die Karte die Person in den Mittelpunkt, das Ecksymbol öffnet die Personenseite; die Fokuskarte selbst öffnet die Personenseite und trägt das Abzeichen „Im Fokus“.
 - *Randhinweise* (Fokus-Ansicht): „▲ Vorfahren“ oben bzw. „▼ +n Kinder“ unten, wenn Verwandte außerhalb des Ausschnitts liegen.
 - *Bezugsperson:* Verwandtschaftsbegriff als Plakette unter der Karte, Bezugsperson gestrichelt umrandet; bei „Linien“ Tönung, Streifen und Kurzzeichen.
+- *Herkunft* (aus `TreeOriginContext`): Chips (höchstens drei, dann „+n“) unten rechts an der Karte, doppelter Rand außen bei Verbindungspersonen (`data-connecting`), Kennungen als `data-origin` an der Karte; bei einem hervorgehobenen Import treten Karten ohne ihn zurück (wie bei der Suche). Die Chips sind für Screenreader verborgen, stattdessen nennt der versteckte Text „Herkunft: Import A: … (Verbindungsperson)“.
 - *Gesperrte Person:* Platzhalter „Nicht freigegeben / keine Angaben“ mit Schloss, ohne Link, ohne Randhinweise, nicht fokussierbar.
 - *Ehe-Verbindungsstück* (`MarriageLink`): Hochzeitsbild oder Symbol je Partnerschaftsart, Linienbild und Kurzjahr; Link auf die Personenseite mit `?rel=<Beziehung>`.
 - *Anschlüsse:* eindeutige Handle-IDs; Doppelkarten haben zusätzlich Anschlüsse über/unter jeder Hälfte (damit eine Linie nicht fälschlich vom Paar ausgeht), Ehe-Anschlüsse unten seitlich versetzt; bei Paaren mit Kindern ein senkrechter „Stiel“ aus der Paarmitte.
@@ -148,7 +158,19 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 **Ruft auf:** keine API per fetch; Bilder über `/api/media/<id>?variant=thumb`.
 
-**Tests:** `e2e/read/tree-focus.spec.ts` (Fokus-Klick, `tree-person-open`, Randhinweise, Platzhalter), `e2e/read/tree-whole.spec.ts` (`tree-person-focus`, Doppelkarten), `e2e/read/reference.spec.ts` (`tree-kinship`, Kurzzeichen, `data-reference`), `e2e/read/dates.spec.ts` (Datumsanzeige auf der Baumkarte), `e2e/write/media.spec.ts` (Porträt auf der Baumkarte), `e2e/read/permissions.spec.ts`, `e2e/read/mobile.spec.ts`.
+**Tests:** `e2e/read/tree-focus.spec.ts` (Fokus-Klick, `tree-person-open`, Randhinweise, Platzhalter), `e2e/read/tree-whole.spec.ts` (`tree-person-focus`, Doppelkarten), `e2e/read/reference.spec.ts` (`tree-kinship`, Kurzzeichen, `data-reference`), `e2e/read/dates.spec.ts` (Datumsanzeige auf der Baumkarte), `e2e/write/media.spec.ts` (Porträt auf der Baumkarte), `e2e/read/origin.spec.ts`, `e2e/write/origin.spec.ts` (Chips, Ring, Hervorheben), `e2e/read/permissions.spec.ts`, `e2e/read/mobile.spec.ts`.
+
+### components/OriginChips.tsx
+
+**Zweck:** Bausteine der Herkunft: `OriginChip` (ein Buchstabe im Kreis in der Farbe des Imports; „H“ gestrichelt ohne Farbe), `OriginChips` (Gruppe zu einer Liste von Kennungen, höchstens drei, dann „+n“), `OriginLegend` (Herkunfts-Legende im Baum), `TreeOriginContext`, Hilfen `originListText` und `entryMap`. Regeln für Buchstaben, Farben und Texte stehen in `lib/origin.ts`.
+
+**Wo eingesetzt:** `FamilyTree` (Legende, Kontext), `PersonNode` (Chips an der Karte), `PersonOrigin`, `OriginOverview`, `ImportSources` sowie an den Einträgen der Personenseite: `EventSection`, `NameVariants`, `RelationshipEditor`, `CitationSection` (jeweils über eine optionale Eigenschaft `origin` mit den Chips je Eintrag; fehlt sie, erscheint nichts).
+
+**Verhalten:** Farbe steht nie allein — jeder Chip trägt Buchstaben und Titel („Import A: Name“ bzw. „von Hand erfasst“), jede Gruppe einen Text für Screenreader (abschaltbar mit `decorative`, wenn der umgebende Text die Herkunft schon nennt). Unbekannte Kennungen werden übergangen. Legende: Einträge sind Knöpfe mit `aria-pressed`, ein Statustext sagt, was hervorgehoben ist; Hinweis auf den doppelten Rand nur, wenn es Verbindungspersonen gibt; Hilfe-Link auf die Stammbaum-Hilfe. Telefon: Legendeneinträge mindestens 44 px hoch.
+
+**Server oder Client:** Client.
+
+**Tests:** `e2e/read/origin.spec.ts`, `e2e/write/origin.spec.ts`; Palette und Kontrast in `tests/origin.test.ts`.
 
 ### components/MarriageNode.tsx
 
@@ -758,13 +780,38 @@ vorher → nachher …“, Betrachter: „kein Abschnitt ‚Änderungen‘, API
 verweigert“). Unit (Dienst): `tests/changelog.test.ts`,
 `tests/changelog.db.test.ts`.
 
+### components/PersonOrigin.tsx
+
+**Zweck:** Block „Herkunft“ auf der Personenseite: aus welchen Importen die
+Person stammt und ob sie aus mehreren Einträgen zusammengeführt wurde.
+
+**Wo eingesetzt:** `app/people/[id]/page.tsx`, vor „Änderungen“ — nur wenn
+`getPersonOrigin` Daten liefert (also nur für Benutzer, die die Person
+bearbeiten dürfen). Dieselben Daten liefern die Chips an Ereignissen,
+weiteren Namen, Beziehungen und Belegen der Seite.
+
+**Verhalten:** Je Import Chip, Name, „importiert am …“, ggf. „zuletzt
+aktualisiert am …“, Zahl der Einträge dieses Imports und „durch
+Zusammenführen dazugekommen“. Ohne Import: „Von Hand erfasst — diese Person
+stammt aus keinem Import.“ Bei Zusammenführungen ein Satz „Zusammengeführt
+am … aus 2 Einträgen“ bzw. „… aus n Einträgen, zuletzt am …“. Ein Hinweis
+sagt ehrlich, dass es für Name, Geburt, Tod und Geschlecht keine Herkunft
+je Angabe gibt, und verweist auf „Änderungen“. Hilfe-Link auf die
+Personen-Hilfe (Abschnitt „Herkunft“).
+
+**Server oder Client:** Server-Komponente (keine Interaktion).
+
+**Tests:** `e2e/read/origin.spec.ts` (von Hand erfasst, fehlt bei nur
+lesbaren Personen und für Betrachter), `e2e/write/origin.spec.ts` (zwei
+Importe, „zusammengeführt am … aus 2 Einträgen“, Chips an Einträgen).
+
 ### components/PersonPicker.tsx
 
 **Zweck:** Suchfeld zur Personenauswahl statt Drop-Down (bei vielen Personen
 und gleichnamigen Verwandten), optional mit Neuanlage aus dem Suchtext.
 
 **Wo eingesetzt:** nicht direkt in `app/`; in `RelationshipEditor`
-(Personenseite, mit Neuanlage), `MergeWithPicker` (Personenseite, Dubletten
+(Personenseite, mit Neuanlage), `MergeDialog` (Personenseite, Dubletten
 zusammenführen) und `UserAdmin` (`app/admin/users`, Person einem Benutzer
 zuordnen).
 
@@ -801,7 +848,7 @@ ohne `familyIds`).
 **Tests:** `e2e/write/person-lifecycle.spec.ts` (Auswahl über die Combobox
 „Person“, „Neu anlegen: …“), `e2e/write/reference.spec.ts` (Zuordnung in
 der Benutzerverwaltung), `e2e/write/merge.spec.ts` (Suche im Picker von
-`MergeWithPicker` über den Platzhalter). Kein Unit-Test.
+`MergeDialog` über den Platzhalter). Kein Unit-Test.
 
 ### components/AttachedMedia.tsx
 
@@ -1014,7 +1061,7 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 ### components/PageLoading.tsx
 
 - **Zweck:** Platzhalter, solange eine Seite lädt: ruhig pulsierende Balken und Kärtchen statt eines Spinners.
-- **Wo eingesetzt:** `app/tree/loading.tsx` und `app/research/loading.tsx`, sonst nirgends.
+- **Wo eingesetzt:** `app/research/loading.tsx` und als `Suspense`-Platzhalter in `app/tree/page.tsx`, sonst nirgends.
 - **Props:** `label` (optional; Standard „Wird geladen…“). Der Text ist nur für Screenreader sichtbar.
 - **Verhalten:** Hülle mit `role="status"` und `aria-live="polite"`; die Platzhalterformen sind `aria-hidden`. Das Kachelraster hat 1, 2 bzw. 3 Spalten je nach Breite.
 - **Server oder Client:** kein `"use client"`. Reine Darstellung, als Server-Komponente nutzbar.
@@ -1204,6 +1251,7 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
     - „Überholte Rohdaten entfernen“, mit Rückfrage.
   - Vorschauen: „Verwerfen“, mit Rückfrage; die aufbewahrte Datei wird dabei gelöscht. Nach 7 Tagen verfallen Vorschauen von selbst (laut Text, die Umsetzung liegt im Server).
   - Lädt neu, sobald das Ereignis `import-finished` kommt.
+  - Am Ende des Abschnitts `ImportSources` („Namen der Importe“).
 - **Server oder Client:** Client.
 - **Ruft auf:**
   - `GET /api/import/batches?limit=50` (Verlauf laden)
@@ -1212,6 +1260,16 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
   - `DELETE /api/import/gedcom/[id]` (Vorschau verwerfen)
   - `GET /api/import/batches/[id]/file` (Originaldatei, als Link)
 - **Tests:** `e2e/write/gedcom-import.spec.ts` (`import-entry`, `import-preview-entry`, Verwerfen, überholte Rohdaten). Das Neu-Einlesen prüft nur die Serverseite: `tests/import-sources.db.test.ts`. Der Knopf `import-reread` kommt in keinem e2e-Test vor.
+
+### components/ImportSources.tsx
+
+- **Zweck:** „Namen der Importe“: je Import (Quell-Baum; mehrere Läufe zählen als einer) Chip mit Buchstabe und Farbe, Anzeigename bzw. Standardname „(noch kein eigener Name)“, Datei, Zahl der Personen und Läufe, erster/letzter Import — und „Umbenennen“.
+- **Wo eingesetzt:** in `ImportHistory` (`app/admin/data/page.tsx`, nur Administratoren). Ohne Importe erscheint nichts.
+- **Props:** keine; lädt selbst, neu beim Ereignis `import-finished`.
+- **Verhalten:** Umbenennen öffnet ein Eingabefeld in der Zeile (höchstens 60 Zeichen, Platzhalter = Standardname); leer speichern stellt den Standardnamen wieder her. Erfolg als `status` („Import A heißt jetzt „…“.“), Fehler (z.B. Name schon vergeben) als `alert`. Buchstabe und Farbe ändern sich nie.
+- **Server oder Client:** Client.
+- **Ruft auf:** `GET` und `PATCH /api/import/sources`.
+- **Tests:** `e2e/write/origin.spec.ts` (Umbenennen, Buchstabe und Farbe bleiben, Bearbeiter → 403). Dienst: `tests/origin.db.test.ts`.
 
 ### components/ConnectImports.tsx
 
@@ -1228,12 +1286,23 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
   - „Gemeinsame Vorschau“: was umzieht, zusammenfällt oder blockiert ist, und eine Warnung, wenn danach mehr Personen für weitere Familien sichtbar werden.
   - „Jetzt zusammenführen“ mit Rückfrage. Danach Ergebnis und gegebenenfalls ein Knopf zum Folge-Abgleich.
   - Der Lauf-Bereich ist `aria-live="polite"`. Auf dem Telefon haben die Personen-Links größere Tippziele.
+  - Importe heißen in der Auswahl „Import A · Name“ (Bezeichnung aus `loadImportDirectory`). Ist ein Zusammenführen fertig, löst die Komponente das Fenster-Ereignis `origin-changed` aus, damit `OriginOverview` neu lädt.
 - **Server oder Client:** Client.
 - **Ruft auf:**
   - `GET` und `POST /api/connect` (Gruppen und Läufe laden bzw. Abgleich starten)
   - `GET /api/connect/[id]` (Lauf laden, mit Filter und Seite)
   - `POST /api/connect/[id]` mit Aktion `decide`, `preview` oder `apply`
 - **Tests:** `e2e/write/connect.spec.ts` (Start, Zusammenfassung, Vorschau, Anwenden, Folge-Abgleich). Die Logik prüfen `tests/import-linking.test.ts` und `tests/import-linking.db.test.ts`. Das Fortsetzen eines unterbrochenen Laufs (`connect-interrupted`) ist in e2e nicht abgedeckt.
+
+### components/OriginOverview.tsx
+
+- **Zweck:** Übersicht „Importe und ihre Verbindungen“ oben auf „Importe verbinden“: jeder Import (und „von Hand erfasst“) als Kreis, Fläche nach Zahl der Personen; je Import-Paar eine Linie mit der Zahl der Verbindungspersonen (Personen, die schon in beiden vorkommen). Ohne Linie hängen zwei Importe noch nicht zusammen.
+- **Wo eingesetzt:** `app/research/connect/page.tsx` (nur Administratoren), über `ConnectImports`.
+- **Props:** keine; lädt selbst.
+- **Verhalten:** Das Bild (SVG, Kreise auf einer Ellipse, lange Namen gekürzt) ist nur Veranschaulichung mit zusammenfassendem `aria-label`; dieselben Angaben stehen darunter als zwei Tabellen (Importe mit Personenzahl, Paare mit Verbindungspersonen). Lädt neu beim Ereignis `origin-changed`. Ohne Personen: „Noch keine Personen.“
+- **Server oder Client:** Client.
+- **Ruft auf:** `GET /api/origin/overview`.
+- **Tests:** `e2e/write/origin.spec.ts` (Kreise, Kante mit Zahl, Tabellen, Telefonbreite). Dienst: `tests/origin.db.test.ts`.
 
 ### components/DuplicateBanner.tsx
 
@@ -1276,28 +1345,45 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
   - Personenkarten „Bleibt“ und „Geht darin auf“ mit Lebensdaten, Eltern, Partnern, Kindern, Familien, Importen und Zählern.
   - „⇄ Seiten tauschen“ ersetzt die URL; es wird kein innerer Zustand getauscht.
   - Blockaden stehen in einer Fehlerbox (`role="alert"`), gegebenenfalls mit Links zum Zusammenführen der Eltern zuerst.
+  - „Erst die Eltern, dann dieses Paar zusammenführen …“ erscheint in der Fehlerbox nur, wenn nichts anderes im Weg steht als doppelt erfasste Eltern, die sich alle zuordnen lassen (`resolvable` der Sperre). Der Knopf holt die Vorschau jedes Elternpaars und zeigt sie: wer bleibt, wer darin aufgeht, was dabei geschieht, Link „Einzeln vergleichen“. Erst „Eltern und dieses Paar zusammenführen“ (mit Rückfrage) führt aus — in einem Aufruf, mit dem Stand aller Vorschauen. Jede neue Vorschau des Paars schließt den Abschnitt wieder.
   - „Angaben einzeln ansehen und wählen“ ist ein eigens gesteuertes `<details>`. Je Feld gibt es Optionsfelder (bleibt, andere, gegebenenfalls „beide behalten“) und eine Begründung. Abweichende Felder sind farbig hinterlegt und für Screenreader als „weicht ab“ gekennzeichnet.
   - Für Beziehungen, die beide Personen haben, wählt man die Art (leiblich, Adoption usw.).
   - „Zusammenführen“ mit Rückfrage. Der Server bekommt den Token der Vorschau mit. Bei 409 (zwischenzeitlich geändert) wird die Vorschau neu geladen.
-  - Das Ergebnis zeigt Sätze und Links „Zur Person“ und „Weitere Dubletten prüfen“.
+  - Das Ergebnis zeigt Sätze und Links „Zur Person“ und „Weitere Dubletten prüfen“, nach „Erst die Eltern“ auch die dabei zusammengeführten Elternteile, und darunter `FollowUpDuplicates` für die bleibende Person (und diese Elternteile).
   - Auf dem Telefon stehen die Spalten untereinander; die Seitenbeschriftung „Bleibt“ bzw. „Andere“ erscheint dann sichtbar.
   - Der Bereich trägt `aria-busy`, solange geladen wird.
 - **Server oder Client:** Client.
-- **Ruft auf:** `POST /api/persons/merge/preview`, `POST /api/persons/merge`.
-- **Tests:** `e2e/write/merge.spec.ts` (Tauschen, Felder, Blockaden mit Eltern-Link, Ausführen); `e2e/read/duplicate-banner.spec.ts` und `e2e/write/duplicate-banner.spec.ts` (Weg vom Hinweis zum Vergleich). Die Logik prüfen `tests/merge.db.test.ts` und `tests/merge-rules.test.ts`.
+- **Ruft auf:** `POST /api/persons/merge/preview` (auch je Elternpaar), `POST /api/persons/merge` (gegebenenfalls mit `parentsFirst`).
+- **Tests:** `e2e/write/merge.spec.ts` (Tauschen, Felder, Blockaden mit Eltern-Link, Ausführen); `e2e/write/merge-comfort.spec.ts` (Eltern zuerst, Folgedubletten); `e2e/read/duplicate-banner.spec.ts` und `e2e/write/duplicate-banner.spec.ts` (Weg vom Hinweis zum Vergleich). Die Logik prüfen `tests/merge.db.test.ts` und `tests/merge-rules.test.ts`.
 
-### components/MergeWithPicker.tsx
+### components/MergeDialog.tsx
 
-- **Zweck:** Auf der Personenseite die andere, doppelt erfasste Person suchen und zum Vergleich springen.
-- **Wo eingesetzt:** `app/people/[id]/page.tsx`, im Bereich „Verwaltung“ der Personenseite.
-- **Props:** `personId` (bleibt), `people` (Auswahlliste für `PersonPicker`).
+- **Zweck:** Knopf „Zusammenführen …“ im Kopf der Personenseite mit Dialog: zuerst die möglichen Dubletten dieser Person, darunter die freie Personensuche.
+- **Wo eingesetzt:** `app/people/[id]/page.tsx`, neben „Im Stammbaum zeigen“; nur für Bearbeiter.
+- **Props:** `personId` (bleibt), `personName`, `people` (Auswahlliste für `PersonPicker`).
 - **Verhalten:**
-  - Zunächst nur ein Erklärsatz und der Knopf „Mit anderer Person zusammenführen …“.
-  - Aufgeklappt: `PersonPicker`, beschriftet über `aria-labelledby` mit „Welche Person ist dieselbe?“, dazu „Vergleichen“ (erst aktiv, wenn eine Person gewählt ist) und „Abbrechen“.
-  - Kein automatischer Fokuswechsel beim Aufklappen. Beabsichtigt oder nicht, ist unklar.
+  - Echtes `<dialog>` (`showModal`): Fokus bleibt im Dialog, Escape und ein Klick auf den Hintergrund schließen, danach kehrt der Fokus zum Knopf zurück.
+  - Die Kandidaten werden erst beim Öffnen geladen: Name, Lebensdaten, Herkunft, Klasse (alle drei, auch „unklar“), Begründungssatz, Widersprüche und „Vergleichen“. Eingetragene Vorfahren und Nachkommen sind nie darunter (Regel des Dienstes); ohne Kandidaten steht das dort.
+  - Darunter `PersonPicker` mit „Vergleichen“ (erst aktiv, wenn eine Person gewählt ist).
+  - Der Dialog führt selbst nichts zusammen: Jede Wahl öffnet `/people/merge?keep=<diese>&other=…`; dort lassen sich die Seiten tauschen.
+  - Der Dialog steht oben statt mittig und schneidet nicht ab, damit die Vorschlagsliste der Suche über seinen Rand hinaus aufklappen kann.
 - **Server oder Client:** Client.
-- **Ruft auf:** nichts direkt. Navigiert zu `/people/merge?keep=…&other=…`.
-- **Tests:** `e2e/write/merge.spec.ts` (`merge-open`, `merge-compare`).
+- **Ruft auf:** `GET /api/persons/[id]/duplicates`.
+- **Tests:** `e2e/write/merge-comfort.spec.ts` (Kandidaten, Suche, Escape, ohne Kandidaten), `e2e/write/merge.spec.ts` (`merge-open`, `merge-compare`; Betrachter ohne Knopf).
+
+### components/FollowUpDuplicates.tsx
+
+- **Zweck:** Folgedubletten auf der Ergebnisseite nach einem Zusammenführen: Eltern, Partner und Kinder der bleibenden Person, die jetzt selbst doppelt aussehen.
+- **Wo eingesetzt:** `components/MergeView.tsx` (Ergebnis).
+- **Props:** `personIds` (bleibende Person, gegebenenfalls dazu die im selben Schritt zusammengeführten Elternteile).
+- **Verhalten:**
+  - Ohne Folgedubletten erscheint der Abschnitt gar nicht.
+  - Je Paar: Klasse, beide Personen mit Lebensdaten als Links, über wen gefunden („Beide als Eltern von …“), Begründungssatz, Widersprüche, „Vergleichen“ (öffnet den Vergleich dieses Paars).
+  - Nichts ist angekreuzt oder vorausgewählt. Gibt es „sichere“ Paare: „Alle sicheren Folgedubletten zusammenführen … (N)“ zeigt zuerst die gemeinsame Vorschau des Sammel-Zusammenführens; erst deren Knopf führt aus. „Wahrscheinlich“ und „unklar“ gehen nie mit.
+  - Danach wird neu gesucht — auch bei den dabei bleibenden Personen, deren Eltern nun ebenfalls doppelt sein können.
+- **Server oder Client:** Client.
+- **Ruft auf:** `GET /api/persons/merge/followups`; `POST /api/persons/merge/bulk` (erst `dryRun`, dann Ausführen).
+- **Tests:** `e2e/write/merge-comfort.spec.ts`; Dienst: `tests/merge-followups.db.test.ts`.
 
 ### components/ChangeSetList.tsx
 

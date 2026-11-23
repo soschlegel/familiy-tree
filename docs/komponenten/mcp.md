@@ -21,6 +21,7 @@ Schlüsselverwaltung in der Oberfläche: Seite `/ai-access` und die Routen
 | `mcp/register.ts` | Gemeinsamer Aufbau: `createMcpServer(ctx)` erzeugt einen `McpServer` mit Name `familytree`, Titel „Stammbaum“, Version `0.1.0` und dem Server-Hinweis (`INSTRUCTIONS`). Registriert immer die Lesewerkzeuge, Prompts und die Ressource, die Schreibwerkzeuge nur bei `ctx.allowWrite`. Ohne Seiteneffekte beim Import. |
 | `mcp/tools.ts` | Alle Werkzeuge (`registerReadTools`, `registerWriteTools`), Ausgabeaufbereitung, `personResource` für die Ressource. |
 | `mcp/prompts.ts` | Drei Prompt-Vorlagen und die Ressource `familytree://person/{id}`. |
+| `mcp/person-redirects.ts` | Alte Personen-Kennungen: `resolvePersonArgs` löst sie in den Eingaben jedes Werkzeugs auf (`person_id`, `other_person_id`, `from_person_id`, `to_person_id`, `person_ids`); `withResolvedFrom` ergänzt das Ausgabeschema dieser Werkzeuge um `resolvedFrom`. |
 | `mcp/format.ts` | Reine Formatierungsfunktionen: einheitliche Personenreferenz (`ref`), Lebensspanne, Datumsfelder in echter Genauigkeit (`dateFields`, `dateToken`), `appendResearchNote`. |
 | `mcp/http.ts` | Der reguläre Zugang: `handleMcpPost` für Streamable HTTP, Schlüsselprüfung, Origin-Prüfung, Sperre nach Fehlversuchen, Größenlimits. Bewusst ohne `next/*`, damit Tests den Handler direkt aufrufen können. |
 | `app/api/mcp/route.ts` | Route-Handler `/api/mcp`: `POST` → `handleMcpPost`; `GET`, `DELETE`, `PUT`, `PATCH`, `OPTIONS` → 405. Laufzeit Node.js, immer dynamisch, kein Caching. |
@@ -207,7 +208,7 @@ sagt sinngemäß:
 | Werkzeug | Zweck | Parameter | Ergebnis |
 |---|---|---|---|
 | `search_persons` | Personen suchen, alle Filter mit UND verknüpft (`searchPersons`) | `query` (jedes Wort muss in Vor-, Familien-, Geburts- oder Rufname oder einem weiteren Namen vorkommen), `family_id`, `born_from`/`born_to` (Geburtsjahr; ungenaue Daten zählen mit ihrem Ankerjahr; ohne Geburtsdatum ausgeschlossen), `place` (Geburts-, Sterbe-, Ereignis-, Heirats-/Scheidungsort), `gender`, `deceased`, `sort` (Name, Geburtsdatum auf-/absteigend, zuletzt geändert), `limit` (Standard 20, höchstens 100), `offset` | `total`, `offset`, `hasMore`, `persons` (Referenz plus Geschlecht, Geburts-/Sterbeort, Familien-IDs, Zahl der Beziehungen, ob Notizen vorhanden) |
-| `get_person` | Voller Datensatz einer Person (`getPersonDetail`) | `person_id` | Personenfelder samt Notizen und Datumsangaben, `canEdit`, `families`, `parents`/`partners`/`children` (mit `relationshipId`, Art, Daten, Heirats-/Scheidungsort, Notizen, Bildzahl, Ereignissen der Beziehung), `siblings` (voll/halb), `media` (eigene Bilder, Porträt zuerst), `citations` (Quelle, Angabe, Fundstelle, Verlässlichkeit, `independent: false` bei abgeleiteten Quellen, Bezug zu Beziehung oder Ereignis, Bilder am Beleg und geerbte Bilder der Quelle), `events` und `otherNames` nur, wenn vorhanden; `places` (Freitext → zugeordneter Ort mit `placeId`, Anzeigename, Koordinaten; der Freitext in den Feldern bleibt) |
+| `get_person` | Voller Datensatz einer Person (`getPersonDetail`) | `person_id` | Personenfelder samt Notizen und Datumsangaben, `canEdit`, `families`, `parents`/`partners`/`children` (mit `relationshipId`, Art, Daten, Heirats-/Scheidungsort, Notizen, Bildzahl, Ereignissen der Beziehung), `siblings` (voll/halb), `media` (eigene Bilder, Porträt zuerst), `citations` (Quelle, Angabe, Fundstelle, Verlässlichkeit, `independent: false` bei abgeleiteten Quellen, Bezug zu Beziehung oder Ereignis, Bilder am Beleg und geerbte Bilder der Quelle), `events` und `otherNames` nur, wenn vorhanden; `places` (Freitext → zugeordneter Ort mit `placeId`, Anzeigename, Koordinaten; der Freitext in den Feldern bleibt); `origin` nur, wenn der Benutzer die Person bearbeiten darf (`getPersonOrigin`): `manual` (von Hand erfasst), `imports` (je Import `letter`, `name` wie in der App — ohne eigenen Namen „Import vom …“, nur für Administratoren Datei und Datum —, erster/letzter Import, `records`, `viaMerge`; nie die Quell-Baum-Kennung), `merged` (Zahl der Einträge, erstes/letztes Zusammenführen). Keine Herkunft je Feld; Chips je Eintrag gibt es nur in der App |
 | `get_ancestors` | Vorfahren nach Generationen (`getAncestors`) | `person_id`, `generations` (Standard 4, höchstens 12), `limit` (Standard 200, höchstens 500) | `root`, `generationsRequested`, `total`, `truncated`, `generations` mit deutscher Bezeichnung („Eltern“, „Großeltern“, „Urgroßeltern“ …, ab der 7. „n. Generation“); je Eintrag `viaPersonId` und `subtype` nur bei nicht leiblicher Verbindung |
 | `get_descendants` | Nachfahren nach Generationen (`getDescendants`) | wie `get_ancestors` | wie `get_ancestors` („Kinder“, „Enkel“, „Urenkel“ …) |
 | `get_kinship` | Verwandtschaft von `other_person_id` aus Sicht von `person_id` (`getKinship`) | `person_id`, `other_person_id` | `from`, `to`, `summary` (bevorzugt Blutsverwandtschaft; ohne Weg „keine Verbindung im Stammbaum gefunden“), `blood` (Begriff, Generationen hinauf/hinab, halb, adoptiv, Seite, gemeinsame Vorfahren) und `path` (kürzester Weg über Eltern-/Partnerkanten mit Begriff und Kette „Mutter → Bruder → Ehefrau“). Wege durch Platzhalter sind hier zugelassen (README: strenger in der Oberfläche) |
@@ -313,6 +314,21 @@ oder 3 (Server-Hinweis und Werkzeugbeschreibung sagen das ausdrücklich).
   verweigert oder nicht sichtbar → Fehler. Keine Auflistung aller
   Personen (`list` nicht angeboten).
 
+## Alte Kennungen nach einem Zusammenführen
+
+Ist eine Person in der Web-App in einer anderen aufgegangen, bleibt ihre
+Kennung für die KI brauchbar: Jedes Werkzeug löst sie vor dem Aufruf des
+Dienstes still auf die bleibende Person auf und meldet das im Ergebnis als
+`resolvedFrom` (alte → heutige Kennung); der Server-Hinweis bittet, mit der
+heutigen Kennung weiterzuarbeiten. Das gilt auch für Schreibwerkzeuge (die
+Änderung trifft die bleibende Person) und für die Ressource
+`familytree://person/{id}`. Ohne alte Kennung fehlt das Feld.
+
+Aufgelöst wird nur, wenn der Benutzer die bleibende Person sehen darf
+(`lib/services/redirects.ts`); sonst antwortet das Werkzeug wie bei einer
+unbekannten Kennung. Kennungen aufgegangener Beziehungen und Ereignisse
+werden nicht aufgelöst.
+
 ## Datenschutz und Grenzen
 
 - Alles, was der Assistent abruft, geht an den KI-Anbieter.
@@ -329,6 +345,7 @@ oder 3 (Server-Hinweis und Werkzeugbeschreibung sagen das ausdrücklich).
 |---|---|
 | `tests/mcp-http.db.test.ts` | HTTP-Endpunkt mit dem HTTP-Client des SDK: Werkzeuglisten je Stufe, Lese-Schlüssel ohne Schreibwerkzeuge, Audit mit Kanal und Schlüssel-ID, Herabstufen und Widerruf beim nächsten Aufruf, 401/403-Matrix samt `WWW-Authenticate`, Cookie allein meldet nicht an, Maskierung für Betrachter, Körpergröße, Origin, Methoden, Sperre nach Fehlversuchen, keine Geheimnisse im Log, `.mcp.json` |
 | `tests/mcp.db.test.ts` | stdio-Server: alle Lesewerkzeuge, Prompts und Ressource, Maskierung, Schreibwerkzeuge mit Audit, Ereignisse/Namen/Orte/Belege an Ereignissen, Startverweigerung (ohne/unbekannter/gesperrter Benutzer, ohne KI-Recht, falsche Datenbank), KI-Recht „lesen“ trotz `MCP_ALLOW_WRITE`, Rechteänderung während der Sitzung, Start wie `npm run mcp:stdio` mit sauberem stdout |
+| `tests/person-redirect.db.test.ts` | Alte Kennungen: Auflösen in Eingaben (einzeln, Listen), `resolvedFrom` in Lese- und Schreibwerkzeugen samt Schema-Prüfung des Clients, Ressource, verborgene Zielperson wie unbekannt |
 | `tests/mcp-format.test.ts` | Formatierung: Personenreferenz, Lebensspanne, Recherchenotiz anhängen, ungenaue Daten |
 | `tests/media-links.db.test.ts` | `add_media` per base64 und per Adresse (mit ersetztem Netz), `link_media`, Rechte |
 | `tests/changelog.db.test.ts` | Bündeln je Schlüssel, `begin_change_set`, fremde Paketkennung abgelehnt |
