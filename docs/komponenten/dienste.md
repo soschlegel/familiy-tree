@@ -398,9 +398,14 @@ verlassenen sehen die Änderung).
 löschen — mit allen Strukturregeln.
 
 **Wichtige Funktionen:**
-- `createRelationship(scope, input)` — neue Beziehung.
+- `createRelationship(scope, input)` — neue Beziehung. Eine Person, die der
+  Benutzer nicht sehen darf, gilt wie eine nicht vorhandene (`NOT_FOUND`,
+  nicht `FORBIDDEN` — sonst verriete die Antwort, dass es sie gibt).
 - `updateRelationship(scope, id, patch)` — Art, Zeitraum, Orte, Notiz ändern.
-- `deleteRelationship(scope, id)` — Beziehung löschen.
+- `deleteRelationship(scope, id)` — Beziehung löschen; mit ihr gehen
+  (Cascade) ihre Ereignisse und Belege, deren danach verwaiste Bilder
+  werden ebenfalls entfernt. Über den KI-Zugang abgelehnt (`CONFLICT`,
+  `WOULD_DELETE_MEDIA`), wenn dabei ein Bild verloren ginge.
 - `wouldCreateCycle(elternId, kindId)` — prüft ebenenweise in der Datenbank,
   ob der Elternteil schon Nachfahre des Kindes ist. (Nicht zu verwechseln mit
   der gleichnamigen Funktion in `lib/graph.ts`, die im Speicher arbeitet.)
@@ -455,6 +460,9 @@ an einer Person oder Beziehung. Welche Angabe wo steht, regelt
   oder der Träger unsichtbar ist.
 - `createEvent`, `updateEvent`, `deleteEvent` — Mutationen; Datum als Text
   wie überall („um 1850“, „zwischen 1850 und 1855“), Unlesbares als Wortlaut.
+  `deleteEvent` über den KI-Zugang (`scope.via`) wird mit `CONFLICT`
+  (`WOULD_DELETE_MEDIA`) abgelehnt, wenn danach ein Bild des Ereignisses
+  oder seiner Belege an nichts mehr hinge (`assertNoMediaLossViaAi`).
 - `loadEventsFor({personIds, relationshipIds}, {includeAlternatives})` —
   Ereignisse vieler Träger in einem Rutsch, **ohne** Rechteprüfung (nur für
   Dienste, die die Sichtbarkeit selbst geprüft haben).
@@ -662,6 +670,13 @@ Sichtbares; was an etwas Sichtbarem hängt, ist sichtbar
 - `mediaAttachedTo({eventIds, citationIds, sourceIds})` — Bilder an diesen
   Einträgen und an deren Belegen; Kandidaten, bevor die Einträge gelöscht
   werden.
+- `mediaOrphanedWithout(kandidaten, {relationshipIds, eventIds,
+  citationIds})` — Vorab-Prüfung: welche Bilder hingen an nichts mehr, wenn
+  diese Einträge gelöscht würden.
+- `assertNoMediaLossViaAi(scope, kandidaten, weg)` — über den KI-Zugang
+  (`scope.via`) `CONFLICT` mit Grund `WOULD_DELETE_MEDIA` und den
+  betroffenen Bild-IDs, falls dabei ein Bild verloren ginge; in der App
+  ohne Wirkung. Benutzt von `deleteEvent` und `deleteRelationship`.
 
 **Regeln und Entscheidungen:** Erst Datenbank, dann Dateien; scheitert das
 Löschen einer Datei, bleibt nur eine verwaiste Datei (Fehler im Log). Ein noch
@@ -714,7 +729,9 @@ Ziele: Personen, Beziehungen, Ereignisse, Belege, Quellen.
 - `unlinkMedia`: Jede genannte Zuordnung muss bestehen (sonst `NOT_FOUND`).
   Hinge das Bild danach an nichts mehr, wird es mit `deleteOrphan` gelöscht
   (App, nach Rückfrage), sonst `CONFLICT` (`LAST_LINK`) — die KI löscht keine
-  Bilder.
+  Bilder. Mit `deleteOrphan` gilt dann das Löschrecht des Bildes
+  (`canDeleteMedia`, sonst `FORBIDDEN`) — sonst ließe sich ein Quellen-Scan
+  über „lösen“ entfernen, obwohl „löschen“ verboten ist.
 - Schlägt die Transaktion fehl, werden die schon gespeicherten Dateien wieder
   entfernt.
 
@@ -1523,6 +1540,17 @@ Verwandten aus fremder Familie) ohne Feldwerte.
 `tests/changelog.test.ts`); `e2e/write/changelog.spec.ts`.
 
 **Gelöschte Schlüssel im Verlauf (seit 22.11.):** `tokenLabels(ids)` löst `apiTokenId` zu Namen auf. Fehlt der Schlüssel (endgültig gelöscht oder mit seinem Benutzer entfernt), kommt der Name aus dem letzten `CREATE`/`DELETE`-Protokolleintrag des Schlüssels, dazu `tokenDeleted: true`; ohne solchen Eintrag `tokenName: null`. Gilt für `listPersonChanges`/`listChangeSetEntries` und `listChangeSets`; Anzeige „KI über MCP · Schlüssel „Name“ (gelöscht)“ bzw. „· Schlüssel (gelöscht)“.
+
+**Was Nicht-Admins im Verlauf sehen** (`toEntry`): Den **Namen eines
+KI-Schlüssels** sehen nur sein Besitzer und Admins. Den **Titel eines
+Pakets** sehen Admins und wer das Paket angelegt hat; alle anderen
+bekommen `neutralChangeSetTitle` — „Import“ bzw. „KI-Änderungen“ oder den
+Titel nur bis zum ersten Anführungszeichen (Titel können Dateinamen eines
+Imports, frei gewählte Texte der KI, fremde Schlüsselnamen oder Ortstexte
+enthalten). Ein Personeneintrag, dessen Person es nicht mehr gibt
+(gelöscht oder aufgegangen), gilt für Nicht-Admins als verborgen — ohne
+Feldwerte, weil sich ihre Sichtbarkeit nicht mehr feststellen lässt.
+Tests: `tests/ai-token-delete.db.test.ts`.
 
 ### lib/services/ai-access.ts
 

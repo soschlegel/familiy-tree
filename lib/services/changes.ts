@@ -228,7 +228,7 @@ const MAX_TEXT = 300;
 type Row = Prisma.AuditLogGetPayload<{
   include: {
     user: { select: { name: true; email: true } };
-    changeSet: { select: { id: true; title: true; kind: true } };
+    changeSet: { select: { id: true; title: true; kind: true; userId: true } };
   };
 }>;
 
@@ -623,8 +623,15 @@ function toEntry(ctx: Ctx, row: Row): ChangeEntryDto {
     channel: row.channel === "MCP" ? "MCP" : "APP",
     // Den Namen eines KI-Schlüssels sehen nur sein Besitzer und Admins.
     ...tokenFields(row.channel === "MCP" && row.apiTokenId && ownToken ? ctx.tokens.get(row.apiTokenId) : undefined),
+    // Den Titel eines Pakets sehen Admins und wer es selbst angelegt hat.
     changeSet: row.changeSet
-      ? { id: row.changeSet.id, title: ctx.scope.isAdmin ? row.changeSet.title : neutralChangeSetTitle(row.changeSet.title, row.changeSet.kind) }
+      ? {
+          id: row.changeSet.id,
+          title:
+            ctx.scope.isAdmin || (row.changeSet.userId !== null && row.changeSet.userId === ctx.scope.userId)
+              ? row.changeSet.title
+              : neutralChangeSetTitle(row.changeSet.title, row.changeSet.kind),
+        }
       : null,
     fields: hiddenPerson ? [] : fieldsOf(ctx, row),
     note: hiddenPerson ? null : note,
@@ -632,7 +639,7 @@ function toEntry(ctx: Ctx, row: Row): ChangeEntryDto {
 }
 
 /**
- * Paket-Titel für Nicht-Admins. Titel können Dinge nennen, die ein
+ * Paket-Titel für Nicht-Admins (außer für den Urheber des Pakets). Titel können Dinge nennen, die ein
  * Bearbeiter sonst nicht sähe: den Dateinamen eines Imports (sonst nur für
  * Admins, `importLabel`), einen frei gewählten Text der KI
  * (`begin_change_set` — das Paket kann Personen mehrerer Familien berühren),
@@ -650,7 +657,7 @@ export function neutralChangeSetTitle(title: string, kind: string): string {
 
 const ROW_INCLUDE = {
   user: { select: { name: true, email: true } },
-  changeSet: { select: { id: true, title: true, kind: true } },
+  changeSet: { select: { id: true, title: true, kind: true, userId: true } },
 } as const;
 
 async function loadEntries(scope: Scope, ids: string[]): Promise<ChangeEntryDto[]> {

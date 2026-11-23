@@ -18,6 +18,7 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 import { GET } from "@/app/api/health/route";
+import { HEALTH_CACHE_MS, resetHealthCache } from "@/lib/health-cache";
 
 let base: string;
 const previous = process.env.MEDIA_DIR;
@@ -31,6 +32,7 @@ afterAll(async () => {
   await rm(base, { recursive: true, force: true });
 });
 beforeEach(() => {
+  resetHealthCache();
   db.ok = true;
   process.env.MEDIA_DIR = path.join(base, "media");
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -90,5 +92,25 @@ describe("GET /api/health", () => {
     const res = await GET();
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ status: "error" });
+  });
+
+  it("viele Aufrufe kurz hintereinander prüfen nur einmal; nosniff gesetzt", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    const spy = vi.mocked(prisma.$queryRaw);
+    spy.mockClear();
+    const all = await Promise.all(Array.from({ length: 20 }, () => GET()));
+    expect(all.every((r) => r.status === 200)).toBe(true);
+    expect(all[0].headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("nach Ablauf des Zeitfensters wird neu geprüft", async () => {
+    const { cachedHealth } = await import("@/lib/health-cache");
+    const probe = vi.fn(async () => true);
+    await cachedHealth(probe, 1000);
+    await cachedHealth(probe, 1000 + HEALTH_CACHE_MS - 1);
+    expect(probe).toHaveBeenCalledTimes(1);
+    await cachedHealth(probe, 1000 + HEALTH_CACHE_MS);
+    expect(probe).toHaveBeenCalledTimes(2);
   });
 });

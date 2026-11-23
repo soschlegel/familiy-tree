@@ -34,6 +34,7 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 
 import { tokenPrefixOf } from "../lib/ai-tokens";
+import { checkMcpRate } from "../lib/rate-limit";
 import { authorizeAiCall, type AiAuthFailureReason, type AiCredential } from "../lib/services";
 import { createMcpServer } from "./register";
 
@@ -283,6 +284,15 @@ export async function handleMcpPost(req: Request): Promise<Response> {
   }
 
   const label = keyLabel(secret);
+
+  // Drosselung je Schlüssel (lib/rate-limit.ts) — auch ein gültiger
+  // Schlüssel soll den Server nicht in einer Schleife auslasten.
+  const rate = checkMcpRate(auth.keyId ?? auth.user.id, now);
+  if (!rate.ok) {
+    console.warn(`[mcp-http] 429 Anfragegrenze (${label})`);
+    return jsonError(429, "Too many requests — try again later.", { "Retry-After": String(rate.retryAfter) });
+  }
+
   const server = createMcpServer({
     label,
     allowWrite: auth.level === "WRITE",

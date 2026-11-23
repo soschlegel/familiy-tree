@@ -29,6 +29,7 @@ fortschreiben“).
 | [mcp.md](mcp.md) | MCP-Server: Anmeldung, Stufen, Limits, Server-Hinweis, jedes Werkzeug, Prompts, Ressource, Tests | Bei Änderungen an der KI-Schnittstelle |
 | [oberflaeche-komponenten.md](oberflaeche-komponenten.md) | Alle React-Komponenten in `components/`, Gestaltungssystem `app/globals.css`, Zusammenspiel der Baumansichten | Bei Änderungen an der Oberfläche |
 | [betrieb-und-tests.md](betrieb-und-tests.md) | Skripte, Docker, Compose, CI, Konfiguration, Mock-Umgebung, Geodaten, Umgebungsvariablen; Aufbau von `tests/` und `e2e/`, bekannte Flakes | Bei Betrieb, Ausrollen und Tests |
+| [../sicherheit.md](../sicherheit.md) | Sicherheitsprüfung: geprüfte Bereiche, behobene Befunde, akzeptierte Restrisiken, Hinweise für den Betrieb | Bei Änderungen an Anmeldung, Rechten, Schnittstellen oder Betrieb |
 
 ## Grobe Architektur
 
@@ -37,8 +38,10 @@ fortschreiben“).
   sind Client-Komponenten in `components/`, die über `components/api-client.ts`
   die API-Routen aufrufen.
 - **Schnittstellen:** API-Routen (`app/api/**/route.ts`) laufen über
-  `route()` in `lib/api.ts` (Anmeldung, Rechteprüfung, Fehlerabbildung,
-  Changelog-Paket je Anfrage) und rufen die Dienste. Der MCP-Server
+  `route()` in `lib/api.ts` (Herkunftsprüfung, Anmeldung, Größen- und
+  Anfragegrenzen, Rechteprüfung, Fehlerabbildung, Changelog-Paket je
+  Anfrage, Kopfzeilen gegen Zwischenspeichern) und rufen die Dienste.
+  Ergebnis der Sicherheitsprüfung: [../sicherheit.md](../sicherheit.md). Der MCP-Server
   (`mcp/`, `/api/mcp`) nutzt dieselben Dienste mit den Rechten des
   Schlüssel-Inhabers.
 - **Geschäftslogik:** `lib/services/` — alle Regeln, Rechteprüfung über den

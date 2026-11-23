@@ -6,7 +6,7 @@ Wie ein KI-Assistent wie Claude im Stammbaum mitrecherchiert: Schlüssel anlegen
 
 Mit einem **persönlichen Schlüssel** arbeitet ein KI-Assistent (Claude) direkt mit den Stammbaumdaten: Er beantwortet Fragen zu Personen und Verwandtschaft („Wer waren die Eltern von Anna Vogt?“), findet fehlende Angaben, Widersprüche und mögliche Dubletten und trägt — wenn du es erlaubst — Rechercheergebnisse samt Belegen ein.
 
-Dabei handelt die KI **als du**: Sie sieht nur, was du siehst, und ändert nur, was du ändern darfst. Personen, Quellen oder Bilder löschen und Personen zusammenführen kann sie nie. Jede Änderung durch die KI steht in der [Änderungsgeschichte](09-aenderungen.md) mit dem Namen des Schlüssels.
+Dabei handelt die KI **als du**: Sie sieht nur, was du siehst, und ändert nur, was du ändern darfst. Personen, Quellen oder Bilder löschen und Personen zusammenführen kann sie nie — auch nicht nebenbei: Hängt an einem Ereignis oder einer Beziehung ein Bild, das sonst nirgends hängt, lehnt die App das Löschen durch die KI ab; das erledigst du dann selbst in der App. Jede Änderung durch die KI steht in der [Änderungsgeschichte](09-aenderungen.md) mit dem Namen des Schlüssels.
 
 > **Bedenke:** Alles, was der Assistent abruft, geht an den KI-Anbieter. Besonders bei lebenden Personen lohnt es sich, das zu bedenken.
 

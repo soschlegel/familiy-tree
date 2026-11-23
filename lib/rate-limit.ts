@@ -92,6 +92,7 @@ const HEAVY_PATHS = [
   "/api/connect",
   "/api/persons/merge",
   "/api/places/auto",
+  "/api/origin",
 ];
 
 /** Ordnet eine Anfrage einer Regel zu. */
@@ -100,6 +101,8 @@ export function apiBucket(method: string, pathname: string): ApiBucket {
   const read = m === "GET" || m === "HEAD";
   if (pathname === "/api/export") return "export";
   if (!read && (pathname === "/api/media" || pathname === "/api/import" || pathname === "/api/import/gedcom")) return "upload";
+  // Dubletten einer Person: vergleicht mit allen bearbeitbaren Personen.
+  if (/^\/api\/persons\/[^/]+\/duplicates$/.test(pathname)) return "heavy";
   if (HEAVY_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
     // „kein Duplikat“ ist ein gewöhnlicher Schreibvorgang.
     if (pathname === "/api/duplicates/dismiss") return "write";
@@ -117,7 +120,24 @@ export function checkApiRate(userId: string, method: string, pathname: string, n
   return apiLimiter.hit(`${bucket}:${userId}`, API_RULES[bucket], now);
 }
 
+/**
+ * KI-Zugang (MCP über HTTP): Anfragen je Schlüssel, gezählt nach erfolgreicher
+ * Anmeldung (Fehlversuche begrenzt mcp/http.ts getrennt je Absender). Eine
+ * Anfrage ist ein Werkzeugaufruf oder eine Liste; ein Assistent braucht im
+ * Gespräch selten mehr als einige Dutzend je Minute.
+ */
+export const MCP_RULE: RateRule = { limit: 300, windowMs: MINUTE };
+
+const mcpLimiter = new RateLimiter();
+
+/** Zählt eine angemeldete MCP-Anfrage für einen Schlüssel (bzw. Benutzer). */
+export function checkMcpRate(key: string, now = Date.now()): RateResult {
+  if (!rateLimitEnabled()) return { ok: true };
+  return mcpLimiter.hit(`mcp:${key}`, MCP_RULE, now);
+}
+
 /** Nur für Tests. */
 export function resetApiRateLimit(): void {
   apiLimiter.reset();
+  mcpLimiter.reset();
 }

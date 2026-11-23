@@ -5,6 +5,25 @@ const nextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
   // Erzeugt .next/standalone — der Docker-Image bleibt dadurch klein.
   output: "standalone",
+  // Keine Versionsangabe „X-Powered-By: Next.js“ nach außen.
+  poweredByHeader: false,
+  // Kopfzeilen für jede Antwort (docs/sicherheit.md): nicht in fremde Seiten
+  // einbetten (Clickjacking), beim Klick auf externe Links (z.B. Adressen in
+  // Quellen) keine Adresse der App samt Personen-Kennung mitschicken, keine
+  // Inhaltsart erraten. Bewusst ohne Content-Security-Policy hier — die
+  // Bildroute setzt ihre eigene, strengere.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "same-origin" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+        ],
+      },
+    ];
+  },
   // sharp läuft im Route-Handler und darf nicht mitgebundelt werden.
   serverExternalPackages: ["sharp"],
   // Das Ortsverzeichnis wird zur Laufzeit von der Platte gelesen

@@ -48,4 +48,4 @@ Beispiel: Am „Taufbuch St. Marien“ hängen das Titelblatt und der Scan von S
 
 ## Bilder anhängen und entfernen
 
-An jeder Ereignis- und Belegzeile und auf der Seite der Quelle („Bilder zur Quelle“) führt **Bild hinzufügen** zu **Datei hochladen** oder **Vorhandenes Bild** (ein Bild, das schon auf der Seite ist). „entfernen“ löst ein Bild nur von diesem Eintrag — nach einer Rückfrage. Hängt es sonst nirgends, wird es dabei ganz gelöscht; die Rückfrage sagt das.
+An jeder Ereignis- und Belegzeile und auf der Seite der Quelle („Bilder zur Quelle“) führt **Bild hinzufügen** zu **Datei hochladen** oder **Vorhandenes Bild** (ein Bild, das schon auf der Seite ist). „entfernen“ löst ein Bild nur von diesem Eintrag — nach einer Rückfrage. Hängt es sonst nirgends, wird es dabei ganz gelöscht; die Rückfrage sagt das. Ein Bild an einer Quelle, die auch Einträge anderer Familien belegt, darfst du nur dann ganz löschen, wenn du alle ihre Belege bearbeiten darfst — sonst lehnt die App das ab.

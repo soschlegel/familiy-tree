@@ -22,6 +22,14 @@ Anfrage frisch aus der Datenbank gelesen, eine Sperre wirkt also sofort
   `{ error: "Nicht angemeldet" }`; mit `action` und fehlendem Recht **403**.
   Jede Anfrage bekommt ein eigenes Änderungspaket (`appChangeSet()`), das
   erst mit der ersten Änderung angelegt wird.
+- Vor Anmeldung und Handler prüft `route()` außerdem (Reihenfolge):
+  schreibende Anfrage von fremder Herkunft → **403** (noch vor der
+  Anmeldeprüfung, `lib/request-guard.ts`); nach der Anmeldung zu großer
+  Körper laut `Content-Length` → **413**, Körper ohne Längenangabe → **411**;
+  Anfragegrenze je Benutzer überschritten → **429** mit `Retry-After`
+  (`lib/rate-limit.ts`). Jede Antwort bekommt `Cache-Control: private,
+  no-store` (außer die Route setzt selbst etwas, z.B. Bilder) und
+  `X-Content-Type-Options: nosniff`.
 
 **Globale Rechte** (`lib/authz.ts`) hat nur die Rolle Administrator:
 `user:read`, `user:manage`, `audit:read`, `data:import`, `family:manage`,
@@ -552,14 +560,17 @@ Fehlercodes aus den Grundregeln.
   Datenbank (`SELECT 1`) und ob der Medienordner samt Unterordnern
   beschreibbar ist (`checkMediaDir`), je mit 3 s Zeitgrenze. Antwort
   `{ status: "ok" }` (200) oder `{ status: "error" }` (503), immer
-  `no-store`; Fehler nur als eine Zeile im Server-Log. Test:
-  `tests/health.test.ts`.
+  `no-store`; Fehler nur als eine Zeile im Server-Log. Das Ergebnis gilt
+  5 s (`lib/health-cache.ts`): viele Aufrufe von außen lösen höchstens eine
+  Prüfung je Zeitfenster aus. Test: `tests/health.test.ts`.
 - **`/api/mcp`**: siehe [mcp.md](mcp.md).
 
 ### Baum und Karte
 
 - **`GET /api/tree`**: der ganze Graph über `loadTree` — sichtbare
-  Personen mit Angaben, alle übrigen als anonyme Platzhalter.
+  Personen mit Angaben, alle übrigen als anonyme Platzhalter. Wer keiner
+  Familie angehört (und nicht Admin ist), bekommt eine leere Antwort — auch
+  keine Platzhalter, deren Zahl und Verknüpfung ihn nichts angehen.
 - **`GET /api/map`**: Kartendaten wie `/map` über `loadMapView`.
   Suchparameter `person`, `mode` = `ancestors` oder `all` (anders als die
   Seite, die `vorfahren`/`alle` nimmt); ohne `person` gilt die
@@ -657,7 +668,12 @@ Fehlercodes aus den Grundregeln.
   Vorschaubild. Unbekannt oder unsichtbar → 404 (`canViewMedia`), fehlende
   Datei → 404 mit Hinweis im Log. Kopfzeilen `ETag`,
   `Cache-Control: private, max-age=31536000, immutable`; bedingte Anfrage
-  mit passendem `If-None-Match` → 304.
+  mit passendem `If-None-Match` → 304. `Content-Type` nur aus einer festen
+  Liste von Bildarten (WebP, JPEG, PNG, GIF, AVIF, TIFF) — alles andere,
+  auch SVG oder HTML in einem Datensatz, geht als
+  `application/octet-stream` hinaus; dazu `nosniff`, `Content-Disposition:
+  inline` und `Content-Security-Policy: default-src 'none'; sandbox`, damit
+  ein Browser die Antwort nie als Seite ausführt.
 - **`DELETE /api/media/[id]`**: unsichtbar 404, ohne Löschrecht
   (`canDeleteMedia`) 403. Löscht den Datensatz, danach die Dateien (eine
   verwaiste Datei wird hingenommen); Audit direkt in der Route mit den
@@ -667,8 +683,10 @@ Fehlercodes aus den Grundregeln.
   `linkMedia` — Bild sichtbar, jedes Ziel bearbeitbar.
 - **`DELETE /api/media/[id]/links`** (Ziele als Suchparameter, z.B.
   `?eventId=…`): `unlinkMedia` **mit** Löschen eines danach verwaisten
-  Bildes (die Oberfläche fragt vorher). Anders als `link_media` über MCP,
-  das nie löscht.
+  Bildes (die Oberfläche fragt vorher). Würde das Bild dabei endgültig
+  gelöscht, gilt das Löschrecht (`canDeleteMedia`, sonst 403) — der Scan
+  einer gemeinsam genutzten Quelle lässt sich so nicht am Löschverbot
+  vorbei entfernen. Anders als `link_media` über MCP, das nie löscht.
 - **`POST /api/media/[id]/primary`** (genau eines von `personId`,
   `relationshipId`): Primärbild setzen (Porträt der Person bzw. Bild der
   Hochzeit). Rechte über `canUploadForPerson` /
