@@ -21,6 +21,7 @@ Schlüsselverwaltung in der Oberfläche: Seite `/ai-access` und die Routen
 | `mcp/register.ts` | Gemeinsamer Aufbau: `createMcpServer(ctx)` erzeugt einen `McpServer` mit Name `familytree`, Titel „Stammbaum“, Version `0.1.0` und dem Server-Hinweis (`INSTRUCTIONS`). Registriert immer die Lesewerkzeuge, Prompts und die Ressource, die Schreibwerkzeuge nur bei `ctx.allowWrite`. Ohne Seiteneffekte beim Import. |
 | `mcp/tools.ts` | Alle Werkzeuge (`registerReadTools`, `registerWriteTools`), Ausgabeaufbereitung, `personResource` für die Ressource. |
 | `mcp/prompts.ts` | Drei Prompt-Vorlagen und die Ressource `familytree://person/{id}`. |
+| `mcp/person-redirects.ts` | Alte Personen-Kennungen: `resolvePersonArgs` löst sie in den Eingaben jedes Werkzeugs auf (`person_id`, `other_person_id`, `from_person_id`, `to_person_id`, `person_ids`); `withResolvedFrom` ergänzt das Ausgabeschema dieser Werkzeuge um `resolvedFrom`. |
 | `mcp/format.ts` | Reine Formatierungsfunktionen: einheitliche Personenreferenz (`ref`), Lebensspanne, Datumsfelder in echter Genauigkeit (`dateFields`, `dateToken`), `appendResearchNote`. |
 | `mcp/http.ts` | Der reguläre Zugang: `handleMcpPost` für Streamable HTTP, Schlüsselprüfung, Origin-Prüfung, Sperre nach Fehlversuchen, Größenlimits. Bewusst ohne `next/*`, damit Tests den Handler direkt aufrufen können. |
 | `app/api/mcp/route.ts` | Route-Handler `/api/mcp`: `POST` → `handleMcpPost`; `GET`, `DELETE`, `PUT`, `PATCH`, `OPTIONS` → 405. Laufzeit Node.js, immer dynamisch, kein Caching. |
@@ -313,6 +314,21 @@ oder 3 (Server-Hinweis und Werkzeugbeschreibung sagen das ausdrücklich).
   verweigert oder nicht sichtbar → Fehler. Keine Auflistung aller
   Personen (`list` nicht angeboten).
 
+## Alte Kennungen nach einem Zusammenführen
+
+Ist eine Person in der Web-App in einer anderen aufgegangen, bleibt ihre
+Kennung für die KI brauchbar: Jedes Werkzeug löst sie vor dem Aufruf des
+Dienstes still auf die bleibende Person auf und meldet das im Ergebnis als
+`resolvedFrom` (alte → heutige Kennung); der Server-Hinweis bittet, mit der
+heutigen Kennung weiterzuarbeiten. Das gilt auch für Schreibwerkzeuge (die
+Änderung trifft die bleibende Person) und für die Ressource
+`familytree://person/{id}`. Ohne alte Kennung fehlt das Feld.
+
+Aufgelöst wird nur, wenn der Benutzer die bleibende Person sehen darf
+(`lib/services/redirects.ts`); sonst antwortet das Werkzeug wie bei einer
+unbekannten Kennung. Kennungen aufgegangener Beziehungen und Ereignisse
+werden nicht aufgelöst.
+
 ## Datenschutz und Grenzen
 
 - Alles, was der Assistent abruft, geht an den KI-Anbieter.
@@ -329,6 +345,7 @@ oder 3 (Server-Hinweis und Werkzeugbeschreibung sagen das ausdrücklich).
 |---|---|
 | `tests/mcp-http.db.test.ts` | HTTP-Endpunkt mit dem HTTP-Client des SDK: Werkzeuglisten je Stufe, Lese-Schlüssel ohne Schreibwerkzeuge, Audit mit Kanal und Schlüssel-ID, Herabstufen und Widerruf beim nächsten Aufruf, 401/403-Matrix samt `WWW-Authenticate`, Cookie allein meldet nicht an, Maskierung für Betrachter, Körpergröße, Origin, Methoden, Sperre nach Fehlversuchen, keine Geheimnisse im Log, `.mcp.json` |
 | `tests/mcp.db.test.ts` | stdio-Server: alle Lesewerkzeuge, Prompts und Ressource, Maskierung, Schreibwerkzeuge mit Audit, Ereignisse/Namen/Orte/Belege an Ereignissen, Startverweigerung (ohne/unbekannter/gesperrter Benutzer, ohne KI-Recht, falsche Datenbank), KI-Recht „lesen“ trotz `MCP_ALLOW_WRITE`, Rechteänderung während der Sitzung, Start wie `npm run mcp:stdio` mit sauberem stdout |
+| `tests/person-redirect.db.test.ts` | Alte Kennungen: Auflösen in Eingaben (einzeln, Listen), `resolvedFrom` in Lese- und Schreibwerkzeugen samt Schema-Prüfung des Clients, Ressource, verborgene Zielperson wie unbekannt |
 | `tests/mcp-format.test.ts` | Formatierung: Personenreferenz, Lebensspanne, Recherchenotiz anhängen, ungenaue Daten |
 | `tests/media-links.db.test.ts` | `add_media` per base64 und per Adresse (mit ersetztem Netz), `link_media`, Rechte |
 | `tests/changelog.db.test.ts` | Bündeln je Schlüssel, `begin_change_set`, fremde Paketkennung abgelehnt |

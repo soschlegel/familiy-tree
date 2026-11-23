@@ -1,6 +1,7 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { permanentRedirect } from "next/navigation";
 
 import { requireScope } from "@/lib/session";
 import { editableFamilyIds } from "@/lib/scope";
@@ -10,6 +11,7 @@ import {
   loadGraph,
   loadTree,
   referenceView,
+  resolvePersonRedirect,
   resolveReference,
   type TreeCounts,
 } from "@/lib/services";
@@ -17,6 +19,7 @@ import { LINES_COOKIE, REFERENCE_COOKIE, type ReferenceView } from "@/lib/refere
 import { FOCUS_COOKIE, FOCUS_DEPTH, parseDepth, type TreeView } from "@/lib/focus-tree";
 import { FamilyTree } from "@/components/FamilyTree";
 import { BrandMark } from "@/components/NavBar";
+import { PageLoading } from "@/components/PageLoading";
 import { ReferenceChip } from "@/components/ReferenceChip";
 
 export const dynamic = "force-dynamic";
@@ -37,17 +40,46 @@ function parseView(view: string | undefined): TreeView {
 
 const ID_PATTERN = /^[\w-]{1,64}$/;
 
-export default async function TreePage({
+type TreeSearchParams = Promise<{
+  denied?: string;
+  focus?: string;
+  view?: string;
+  up?: string;
+  down?: string;
+  bezug?: string;
+}>;
+
+/**
+ * Äußere Seite: prüft nur, ob `focus` die alte Kennung einer aufgegangenen
+ * Person ist (dann 308 auf die bleibende — lib/services/redirects.ts), und
+ * zeigt sonst sofort die Ladeanzeige, während der Baum (`TreeContent`) lädt.
+ *
+ * Deshalb gibt es hier kein `loading.tsx`: Dessen Ladeanzeige streamt die
+ * Antwort schon vor dieser Prüfung, und danach ließe sich kein Status 308
+ * mehr setzen. Die Prüfung selbst ist ein einziger Schlüsselzugriff; die
+ * Anmeldung wird nur geladen, wenn es wirklich eine Umleitung gibt.
+ */
+export default async function TreePage({ searchParams }: { searchParams: TreeSearchParams }) {
+  const params = await searchParams;
+  if (params.focus && ID_PATTERN.test(params.focus)) {
+    const mergedInto = await resolvePersonRedirect(async () => (await requireScope()).scope, params.focus);
+    if (mergedInto) {
+      const query = new URLSearchParams(Object.entries(params).filter((e): e is [string, string] => typeof e[1] === "string"));
+      query.set("focus", mergedInto);
+      permanentRedirect(`/tree?${query}`);
+    }
+  }
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <TreeContent searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function TreeContent({
   searchParams,
 }: {
-  searchParams: Promise<{
-    denied?: string;
-    focus?: string;
-    view?: string;
-    up?: string;
-    down?: string;
-    bezug?: string;
-  }>;
+  searchParams: TreeSearchParams;
 }) {
   const { scope } = await requireScope();
   const params = await searchParams;

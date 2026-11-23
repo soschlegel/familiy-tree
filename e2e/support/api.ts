@@ -28,8 +28,9 @@ export async function createPerson(
 
 export async function deletePerson(api: APIRequestContext, id: string) {
   const res = await api.delete(`/api/persons/${id}?force=true`);
-  // Schon weg (z.B. im Test selbst gelöscht) ist in Ordnung.
-  expect([200, 404]).toContain(res.status());
+  // Schon weg (z.B. im Test selbst gelöscht) ist in Ordnung — ebenso 409:
+  // Die Person ist in einer anderen aufgegangen (alte Kennung, `mergedInto`).
+  expect([200, 404, 409]).toContain(res.status());
 }
 
 export async function createRelationship(api: APIRequestContext, data: Record<string, unknown>) {

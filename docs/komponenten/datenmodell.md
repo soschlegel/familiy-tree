@@ -21,7 +21,7 @@ Querverweise: Datumslogik `lib/dates.ts`, Rechte `lib/scope.ts` und
 | Lebensereignisse | `Event` | `EventType` |
 | Medien | `MediaAsset`, `PersonMedia`, `RelationshipMedia`, `SourceMedia`, `EventMedia`, `CitationMedia` | — |
 | Quellen und Belege | `Source`, `Citation` | `SourceKind`, `CitationFact`, `CitationConfidence` |
-| Import und Herkunft | `ImportBatch`, `ImportLink`, `ExternalId`, `ImportRawRecord`, `DuplicateDismissal` | `ImportStatus` |
+| Import und Herkunft | `ImportBatch`, `ImportLink`, `ExternalId`, `ImportRawRecord`, `DuplicateDismissal`, `PersonRedirect` | `ImportStatus` |
 | Audit und Änderungsgeschichte | `AuditLog`, `ChangeSet` | `AuditChannel` |
 | Orte (Karte) | `Place` | `PlaceSource`, `PlacePrecision` |
 
@@ -526,6 +526,17 @@ gelöscht → `userId` `NULL`.
 **Index:** `personBId` (Abfragen von der B-Seite; die A-Seite deckt der
 Primärschlüssel ab).
 
+### `PersonRedirect`
+**Bedeutung:** Alte Kennung einer Person, die beim Zusammenführen in einer
+anderen aufgegangen ist, mit der bleibenden Person als Ziel
+(`lib/services/redirects.ts`). `fromId` verweist bewusst auf nichts — die
+Person gibt es nicht mehr. Ketten gibt es nicht: Das Zusammenführen biegt
+bestehende Einträge auf die neue bleibende Person um.
+
+**Felder:** `fromId` (Primärschlüssel), `toId` (mit Index), `createdAt`.
+
+**Löschverhalten:** Cascade mit der bleibenden Person (`toId`).
+
 ### `AuditLog`
 **Bedeutung:** Protokoll jeder Änderung (`lib/audit.ts`). Schreibfehler im
 Audit rollen die eigentliche Änderung nicht zurück (`audit` fängt Fehler ab).
@@ -621,6 +632,7 @@ zuordnen“, von Hand Bestätigtes nie überschreiben).
 | `20261123000001_orte` | Tabelle `Place`, Enums `PlaceSource`, `PlacePrecision`. |
 | `20261124000000_neuigkeiten` | `User.lastSeenReleaseId` (Text, optional) — nur `ADD COLUMN`. |
 | `20261124000001_orte_ki` | `PlaceSource` um `AI` (`ALTER TYPE … ADD VALUE`); `Place.note` (optional) und `Place.uncertain` (Standard `false`). |
+| `20261125000000_person_redirect` | Tabelle `PersonRedirect` mit Index und Fremdschlüssel (Cascade). Bewusst ohne Daten: Die Rückfüllung aus dem Audit geschieht im Code (`backfillPersonRedirects`). |
 
 `migration_lock.toml` legt den Anbieter (PostgreSQL) fest.
 

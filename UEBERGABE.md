@@ -88,32 +88,29 @@ README, Abschnitt „Tests“.
   „unklar“ bleibt der Dublettenliste vorbehalten (Entscheidung des
   Eigentümers). Gemessen: rund 4 ms auf den Mock-Daten, rund 120 ms bei
   11 847 erzeugten Personen; mit echten Daten nicht gemessen.
-- **Knopf „Zusammenführen …“** neben „Im Stammbaum zeigen“ mit Dialog:
-  zuerst die Kandidaten dieser Person (Klasse, Begründungssatz über
-  `evidenceSentence` in `lib/import-linking.ts`), darunter die freie
-  Personensuche. Den Eintrag unter „Verwaltung“
-  (`components/MergeWithPicker.tsx`) entfernen.
-- **Folgedubletten** auf der Ergebnisseite: Eltern×Eltern, Partner×Partner,
-  Kinder×Kinder der bleibenden Person (`relaxedMatch` in
-  `lib/import-linking.ts`, noch nicht exportiert, plus `scoreDuplicate`);
-  „alle sicheren Folgedubletten zusammenführen“ über
-  `previewBulkMerge`/`bulkMerge` (`lib/services/merge-bulk.ts`).
-- **Alte Kennung als Umleitung**, neue Migration: Tabelle
-  `PersonRedirect(fromId PK, toId FK Person ON DELETE CASCADE, createdAt)`.
-  Im Merge-Schritt `X→K` anlegen und bestehende `…→X` auf `K` umbiegen.
-  Rückfüllung aus `AuditLog` (`MERGE`-Einträge: `diff->>'mergeId'` →
-  `entityId`; dazu `CONNECT`-Einträge mit `diff.clusters`).
-  **Bedingung:** Die Rückfüllung darf an keinen Daten scheitern können (nur
-  Zeilen mit den erwarteten Schlüsseln, keine werfenden Casts, Ziel existiert,
-  `ON CONFLICT DO NOTHING`) und ist nachzuweisen auf einer Datenbank mit
-  Zusammenführungen des veröffentlichten Codes: einzeln, gesammelt, Kette
-  A→B→C, bleibende Person später gelöscht. Geht das nicht beweisbar in SQL:
-  nur die Tabelle anlegen, Rückfüllung idempotent im Code.
-  Verhalten: `/people/<alt>` und `/tree?focus=<alt>` → 308, nur wenn die
-  Person sichtbar ist; `GET /api/persons/<alt>` → 308; PATCH/DELETE auf eine
-  alte Kennung → 409 mit `mergedInto`. MCP löst Personen-Kennungen still auf
-  und meldet `resolvedFrom`. Keine Umleitung für aufgegangene Beziehungen und
-  Ereignisse.
+- **Knopf „Zusammenführen …“** — erledigt (`components/MergeDialog.tsx`,
+  `GET /api/persons/[id]/duplicates`): neben „Im Stammbaum zeigen“, Dialog
+  mit den Kandidaten dieser Person (Klasse, Begründungssatz) und darunter
+  der freien Suche; der Eintrag unter „Verwaltung“ ist entfernt. Der Dialog
+  zeigt auch „unklar“ (das Banner weiterhin nicht) — bei Bedarf mit dem
+  Eigentümer abstimmen.
+- **Folgedubletten** — erledigt (`lib/services/merge-followups.ts`,
+  `components/FollowUpDuplicates.tsx`): auf der Ergebnisseite, Klassen
+  genau wie die Dublettenliste, gleichnamige Geschwister „unklar“; „alle
+  sicheren“ nur über `previewBulkMerge`/`bulkMerge`.
+- **Alte Kennung als Umleitung** — erledigt (`lib/services/redirects.ts`,
+  Migration `20261125000000_person_redirect`, nur die Tabelle). Die
+  Rückfüllung aus dem Audit läuft im Code (`backfillPersonRedirects`, je
+  Serverprozess einmal beim ersten Nachschlagen ohne Treffer), nicht in der
+  Migration: So kann das Ausrollen an keinen Daten scheitern, und
+  `docker/schema-diff-check.mjs` lässt ohnehin kein `INSERT` zu.
+  Nachgewiesen in `tests/person-redirect.db.test.ts` (einzeln, gesammelt,
+  Kette A→B→C, „Importe verbinden“, bleibende Person später gelöscht,
+  unbrauchbare Audit-Einträge). Mit echten Daten noch nicht gelaufen — nach
+  dem Ausrollen einmal eine alte Adresse aufrufen und im Server-Log die
+  Zeile `[umleitungen] … nachgetragen` prüfen. `/tree` hat dafür kein
+  `loading.tsx` mehr (die Ladeanzeige kommt aus einem `Suspense` in der
+  Seite), sonst ließe sich kein 308 setzen.
 - **KI-Vorprüfung**: Tabelle `DuplicateReview` (Paar als Schlüssel, `verdict`
   MERGE | DISPUTED | NOT_DUPLICATE, `reason`, `suggestedKeepId`, Benutzer,
   Schlüssel, Zeitpunkt, Stand beider Personen zur Erkennung „veraltet“).
@@ -124,9 +121,9 @@ README, Abschnitt „Tests“.
   Oberfläche: Einschätzung je Paar anzeigen, Filter „von der KI vorgeprüft“
   je Urteil, Sammelaktionen nur über die normale Vorschau; nie vorausgewählt,
   die Klasse bleibt unverändert.
-- Dazu klein: **„Erst die Eltern, dann dieses Paar zusammenführen“** in
-  einem Schritt auf der Vergleichsseite (Vorschläge liefert bereits
-  `MergeBlocker.suggestions` in `lib/services/merge.ts`).
+- **„Erst die Eltern, dann dieses Paar zusammenführen“** — erledigt
+  (`parentsFirst` in `mergePersons`, eine Transaktion; nur für Elternpaare,
+  die mindestens „wahrscheinlich“ dieselbe Person sind).
 
 ### 2. Herkunft sichtbar machen und visualisieren (Entwurf freigegeben)
 
