@@ -6,10 +6,12 @@ import { permanentRedirect } from "next/navigation";
 import { requireScope } from "@/lib/session";
 import { editableFamilyIds } from "@/lib/scope";
 import {
+  canSeeOrigin,
   listFamilies,
   loadFocusTree,
   loadGraph,
   loadTree,
+  loadTreeOrigin,
   referenceView,
   resolvePersonRedirect,
   resolveReference,
@@ -17,6 +19,7 @@ import {
 } from "@/lib/services";
 import { LINES_COOKIE, REFERENCE_COOKIE, type ReferenceView } from "@/lib/reference";
 import { FOCUS_COOKIE, FOCUS_DEPTH, parseDepth, type TreeView } from "@/lib/focus-tree";
+import { ORIGIN_PARAM } from "@/lib/origin";
 import { FamilyTree } from "@/components/FamilyTree";
 import { BrandMark } from "@/components/NavBar";
 import { PageLoading } from "@/components/PageLoading";
@@ -33,6 +36,8 @@ export const metadata = { title: "Baum" };
  * - `bezug` — vorübergehende Bezugsperson (README, „Bezugsperson“); ohne
  *   `focus` steht sie auch im Mittelpunkt. `bezug=ich` kehrt zur eigenen
  *   Person zurück.
+ * - `herkunft=1` — Schalter „Herkunft“: Importe je Person als Chips. Nur für
+ *   Bearbeiter und Administratoren; die Zuordnung wird nur dann geladen.
  */
 function parseView(view: string | undefined): TreeView {
   return view === "generations" || view === "timeline" ? view : "focus";
@@ -47,6 +52,7 @@ type TreeSearchParams = Promise<{
   up?: string;
   down?: string;
   bezug?: string;
+  herkunft?: string;
 }>;
 
 /**
@@ -102,6 +108,9 @@ async function TreeContent({
   );
   const bezugParam = params.bezug && choice.source === "param" ? choice.id : null;
   const initialLines = jar.get(LINES_COOKIE)?.value === "1";
+  // Herkunft: Schalter standardmäßig aus; ohne Recht wirkt auch die Adresse nicht.
+  const canOrigin = canSeeOrigin(scope);
+  const originOn = canOrigin && params[ORIGIN_PARAM] === "1";
   let reference: ReferenceView | null = null;
 
   // Ohne freigegebene Familie gäbe es nur Platzhalter — dann gar nicht erst
@@ -148,6 +157,7 @@ async function TreeContent({
       // Nur der Ausschnitt verlässt den Server — berechnet wird trotzdem in
       // einem Durchgang von der Bezugsperson aus.
       reference = graph ? referenceView(graph, choice, result.tree.persons.map((p) => p.id)) : null;
+      const origin = originOn && graph ? await loadTreeOrigin(scope, graph, result.tree.persons.map((p) => p.id)) : null;
       content = (
         <FamilyTree
           key="focus"
@@ -156,6 +166,8 @@ async function TreeContent({
           families={families}
           reference={reference}
           initialLines={initialLines}
+          canOrigin={canOrigin}
+          origin={origin}
         />
       );
     }
@@ -169,6 +181,7 @@ async function TreeContent({
     };
     if (visible > 0) {
       reference = graph ? referenceView(graph, choice) : null;
+      const origin = originOn && graph ? await loadTreeOrigin(scope, graph) : null;
       content = (
         <FamilyTree
           key="full"
@@ -178,6 +191,8 @@ async function TreeContent({
           focusId={requested ?? bezugParam ?? undefined}
           reference={reference}
           initialLines={initialLines}
+          canOrigin={canOrigin}
+          origin={origin}
         />
       );
     }

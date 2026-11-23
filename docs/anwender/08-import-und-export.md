@@ -36,6 +36,12 @@ Der Normalfall ist, denselben Baum regelmäßig neu zu exportieren und einzuspie
 
 Nichts geht verloren: Was die App nicht abbilden kann, bewahrt sie unverändert auf und schreibt es beim GEDCOM-Export zurück. Die Originaldatei jedes Imports kannst du im Importverlauf wieder herunterladen.
 
+### Importe benennen
+
+Unter **Verwaltung → Daten**, im Abschnitt „Importe“, steht die Liste **Namen der Importe**. Jeder Import — mehrere Stände desselben Stammbaums zählen als einer — hat dort seinen Buchstaben, seine Farbe und einen Namen. Mit **Umbenennen** gibst du ihm einen sprechenden Namen, z.B. „Stammbaum Tante Erika“.
+
+Der Name erscheint überall, wo der Import genannt wird: im [Stammbaum](04-stammbaum.md#herkunft), im Block „Herkunft“ der Personenseite, bei möglichen Dubletten, im Vergleich und unter „Importe verbinden“ — auch für Bearbeiter. Ohne eigenen Namen sehen Bearbeiter „Import vom 12.03.2026“. Den **Dateinamen** sehen nur Administratoren. Buchstabe und Farbe ändern sich durch das Umbenennen nicht; lässt du das Feld leer, gilt wieder der Standardname.
+
 ### Familien beim Import
 
 Sichtbarkeit hängt an Familien (siehe [Erste Schritte](01-erste-schritte.md#familien-wer-was-sieht)). Neue Personen kommen deshalb standardmäßig in **keine** Familie — dann sieht sie nur der Administrator, bis er sie zuordnet. Du kannst sie aber gleich vorhandenen Familien oder einer neuen Familie zuordnen. Personen, die in der Datei als privat oder lebend markiert sind, bleiben auf Wunsch (Standard) ohne Familie.

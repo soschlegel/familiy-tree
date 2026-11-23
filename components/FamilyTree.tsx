@@ -41,6 +41,8 @@ import {
 } from "./MarriageNode";
 import { MarriageEdge } from "./MarriageEdge";
 import { LineLegend, ReferenceContext, type TreeReference } from "./ReferenceLines";
+import { OriginLegend, TreeOriginContext, type TreeOriginState } from "./OriginChips";
+import { ORIGIN_PARAM, type TreeOrigin } from "@/lib/origin";
 import { ParentEdge, PARENT_EDGE_STYLE, type ParentSubtype } from "./ParentEdge";
 import {
   displayName,
@@ -94,11 +96,14 @@ export function treeUrl({
   focus,
   up = FOCUS_DEPTH.up,
   down = FOCUS_DEPTH.down,
+  herkunft = false,
 }: {
   view?: TreeView;
   focus?: string | null;
   up?: number;
   down?: number;
+  /** Schalter „Herkunft“ (`?herkunft=1`); aus bleibt weg. */
+  herkunft?: boolean;
 }): string {
   const s = new URLSearchParams();
   if (view !== "focus") s.set("view", view);
@@ -107,6 +112,7 @@ export function treeUrl({
     if (up !== FOCUS_DEPTH.up) s.set("up", String(up));
     if (down !== FOCUS_DEPTH.down) s.set("down", String(down));
   }
+  if (herkunft) s.set(ORIGIN_PARAM, "1");
   const query = s.toString();
   return query ? `/tree?${query}` : "/tree";
 }
@@ -197,6 +203,10 @@ export function FamilyTree(props: {
   reference?: ReferenceView | null;
   /** Schalter „Linien“ beim Laden (Cookie). */
   initialLines?: boolean;
+  /** Darf der Benutzer die Herkunft sehen (Bearbeiter, Administratoren)? Dann gibt es den Schalter. */
+  canOrigin?: boolean;
+  /** Herkunft der gezeigten Personen — nur bei eingeschaltetem Schalter (`?herkunft=1`) geladen. */
+  origin?: TreeOrigin | null;
 }) {
   return (
     <ReactFlowProvider>
@@ -212,6 +222,8 @@ function TreeCanvas({
   focusId,
   reference = null,
   initialLines = false,
+  canOrigin = false,
+  origin = null,
 }: {
   data: TreeData | FocusTreeData;
   view: TreeView;
@@ -219,6 +231,8 @@ function TreeCanvas({
   focusId?: string;
   reference?: ReferenceView | null;
   initialLines?: boolean;
+  canOrigin?: boolean;
+  origin?: TreeOrigin | null;
 }) {
   const focusData = view === "focus" && "members" in data ? data : null;
   const router = useRouter();
@@ -235,6 +249,21 @@ function TreeCanvas({
     () => ({ view: reference, showLines: showLines && reference !== null }),
     [reference, showLines],
   );
+
+  // Herkunft: Der Schalter steht in der Adresse (`?herkunft=1`) — die
+  // Zuordnung Person → Importe lädt der Server nur dann. Alle Verweise der
+  // Baumseite tragen ihn weiter (tUrl). Hervorheben per Klick in der Legende.
+  const originOn = origin !== null;
+  const tUrl = useCallback((o: Parameters<typeof treeUrl>[0]) => treeUrl({ ...o, herkunft: originOn }), [originOn]);
+  const [originHighlight, setOriginHighlight] = useState<string | null>(null);
+  const originState = useMemo<TreeOriginState>(
+    () => ({ origin, highlight: origin?.entries.some((e) => e.key === originHighlight) ? originHighlight : null }),
+    [origin, originHighlight],
+  );
+  // Beim Einschalten die Legende zeigen — erst sie nennt die Importe zu den Buchstaben.
+  useEffect(() => {
+    if (originOn && window.matchMedia("(min-width: 768px)").matches) setLegendOpen(true);
+  }, [originOn]);
 
   /** Linien ein/aus — im Cookie gemerkt, damit der Server beim nächsten Mal gleich richtig zeichnet. */
   function toggleLines(on: boolean) {
@@ -267,7 +296,7 @@ function TreeCanvas({
   useEffect(() => {
     // Mit eingefärbten Linien auch in der Fokus-Ansicht: erst die Legende
     // nennt die Großeltern zu den Farben.
-    setLegendOpen((view !== "focus" || (initialLines && reference !== null)) && window.matchMedia("(min-width: 768px)").matches);
+    setLegendOpen((view !== "focus" || (initialLines && reference !== null) || origin !== null) && window.matchMedia("(min-width: 768px)").matches);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -285,7 +314,7 @@ function TreeCanvas({
     [router],
   );
 
-  const focusHref = useCallback((id: string) => treeUrl({ focus: id, up, down }), [up, down]);
+  const focusHref = useCallback((id: string) => tUrl({ focus: id, up, down }), [tUrl, up, down]);
 
   /** Fokus-Verweise selbst ausführen — mit Übergang statt harter Navigation. */
   const onFocusClick = useCallback(
@@ -318,14 +347,14 @@ function TreeCanvas({
     }
     const url = new URL(window.location.href);
     if (url.searchParams.get("focus") !== id) {
-      window.history.replaceState(null, "", treeUrl({ focus: id, up: focusData.up, down: focusData.down }));
+      window.history.replaceState(null, "", tUrl({ focus: id, up: focusData.up, down: focusData.down }));
     }
     const person = focusData.persons.find((p) => p.id === id);
     if (person) {
       recentFocus = [{ id, name: displayName(person) }, ...recentFocus.filter((r) => r.id !== id)].slice(0, 6);
     }
     setRecent(recentFocus);
-  }, [focusData]);
+  }, [focusData, tUrl]);
 
   /**
    * Filter auf ausgewählte Familien. Beziehungen bleiben nur, wenn beide
@@ -951,16 +980,16 @@ function TreeCanvas({
   function switchView(next: TreeView) {
     if (focusData) {
       if (next === "focus") return;
-      navigate(treeUrl({ view: next, focus: focusData.focusId }));
+      navigate(tUrl({ view: next, focus: focusData.focusId }));
       return;
     }
     if (next === "focus") {
-      navigate(treeUrl({ focus: focused }));
+      navigate(tUrl({ focus: focused }));
       return;
     }
     setMode(next);
     // Nur die Adresse nachführen (Neuladen, Teilen) — die Daten sind dieselben.
-    window.history.replaceState(null, "", treeUrl({ view: next, focus: focused }));
+    window.history.replaceState(null, "", tUrl({ view: next, focus: focused }));
   }
 
   // Menüs schließen bei Klick daneben (auch auf der Baumfläche), Escape und
@@ -1016,6 +1045,7 @@ function TreeCanvas({
   return (
     <TreeNavContext.Provider value={nav}>
     <ReferenceContext.Provider value={referenceCtx}>
+    <TreeOriginContext.Provider value={originState}>
     <div className="flex flex-1 flex-col gap-2">
       <div className="flex flex-wrap items-start gap-2" role="toolbar" aria-label="Baumansicht">
         <div className="relative w-full sm:w-64" ref={searchBoxRef}>
@@ -1218,6 +1248,30 @@ function TreeCanvas({
           </label>
         )}
 
+        {canOrigin && (
+          <label
+            title="Zeigt an jeder Karte, aus welchen Importen die Person stammt (Buchstaben A, B, C …; H = von Hand erfasst)"
+            className={`${toolbarBox} flex cursor-pointer items-center gap-2 px-3 py-1.5 max-md:min-h-11 ${focusData ? "max-sm:order-2" : ""}`}
+          >
+            <input
+              type="checkbox"
+              data-testid="tree-origin-toggle"
+              checked={originOn}
+              disabled={pending}
+              onChange={(e) =>
+                navigate(
+                  focusData
+                    ? treeUrl({ focus: currentFocus, up, down, herkunft: e.target.checked })
+                    : treeUrl({ view: mode, focus: focused, herkunft: e.target.checked }),
+                  true,
+                )
+              }
+              className="accent-amber-600"
+            />
+            Herkunft
+          </label>
+        )}
+
         {/* Fokus-Ansicht auf dem Telefon: Ansicht zuerst, „Ehen zeigen“ und die
             Tiefe teilen sich die nächste Zeile — sonst vier Zeilen bei 360 px. */}
         <div className={`${toolbarBox} flex overflow-hidden ${focusData ? "max-sm:order-1" : ""}`} role="group" aria-label="Ansicht">
@@ -1261,7 +1315,7 @@ function TreeCanvas({
                 id="tree-depth-up"
                 data-testid="tree-depth-up"
                 value={up}
-                onChange={(e) => navigate(treeUrl({ focus: currentFocus, up: Number(e.target.value), down }), true)}
+                onChange={(e) => navigate(tUrl({ focus: currentFocus, up: Number(e.target.value), down }), true)}
                 className="rounded-md bg-transparent py-0.5 pl-1 pr-1 font-medium tabular-nums focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 max-md:min-h-[2.625rem] max-md:min-w-11 max-md:text-base"
               >
                 {Array.from({ length: FOCUS_DEPTH.max - FOCUS_DEPTH.min + 1 }, (_, i) => FOCUS_DEPTH.min + i).map((n) => (
@@ -1277,7 +1331,7 @@ function TreeCanvas({
                 id="tree-depth-down"
                 data-testid="tree-depth-down"
                 value={down}
-                onChange={(e) => navigate(treeUrl({ focus: currentFocus, up, down: Number(e.target.value) }), true)}
+                onChange={(e) => navigate(tUrl({ focus: currentFocus, up, down: Number(e.target.value) }), true)}
                 className="rounded-md bg-transparent py-0.5 pl-1 pr-1 font-medium tabular-nums focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 max-md:min-h-[2.625rem] max-md:min-w-11 max-md:text-base"
               >
                 {Array.from({ length: FOCUS_DEPTH.max - FOCUS_DEPTH.min + 1 }, (_, i) => FOCUS_DEPTH.min + i).map((n) => (
@@ -1286,7 +1340,7 @@ function TreeCanvas({
               </select>
             </div>
             <Link
-              href={treeUrl({ view: "generations", focus: currentFocus })}
+              href={tUrl({ view: "generations", focus: currentFocus })}
               onClick={(e) => {
                 if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
                 e.preventDefault();
@@ -1410,9 +1464,13 @@ function TreeCanvas({
           timeline={activeView === "timeline"}
           focus={Boolean(focusData)}
           lines={showLines ? reference : null}
+          origin={origin}
+          originHighlight={originState.highlight}
+          onOriginHighlight={setOriginHighlight}
         />
       </div>
     </div>
+    </TreeOriginContext.Provider>
     </ReferenceContext.Provider>
     </TreeNavContext.Provider>
   );
@@ -1475,6 +1533,9 @@ function Legend({
   timeline,
   focus,
   lines,
+  origin,
+  originHighlight,
+  onOriginHighlight,
 }: {
   open: boolean;
   onToggle: () => void;
@@ -1482,6 +1543,10 @@ function Legend({
   focus: boolean;
   /** Bezugsperson, deren Ahnenlinien gerade eingefärbt sind. */
   lines: ReferenceView | null;
+  /** Herkunft der gezeigten Personen (Schalter „Herkunft“). */
+  origin: TreeOrigin | null;
+  originHighlight: string | null;
+  onOriginHighlight: (key: string | null) => void;
 }) {
   return (
     <div
@@ -1501,13 +1566,22 @@ function Legend({
         Legende
         <span aria-hidden className="text-[10px]">{open ? "▾" : "▸"}</span>
       </button>
+      {open && origin && (
+        <div className="max-h-[32vh] overflow-y-auto border-b border-stone-200 px-3 pb-2 dark:border-stone-800">
+          <OriginLegend origin={origin} highlight={originHighlight} onHighlight={onOriginHighlight} />
+        </div>
+      )}
       {open && lines && (
-        <div className="max-h-[40vh] overflow-y-auto border-b border-stone-200 px-3 pb-2 dark:border-stone-800">
+        <div className={`max-h-[40vh] overflow-y-auto border-b border-stone-200 px-3 pb-2 dark:border-stone-800 ${origin ? "pt-2" : ""}`}>
           <LineLegend view={lines} />
         </div>
       )}
       {open && (
-        <ul id="tree-legend" className={`space-y-1 px-3 pb-2 ${lines ? "pt-2 max-md:hidden" : ""}`}>
+        // Mit Linien oder Herkunft bleibt auf dem Telefon nur deren Legende — sonst
+        // deckte die aufgeklappte Liste den halben Baum zu. Sind beide an, entfällt
+        // die allgemeine Liste auch auf breiten Bildschirmen (die Legende würde
+        // sonst höher als die Baumfläche).
+        <ul id="tree-legend" className={`space-y-1 px-3 pb-2 ${lines || origin ? "pt-2 max-md:hidden" : ""} ${lines && origin ? "hidden" : ""}`}>
           <LegendLine subtype="BIOLOGICAL" label="leibliche Abstammung" />
           <LegendLine subtype="ADOPTIVE" label="Adoption" />
           <LegendLine subtype="STEP" label="Stiefkind" />

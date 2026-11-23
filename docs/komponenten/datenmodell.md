@@ -21,7 +21,7 @@ Querverweise: Datumslogik `lib/dates.ts`, Rechte `lib/scope.ts` und
 | Lebensereignisse | `Event` | `EventType` |
 | Medien | `MediaAsset`, `PersonMedia`, `RelationshipMedia`, `SourceMedia`, `EventMedia`, `CitationMedia` | — |
 | Quellen und Belege | `Source`, `Citation` | `SourceKind`, `CitationFact`, `CitationConfidence` |
-| Import und Herkunft | `ImportBatch`, `ImportLink`, `ExternalId`, `ImportRawRecord`, `DuplicateDismissal`, `PersonRedirect` | `ImportStatus` |
+| Import und Herkunft | `ImportBatch`, `ImportLink`, `ImportSource`, `ExternalId`, `ImportRawRecord`, `DuplicateDismissal`, `PersonRedirect` | `ImportStatus` |
 | Audit und Änderungsgeschichte | `AuditLog`, `ChangeSet` | `AuditChannel` |
 | Orte (Karte) | `Place` | `PlaceSource`, `PlacePrecision` |
 
@@ -482,6 +482,29 @@ Baums. Die ursprünglichen Unique-Indizes je Träger-Spalte wurden mit
 erneuten Import; `firstBatchId`, `lastBatchId`; je Träger-Spalte ein Index
 (Herkunft eines Datensatzes laden, Umhängen beim Zusammenführen).
 
+**Verwendung zur Anzeige:** `lib/services/origin.ts` liest die Links nur
+(Herkunft sichtbar machen: Buchstabe je Quell-Baum, Chips im Baum und auf
+der Personenseite, Übersicht) — geschrieben werden sie weiterhin nur vom
+Import und vom Zusammenführen.
+
+### `ImportSource`
+**Bedeutung:** Lesbarer Anzeigename eines Imports (Quell-Baums), vergeben
+von einem Administrator in der Importverwaltung. Eine Zeile entsteht erst
+beim Benennen; ohne Zeile gilt der Standardname („Import vom <Datum>“, für
+Administratoren der Dateiname). Buchstabe und Farbe eines Imports hängen
+nicht an dieser Tabelle, sondern an der Reihenfolge der Läufe
+(`lib/services/origin.ts`, `loadImportDirectory`) — Umbenennen ändert sie
+deshalb nie.
+
+**Felder:** `sourceTreeId` (Primärschlüssel, ohne Fremdschlüssel — ein
+Quell-Baum ist keine eigene Tabelle, nur eine Kennung an `ImportBatch` und
+`ImportLink`), `displayName` (Pflicht, höchstens 60 Zeichen und je Import
+eindeutig ohne Rücksicht auf Groß-/Kleinschreibung — beides prüft der
+Dienst), `createdAt`, `updatedAt`.
+
+**Löschverhalten:** Entfernt der Administrator den Namen, wird die Zeile
+gelöscht. Läufe oder Links zu löschen berührt sie nicht.
+
 ### `ExternalId`
 **Bedeutung:** Fremdkennung eines Datensatzes, damit ein erneuter Import
 ihn wiedererkennt: `system` z.B. `GEDCOM_XREF` (Wert `@I12@`, nur zusammen
@@ -633,6 +656,7 @@ zuordnen“, von Hand Bestätigtes nie überschreiben).
 | `20261124000000_neuigkeiten` | `User.lastSeenReleaseId` (Text, optional) — nur `ADD COLUMN`. |
 | `20261124000001_orte_ki` | `PlaceSource` um `AI` (`ALTER TYPE … ADD VALUE`); `Place.note` (optional) und `Place.uncertain` (Standard `false`). |
 | `20261125000000_person_redirect` | Tabelle `PersonRedirect` mit Index und Fremdschlüssel (Cascade). Bewusst ohne Daten: Die Rückfüllung aus dem Audit geschieht im Code (`backfillPersonRedirects`). |
+| `20261125000002_import_anzeigename` | Tabelle `ImportSource` (Anzeigename je Quell-Baum) — nur `CREATE TABLE`, keine Rückfüllung. |
 
 `migration_lock.toml` legt den Anbieter (PostgreSQL) fest.
 

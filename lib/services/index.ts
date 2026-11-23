@@ -40,3 +40,4 @@ export * from "./changes";
 export * from "./media-links";
 export * from "./attached-media";
 export * from "./release-notes";
+export * from "./origin";

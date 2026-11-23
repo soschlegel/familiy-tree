@@ -60,3 +60,5 @@ Die Adresse des Eintrags, der beim Zusammenführen aufgegangen ist, führt danac
 Wurden mehrere Stammbäume importiert (z.B. die MyHeritage-Bäume zweier Verwandter), findet **Recherche → Importe verbinden** die Personen, die in mehreren Importen vorkommen, und führt sie nach Bestätigung zusammen — so wird aus mehreren Importen ein gemeinsamer Stammbaum. Dort gibt es zusätzlich die Klasse „sehr wahrscheinlich“; vorausgewählt sind nur die sicheren Verbindungen.
 
 Die KI (siehe [KI-Zugang](10-ki-zugang.md)) kann mögliche Dubletten finden und begründen, aber **nie selbst zusammenführen** — das geht nur hier in der App.
+
+Oben auf **Importe verbinden** zeigt eine **Übersicht** jeden Import als Kreis; die Zahl an einer Linie nennt die Verbindungspersonen — Personen, die schon in beiden Importen vorkommen, also bereits zusammengeführt sind. Dieselben Zahlen stehen darunter als Tabelle. Welcher Buchstabe zu welchem Import gehört, erklärt [Herkunft](04-stammbaum.md#herkunft).

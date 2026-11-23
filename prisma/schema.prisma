@@ -756,6 +756,19 @@ model ImportBatch {
   @@index([createdAt])
 }
 
+// Anzeigename eines Imports. Ein „Import“ im Sinn der Oberfläche ist ein
+// Quell-Baum (sourceTreeId): mehrere Läufe (ImportBatch) derselben Kennung
+// sind Stände desselben Baums und teilen sich Namen, Buchstabe und Farbe
+// (lib/origin.ts, lib/services/origin.ts). Eine Zeile gibt es nur, wenn ein
+// Administrator den Import benannt hat — sonst gilt „Import vom <Datum>“.
+// Bewusst ohne Fremdschlüssel: sourceTreeId ist nirgends Primärschlüssel.
+model ImportSource {
+  sourceTreeId String   @id
+  displayName  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
 // Herkunft eines importierten Datensatzes — eine Zeile je Datensatz UND
 // Datensatz der Quelle (sourceTreeId + externalKey), angelegt bzw.
 // fortgeschrieben von jedem Import, der ihn anlegt, aktualisiert oder mit

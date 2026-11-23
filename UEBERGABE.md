@@ -125,28 +125,36 @@ README, Abschnitt „Tests“.
   (`parentsFirst` in `mergePersons`, eine Transaktion; nur für Elternpaare,
   die mindestens „wahrscheinlich“ dieselbe Person sind).
 
-### 2. Herkunft sichtbar machen und visualisieren (Entwurf freigegeben)
+### 2. Herkunft sichtbar machen und visualisieren — erledigt (Branch `herkunft`)
 
-- Je Import ein Buchstabe (A, B, C … nach Reihenfolge des ersten Imports) und
-  eine Farbe aus der Okabe-Ito-Palette; „von Hand erfasst“ = gestrichelter
-  Chip „H“. Nie nur Farbe.
-- **Lesbare Namen für Importe**: Anzeigename je Import, überall verwendet.
-  Falls dafür eine Spalte nötig ist: kleine ergänzende Migration, vorher
-  abstimmen.
-- **Stammbaum**: Schalter `?herkunft=1`, standardmäßig aus, nur Bearbeiter
-  und Administratoren. Zuordnung Person → Importe nur bei eingeschaltetem
-  Schalter laden; höchstens drei Chips je Karte, dann „+n“;
-  Verbindungspersonen mit dezentem Ring; Legende mit Hervorheben per Klick.
-- **Personenseite**: Block „Herkunft“ (Importe, „zusammengeführt am … aus N
-  Einträgen“ aus dem `MERGE`-Eintrag); kleine Chips an Ereignissen, Namen,
-  Beziehungen, Belegen. Bei den Hauptangaben nur ehrliche Aussagen — es gibt
-  keine Änderungsgeschichte je Feld.
-- **Übersicht** auf `/research/connect`: Importe als Kreise, Kanten mit der
-  Zahl der Verbindungspersonen, dazu dieselben Angaben als Liste.
-- MCP: `get_person.origin` nur, wenn der Benutzer die Person bearbeiten darf.
-- Ausgangspunkte: `ImportLink` (`sourceTreeId`, `mergedFromId`, `mergedAt`),
-  `components/PersonNode.tsx`, `components/FamilyTree.tsx`,
-  `app/tree/page.tsx`, `lib/services/tree.ts`.
+Umgesetzt wie im Entwurf; Beschreibung in `docs/komponenten/dienste.md`
+(`lib/services/origin.ts`), `bibliotheken.md` (`lib/origin.ts`),
+`oberflaeche-komponenten.md` (`OriginChips`, `PersonOrigin`,
+`OriginOverview`, `ImportSources`), Anwender-Hilfe in 02, 04, 07 und 08.
+
+- Je Import (Quell-Baum) ein Buchstabe A, B, C … ohne „H“ nach Reihenfolge
+  des ersten Laufs und eine Okabe-Ito-Farbe; „von Hand erfasst“ =
+  gestrichelter Chip „H“. Nie nur Farbe.
+- **Lesbare Namen**: neue, rein ergänzende Migration
+  `20261125000002_import_anzeigename` (Tabelle `ImportSource`, ohne
+  Rückfüllung). Administratoren benennen Importe unter Verwaltung → Daten;
+  der Name ersetzt überall den Dateinamen (Dubletten-Hinweis, Vergleich,
+  „Importe verbinden“, GEDCOM-Vorschau). `importLabel` ist entfallen.
+- **Stammbaum**: Schalter „Herkunft“ (`?herkunft=1`), Chips (höchstens drei,
+  dann „+n“), doppelter Rand für Verbindungspersonen, Legende mit
+  Hervorheben. **Personenseite**: Block „Herkunft“ und Chips an Ereignissen,
+  Namen, Beziehungen, Belegen. **Übersicht** auf `/research/connect`.
+  **MCP**: `get_person.origin`.
+
+**Entscheidungen fürs Protokoll:**
+- „Linien“ und „Herkunft“ gehen gleichzeitig und teilen sich die Karte:
+  Linien = Tönung, Streifen links, Kürzel oben; Herkunft = Chips unten
+  rechts, Ring außen.
+- Herkunft gibt es überall (Baum, Personenseite, Übersicht, KI-Zugang) nur
+  für Personen, die der Benutzer bearbeiten darf; Zahlen zählen nur diese.
+- Der Haken des Schalters folgt der Adresse: Er wechselt erst, wenn die
+  Seite mit bzw. ohne `herkunft=1` geladen ist (der Server lädt die
+  Zuordnung).
 
 ### 3. Vorschläge schon beim Import
 

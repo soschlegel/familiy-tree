@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { requireScope } from "@/lib/session";
 import { ConnectImports } from "@/components/ConnectImports";
+import { OriginOverview } from "@/components/OriginOverview";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Importe verbinden" };
@@ -25,6 +26,7 @@ export default async function ConnectPage() {
           selbst. Vor dem Zusammenführen zeigt eine gemeinsame Vorschau, was geschieht.
         </p>
       </div>
+      <OriginOverview />
       <ConnectImports />
     </div>
   );

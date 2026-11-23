@@ -69,6 +69,12 @@ export function ConnectImports() {
     return () => clearTimeout(t);
   }, [run, load]);
 
+  // Nach dem Zusammenführen stimmt die Übersicht der Herkunft nicht mehr — neu laden lassen.
+  const status = run?.status;
+  useEffect(() => {
+    if (status === "done") window.dispatchEvent(new Event("origin-changed"));
+  }, [status]);
+
   async function start() {
     setBusy(true);
     setError(null);

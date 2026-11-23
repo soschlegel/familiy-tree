@@ -6,7 +6,8 @@ import { fuzzyField } from "../dates";
 import { findDuplicatePairs, scoreDuplicate, type Confidence, type DupPerson } from "../duplicates";
 import { evidenceSentence } from "../import-linking";
 import { firstGivenKey, nameKey } from "../name-keys";
-import { importLabel, MANUAL_ORIGIN_LABEL, toPersonBrief, type PersonBrief } from "./dto";
+import { MANUAL_ORIGIN_LABEL, toPersonBrief, type PersonBrief } from "./dto";
+import { loadImportDirectory } from "./origin";
 import { loadGraph, type LoadedGraph } from "./graph-data";
 import { forbiddenError, notFoundError, validationError } from "./errors";
 import { audit, auditActor } from "../audit";
@@ -156,7 +157,7 @@ export async function listDuplicateCandidates(
 
 export type PersonDuplicateCandidate = {
   person: PersonBrief;
-  /** Herkunft des Kandidaten: Importe (Dateiname nur für Administratoren) oder „von Hand erfasst“. */
+  /** Herkunft des Kandidaten: Importe („A · Anzeigename“; Dateiname nur für Administratoren) oder „von Hand erfasst“. */
   origin: string[];
   score: number;
   confidence: Confidence;
@@ -266,7 +267,7 @@ export async function listDuplicatesOfPerson(
     }),
     prisma.importLink.findMany({
       where: { personId: { in: ids } },
-      select: { personId: true, sourceTreeId: true, lastBatch: { select: { fileName: true, createdAt: true } } },
+      select: { personId: true, sourceTreeId: true },
     }),
     prisma.duplicateDismissal.findMany({
       where: { OR: [{ personAId: personId }, { personBId: personId }] },
@@ -302,9 +303,10 @@ export async function listDuplicatesOfPerson(
   }
   const treesOf = new Map<string, Set<string>>();
   const originOf = new Map<string, Set<string>>();
+  const importDir = await loadImportDirectory(links.map((l) => l.sourceTreeId));
   for (const l of links) {
     if (l.sourceTreeId) treesOf.set(l.personId!, new Set([...(treesOf.get(l.personId!) ?? []), l.sourceTreeId]));
-    originOf.set(l.personId!, new Set([...(originOf.get(l.personId!) ?? []), importLabel(scope, l.lastBatch)]));
+    originOf.set(l.personId!, new Set([...(originOf.get(l.personId!) ?? []), importDir.label(scope, l.sourceTreeId)]));
   }
 
   const people = [...rowOf.values()].map((r) => toDupPerson(r, rel(r.id), (id) => relKey(nameRows.get(id)), r.names, [...(treesOf.get(r.id) ?? [])]));

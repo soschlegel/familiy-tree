@@ -31,7 +31,7 @@ import { personDateIssues, MAX_BIOLOGICAL_PARENTS, PARENT_SUBTYPES, PARTNER_SUBT
 import { conflictError, forbiddenError, notFoundError, parseOrThrow, validationError } from "./errors";
 import { newId } from "./imports";
 import { plural } from "../plural";
-import { importLabel } from "./dto";
+import { loadImportDirectory, type ImportDirectory } from "./origin";
 import { auditActor, auditData, fieldChanges } from "../audit";
 import { nameChangeSet } from "../change-sets";
 import { recordPersonRedirect } from "./redirects";
@@ -671,7 +671,7 @@ export type MergePersonSide = {
   parents: string[];
   partners: string[];
   children: number;
-  /** Importe (Datei und Datum; Dateinamen nur für Administratoren). */
+  /** Importe („A · Anzeigename“; Dateinamen nur für Administratoren). */
   imports: string[];
   /** Herkunft: Stammbaum (Datei des letzten Imports) je Link. */
   provenance: { sourceTreeId: string | null; fileName: string | null; externalKey: string | null; merged: boolean }[];
@@ -689,7 +689,7 @@ export type MergePreview = {
   token: string;
 };
 
-function side(scope: Scope, p: PersonBundle, rels: RelBundle[]): MergePersonSide {
+function side(scope: Scope, p: PersonBundle, rels: RelBundle[], importDir: ImportDirectory): MergePersonSide {
   const fact = (date: string, place: string | null) => [date, place].filter(Boolean).join(", ") || null;
   const mine = rels.filter((r) => r.fromPersonId === p.id || r.toPersonId === p.id);
   const parents = mine.filter((r) => r.type === "PARENT_OF" && r.toPersonId === p.id).map((r) => nameFor(scope, r.fromPerson).replace(/^„|“$/g, ""));
@@ -698,7 +698,7 @@ function side(scope: Scope, p: PersonBundle, rels: RelBundle[]): MergePersonSide
     .map((r) => nameFor(scope, r.fromPersonId === p.id ? r.toPerson : r.fromPerson).replace(/^„|“$/g, ""));
   const children = mine.filter((r) => r.type === "PARENT_OF" && r.fromPersonId === p.id).length;
   const dateText = (k: "birthDate" | "deathDate") => formatDateWithPhrase(fuzzyField(p, k), p[`${k}Phrase`]);
-  const imports = [...new Set(p.importLinks.map((l) => importLabel(scope, l.lastBatch)))];
+  const imports = [...new Set(p.importLinks.map((l) => importDir.label(scope, l.sourceTreeId)))];
   const values = Object.fromEntries(MERGE_FIELDS.map((f) => [f, ""])) as Record<MergeField, string>;
   const cmp = compareFields(p as unknown as PersonValues, p as unknown as PersonValues);
   for (const c of cmp) values[c.field] = c.keep;
@@ -726,11 +726,11 @@ function side(scope: Scope, p: PersonBundle, rels: RelBundle[]): MergePersonSide
   };
 }
 
-function toPreview(scope: Scope, plan: MergePlan): MergePreview {
+function toPreview(scope: Scope, plan: MergePlan, importDir: ImportDirectory): MergePreview {
   const { keep, other, relationships } = plan.snapshot;
   return {
-    keep: side(scope, keep, relationships),
-    other: side(scope, other, relationships),
+    keep: side(scope, keep, relationships, importDir),
+    other: side(scope, other, relationships, importDir),
     fields: plan.fields,
     relationshipChoices: plan.collapses
       .filter((c) => c.survivor.subtype !== c.removed.subtype)
@@ -760,7 +760,8 @@ export async function previewPersonMerge(
   const parsed = parseOrThrow(mergeInputSchema.safeParse({ keepId, mergeId, ...input }));
   const snap = await loadMergeSnapshot(prisma, keepId, mergeId);
   if (!snap) throw notFoundError("Person");
-  return toPreview(scope, planMerge(scope, snap, parsed));
+  const importDir = await loadImportDirectory([...snap.keep.importLinks, ...snap.other.importLinks].map((l) => l.sourceTreeId));
+  return toPreview(scope, planMerge(scope, snap, parsed), importDir);
 }
 
 // ---------------------------------------------------------------------------

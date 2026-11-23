@@ -22,6 +22,8 @@ import {
   type CitationFactName,
   type SourceKindName,
 } from "@/lib/validation";
+import { OriginChips } from "./OriginChips";
+import type { OriginChipMap } from "@/lib/origin";
 
 /** Beleg in der Form, die die Personenseite übergibt (PersonCitation). */
 export type CitationRow = {
@@ -156,7 +158,10 @@ export function CitationSection({
   canEdit,
   canCreateSource,
   mediaCandidates = [],
+  origin,
 }: {
+  /** Herkunft je Beleg als Chips (nur für Bearbeiter geladen). */
+  origin?: OriginChipMap | null;
   personId: string;
   citations: CitationRow[];
   targets: CitationTargetOption[];
@@ -353,6 +358,7 @@ export function CitationSection({
                       {!row.eventLabel && row.relationLabel && <span className="text-xs muted">· {row.relationLabel}</span>}
                       {row.detail && <span className="text-xs muted">· {row.detail}</span>}
                       <CitationLink url={row.url} />
+                      <OriginChips keys={origin?.citations[row.id]} entries={origin?.entries} />
                       {row.confidence && !DERIVED_SOURCE_KINDS.includes(row.source.kind) ? (
                         <span className={`${confidenceBadge[row.confidence]} px-2 py-0 text-[11px]`}>
                           {CONFIDENCE_LABEL[row.confidence]}

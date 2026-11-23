@@ -9,6 +9,8 @@ export const HELP_LINKS = {
   orteZuordnen: "/hilfe/orte-zuordnen",
   linien: "/hilfe/stammbaum#linienfarben",
   bezugsperson: "/hilfe/stammbaum#bezugsperson",
+  herkunft: "/hilfe/stammbaum#herkunft",
+  herkunftPerson: "/hilfe/personen#herkunft",
   dubletten: "/hilfe/dubletten",
   dublettenKlassen: "/hilfe/dubletten#was-bedeuten-sicher-wahrscheinlich-und-unklar",
   kiZugang: "/hilfe/ki-zugang",
