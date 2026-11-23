@@ -1,3 +1,10 @@
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+// Korrektur für den Hydration-Fehler (React #418) im React, das Next.js 15.5
+// mitbringt — siehe lib/next-patches/react-hydration-replay-fix.cjs.
+const hydrationFix = require("./lib/next-patches/react-hydration-replay-fix.cjs");
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Eigener Build-Ordner für den Mock-Server (scripts/mock.mjs), damit er
@@ -26,6 +33,14 @@ const nextConfig = {
   // Dateizugriff zur Laufzeit, nichts für das Standalone-Image nachzutragen.
   webpack(config) {
     config.module.rules.push({ resourceQuery: /raw/, type: "asset/source" });
+    // Rückportierung einer React-Korrektur in das von Next mitgebrachte
+    // react-dom (nur dessen Client-Dateien; bricht den Build ab, wenn die
+    // Stelle nicht mehr passt). Entfällt mit Next.js 16 / React 19.3.
+    config.module.rules.push({
+      test: hydrationFix.TARGET,
+      enforce: "pre",
+      loader: require.resolve("./lib/next-patches/react-hydration-replay-fix.cjs"),
+    });
     return config;
   },
 };
