@@ -45,11 +45,14 @@ aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
   Version 5 mit `places`, MCP `get_place` und `places` in
   `get_person`/`list_events`. Prüfstand: Vitest 877/877, Playwright
   (Produktions-Build) 317/317, `gedcom:check` ohne Warnungen.
-- Offen: Git-Verlauf umschreiben (echte Namen in alter Demofamilie,
-  Autor-E-Mail, Beispielorte) — vom Eigentümer bestätigt, als letzter
-  Schritt ohne aktive Worktrees. Aus der Sicherheitsprüfung: eine
-  Content-Security-Policy für die Seiten als eigenes Paket; Anfragegrenzen
-  für Unangemeldete und HSTS gehören in den Reverse-Proxy.
+- Git-Verlauf am 23.11. umgeschrieben (alte Demofamilie, Beispielorte,
+  Autor-Adresse; alle Zweige neu hochgeladen, Stand bytegleich). Alte Klone
+  und Worktrees passen nicht mehr dazu — neu klonen statt zusammenführen.
+  Die Verweise der alten Pull Requests bei GitHub zeigen noch auf den alten
+  Verlauf; entfernen kann sie nur der GitHub-Support.
+- Offen aus der Sicherheitsprüfung: eine Content-Security-Policy für die
+  Seiten als eigenes Paket; Anfragegrenzen für Unangemeldete und HSTS
+  gehören in den Reverse-Proxy.
 - Beim Ausrollen beachten: Der Reverse-Proxy muss für `/api/mcp` größere
   Anfragen durchlassen (Bilder als base64 über MCP, bis
   MAX_UPLOAD_BYTES × 4/3 + 1 MiB), sonst antwortet er mit 413.
