@@ -24,7 +24,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { mockDbSkipReason } from "./db-ready";
 import type { Scope } from "@/lib/scope";
-import { bulkMerge, createPerson, createRelationship, deletePerson, getPersonDetail, mergePersons, scopeForEmail, ServiceError } from "@/lib/services";
+import { bulkMerge, createPerson, deletePerson, getPersonDetail, mergePersons, scopeForEmail, ServiceError } from "@/lib/services";
 import { applyGedcomImport, startGedcomImport } from "@/lib/services/gedcom-import";
 import { startConnectApply, startConnectPreview, startConnectRun, waitForConnectRun } from "@/lib/services/import-linking";
 import { backfillPersonRedirects, mergedIntoError, resolvePersonRedirect, resolvePersonRedirects } from "@/lib/services/redirects";

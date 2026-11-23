@@ -523,6 +523,9 @@ gespeichert (`personAId` < `personBId`, geprüft im Dienst).
 **Löschverhalten:** Cascade mit jeder der beiden Personen; Benutzer
 gelöscht → `userId` `NULL`.
 
+**Index:** `personBId` (Abfragen von der B-Seite; die A-Seite deckt der
+Primärschlüssel ab).
+
 ### `PersonRedirect`
 **Bedeutung:** Alte Kennung einer Person, die beim Zusammenführen in einer
 anderen aufgegangen ist, mit der bleibenden Person als Ziel
@@ -533,9 +536,6 @@ bestehende Einträge auf die neue bleibende Person um.
 **Felder:** `fromId` (Primärschlüssel), `toId` (mit Index), `createdAt`.
 
 **Löschverhalten:** Cascade mit der bleibenden Person (`toId`).
-
-**Index:** `personBId` (Abfragen von der B-Seite; die A-Seite deckt der
-Primärschlüssel ab).
 
 ### `AuditLog`
 **Bedeutung:** Protokoll jeder Änderung (`lib/audit.ts`). Schreibfehler im
