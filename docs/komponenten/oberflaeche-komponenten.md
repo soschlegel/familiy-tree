@@ -1365,13 +1365,13 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 - **Props:** `personId` (bleibt), `personName`, `people` (Auswahlliste für `PersonPicker`).
 - **Verhalten:**
   - Echtes `<dialog>` (`showModal`): Fokus bleibt im Dialog, Escape und ein Klick auf den Hintergrund schließen, danach kehrt der Fokus zum Knopf zurück.
-  - Die Kandidaten werden erst beim Öffnen geladen: Name, Lebensdaten, Herkunft, Klasse (alle drei, auch „unklar“), Begründungssatz, Widersprüche und „Vergleichen“. Eingetragene Vorfahren und Nachkommen sind nie darunter (Regel des Dienstes); ohne Kandidaten steht das dort.
+  - Die Kandidaten werden erst beim Öffnen geladen: Name, Lebensdaten, Herkunft, Klasse (alle drei, auch „unklar“), Begründungssatz, die KI-Einschätzung des Paars, falls vorhanden („KI-Einschätzung: …“, mit „(veraltet)“ — nur das Urteil, es ändert weder Klasse noch Reihenfolge), Widersprüche und „Vergleichen“. Eingetragene Vorfahren und Nachkommen sind nie darunter (Regel des Dienstes); ohne Kandidaten steht das dort.
   - Darunter `PersonPicker` mit „Vergleichen“ (erst aktiv, wenn eine Person gewählt ist).
   - Der Dialog führt selbst nichts zusammen: Jede Wahl öffnet `/people/merge?keep=<diese>&other=…`; dort lassen sich die Seiten tauschen.
   - Der Dialog steht oben statt mittig und schneidet nicht ab, damit die Vorschlagsliste der Suche über seinen Rand hinaus aufklappen kann.
 - **Server oder Client:** Client.
 - **Ruft auf:** `GET /api/persons/[id]/duplicates`.
-- **Tests:** `e2e/write/merge-comfort.spec.ts` (Kandidaten, Suche, Escape, ohne Kandidaten), `e2e/write/merge.spec.ts` (`merge-open`, `merge-compare`; Betrachter ohne Knopf).
+- **Tests:** `e2e/write/merge-comfort.spec.ts` (Kandidaten, Suche, Escape, ohne Kandidaten), `e2e/write/merge.spec.ts` (`merge-open`, `merge-compare`; Betrachter ohne Knopf), KI-Einschätzung im Dialog in `e2e/write/duplicate-review.spec.ts`.
 
 ### components/FollowUpDuplicates.tsx
 

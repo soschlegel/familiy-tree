@@ -158,6 +158,10 @@ test("„veraltet“, wenn sich eine Person seit der Einschätzung geändert hat
 
   await page.goto(`/people/${likely.a}`);
   await expect(page.getByTestId("duplicate-banner-review")).toHaveText("KI-Einschätzung: zusammenführen (veraltet)");
+  // Dieselbe Einschätzung steht im Dialog „Zusammenführen …“ am Kandidaten.
+  await page.getByTestId("merge-open").click();
+  await expect(page.getByTestId("merge-dialog").getByTestId("merge-candidate-review")).toHaveText("KI-Einschätzung: zusammenführen (veraltet)");
+  await page.keyboard.press("Escape");
   await expectNoA11yViolations(page);
 });
 

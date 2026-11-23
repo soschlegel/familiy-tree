@@ -6,6 +6,7 @@ import { useId, useRef, useState } from "react";
 
 import { apiFetch } from "./api-client";
 import { PersonPicker, type PickerPerson } from "./PersonPicker";
+import { VERDICT_LABEL } from "@/lib/duplicate-verdicts";
 import { CONFIDENCE_LABEL } from "@/lib/duplicates";
 import { HELP_LINKS } from "@/lib/help/links";
 import { lifeSpan } from "@/lib/tree-layout";
@@ -114,6 +115,13 @@ export function MergeDialog({ personId, personName, people }: { personId: string
                     <p className="mt-1 text-xs muted" data-testid="merge-candidate-reason">
                       {d.sentence}
                     </p>
+                    {/* KI-Vorprüfung: nur das Urteil — es ändert weder Klasse noch Reihenfolge. */}
+                    {d.review && (
+                      <p className="mt-1 text-xs" data-testid="merge-candidate-review" data-verdict={d.review.verdict}>
+                        KI-Einschätzung: {VERDICT_LABEL[d.review.verdict]}
+                        {d.review.stale && " (veraltet)"}
+                      </p>
+                    )}
                     {d.conflicts.length > 0 && <p className="mt-1 text-xs text-red-700 dark:text-red-300">Widerspruch: {d.conflicts.join(" · ")}</p>}
                     <Link href={compareHref(d.person.id)} className="btn-secondary btn-sm mt-2" data-testid="merge-candidate-compare">
                       Vergleichen<span className="sr-only"> mit {fullName(d.person)}</span>

@@ -74,7 +74,7 @@ Wichtig zu wissen:
 - Die Einschätzung ist **nur ein Hinweis**. Sie wählt nichts vor, und sie ändert die Klasse nicht: Ein „zusammenführen“ der KI macht aus einem „wahrscheinlichen“ Paar kein „sicheres“. In einem Rutsch zusammenführen lassen sich weiterhin nur „sichere“ Paare, und immer erst nach der gemeinsamen Vorschau.
 - Ein „kein Duplikat“ der KI blendet das Paar **nicht** aus. Wenn du zustimmst, klickst du **Als „kein Duplikat“ übernehmen** — erst das blendet es aus, wie der Knopf „Kein Duplikat“.
 - **veraltet** steht an einer Einschätzung, wenn einer der beiden Einträge seither geändert wurde (Angaben, Namen, Ereignisse, Beziehungen oder Familien). Dann passt die Begründung vielleicht nicht mehr; die KI kann das Paar neu einschätzen.
-- Die Einschätzung sieht nur, wer beide Personen bearbeiten darf. Auf der Personenseite steht sie kurz im Dubletten-Hinweis („KI-Einschätzung: strittig“).
+- Die Einschätzung sieht nur, wer beide Personen bearbeiten darf. Auf der Personenseite steht sie kurz im Dubletten-Hinweis („KI-Einschätzung: strittig“) und ebenso im Dialog **Zusammenführen …** am jeweiligen Eintrag.
 
 ## Importe verbinden (Administratoren)
 
