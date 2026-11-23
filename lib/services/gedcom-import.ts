@@ -1129,7 +1129,7 @@ export async function applyGedcomImport(
     photos,
   };
   // Neue Ortstexte des Imports im Hintergrund zuordnen (alle offenen).
-  queuePlaceAutoAssign(scope);
+  void queuePlaceAutoAssign(scope);
   await finishImportBatch(scope, batchId, {
     status: "COMPLETED",
     counts: result,

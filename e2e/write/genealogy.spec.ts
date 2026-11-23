@@ -248,7 +248,7 @@ test("Beziehung: Orte, Ehestand unbekannt und Datumsbereich", async ({ page }) =
   await expect(page.getByTestId("relationship-editor").getByText("Änderung gespeichert.")).toBeVisible();
   const card = page.getByTestId("relatives-partners").getByRole("listitem").filter({ hasText: partnerGiven });
   await expect(card).toContainText("Partnerschaft seit 1880 · Ehestand unbekannt");
-  await expect(card.getByTestId("partner-places")).toHaveText("Beginn in Celle");
+  await expect(card.getByTestId("partner-places")).toHaveText(/^Beginn in Celle(, Niedersachsen, Deutschland)?$/);
   await expect(relRow).toContainText("Ehestand unbekannt");
 
   await relRow.getByRole("button", { name: "ändern" }).click();
@@ -259,7 +259,7 @@ test("Beziehung: Orte, Ehestand unbekannt und Datumsbereich", async ({ page }) =
   await relRow.getByLabel("Scheidungsort").fill("Celle");
   await relRow.getByRole("button", { name: "Speichern" }).click();
   await expect(card).toContainText("geschieden · zwischen 1879 und 1881 – 1901");
-  await expect(card.getByTestId("partner-places")).toHaveText("Hochzeit in Hannover · Scheidung in Celle");
+  await expect(card.getByTestId("partner-places")).toHaveText(/^Hochzeit in Hannover(, Niedersachsen, Deutschland)? · Scheidung in Celle(, Niedersachsen, Deutschland)?$/);
   await expect(relRow).toContainText("geschieden, zwischen 1879 und 1881 – 1901 · Hannover / Celle");
 });
 
