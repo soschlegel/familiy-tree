@@ -72,8 +72,8 @@ export function WhatsNewDialog({ releases, more, latestId }: { releases: Release
           </h2>
           <p className="mt-1 text-sm muted">Das hat sich im Stammbaum zuletzt geändert.</p>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          <ReleaseNoteList releases={releases} headingLevel={3} />
+        {/* Mit der Tastatur erreichbar: Bei langen Einträgen rollt dieser Bereich. */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4" tabIndex={0} role="group" aria-label="Neuigkeiten">          <ReleaseNoteList releases={releases} headingLevel={3} />
           {more > 0 && (
             <p className="mt-4 text-sm muted" data-testid="whats-new-more">
               {more === 1

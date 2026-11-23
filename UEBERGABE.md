@@ -21,7 +21,8 @@ aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
   Karte/Orte, Schlüsselverwaltung, Komponenten-Doku (.2), Bilder an
   Einträgen (.1).
 - Prüfstand: Migrationen ↔ Schema ohne Abweichung, alle drei neuen
-  Migrationen rein ergänzend, Typecheck, Lint, Vitest 956/956.
+  Migrationen rein ergänzend, Typecheck, Lint, Vitest 956/956; `npm run test:e2e` (Produktions-Build,
+  strenger Hydration-Wächter): 339 bestanden, 1 übersprungen.
 - Arbeitsweise seit 23.11. (AGENTS.md, Abschnitt 2 und 3): höchstens zwei
   Sub-Agenten gleichzeitig, auf Opus, mit kurzem Auftrag; Agenten testen
   gezielt; der Playwright-Gesamtlauf läuft nur auf Anfrage des Eigentümers
