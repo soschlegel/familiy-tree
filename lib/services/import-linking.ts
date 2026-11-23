@@ -10,6 +10,7 @@ import { linkImports, type LinkPair, type LinkPerson, type LinkResult } from "..
 import { getObjectBuffer, putObject } from "../storage";
 import { conflictError, forbiddenError, notFoundError, parseOrThrow, ServiceError } from "./errors";
 import { loadDuplicatePeople } from "./duplicates";
+import { loadImportDirectory } from "./origin";
 import { loadMergeSnapshot, mergePersons, planMerge, summarizePlan } from "./merge";
 import { audit, auditActor } from "../audit";
 import { nameChangeSet } from "../change-sets";
@@ -114,16 +115,18 @@ export async function listConnectGroups(scope: Scope): Promise<ConnectRun["group
   const batches = await prisma.importBatch.findMany({
     where: { status: "COMPLETED", sourceTreeId: { not: null } },
     orderBy: { createdAt: "desc" },
-    select: { sourceTreeId: true, fileName: true, createdAt: true },
+    select: { sourceTreeId: true },
   });
   const counts = await prisma.importLink.groupBy({ by: ["sourceTreeId"], where: { entityType: "PERSON", sourceTreeId: { not: null } }, _count: true });
   const countOf = new Map(counts.map((c) => [c.sourceTreeId, c._count]));
   const out = new Map<string, ConnectRun["groups"][number]>();
+  // Bezeichnung wie überall: Buchstabe und Anzeigename (ohne eigenen Namen Datei und Datum).
+  const importDir = await loadImportDirectory();
   for (const b of batches) {
     if (out.has(b.sourceTreeId!)) continue;
     out.set(b.sourceTreeId!, {
       id: b.sourceTreeId!,
-      label: `Import „${b.fileName}“ (${b.createdAt.toLocaleDateString("de-DE", { timeZone: "Europe/Berlin" })})`,
+      label: `Import ${importDir.label(scope, b.sourceTreeId)}`,
       persons: countOf.get(b.sourceTreeId) ?? 0,
     });
   }

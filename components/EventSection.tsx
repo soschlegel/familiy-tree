@@ -18,6 +18,8 @@ import {
 } from "@/lib/events";
 import { eventTypeGroups, valueCaption } from "@/lib/event-labels";
 import { AttachedMedia, type AttachedItem, type InheritedItem, type MediaCandidate } from "./AttachedMedia";
+import { OriginChips } from "./OriginChips";
+import type { OriginChipMap } from "@/lib/origin";
 
 /** Ereignis, wie die Personenseite es übergibt (EventDto + Träger + Belege). */
 export type EventRow = {
@@ -367,8 +369,10 @@ function EventItem({
   onDelete,
   mediaCandidates,
   placeLinks,
+  origin,
   children,
 }: {
+  origin?: OriginChipMap | null;
   e: EventRow;
   canEdit: boolean;
   busy: boolean;
@@ -403,6 +407,7 @@ function EventItem({
             </span>
           )}
           {e.ownerLabel && <span className="text-xs muted">· {e.ownerLabel}</span>}
+          <OriginChips keys={origin?.events[e.id]} entries={origin?.entries} />
           {canEdit && e.canEdit && (
             <span className="ml-auto flex shrink-0 gap-3">
               <a href={`#beleg-event:${e.id}`} className="btn-link" data-testid="event-cite">
@@ -480,7 +485,10 @@ export function EventSection({
   canEdit,
   mediaCandidates = [],
   placeLinks,
+  origin,
 }: {
+  /** Herkunft je Ereignis als Chips (nur für Bearbeiter geladen). */
+  origin?: OriginChipMap | null;
   personId: string;
   events: EventRow[];
   owners: EventOwnerOption[];
@@ -578,6 +586,7 @@ export function EventSection({
       busy={busy}
       mediaCandidates={mediaCandidates}
       placeLinks={placeLinks}
+      origin={origin}
       onEdit={() => {
         setEditing(editing === e.id ? null : e.id);
         setAdding(false);

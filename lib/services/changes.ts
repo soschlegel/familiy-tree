@@ -565,6 +565,10 @@ function describe(ctx: Ctx, row: Row): { what: string; note: string | null } {
     case "ApiToken":
       return { what: `KI-Schlüssel ${d.revoked ? "widerrufen" : act}${strOf(d.name) ? ` „${d.name}“` : ""}`, note: null };
     case "ImportBatch": {
+      if (d.renamed) {
+        const to = strOf(obj(obj(d.changes).displayName).to);
+        return { what: to ? `Import ${strOf(d.letter) ?? ""} benannt: „${to}“`.replace("  ", " ") : `Name des Imports ${strOf(d.letter) ?? ""} entfernt`.trimEnd(), note: null };
+      }
       if (d.exchange) return { what: "Daten eingespielt (Austauschformat)", note: null };
       if (d.gedcom) return { what: "GEDCOM-Import abgeschlossen", note: null };
       if (d.counts) {

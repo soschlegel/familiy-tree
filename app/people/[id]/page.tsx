@@ -46,6 +46,8 @@ import { ReferencePanel } from "@/components/ReferencePanel";
 import { MergeWithPicker } from "@/components/MergeWithPicker";
 import { PersonFamilies } from "@/components/PersonFamilies";
 import { PersonChanges } from "@/components/PersonChanges";
+import { PersonOrigin } from "@/components/PersonOrigin";
+import { getPersonOrigin } from "@/lib/services/origin";
 import {
   RelationshipEditor,
   type RelationRow,
@@ -322,6 +324,10 @@ export default async function PersonPage({
         listDuplicatesOfPerson(scope, id),
       ])
     : [[], [], [], null];
+
+  // Herkunft (Importe, Zusammenführungen, Chips an den Einträgen) — nur für
+  // Bearbeiter; der Dienst prüft das Recht selbst noch einmal.
+  const origin = canEdit ? await getPersonOrigin(scope, id) : null;
 
   // Lebensereignisse: die der Person und die ihrer Beziehungen in einer
   // Liste (eine Stelle zum Lesen und Bearbeiten), chronologisch.
@@ -610,9 +616,10 @@ export default async function PersonPage({
         canEdit={canEdit}
         mediaCandidates={mediaCandidates}
         placeLinks={placeLinks}
+        origin={origin?.chips}
       />
 
-      <NameVariants personId={person.id} names={detail.names} canEdit={canEdit} />
+      <NameVariants personId={person.id} names={detail.names} canEdit={canEdit} origin={origin?.chips} />
 
       <section aria-labelledby="family-h" className="space-y-5">
         <h2 id="family-h" className="section-title">
@@ -722,6 +729,7 @@ export default async function PersonPage({
         canEdit={canEdit}
         canCreateSource={canCreateSources(scope)}
         mediaCandidates={mediaCandidates}
+        origin={origin?.chips}
       />
 
       {documentImages.size > 0 && <DocumentImages items={[...documentImages.values()]} />}
@@ -738,6 +746,9 @@ export default async function PersonPage({
           canDelete={canEdit}
         />
       </div>
+
+      {/* Herkunft: Inhalt in components/PersonOrigin.tsx */}
+      {origin && <PersonOrigin origin={origin} />}
 
       {/* Changelog: Inhalt in components/PersonChanges.tsx */}
       {canEdit && <PersonChanges personId={person.id} />}
@@ -758,6 +769,7 @@ export default async function PersonPage({
             relations={relations}
             people={allPersons}
             canEdit={canEdit}
+            origin={origin?.chips}
             newPersonFamilies={detail.families.filter(
               (f) => scope.isAdmin || editableFamilyIds(scope).includes(f.id),
             )}

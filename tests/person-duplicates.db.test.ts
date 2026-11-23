@@ -263,7 +263,7 @@ describe.skipIf(Boolean(skipReason))("Mögliche Dubletten einer Person (Testdate
     expect((await listDuplicatesOfPerson(admin, a.id, { limit: 50 })).items).toHaveLength(5);
   });
 
-  it("Herkunft: Dateiname des Imports nur für Administratoren, sonst „importiert“; ohne Import „von Hand erfasst“", async () => {
+  it("Herkunft: Buchstabe und Name des Imports — Dateiname nur für Administratoren, sonst „Import vom …“; ohne Import „von Hand erfasst“", async () => {
     const sn = randomSurname();
     const same = { givenName: "Friederike", familyName: sn, birthDate: "1833-06-21", deathDate: "1901-12-05" };
     const a = await person(same);
@@ -278,8 +278,8 @@ describe.skipIf(Boolean(skipReason))("Mögliche Dubletten einer Person (Testdate
     const forAdmin = (await listDuplicatesOfPerson(admin, a.id)).items[0];
     expect(forAdmin.person.id).toBe(b.id);
     expect(forAdmin.origin).toHaveLength(1);
-    expect(forAdmin.origin[0]).toMatch(new RegExp(`^„test-${sn}\\.ged“ \\(\\d{1,2}\\.\\d{1,2}\\.\\d{4}\\)$`));
-    expect((await listDuplicatesOfPerson(editor, a.id)).items[0].origin).toEqual(["importiert"]);
+    expect(forAdmin.origin[0]).toMatch(new RegExp(`^[A-Z]+ · „test-${sn}\\.ged“ \\(\\d{1,2}\\.\\d{1,2}\\.\\d{4}\\)$`));
+    expect((await listDuplicatesOfPerson(editor, a.id)).items[0].origin).toEqual([expect.stringMatching(/^[A-Z]+ · Import vom \d{1,2}\.\d{1,2}\.\d{4}$/)]);
     expect((await listDuplicatesOfPerson(editor, b.id)).items[0].origin).toEqual(["von Hand erfasst"]);
   });
 });

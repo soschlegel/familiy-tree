@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { apiFetch, jsonBody } from "./api-client";
 import { plural } from "@/lib/plural";
+import { ImportSources } from "./ImportSources";
 
 type Entry = {
   id: string;
@@ -166,6 +167,7 @@ export function ImportHistory() {
           </ul>
         </details>
       )}
+      <ImportSources />
     </section>
   );
 }

@@ -11,6 +11,8 @@ import { PlaceHint, savePlaceChoices, type PlaceChoice } from "./PlaceHint";
 import { formatDateOf } from "@/lib/tree-layout";
 import { toDateInput, toFuzzyDate } from "@/lib/dates";
 import { PARTNER_SUBTYPE_LABEL, since } from "@/lib/partner-labels";
+import { OriginChips } from "./OriginChips";
+import type { OriginChipMap } from "@/lib/origin";
 
 export type RelationRow = {
   id: string;
@@ -256,7 +258,10 @@ export function RelationshipEditor({
   people,
   canEdit,
   newPersonFamilies = [],
+  origin,
 }: {
+  /** Herkunft je Beziehung als Chips (nur für Bearbeiter geladen). */
+  origin?: OriginChipMap | null;
   personId: string;
   relations: RelationRow[];
   people: PickerPerson[];
@@ -422,6 +427,7 @@ export function RelationshipEditor({
                   </Link>
                 )}
                 <span className="text-xs muted">{describe(r)}</span>
+                <OriginChips keys={origin?.relationships[r.id]} entries={origin?.entries} />
 
                 {canEdit && (
                   <span className="ml-auto flex shrink-0 gap-3">
