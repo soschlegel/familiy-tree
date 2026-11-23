@@ -194,7 +194,7 @@ export async function createRelationship(
     entityId: relationship.id,
     diff: toRelationshipDto(relationship),
   });
-  queuePlaceAutoAssign(scope, [relationship.startPlace, relationship.endPlace]);
+  await queuePlaceAutoAssign(scope, [relationship.startPlace, relationship.endPlace]);
 
   return toRelationshipDto(relationship);
 }
@@ -258,7 +258,7 @@ export async function updateRelationship(
     });
   }
   if (changes.startPlace || changes.endPlace) {
-    queuePlaceAutoAssign(scope, [changes.startPlace?.to as string | null, changes.endPlace?.to as string | null]);
+    await queuePlaceAutoAssign(scope, [changes.startPlace?.to as string | null, changes.endPlace?.to as string | null]);
   }
 
   return toRelationshipDto(relationship);

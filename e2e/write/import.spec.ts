@@ -338,7 +338,7 @@ test("Datei im alten Format (Version 1) ohne neue Felder", async ({ page }) => {
   await page.goto(`/people/${v1Person}`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(`E2E Alt${tag} Version1`);
   // Ohne Genauigkeit: tagesgenau.
-  await expect(page.getByTestId("person-birth")).toHaveText("17.05.1925 in Celle");
+  await expect(page.getByTestId("person-birth")).toHaveText(/^17\.05\.1925 in Celle(, Niedersachsen, Deutschland)?$/);
   await expect(page.getByTestId("relatives-parents")).toContainText(`${target.givenName} ${target.familyName}`);
   // Ohne Familie nur für Admins sichtbar.
   await expect(page.getByRole("region", { name: "Familien" })).toContainText(

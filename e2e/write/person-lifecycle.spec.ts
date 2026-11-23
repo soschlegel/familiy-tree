@@ -79,7 +79,7 @@ test("anlegen: Prüfungen stehen auf Deutsch am Feld", async ({ page }) => {
   main = { id: page.url().split("/").pop()!, name: `${given} Testfall` };
   created.push(main.id);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(main.name);
-  await expect(page.getByTestId("person-birth")).toHaveText("12.03.1950 in Celle");
+  await expect(page.getByTestId("person-birth")).toHaveText(/^12\.03\.1950 in Celle(, Niedersachsen, Deutschland)?$/);
   await expect(page.getByTestId("person-death")).toHaveText("—");
   await expect(page.locator(".badge-accent").filter({ hasText: familyName("A") })).toBeVisible();
 });

@@ -1419,7 +1419,7 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 
 ### components/PlaceText.tsx
 
-- **Zweck:** Ortsangabe als Freitext der Person, bei zugeordnetem Ort als Link auf die Ortsseite (Titel = Anzeigename) und — wenn der Ort anders heißt — dezent „→ Wrocław, Polen“. Ohne Zuordnung reiner Text.
+- **Zweck:** Ortsangabe in der Anzeige. Bei zugeordnetem Ort steht der systematische Ort (Anzeigename „Ort, Region, Land“, heutiger Name mit altem in Klammern) als Link auf die Ortsseite; Titel = „Eingegeben: <Freitext>“ (Entscheidung des Eigentümers, 22.11.). Der Freitext steht dezent daneben („· eingegeben: …“) nur, wenn er mehr sagt als der Anzeigename — `textCoveredByLabel`: jeder Kommateil des Texts kommt im Anzeigenamen vor (Anschrift oder alte Landschaft bleiben so sichtbar). Ohne Zuordnung reiner Text.
 - **Wo eingesetzt:** Personenseite (Geburt, Tod, Orte der Partnerschaften), `EventSection` (Ort je Ereignis).
 - **Props:** `text`, `links` (aus `placeLinksFor`, Schlüssel `placeKey`). Ohne Hooks, für Server- und Client-Komponenten.
 

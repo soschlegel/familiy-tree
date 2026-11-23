@@ -632,8 +632,10 @@ alle Zuordnungen mit demselben Verzeichniseintrag bzw. bei eigenen Orten
 denselben Koordinaten. Es erscheinen nur Personen, die der Benutzer sehen
 darf; Freitexte nur gesperrter Personen fehlen, ein Ort ohne sichtbare
 Angabe gilt als nicht vorhanden. Auf der **Personenseite** wird jeder
-zugeordnete Ort zum Link, angezeigt bleibt der Freitext, dazu dezent der
-erkannte Ort, wenn er anders heißt („Breslau → Wrocław, Polen“).
+zugeordnete Ort zum Link mit dem systematischen Namen („Karlsruhe,
+Baden-Württemberg, Deutschland“, „Wrocław (Breslau), Polen“); der Freitext
+steht im Titel und dezent daneben, wenn er mehr sagt als der Ortsname
+(`textCoveredByLabel` in `components/PlaceText.tsx`).
 
 **Echte Orte auswählen:** Unter jedem Ortsfeld öffnet „Ort wählen …“ die
 Kandidaten (Verzeichnis und eigene Orte). Die Wahl wird nach dem Speichern

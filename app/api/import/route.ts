@@ -686,7 +686,7 @@ export const POST = route("data:import", async (ctx, req) => {
     personIds: data.persons.map((p) => p.id),
   });
   // Neue Ortstexte im Hintergrund zuordnen (alle offenen).
-  queuePlaceAutoAssign(ctx.scope);
+  void queuePlaceAutoAssign(ctx.scope);
 
   return NextResponse.json({ preview: false, plan });
 });
