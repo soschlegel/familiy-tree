@@ -109,6 +109,8 @@ beide). Ereignisse, Belege, Namen und Rohdaten folgen ihrem Träger.
 | `duplicates.ts` | Mögliche Dubletten (Liste, je Person), „kein Duplikat“ |
 | `merge.ts` | Zwei Personen zusammenführen (Vorschau, Ausführen) |
 | `merge-bulk.ts` | Sichere Dubletten in einem Rutsch zusammenführen |
+| `merge-followups.ts` | Folgedubletten nach einem Zusammenführen (Eltern, Partner, Kinder der bleibenden Person) |
+| `redirects.ts` | Alte Kennung als Umleitung: anlegen, auflösen, Rückfüllung aus dem Audit |
 | `reference.ts` | Bezugsperson („das bin ich“), Verwandtschaft und Linien |
 | `map.ts` | Daten der Karte „Wurzeln nach Jahr“ |
 | `places.ts` | Ortstexte → Koordinaten (Ortszuordnung, nur Admin) |
@@ -900,9 +902,12 @@ MCP) und die Markierung „kein Duplikat“. Bewertung und Klassen
   maxYearDiff})` — Paare nach Klasse und Punkten, seitenweise (Standard 25,
   höchstens 500), mit Zählung je Klasse, Zahl der ausgeblendeten Paare und
   `canMerge` je Paar.
-- `listDuplicatesOfPerson(scope, personId, {limit})` — Kandidaten einer
+- `listDuplicatesOfPerson(scope, personId, {limit, includeUnclear})` — Kandidaten einer
   Person (Standard 3, höchstens 50) mit Herkunft („von Hand erfasst“ bzw.
   Import).
+  Je Kandidat auch der Begründungssatz (`sentence`, `evidenceSentence`).
+  `includeUnclear` nimmt die Klasse „unklar“ dazu — nur für den Dialog
+  „Zusammenführen …“, den jemand ausdrücklich öffnet.
 - `dismissDuplicate(scope, a, b)`, `undismissDuplicate(scope, a, b)` — Paar
   dauerhaft als „kein Duplikat“ markieren bzw. die Markierung aufheben.
 
@@ -936,8 +941,9 @@ MCP) und die Markierung „kein Duplikat“. Bewertung und Klassen
 
 **Benutzt von:** `app/api/duplicates/route.ts`,
 `app/api/duplicates/dismiss/route.ts`, `app/research/page.tsx`,
-`app/research/duplicates/page.tsx`, `app/people/[id]/page.tsx` (Hinweis);
-`research.ts`, `merge-bulk.ts`, `import-linking.ts`; MCP indirekt über
+`app/research/duplicates/page.tsx`, `app/people/[id]/page.tsx` (Hinweis),
+`app/api/persons/[id]/duplicates/route.ts` (Dialog „Zusammenführen …“);
+`research.ts`, `merge-bulk.ts`, `merge-followups.ts`, `import-linking.ts`; MCP indirekt über
 `find_possible_duplicates`.
 
 **Tests:** `tests/person-duplicates.db.test.ts`, `tests/services.db.test.ts`
@@ -958,6 +964,7 @@ Hauptangaben in `lib/merge-rules.ts`.
   wählbare Art zusammenfallender Beziehungen, Zusammenfassung in ganzen
   Sätzen, Blocker, `canMerge` und ein Stand-Kennzeichen (`token`).
 - `mergePersons(scope, input, {tx, now, parentEdges})` — führt aus; mit
+  `parentsFirst` zuerst die doppelt erfassten Eltern (siehe unten); mit
   `expectedToken` aus der Vorschau.
 - `loadMergeSnapshot`, `planMerge`, `summarizePlan` — Bausteine, auch für
   Sammel-Zusammenführen und „Importe verbinden“.
@@ -1002,6 +1009,23 @@ Hauptangaben in `lib/merge-rules.ts`.
   Überraschung. Blocker → `CONFLICT` mit den Blockern in `details`.
 - Vor dem Löschen der aufgehenden Person wird geprüft, dass nichts mehr an ihr
   hängt; sonst bricht die Transaktion ab.
+- **Alte Kennung:** Vor dem Löschen der aufgehenden Person vermerkt
+  `recordPersonRedirect` (`redirects.ts`) in derselben Transaktion die
+  Umleitung aufgegangen → bleibend und biegt Umleitungen, die bisher auf die
+  aufgehende Person zeigten, auf die bleibende um.
+- **„Erst die Eltern, dann dieses Paar“** (`parentsFirst`): Ist ein Paar
+  nur wegen doppelt erfasster Eltern gesperrt, kennzeichnet die Sperre
+  `BIO_PARENTS` das mit `resolvable` — wenn alle vorgeschlagenen
+  Elternpaare sichtbar sind, jedes mindestens „wahrscheinlich“ dieselbe
+  Person ist (nie ein schwacher Treffer wie „nur der erste Vorname gleich“)
+  und danach höchstens zwei leibliche Elternteile bleiben. Dann führt ein
+  Aufruf in EINER Transaktion zuerst die Elternpaare (Vorgaben der Regeln,
+  bleibend ist der Elternteil des bleibenden Eintrags) und danach das Paar
+  zusammen. Der Server nimmt nur genau die Paare, die die Sperre in diesem
+  Augenblick vorschlägt; jedes Elternpaar durchläuft dieselben Prüfungen wie
+  ein einzelnes Zusammenführen (Rechte an beiden, Stand aus seiner Vorschau,
+  Sperren). Scheitert irgendetwas oder bleibt das Paar danach gesperrt, wird
+  nichts geändert. Ergebnis: `parentMerges` nennt die Elternpaare.
 - Kein KI-Werkzeug: Zusammenführen geht nur in der Web-App (Leitlinie des
   Eigentümers).
 
@@ -1022,14 +1046,17 @@ Herkunftsangaben und Fremdkennungen sowie das Ergebnis — genug für einen
 Rückbau von Hand. Betroffen: beide Personen und die Verwandten mit
 umgehängter Beziehung; Familien der aufgegangenen Person. Paket „Personen
 zusammengeführt“ (Art MERGE).
+Mit `parentsFirst` heißt das Paket „Personen
+zusammengeführt (erst die Eltern)“ und enthält je Paar einen `MERGE`-Eintrag.
 
 **Benutzt von:** `app/api/persons/merge/preview/route.ts`,
 `app/api/persons/merge/route.ts`; `merge-bulk.ts`, `import-linking.ts`;
 Typen in `components/MergeView.tsx`.
 
 **Tests:** `tests/merge.db.test.ts`, `tests/changelog.db.test.ts`,
-`tests/reference.db.test.ts` (Regeln: `tests/merge-rules.test.ts`);
-`e2e/write/merge.spec.ts`.
+`tests/reference.db.test.ts` (Regeln: `tests/merge-rules.test.ts`), `tests/merge-followups.db.test.ts`
+(Eltern zuerst), `tests/person-redirect.db.test.ts` (Umleitung);
+`e2e/write/merge.spec.ts`, `e2e/write/merge-comfort.spec.ts`.
 
 ### lib/services/merge-bulk.ts
 
@@ -1068,11 +1095,116 @@ Bearbeitungsrecht an beiden → übersprungen.
 je einem `MERGE`-Eintrag pro Paar.
 
 **Benutzt von:** `app/api/persons/merge/bulk/route.ts` (mit `dryRun` für die
-Vorschau); Typen in `components/DuplicateList.tsx`.
+Vorschau); Typen in `components/DuplicateList.tsx` und
+`components/FollowUpDuplicates.tsx` (sichere Folgedubletten).
 
 **Tests:** `tests/reference.db.test.ts` (`bulkMerge`);
 `e2e/write/merge.spec.ts` („sichere Paare in einem Rutsch“). Für
-`previewBulkMerge` gibt es keinen Dienst-Test.
+`previewBulkMerge` prüft `tests/merge-followups.db.test.ts` mit (ein
+„wahrscheinliches“ Paar wird übersprungen).
+
+### lib/services/merge-followups.ts
+
+**Zweck:** Folgedubletten nach einem Zusammenführen: An der bleibenden
+Person hängen danach oft Eltern, Partner und Kinder doppelt — je einmal aus
+jedem der beiden Einträge. Die Ergebnisseite nennt diese Paare.
+
+**Wichtige Funktionen:**
+- `listFollowUpDuplicates(scope, personIds)` — für eine bis 20 Personen
+  (`MAX_FOLLOW_UP_PERSONS`) die Paare Eltern × Eltern, Partner × Partner,
+  Kinder × Kinder: beide Personen, über wen gefunden (`via`), Klasse,
+  Punkte, Gründe, Widersprüche, Begründungssatz; dazu die Zahl der
+  „sicheren“. Höchstens 50 Paare, „sicher“ zuerst.
+
+**Regeln und Entscheidungen:**
+- Die Klasse ist genau die der Dublettenliste (`scoreDuplicate` mit
+  derselben Abstammungsregel) — hier wird nichts hochgestuft. Der gemeinsame
+  Verwandte zählt dort ohnehin („dasselbe Kind eingetragen“).
+- `relaxedMatch` (`lib/import-linking.ts`) entscheidet nur, ob ein Paar
+  überhaupt genannt wird. Paare, die nur danach passen (z.B. abweichender
+  Nachname), sind „unklar“.
+- Passt jemand zu mehreren (gleichnamige Geschwister), sind alle diese Paare
+  „unklar“ — strenger als die Liste.
+- Miteinander verbundene Personen und eingetragene Vorfahren/Nachkommen sind
+  nie ein Paar; als „kein Duplikat“ markierte Paare fehlen.
+- Der Dienst führt nichts zusammen. „Alle sicheren Folgedubletten“ gehen
+  über `previewBulkMerge`/`bulkMerge`, die jedes Paar selbst noch einmal
+  bewerten; „wahrscheinlich“ und „unklar“ gehen nie mit.
+- Lädt wie die Dublettenliste den ganzen sichtbaren Graphen
+  (`loadDuplicatePeople`) — einmal je Ergebnisseite.
+
+**Rechte/Datenschutz:** Nur Paare, deren beide Personen der Benutzer
+bearbeiten darf. Unbekannte oder nicht sichtbare Ausgangspersonen ergeben
+schlicht nichts. Die Abstammung läuft nur über sichtbare Personen.
+
+**Benutzt von:** `app/api/persons/merge/followups/route.ts`; Typen in
+`components/FollowUpDuplicates.tsx`.
+
+**Tests:** `tests/merge-followups.db.test.ts`;
+`e2e/write/merge-comfort.spec.ts`.
+
+### lib/services/redirects.ts
+
+**Zweck:** Alte Kennung als Umleitung. Nach einem Zusammenführen zeigt die
+Kennung der aufgegangenen Person auf die bleibende (Tabelle
+`PersonRedirect`), damit Links, Lesezeichen und Kennungen, die sich eine
+KI gemerkt hat, weiter zum richtigen Eintrag führen.
+
+**Wichtige Funktionen:**
+- `recordPersonRedirect(db, fromId, toId, now)` — im Zusammenführen, in
+  dessen Transaktion und vor dem Löschen der aufgehenden Person: trägt
+  aufgegangen → bleibend ein und biegt alles, was bisher auf die aufgehende
+  Person zeigte, auf die bleibende um.
+- `resolvePersonRedirects(scope, ids)`, `resolvePersonRedirect(scope, id)`
+  — alte → heutige Kennung. Der Scope darf als Funktion kommen und wird dann
+  nur geladen, wenn es überhaupt eine Umleitung gibt.
+- `mergedIntoError(scope, id)` — für schreibende Aufrufe: Konflikt mit
+  `mergedInto` in den Details, oder `null`.
+- `backfillPersonRedirects()` — Rückfüllung aus dem Audit;
+  `ensurePersonRedirectBackfill()` stößt sie je Serverprozess einmal an.
+
+**Regeln und Entscheidungen:**
+- **Keine Ketten:** Geht die bleibende Person später selbst auf, zeigen alle
+  ihre alten Kennungen danach direkt auf die neue bleibende Person. Ein
+  Nachschlagen genügt.
+- **Nur Personen.** Aufgegangene Beziehungen und Ereignisse bekommen keine
+  Umleitung.
+- Eine Kennung, zu der es eine Person gibt, wird nie umgeleitet.
+- Wird die bleibende Person gelöscht, verschwinden ihre alten Kennungen mit
+  (Cascade) — die alte Adresse ist dann wieder „nicht gefunden“.
+- **Lesen leitet um, Schreiben nicht:** Seiten und `GET` antworten mit 308;
+  `PATCH`/`DELETE` auf eine alte Kennung mit 409 und `mergedInto`, damit
+  der Aufrufer bewusst den bleibenden Eintrag nimmt. Der KI-Zugang löst
+  dagegen still auf und meldet `resolvedFrom` ([mcp.md](mcp.md)).
+- **Rückfüllung im Code statt in der Migration:** Die Migration legt nur die
+  Tabelle an — sie kann so an keinen Daten scheitern, und das Prüfskript für
+  rein ergänzende Migrationen lässt ohnehin kein `INSERT` zu. Zusammenführungen
+  aus der Zeit davor trägt `backfillPersonRedirects` nach: je `MERGE`-Eintrag
+  des Audits `diff.mergeId` → `entityId`, dazu die Gruppen abgeschlossener
+  Läufe von „Importe verbinden“ (`CONNECT`, `diff.clusters`, ohne die dort
+  als fehlgeschlagen vermerkten; ein `MERGE`-Eintrag hat Vorrang). Gelesen
+  werden nur Zeilen mit den erwarteten Schlüsseln (`jsonb_typeof`, keine
+  Umwandlungen, die werfen könnten); Ketten werden bis zum Ende verfolgt,
+  Kreise übersprungen; eingetragen wird nur, wenn es die alte Person nicht
+  mehr und das Ziel noch gibt; vorhandene Einträge bleiben
+  (`ON CONFLICT DO NOTHING`). Beliebig oft wiederholbar.
+- Die Rückfüllung läuft je Serverprozess einmal, beim ersten Nachschlagen
+  ohne Treffer; ein Fehler landet im Server-Log, hält keinen Aufruf auf und
+  wird frühestens nach einer Minute erneut versucht.
+
+**Rechte/Datenschutz:** Aufgelöst wird nur, wenn der Benutzer die
+**bleibende** Person sehen darf. Sonst gibt es keine Antwort — genau wie bei
+einer unbekannten Kennung (404 bzw. „nicht gefunden“); eine Umleitung verriete
+sonst, dass es eine verborgene Person gibt.
+
+**Benutzt von:** `merge.ts`; `app/people/[id]/page.tsx`,
+`app/people/[id]/edit/page.tsx`, `app/tree/page.tsx`,
+`app/api/persons/[id]/route.ts`; `mcp/person-redirects.ts`, `mcp/tools.ts`.
+
+**Tests:** `tests/person-redirect.db.test.ts` (Anlegen, Kette, Sichtbarkeit,
+gelöschtes Ziel, Rückfüllung gegen einzelne, gesammelte, verkettete und
+verbundene Zusammenführungen, unbrauchbare Audit-Einträge, KI-Zugang);
+`e2e/write/merge-comfort.spec.ts` (308, 409, 404).
 
 ---
 

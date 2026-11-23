@@ -5,7 +5,7 @@ import { apiAs, createPerson, createRelationship, deletePerson, uniq, type Creat
 
 /**
  * Dubletten zusammenführen als Bearbeiter: von der Personenseite über den
- * Personenwähler zum Vergleich, Feld wählen, Zusammenfassung, Bestätigen,
+ * Dialog „Zusammenführen …“ (freie Suche) zum Vergleich, Feld wählen, Zusammenfassung, Bestätigen,
  * Ergebnis; Recherche → Mögliche Dubletten: „kein Duplikat“, sichere Paare in
  * einem Rutsch; Blockade bei verbundenen Personen; Betrachter ohne Knopf und
  * ohne Zugriff. Alle Datensätze heißen „E2E …“ und werden entfernt.
@@ -52,6 +52,7 @@ test("Personenseite → Vergleich → Zusammenführen: Wahl, Zweitangabe, Ergebn
 
   await page.goto(`/people/${keep.id}`);
   await page.getByTestId("merge-open").click();
+  await expect(page.getByTestId("merge-dialog")).toBeVisible();
   await page.getByPlaceholder("Name der doppelten Person…").fill(`E2E Anna ${surname} 1802`);
   await page.getByRole("button", { name: new RegExp(`E2E Anna ${surname}`) }).first().click();
   await page.getByTestId("merge-compare").click();
@@ -80,7 +81,10 @@ test("Personenseite → Vergleich → Zusammenführen: Wahl, Zweitangabe, Ergebn
   await result.getByRole("link", { name: "Zur Person" }).click();
   await expect(page).toHaveURL(new RegExp(`/people/${keep.id}$`));
   await expect(page.getByRole("main")).toContainText("1802");
-  await expect((await page.request.get(`/api/persons/${other.id}`)).status()).toBe(404);
+  // Die alte Kennung leitet auf die bleibende Person um (e2e/write/merge-comfort.spec.ts prüft das im Einzelnen).
+  const old = await page.request.get(`/api/persons/${other.id}`, { maxRedirects: 0 });
+  expect(old.status()).toBe(308);
+  expect(old.headers().location).toBe(`/api/persons/${keep.id}`);
 });
 
 test("verbundene Personen: Blockade mit Erklärung, Knopf gesperrt", async ({ page }) => {

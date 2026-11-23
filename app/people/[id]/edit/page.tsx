@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound, permanentRedirect, redirect } from "next/navigation";
 
 import { prisma } from "@/lib/prisma";
+import { resolvePersonRedirect } from "@/lib/services";
 import { requireScope } from "@/lib/session";
 import { canEditPerson, canViewPerson } from "@/lib/scope";
 import { PersonForm } from "@/components/PersonForm";
@@ -23,7 +24,12 @@ export default async function EditPersonPage({
     where: { id },
     include: { families: { select: { familyId: true } } },
   });
-  if (!person) notFound();
+  if (!person) {
+    // Alte Kennung einer aufgegangenen Person → Bearbeiten der bleibenden.
+    const mergedInto = await resolvePersonRedirect(scope, id);
+    if (mergedInto) permanentRedirect(`/people/${mergedInto}/edit`);
+    notFound();
+  }
 
   const familyIds = person.families.map((f) => f.familyId);
   if (!canViewPerson(scope, familyIds)) notFound();

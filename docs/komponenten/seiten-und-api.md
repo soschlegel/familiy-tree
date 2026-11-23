@@ -49,10 +49,12 @@ Fremdschlüssel ins Leere 409; alles andere 500 mit allgemeiner Meldung
 Anfrage. Einige Abläufe benennen ihr Paket selbst (Import, Zusammenführen,
 Sammel-Zusammenführen).
 
-**Ladezustände.** Nur `/tree` und `/research` haben eine `loading.tsx`
-(gemeinsame Komponente `PageLoading`). Bewusst nur auf Seiten ohne
-`notFound()`: Eine Ladeanzeige streamt die Antwort, danach ließe sich kein
-404-Status mehr setzen.
+**Ladezustände.** Nur `/research` hat eine `loading.tsx` (gemeinsame
+Komponente `PageLoading`). Bewusst nur auf Seiten ohne `notFound()` und
+ohne Umleitung mit Status: Eine Ladeanzeige streamt die Antwort, danach
+ließe sich kein 404 oder 308 mehr setzen. `/tree` zeigt dieselbe
+Ladeanzeige über ein `Suspense` in der Seite selbst — erst nach der Prüfung
+auf eine alte Kennung.
 
 Alle Seiten außer `/login` und der Weiterleitung `/` sind
 `force-dynamic` (kein Zwischenspeichern). Seitentitel nach dem Muster
@@ -101,13 +103,15 @@ Dienst über den `Scope`.
 | `GET /api/tree` | Ganzer Graph mit Platzhaltern | angemeldet |
 | `GET /api/map` | Kartendaten | angemeldet |
 | `GET, POST /api/persons` | Personen suchen / anlegen | angemeldet (Anlegen: Dienst) |
-| `GET, PATCH, DELETE /api/persons/[id]` | Person lesen / ändern / löschen | Dienst |
+| `GET, PATCH, DELETE /api/persons/[id]` | Person lesen / ändern / löschen; alte Kennung: `GET` 308 auf die bleibende Person, `PATCH`/`DELETE` 409 mit `mergedInto` — beides nur, wenn die bleibende Person sichtbar ist, sonst 404 | Dienst |
+| `GET /api/persons/[id]/duplicates` | Mögliche Dubletten einer Person für den Dialog „Zusammenführen …“ (alle Klassen, Begründungssatz) | Bearbeiter beider Einträge (Dienst), sonst leer |
 | `GET /api/persons/[id]/changes` | Änderungsverlauf einer Person | Bearbeiter der Person (Dienst) |
 | `GET, POST /api/persons/[id]/events` | Ereignisse einer Person | Dienst |
 | `PUT /api/persons/[id]/families` | Familienzuordnung setzen | Dienst |
 | `GET, POST /api/persons/[id]/names` | Weitere Namen | Dienst |
 | `POST /api/persons/merge/preview` | Vorschau Zusammenführen | Dienst |
-| `POST /api/persons/merge` | Zusammenführen | Dienst |
+| `POST /api/persons/merge` | Zusammenführen; mit `parentsFirst` erst die doppelt erfassten Eltern, dann das Paar | Dienst |
+| `GET /api/persons/merge/followups?ids=…` | Folgedubletten der bleibenden Person(en) | Dienst (nur bearbeitbare Paare) |
 | `POST /api/persons/merge/bulk` | Mehrere sichere Paare zusammenführen | Dienst |
 | `PATCH, DELETE /api/names/[id]` | Weiteren Namen ändern / löschen | Dienst |
 | `GET, PATCH, DELETE /api/events/[id]` | Ereignis | Dienst |
@@ -212,11 +216,17 @@ dort auf `/login`).
   freigeschaltet.
 - Suchparameter: `error`.
 
-### `/tree` — `app/tree/page.tsx` (+ `loading.tsx`)
+### `/tree` — `app/tree/page.tsx`
 
 Der Stammbaum in drei Ansichten. Bedienung: README, „Fokus-Ansicht“ und
 „Bezugsperson“.
 
+- **Aufbau:** Die äußere Seite prüft nur, ob `focus` die alte Kennung
+  einer aufgegangenen Person ist — dann 308 auf dieselbe Adresse mit der
+  bleibenden Person (`resolvePersonRedirect`; ein Schlüsselzugriff, die
+  Anmeldung wird nur bei einem Treffer geladen; nur bei sichtbarer
+  Zielperson, sonst bleibt es bei „Person nicht gefunden“). Danach zeigt sie
+  sofort `PageLoading`, während `TreeContent` den Baum lädt.
 - **Rechte:** angemeldet. Ohne freigegebene Familie (und nicht Admin)
   wird nichts geladen; Hinweis „Noch keine Familie freigegeben“.
 - **Suchparameter:**
@@ -293,7 +303,9 @@ Karte „Wurzeln nach Jahr“ (README, „Karte und Orte“).
 
 Die Personenseite.
 
-- **Rechte:** Person sichtbar, sonst `notFound()`. Bearbeitungsteile nur
+- **Rechte:** Person sichtbar, sonst `notFound()` — außer die Kennung ist
+  die alte Kennung einer aufgegangenen Person und die bleibende ist
+  sichtbar: dann 308 auf deren Seite. Bearbeitungsteile nur
   bei `canEdit` (aus `getPersonDetail`). Auch der Seitentitel (Name)
   entsteht erst nach der Rechteprüfung.
 - **Suchparameter:** `rel` (eine Beziehungs-ID: deren Bilderbereich ist
@@ -305,7 +317,8 @@ Die Personenseite.
   `listSourceOptions`, `listDuplicatesOfPerson`.
 - **Anzeige (Komponenten):** `DuplicateBanner` (nur Bearbeiter), Kopf mit
   `Avatar`, Lebensdaten samt abweichender Zweitangaben, Knöpfe
-  „Bearbeiten“ und „Im Stammbaum zeigen“ (`/tree?focus=…`);
+  „Bearbeiten“, „Im Stammbaum zeigen“ (`/tree?focus=…`) und — nur
+  Bearbeiter — „Zusammenführen …“ (`MergeDialog`);
   `ReferencePanel` (Verwandtschaft zur Bezugsperson, „Das bin ich“, „Baum
   aus dieser Sicht“); Notizen; `EventSection` (Ereignisse der Person und
   ihrer Partnerschaften in einer Liste); `NameVariants`; Familie in
@@ -316,12 +329,13 @@ Die Personenseite.
   zitierten Quellen, Vorschaubild über `/api/media/<id>?variant=thumb`);
   `MediaGallery` (eigene Bilder). Nur Bearbeiter: `PersonChanges`
   (Änderungsverlauf) und der Bereich „Verwaltung“ mit
-  `RelationshipEditor`, `PersonFamilies`, `MergeWithPicker`,
+  `RelationshipEditor`, `PersonFamilies`,
   `DeletePersonButton`.
 
 ### `/people/[id]/edit` — `app/people/[id]/edit/page.tsx`
 
-- **Rechte:** sichtbar, sonst 404; nicht bearbeitbar → zurück zur
+- **Rechte:** sichtbar, sonst 404 (alte Kennung einer aufgegangenen Person
+  mit sichtbarer bleibender Person: 308 auf deren Bearbeiten-Seite); nicht bearbeitbar → zurück zur
   Personenseite.
 - **Daten:** die Person direkt aus der Datenbank samt Familien; Geburts-
   und Sterbedatum als Eingabetext in gespeicherter Genauigkeit

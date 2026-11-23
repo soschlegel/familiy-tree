@@ -12,7 +12,7 @@ Zusammenführen dürfen Bearbeiter, und zwar nur, wenn sie **beide** Personen be
 
 - **Recherche → Mögliche Dubletten**: alle Paare, nach Klasse gefiltert.
 - **Auf der Personenseite** steht oben ein Hinweis „1 mögliche Dublette“ (bis zu drei, mit Lebensdaten und Herkunft), sobald es einen „sicheren“ oder „wahrscheinlichen“ Kandidaten gibt. **Vergleichen** öffnet den Vergleich genau dieses Paares. Den Hinweis sehen nur Bearbeiter.
-- **Selbst suchen**: auf der Personenseite unter „Verwaltung“ → **Mit anderer Person zusammenführen …**.
+- **Zusammenführen …** auf der Personenseite, neben „Im Stammbaum zeigen“: Der Dialog zeigt zuerst die möglichen Dubletten dieser Person — mit Klasse und einem Satz, warum sie zusammenpassen — und darunter eine Suche nach jeder anderen Person. **Vergleichen** öffnet den Vergleich; zusammengeführt wird erst dort. Den Knopf sehen nur Bearbeiter.
 
 Verglichen werden Vor- und Nachnamen (auch Geburtsname und weitere Namen), Geburts- und Sterbedaten (auch ungenaue: „um 1760“ passt zu „12.03.1760“), Geburtsort und die Verwandten. Nie vorgeschlagen werden Personen, die miteinander verbunden sind (Vater und Sohn gleichen Namens), die voneinander abstammen, oder Personen verschiedenen Geschlechts.
 
@@ -37,9 +37,21 @@ Der Vergleich zeigt, **was geschieht**, bevor etwas geschieht:
 
 Mit **„Angaben einzeln ansehen und wählen“** siehst du beide Einträge nebeneinander und wählst je Angabe; **„Seiten tauschen“** bestimmt, welcher Eintrag bleibt. Was die Regeln verletzen würde (z.B. mehr als zwei leibliche Eltern, ein Großvater und sein gleichnamiger Enkel), wird mit Erklärung **blockiert**.
 
+### Wenn die Eltern doppelt erfasst sind
+
+Hat jeder der beiden Einträge eine eigene Mutter oder einen eigenen Vater, die selbst doppelt erfasst sind, wären es zusammen mehr als zwei leibliche Eltern — der Vergleich blockiert das und nennt die Elternpaare. Du kannst sie einzeln vergleichen. Passen sie gut zusammen, gibt es außerdem **„Erst die Eltern, dann dieses Paar zusammenführen …“**: Die App zeigt, welcher Elternteil bleibt und was dabei geschieht, und führt nach deiner Bestätigung erst die Eltern und dann das Paar zusammen. Geht ein Teil nicht, wird nichts geändert. Prüfe vorher, dass es wirklich dieselben Personen sind — bei Eltern, die nur ähnlich heißen (etwa „Johann Karl“ und „Johann Peter“), bietet die App diesen Weg gar nicht an.
+
+### Folgedubletten
+
+Nach dem Zusammenführen stehen oft Verwandte doppelt da: Die bleibende Person hat dann zum Beispiel zwei gleichnamige Väter — je einen aus jedem Eintrag. Die Ergebnisseite listet solche **Folgedubletten** unter den Eltern, Partnern und Kindern auf, wieder mit Klasse und Begründung. Jedes Paar kannst du einzeln **Vergleichen**. Für die Klasse „sicher“ gibt es **„Alle sicheren Folgedubletten zusammenführen …“**: erst die gemeinsame Vorschau, dann ein Knopf zum Ausführen. „Wahrscheinliche“ und „unklare“ Paare gehen dabei nie mit — die prüfst du einzeln.
+
 Auf „Mögliche Dubletten“ lassen sich mehrere **sichere** Paare auswählen („Alle sicheren auf dieser Seite auswählen“) und nach einer gemeinsamen Vorschau in einem Rutsch zusammenführen.
 
 **Kein Duplikat** blendet ein Paar dauerhaft aus — für alle Benutzer.
+
+### Alte Links funktionieren weiter
+
+Die Adresse des Eintrags, der beim Zusammenführen aufgegangen ist, führt danach von selbst zur bleibenden Person — auf der Personenseite und im Stammbaum. Lesezeichen und verschickte Links bleiben also gültig. Das gilt, solange es die bleibende Person gibt und du sie sehen darfst.
 
 > **Vorsicht:** Ein falsches Zusammenführen ist der schlimmste Fehler im Stammbaum — es vermischt zwei Menschen. Einen Knopf „rückgängig“ gibt es nicht; nur der Administrator kann es mühsam aus dem Protokoll oder einer Sicherung wiederherstellen. Im Zweifel: nicht zusammenführen, sondern erst in den Quellen nachsehen. Gleichnamige Cousins mit ähnlichen Daten sind häufiger, als man denkt.
 

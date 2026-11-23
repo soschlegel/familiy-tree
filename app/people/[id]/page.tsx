@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PlaceText } from "@/components/PlaceText";
 import { placeLinksFor } from "@/lib/services/place-pages";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { cache } from "react";
 
 import { prisma } from "@/lib/prisma";
@@ -15,6 +15,7 @@ import {
   listFamilies,
   listPickablePersons,
   listSourceOptions,
+  resolvePersonRedirect,
   type EventDto,
   type PersonCitation,
   type PersonRef,
@@ -43,7 +44,7 @@ import type { InheritedItem, MediaCandidate } from "@/components/AttachedMedia";
 import { DeletePersonButton } from "@/components/DeletePersonButton";
 import { DuplicateBanner } from "@/components/DuplicateBanner";
 import { ReferencePanel } from "@/components/ReferencePanel";
-import { MergeWithPicker } from "@/components/MergeWithPicker";
+import { MergeDialog } from "@/components/MergeDialog";
 import { PersonFamilies } from "@/components/PersonFamilies";
 import { PersonChanges } from "@/components/PersonChanges";
 import {
@@ -289,7 +290,13 @@ export default async function PersonPage({
   // dass es diese Person gibt. Verwandte, die der Benutzer nicht sehen darf,
   // liefert der Dienst bereits als Platzhalter.
   const { scope, detail } = await loadDetail(id);
-  if (!detail) notFound();
+  if (!detail) {
+    // Alte Kennung einer aufgegangenen Person: weiter zur bleibenden — nur,
+    // wenn sie für diesen Benutzer sichtbar ist (lib/services/redirects.ts).
+    const mergedInto = await resolvePersonRedirect(scope, id);
+    if (mergedInto) permanentRedirect(`/people/${mergedInto}`);
+    notFound();
+  }
 
   const { person, canEdit } = detail;
 
@@ -562,6 +569,7 @@ export default async function PersonPage({
             <Link href={`/tree?focus=${person.id}`} className="btn-secondary">
               Im Stammbaum zeigen
             </Link>
+            {canEdit && <MergeDialog personId={person.id} personName={name(person)} people={allPersons} />}
           </div>
         </div>
 
@@ -773,10 +781,6 @@ export default async function PersonPage({
             canEdit={canEdit}
             isAdmin={scope.isAdmin}
           />
-
-          <div className="border-t border-stone-200 pt-4 dark:border-stone-800">
-            <MergeWithPicker personId={person.id} people={allPersons} />
-          </div>
 
           <div className="border-t border-stone-200 pt-4 dark:border-stone-800">
             <DeletePersonButton personId={person.id} personName={name(person)} />

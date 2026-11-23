@@ -93,8 +93,13 @@ export type LinkOptions = {
 const RANK: Record<Confidence, number> = { high: 0, medium: 1, low: 2 };
 const pk = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 
-/** Gelockerte Prüfung für Verwandte bereits verbundener Personen. */
-function relaxedMatch(a: LinkPerson, b: LinkPerson): { ok: boolean; fullGiven: boolean; birthBoth: boolean } {
+/**
+ * Gelockerte Prüfung für Verwandte bereits verbundener Personen (Ausbreitung
+ * hier; Folgedubletten nach einem Zusammenführen in
+ * lib/services/merge-followups.ts). Sagt nur, ob ein Paar überhaupt in Frage
+ * kommt — die Klasse „sicher“ vergibt sie nie.
+ */
+export function relaxedMatch(a: DupPerson, b: DupPerson): { ok: boolean; fullGiven: boolean; birthBoth: boolean } {
   const no = { ok: false, fullGiven: false, birthBoth: false };
   if (a.gender !== "UNKNOWN" && b.gender !== "UNKNOWN" && a.gender !== b.gender) return no;
   const ga = nameKey(a.givenName);

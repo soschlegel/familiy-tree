@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiFetch, jsonBody } from "./api-client";
+import { FollowUpDuplicates } from "./FollowUpDuplicates";
 import type { FieldChoice, MergeField, MergePreview, MergeResult } from "@/lib/services/merge";
+
+/** Ein Elternpaar, das vor diesem Paar zusammengeführt würde, mit seiner eigenen Vorschau. */
+type ParentPlan = { a: string; b: string; label: string; preview: MergePreview };
 
 const SUBTYPE_LABEL: Record<string, string> = {
   BIOLOGICAL: "leiblich",
@@ -39,11 +43,14 @@ export function MergeView({ keepId, otherId }: { keepId: string; otherId: string
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<MergeResult | null>(null);
   const [openDetails, setOpenDetails] = useState(false);
+  // „Erst die Eltern, dann dieses Paar“: Vorschau je Elternpaar (null = nicht geöffnet).
+  const [parentPlan, setParentPlan] = useState<ParentPlan[] | null>(null);
   const seq = useRef(0);
 
   const load = useCallback(async () => {
     const n = ++seq.current;
     setLoading(true);
+    setParentPlan(null);
     const res = await apiFetch<MergePreview>(
       "/api/persons/merge/preview",
       jsonBody("POST", { keepId, mergeId: otherId, choices, relationshipSubtypes: subtypes }),
@@ -84,26 +91,88 @@ export function MergeView({ keepId, otherId }: { keepId: string; otherId: string
     setResult(res.data);
   }
 
+  /** Vorschau der Elternpaare holen, die die Sperre vorschlägt (schreibt nichts). */
+  async function planParentsFirst(pairs: { a: string; b: string; label: string }[]) {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    const plans: ParentPlan[] = [];
+    for (const p of pairs) {
+      const res = await apiFetch<MergePreview>("/api/persons/merge/preview", jsonBody("POST", { keepId: p.a, mergeId: p.b }));
+      if (!res.ok) {
+        setBusy(false);
+        setError(res.message);
+        return;
+      }
+      plans.push({ ...p, preview: res.data });
+    }
+    setBusy(false);
+    setParentPlan(plans);
+  }
+
+  /** Eltern und dieses Paar in EINEM Schritt (eine Transaktion auf dem Server). */
+  async function mergeParentsFirst() {
+    if (!preview || !parentPlan || busy) return;
+    if (!confirm("Erst die Eltern, dann dieses Paar zusammenführen? Das lässt sich nicht mit einem Klick rückgängig machen.")) return;
+    setBusy(true);
+    const res = await apiFetch<MergeResult>(
+      "/api/persons/merge",
+      jsonBody("POST", {
+        keepId,
+        mergeId: otherId,
+        choices,
+        relationshipSubtypes: subtypes,
+        expectedToken: preview.token,
+        parentsFirst: parentPlan.map((p) => ({ keepId: p.a, mergeId: p.b, expectedToken: p.preview.token })),
+      }),
+    );
+    setBusy(false);
+    if (!res.ok) {
+      setError(res.message);
+      if (res.status === 409) void load();
+      return;
+    }
+    setResult(res.data);
+  }
+
   if (result) {
+    const parents = result.parentMerges ?? [];
     return (
-      <section className="card space-y-3 p-5" data-testid="merge-result" aria-live="polite">
-        <h2 className="section-title">{result.alreadyMerged ? "Bereits zusammengeführt" : "Zusammengeführt"}</h2>
-        <ul className="list-disc space-y-1 pl-5 text-sm">
-          {result.summary.sentences
-            .filter((s) => !s.startsWith("Blockiert"))
-            .map((s, i) => (
-              <li key={i}>{s}</li>
-            ))}
-        </ul>
-        <div className="flex flex-wrap gap-2">
-          <Link href={`/people/${result.keepId}`} className="btn-primary">
-            Zur Person
-          </Link>
-          <Link href="/research/duplicates" className="btn-secondary">
-            Weitere Dubletten prüfen
-          </Link>
-        </div>
-      </section>
+      <div className="space-y-5">
+        <section className="card space-y-3 p-5" data-testid="merge-result" aria-live="polite">
+          <h2 className="section-title">{result.alreadyMerged ? "Bereits zusammengeführt" : "Zusammengeführt"}</h2>
+          {parents.length > 0 && (
+            <p className="text-sm" data-testid="merge-result-parents">
+              Zuvor im selben Schritt zusammengeführt: {parents.length === 1 ? "der doppelt erfasste Elternteil" : "die doppelt erfassten Eltern"}{" "}
+              {parents.map((p, i) => (
+                <span key={p.keepId}>
+                  {i > 0 && " und "}
+                  <Link href={`/people/${p.keepId}`} className="underline">
+                    {p.name}
+                  </Link>
+                </span>
+              ))}
+              .
+            </p>
+          )}
+          <ul className="list-disc space-y-1 pl-5 text-sm">
+            {result.summary.sentences
+              .filter((s) => !s.startsWith("Blockiert"))
+              .map((s, i) => (
+                <li key={i}>{s}</li>
+              ))}
+          </ul>
+          <div className="flex flex-wrap gap-2">
+            <Link href={`/people/${result.keepId}`} className="btn-primary">
+              Zur Person
+            </Link>
+            <Link href="/research/duplicates" className="btn-secondary">
+              Weitere Dubletten prüfen
+            </Link>
+          </div>
+        </section>
+        <FollowUpDuplicates personIds={[result.keepId, ...parents.map((p) => p.keepId)]} />
+      </div>
     );
   }
 
@@ -120,6 +189,11 @@ export function MergeView({ keepId, otherId }: { keepId: string; otherId: string
   }
 
   const differing = preview.fields.filter((f) => f.differs).length;
+  // Nur wenn NICHTS anderes im Weg steht als doppelt erfasste Eltern, die sich
+  // alle zuordnen lassen (der Server prüft das beim Ausführen noch einmal).
+  const parentPairs = preview.blockers.flatMap((b) => b.suggestions ?? []);
+  const parentsFirstPossible = parentPairs.length > 0 && preview.blockers.every((b) => b.code === "BIO_PARENTS" && b.resolvable);
+  const parentPlanOk = parentPlan !== null && parentPlan.every((p) => p.preview.canMerge);
 
   return (
     <div className="space-y-6" data-testid="merge-view" aria-busy={loading}>
@@ -161,7 +235,58 @@ export function MergeView({ keepId, otherId }: { keepId: string; otherId: string
               </li>
             ))}
           </ul>
+          {parentsFirstPossible && !parentPlan && (
+            <button type="button" className="btn-secondary" disabled={busy || loading} onClick={() => void planParentsFirst(parentPairs)} data-testid="merge-parents-first">
+              Erst die Eltern, dann dieses Paar zusammenführen …
+            </button>
+          )}
         </div>
+      )}
+
+      {parentPlan && (
+        <section className="card space-y-3 p-4" aria-labelledby="parents-first-h" data-testid="merge-parents-plan">
+          <h2 id="parents-first-h" className="section-title">
+            Erst die Eltern, dann dieses Paar
+          </h2>
+          <p className="text-sm muted">
+            In einem Schritt: Zuerst {parentPlan.length === 1 ? "wird das doppelt erfasste Elternpaar" : "werden die doppelt erfassten Elternpaare"} zusammengeführt
+            (nach den Regeln, ohne Feldwahl), danach dieses Paar mit deiner Wahl. Geht ein Teil nicht, wird nichts geändert. Bitte prüfe, dass es wirklich
+            dieselben Personen sind.
+          </p>
+          {parentPlan.map((p) => (
+            <div key={`${p.a}|${p.b}`} className="rounded-lg border border-stone-200 p-3 text-sm dark:border-stone-800" data-testid="merge-parents-pair">
+              <p>
+                Bleibt <strong>{p.preview.keep.name}</strong>
+                {p.preview.keep.born && ` (*${p.preview.keep.born})`}, darin geht auf: <strong>{p.preview.other.name}</strong>
+                {p.preview.other.born && ` (*${p.preview.other.born})`}.{" "}
+                <Link href={`/people/merge?keep=${p.a}&other=${p.b}`} className="underline">
+                  Einzeln vergleichen
+                </Link>
+              </p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs muted">
+                {p.preview.summary.sentences
+                  .filter((s) => !s.startsWith("Blockiert"))
+                  .slice(1)
+                  .map((s, i) => (
+                    <li key={i}>{s}</li>
+                  ))}
+              </ul>
+              {p.preview.blockers.length > 0 && (
+                <p role="alert" className="mt-1 text-red-700 dark:text-red-300">
+                  Geht so nicht: {p.preview.blockers.map((b) => b.message).join(" ")}
+                </p>
+              )}
+            </div>
+          ))}
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="btn-primary" disabled={!parentPlanOk || busy || loading} onClick={() => void mergeParentsFirst()} data-testid="merge-parents-confirm">
+              {busy ? "Wird zusammengeführt…" : "Eltern und dieses Paar zusammenführen"}
+            </button>
+            <button type="button" className="btn-secondary" onClick={() => setParentPlan(null)}>
+              Abbrechen
+            </button>
+          </div>
+        </section>
       )}
 
       {error && (

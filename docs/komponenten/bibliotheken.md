@@ -861,6 +861,7 @@ für Vorschau, Zusammenführen, Sammel-Zusammenführen und Tests. Dienst:
 
 **Wichtige Funktionen/Typen:** `LinkPerson`, `LinkPair` (Klasse, Punkte,
 Gründe, Widersprüche, `viaRelative`, `bridge`, `veryLikely`),
+`relaxedMatch` (gelockerte Prüfung für Verwandte; vergibt nie eine Klasse),
 `LinkResult` (Paare, sichere Cluster, Teile vorher/nachher, Brücken je
 Gruppenpaar, Dauer), `LinkOptions`, `linkImports`, `evidenceSentence`.
 
@@ -889,7 +890,8 @@ Gruppenpaar, Dauer), `LinkOptions`, `linkImports`, `evidenceSentence`.
 - `evidenceSentence` macht aus den Gründen einen Satz („Gleicher Name,
   gleiches Geburtsdatum …; aus verschiedenen Importen.“).
 
-**Benutzt von:** `lib/services/import-linking.ts`,
+**Benutzt von:** `lib/services/import-linking.ts`, `lib/services/duplicates.ts`
+und `lib/services/merge-followups.ts` (`evidenceSentence`, `relaxedMatch`),
 `components/ConnectImports.tsx`, `tests/fixtures/linking-generator.ts`.
 
 **Tests:** `tests/import-linking.test.ts` (erzeugte Testbäume),
