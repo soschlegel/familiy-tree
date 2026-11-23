@@ -204,7 +204,7 @@ export function DuplicateList({ items, emptyText }: { items: DuplicateCandidate[
                   <p className="mt-1 text-xs muted">
                     Vorschlag der KI: Es bleibt „{fullName(d.review.suggestedKeepId === d.a.id ? d.a : d.b)}
                     {lifeSpan(d.review.suggestedKeepId === d.a.id ? d.a : d.b) ? `, ${lifeSpan(d.review.suggestedKeepId === d.a.id ? d.a : d.b)}` : ""}“. Welcher Eintrag
-                    bleibt, wählen Sie im Vergleich.
+                    bleibt, wählst du im Vergleich.
                   </p>
                 )}
                 <p className="mt-1 text-xs muted">

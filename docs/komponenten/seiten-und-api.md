@@ -368,10 +368,15 @@ Die Personenseite.
 ### `/research/duplicates` — `app/research/duplicates/page.tsx`
 
 - **Rechte:** angemeldet (Dienst filtert auf Sichtbares).
-- **Suchparameter:** `klasse` (`high`, `medium`, `low`), `seite` (25 je
-  Seite).
+- **Suchparameter:** `klasse` (`high`, `medium`, `low`), `ki`
+  (`vorgeprueft`, `zusammenfuehren`, `strittig`, `kein-duplikat`, `offen` =
+  noch nicht vorgeprüft), `seite` (25 je Seite).
 - **Daten:** `listDuplicateCandidates`. **Anzeige:** Klassenwahl mit
-  Zahlen, `DuplicateList`, Zahl der als „kein Duplikat“ markierten Paare.
+  Zahlen, Filter „Von der KI vorgeprüft:“ mit Zahlen innerhalb der Klasse
+  (nur, wenn es Einschätzungen gibt oder der Filter gesetzt ist; mit
+  Kontexthilfe `dublettenKi`), `DuplicateList`, Zahl der als „kein
+  Duplikat“ markierten Paare. Der Filter grenzt nur ein — Klasse und
+  Reihenfolge bleiben.
 
 ### `/research/connect` — `app/research/connect/page.tsx`
 
@@ -596,7 +601,9 @@ Fehlercodes aus den Grundregeln.
   `dryRun` gemeinsame Vorschau (`previewBulkMerge`), sonst Ausführen Paar
   für Paar (`bulkMerge`), ein gemeinsames Paket „Sammel-Zusammenführen“.
 - **`GET /api/duplicates`**: `listDuplicateCandidates`; Suchparameter
-  `offset`, `limit` (Standard 25), `confidence`.
+  `offset`, `limit` (Standard 25), `confidence`, `review` (`any`,
+  `none`, `open`, `MERGE`, `DISPUTED`, `NOT_DUPLICATE`); je Paar ggf.
+  `review` (nur bei Bearbeitungsrecht an beiden), dazu `reviewCounts`.
 - **`POST /api/duplicates/dismiss`** / **`DELETE`** (`a`, `b`):
   `dismissDuplicate` bzw. `undismissDuplicate`.
 

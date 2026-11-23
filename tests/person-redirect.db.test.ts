@@ -314,6 +314,10 @@ describe.skipIf(Boolean(skipReason))("Alte Kennung als Umleitung (Testdatenbank)
     const same = { person_id: k };
     expect(await resolvePersonArgs(editor, same)).toEqual({ args: same, resolvedFrom: null });
     expect((await resolvePersonArgs(editor, { person_id: xC })).resolvedFrom).toBeNull();
+    // KI-Vorprüfung: Paar-Kennungen von preview_person_merge und review_duplicate
+    const pair = await resolvePersonArgs(editor, { keep_id: k, merge_id: x, person_a_id: x, person_b_id: "fremd" });
+    expect(pair.args).toEqual({ keep_id: k, merge_id: k, person_a_id: k, person_b_id: "fremd" });
+    expect(pair.resolvedFrom).toEqual({ [x]: k });
 
     // Über den Server samt Schema-Prüfung des Clients
     const connect = async (s: Scope) => {
@@ -346,6 +350,10 @@ describe.skipIf(Boolean(skipReason))("Alte Kennung als Umleitung (Testdatenbank)
     expect(upd.isError, upd.text).toBe(false);
     expect(upd.data.resolvedFrom).toEqual({ [x]: k });
     expect((await getPersonDetail(admin, k))!.person.notes).toContain("Hinweis über alte Kennung");
+    // KI-Vorprüfung: alte Kennung der aufgegangenen Person = dieselbe Person → abgewiesen, nichts gespeichert
+    const rev = await ed.call("review_duplicate", { person_a_id: x, person_b_id: k, verdict: "DISPUTED", reason: "Test über eine alte Kennung" });
+    expect(rev.isError).toBe(true);
+    expect(rev.text).toContain("Zwei verschiedene Personen");
     // verborgene Zielperson: wie unbekannt
     const hidden = await ed.call("get_person", { person_id: xC });
     const unknown = await ed.call("get_person", { person_id: "gibt-es-nicht" });

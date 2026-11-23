@@ -813,6 +813,19 @@ gemerkt. Ergebnis sortiert nach Klasse, Punkten, IDs.
 **Tests:** `tests/duplicates.test.ts`; Datenbank:
 `tests/person-duplicates.db.test.ts`.
 
+### lib/duplicate-verdicts.ts
+**Zweck:** Urteile der KI-Vorprüfung möglicher Dubletten
+(`DUPLICATE_VERDICTS`: `MERGE`, `DISPUTED`, `NOT_DUPLICATE`), ihre
+Bezeichnungen in der Oberfläche (`VERDICT_LABEL`: „zusammenführen“,
+„strittig“, „kein Duplikat“) und die Grenzen der Begründung (10 bis 2000
+Zeichen). Rein, ohne Datenbank — auch für Client-Komponenten.
+
+**Benutzt von:** `lib/services/duplicate-reviews.ts`,
+`lib/services/duplicates.ts`, `lib/services/changes.ts`, `mcp/tools.ts`,
+`components/DuplicateList.tsx`, `components/DuplicateBanner.tsx`.
+
+**Tests:** indirekt `tests/duplicate-review.db.test.ts`.
+
 ### lib/merge-rules.ts
 **Zweck:** Regeln für das Zusammenführen zweier Personen — rein, gemeinsam
 für Vorschau, Zusammenführen, Sammel-Zusammenführen und Tests. Dienst:
@@ -1527,7 +1540,8 @@ Entwicklung bei jedem Aufruf. Ins Standalone-Image kommen die Dateien über
 
 ### lib/help/links.ts
 **Zweck:** Ziele der Kontexthilfe (`HELP_LINKS`: Karte, Orte zuordnen,
-Linien, Bezugsperson, Dubletten, Dubletten-Klassen, KI-Zugang) an einer
+Linien, Bezugsperson, Dubletten, Dubletten-Klassen, KI-Vorprüfung der
+Dubletten, KI-Zugang) an einer
 Stelle, damit der Test prüfen kann, dass Thema und Anker existieren.
 
 **Benutzt von:** `components/HelpLink.tsx`, `components/DuplicateBanner.tsx`.
