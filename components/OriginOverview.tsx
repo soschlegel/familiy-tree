@@ -128,7 +128,18 @@ export function OriginOverview() {
                   <text x={p.x} y={p.y + 16} textAnchor="middle" fontSize="10.5" fontWeight="600" fill={n.fg ?? "currentColor"}>
                     {n.persons}
                   </text>
-                  <text x={p.x} y={p.y + r + 14} textAnchor="middle" fontSize="11.5" fill="currentColor">
+                  {/* Hof in Hintergrundfarbe: Linien zu anderen Kreisen laufen nicht durch den Namen. */}
+                  <text
+                    x={p.x}
+                    y={p.y + r + 14}
+                    textAnchor="middle"
+                    fontSize="11.5"
+                    fill="currentColor"
+                    strokeWidth={4}
+                    strokeLinejoin="round"
+                    paintOrder="stroke"
+                    className="stroke-white dark:stroke-stone-900"
+                  >
                     {short(n.name)}
                   </text>
                 </g>

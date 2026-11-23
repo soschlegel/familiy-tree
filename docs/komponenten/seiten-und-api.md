@@ -148,6 +148,8 @@ Dienst über den `Scope`.
 | `GET /api/import/batches` | Importverlauf | `data:import` |
 | `GET /api/import/batches/[id]/file` | Originaldatei herunterladen | `data:import` |
 | `POST /api/import/batches/prune` | Überholte Rohdaten entfernen | `data:import` |
+| `GET, PATCH /api/import/sources` | Importe mit Buchstabe/Farbe/Name / Import benennen | `data:import` (Dienst: nur Admin) |
+| `GET /api/origin/overview` | Herkunft: Personen je Import, Verbindungspersonen je Paar | angemeldet; Dienst: Bearbeiter oder Admin, sonst 403 |
 | `GET, POST /api/connect` | Importe verbinden: Auswahl / Lauf starten | `data:import` |
 | `GET, POST /api/connect/[id]` | Lauf: Stand / Entscheiden, Vorschau, Ausführen | `data:import` |
 | `GET, PUT /api/places` | Ortstexte / von Hand zuordnen | `place:manage` |
@@ -227,6 +229,9 @@ Der Stammbaum in drei Ansichten. Bedienung: README, „Fokus-Ansicht“ und
   - `up`, `down` — Tiefe der Fokus-Ansicht (`parseDepth`, Grenzen und
     Standard aus `FOCUS_DEPTH` in `lib/focus-tree.ts`).
   - `bezug` — vorübergehende Bezugsperson; `bezug=ich` zurück zur eigenen.
+  - `herkunft=1` — Schalter „Herkunft“ (Chips je Import an den Karten).
+    Wirkt nur für Bearbeiter und Administratoren (`canSeeOrigin`); für
+    Betrachter gibt es weder Schalter noch Daten.
   - `denied` — Hinweis nach einer Umleitung wegen fehlender Rechte.
 - **Cookies:** `tree-focus` (zuletzt fokussierte Person), `tree-bezug`
   (Bezugsperson), `tree-lines` (Großeltern-Linien an/aus).
@@ -238,7 +243,9 @@ Der Stammbaum in drei Ansichten. Bedienung: README, „Fokus-Ansicht“ und
   ergibt den Hinweis „Person nicht gefunden“ (gemerkte Personen dürfen
   fehlen, dann Ersatzperson). Ganzer Baum: `loadTree`. Verwandtschaftsgrade
   und Linien über `referenceView` — in der Fokus-Ansicht nur für die
-  Personen im Ausschnitt.
+  Personen im Ausschnitt. Nur mit `herkunft=1` (und Recht):
+  `loadTreeOrigin`, ebenfalls auf den Ausschnitt begrenzt; sonst wird keine
+  Herkunft geladen.
 - **Anzeige:** Überschrift mit Zählung („n Personen (m weitere nicht
   freigegeben) · k Beziehungen“), `ReferenceChip` („Sicht von: …“),
   „Person anlegen“ (nur mit Bearbeitungsrecht), `FamilyTree` mit Ansicht,
@@ -302,7 +309,9 @@ Die Personenseite.
 - **Daten:** `getPersonDetail` (einmal je Anfrage, auch für den Titel),
   Porträts der sichtbaren Verwandten (Platzhalter bekommen keines). Nur für
   Bearbeiter: `listPickablePersons` (nur sichtbare), `listFamilies`,
-  `listSourceOptions`, `listDuplicatesOfPerson`.
+  `listSourceOptions`, `listDuplicatesOfPerson`, `getPersonOrigin` (Block
+  „Herkunft“ und Chips an Ereignissen, weiteren Namen, Beziehungen und
+  Belegen).
 - **Anzeige (Komponenten):** `DuplicateBanner` (nur Bearbeiter), Kopf mit
   `Avatar`, Lebensdaten samt abweichender Zweitangaben, Knöpfe
   „Bearbeiten“ und „Im Stammbaum zeigen“ (`/tree?focus=…`);
@@ -314,8 +323,8 @@ Die Personenseite.
   `MediaGallery`), Kinder — gesperrte Verwandte als Platzhalter;
   `CitationSection` (Belege); Belegbilder (Scans an Ereignissen, Belegen,
   zitierten Quellen, Vorschaubild über `/api/media/<id>?variant=thumb`);
-  `MediaGallery` (eigene Bilder). Nur Bearbeiter: `PersonChanges`
-  (Änderungsverlauf) und der Bereich „Verwaltung“ mit
+  `MediaGallery` (eigene Bilder). Nur Bearbeiter: `PersonOrigin`
+  (Herkunft), `PersonChanges` (Änderungsverlauf) und der Bereich „Verwaltung“ mit
   `RelationshipEditor`, `PersonFamilies`, `MergeWithPicker`,
   `DeletePersonButton`.
 
@@ -362,7 +371,9 @@ Die Personenseite.
 ### `/research/connect` — `app/research/connect/page.tsx`
 
 - **Rechte:** nur Administratoren; alle anderen bekommen 404.
-- **Anzeige:** `ConnectImports` (arbeitet über `/api/connect…`).
+- **Anzeige:** `OriginOverview` (Übersicht der Importe und ihrer
+  Verbindungen, über `/api/origin/overview`), darunter `ConnectImports`
+  (arbeitet über `/api/connect…`).
 
 ### `/sources` — `app/sources/page.tsx`
 
@@ -408,7 +419,8 @@ Die Personenseite.
 - **Daten:** `exportFamilyOverview` (Familien und Personenzahlen für den
   GEDCOM-Exportdialog), für Admins `listFamilies`.
 - **Anzeige:** `DataTransfer` (Export, Austauschformat-Import),
-  `GedcomImport`, `ImportHistory`.
+  `GedcomImport`, `ImportHistory` (darin `ImportSources`: Importe
+  benennen).
 
 ### `/ai-access` — `app/ai-access/page.tsx`
 
@@ -755,6 +767,19 @@ Fehlercodes aus den Grundregeln.
   Download (Dateiname bereinigt, `no-store`); fehlt → 404.
 - **`POST /api/import/batches/prune`** (`batchId` optional): überholte
   Rohdaten eines Laufs bzw. aller Läufe entfernen.
+- **`GET /api/import/sources`**: alle Importe (Quell-Bäume) mit Buchstabe,
+  Farbe, Anzeige- und Standardname, Datei, Zahl der Personen und Läufe.
+  **`PATCH`** (`sourceTreeId`, `displayName`): Anzeigenamen setzen; leer
+  entfernt ihn. Name schon vergeben oder länger als 60 Zeichen → 400,
+  unbekannter Import → 404. Beides nur für Administratoren (Dienst prüft
+  zusätzlich; Bearbeiter → 403).
+
+### Herkunft
+
+- **`GET /api/origin/overview`**: Personen je Import (und „von Hand
+  erfasst“), Verbindungspersonen je Import-Paar, Gesamtzahlen — gezählt nur
+  Personen, die der Benutzer bearbeiten darf. Wer nirgends Bearbeiter ist,
+  bekommt 403.
 
 ### Importe verbinden
 

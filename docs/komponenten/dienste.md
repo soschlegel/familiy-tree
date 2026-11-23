@@ -115,6 +115,7 @@ beide). Ereignisse, Belege, Namen und Rohdaten folgen ihrem Träger.
 | `changes.ts` | Änderungsgeschichte lesen (Personenverlauf, Paketübersicht) |
 | `ai-access.ts` | KI-Recht, persönliche Schlüssel, Prüfung je MCP-Aufruf |
 | `imports.ts` | Importläufe, Herkunft, Fremdkennungen, Rohdaten |
+| `origin.ts` | Herkunft sichtbar machen: Buchstabe/Farbe/Name je Import, Herkunft im Baum, auf der Personenseite, Übersicht, Importe benennen |
 | `import-apply.ts` | Massenimport in einer Transaktion |
 | `gedcom-import.ts` | GEDCOM-Import mit Vorschau und Abgleich |
 | `gedcom-photos.ts` | Fotos aus einer GEDCOM-Datei herunterladen |
@@ -139,7 +140,7 @@ Grundsätze der Schicht (reine async-Funktionen, Scope, kein `next/*`,
 `tree`, `persons`, `relationships`, `research`, `duplicates`, `merge`,
 `merge-bulk`, `families`, `kinship`, `reference`, `timeline`, `consistency`,
 `sources`, `ai-access`, `events`, `names`, `imports`, `import-apply`,
-`changes`, `media-links`, `attached-media`, `release-notes` weiter, aus `graph-data` nur
+`changes`, `media-links`, `attached-media`, `release-notes`, `origin` weiter, aus `graph-data` nur
 `loadGraph` und die Graph-Typen.
 
 **Regeln und Entscheidungen:** Nicht über den Sammel-Export erreichbar sind
@@ -200,15 +201,17 @@ sollen sie immer über `formatFuzzyDate`/`lifeSpan` (sonst wird „1850“ zu
   (`maskPerson`).
 - `toRelationshipDto(r)` — Beziehung samt allen Datumsfeldern und Orten.
 - `lifeDatePrecision(p)` — fehlende Genauigkeit/Zusatz = tagesgenau/exakt.
-- `iso(d)`, `fullName(p)`, `importLabel(scope, lauf)`,
-  `MANUAL_ORIGIN_LABEL` („von Hand erfasst“).
+- `iso(d)`, `fullName(p)`, `MANUAL_ORIGIN_LABEL` („von Hand erfasst“).
+  Wie ein Import genannt wird (Buchstabe, Anzeigename, Dateiname nur für
+  Administratoren), sagt seit dem Paket „Herkunft“ allein
+  `loadImportDirectory` in `origin.ts`; das frühere `importLabel` ist
+  entfallen.
 
 **Regeln und Entscheidungen:** `restricted: false` kennzeichnet sichtbare
 Personen; Platzhalter tragen `restricted: true` (aus `lib/scope.ts`).
 
 **Rechte/Datenschutz:** `toPersonSummary` gibt nur die Familien heraus, die
-der Benutzer selbst kennt (`visibleFamilyIds`). `importLabel` nennt Dateiname
-und Datum eines Imports nur Administratoren, sonst nur „importiert“.
+der Benutzer selbst kennt (`visibleFamilyIds`).
 
 **Protokoll:** —
 
@@ -902,7 +905,7 @@ MCP) und die Markierung „kein Duplikat“. Bewertung und Klassen
   `canMerge` je Paar.
 - `listDuplicatesOfPerson(scope, personId, {limit})` — Kandidaten einer
   Person (Standard 3, höchstens 50) mit Herkunft („von Hand erfasst“ bzw.
-  Import).
+  Import als „Buchstabe · Name“ aus `loadImportDirectory` in `origin.ts`).
 - `dismissDuplicate(scope, a, b)`, `undismissDuplicate(scope, a, b)` — Paar
   dauerhaft als „kein Duplikat“ markieren bzw. die Markierung aufheben.
 
@@ -954,7 +957,8 @@ Hauptangaben in `lib/merge-rules.ts`.
 **Wichtige Funktionen:**
 - `previewPersonMerge(scope, keepId, mergeId, {choices,
   relationshipSubtypes})` — beide Seiten (Felder, Familien, Lebensdaten,
-  Eltern, Partner, Kinderzahl, Importe, Herkunft), Feldvergleich mit Wahl,
+  Eltern, Partner, Kinderzahl, Importe als „Buchstabe · Name“ über
+  `loadImportDirectory`, Herkunft), Feldvergleich mit Wahl,
   wählbare Art zusammenfallender Beziehungen, Zusammenfassung in ganzen
   Sätzen, Blocker, `canMerge` und ein Stand-Kennzeichen (`token`).
 - `mergePersons(scope, input, {tx, now, parentEdges})` — führt aus; mit
@@ -1629,7 +1633,9 @@ Administratoren.
   Vorschauen derselben Datei verwerfen, Vorschau berechnen und als
   `MEDIA_DIR/imports/<lauf>.plan.json` speichern.
 - `recomputeGedcomPreview(scope, batchId, wahl)` — Vorschau mit anderer Wahl
-  des Quell-Baums (automatisch, vorhandener, neu).
+  des Quell-Baums (automatisch, vorhandener, neu). Die vorhandenen Bäume
+  zur Wahl tragen Buchstabe und, falls vergeben, Anzeigenamen des Imports
+  (`loadImportDirectory`) vor Datei und Programm.
 - `rereadGedcomBatch(scope, batchId)` — ausgeführte Datei aus dem Original
   erneut einlesen (neuer Lauf, übliche Vorschau).
 - `getGedcomPlan`, `listGedcomPlanItems(scope, batchId, {kind, group, q,
@@ -1770,7 +1776,8 @@ zusammenführen.
 
 **Wichtige Funktionen:**
 - `listConnectGroups(scope)` — Importe (Quell-Bäume mit abgeschlossenem Lauf
-  und noch vorhandenen Personen) und „von Hand erfasst“ zur Auswahl.
+  und noch vorhandenen Personen; benannt als „Import A · Name“ über
+  `loadImportDirectory`) und „von Hand erfasst“ zur Auswahl.
 - `listConnectRuns(scope)` — die letzten 20 Läufe (ohne Paare).
 - `startConnectRun(scope, {groups, withinGroup})` — Abgleich im Hintergrund.
 - `getConnectRun(scope, id, {confidence, bridgesOnly, veryLikely, offset,
@@ -1819,6 +1826,95 @@ Typen in `components/ConnectImports.tsx`.
 
 **Tests:** `tests/import-linking.db.test.ts` (Abgleich-Regeln:
 `tests/import-linking.test.ts`); `e2e/write/connect.spec.ts`.
+
+### lib/services/origin.ts
+
+**Zweck:** Herkunft sichtbar machen — welche Importe eine Person bzw. einen
+Eintrag geliefert haben. Leitlinie: Die App ist die Wahrheit, Importe sind
+Quellen; Herkunft ist Zusatzinformation. Der Dienst liest deshalb nur
+(`ImportLink`, `ImportBatch`, Protokoll); einzige Schreibstelle ist der
+Anzeigename eines Imports. Reine Regeln ohne Datenbank (Buchstaben,
+Farben, Texte, Typen für Server und Browser) liegen in `lib/origin.ts`.
+
+**Wichtige Funktionen:**
+- `loadImportDirectory(treeIds?)` — Verzeichnis aller Importe (Quell-Bäume)
+  mit Buchstabe, Farbe, Anzeigename, Datei und Zahl der Läufe; liefert
+  `name`, `label` („A · Name“) und `entry` (Chip/Legende) je Kennung. Die
+  einzige Stelle, die sagt, wie ein Import heißt — Dubletten-Hinweis,
+  Zusammenführen, „Importe verbinden“ und die GEDCOM-Vorschau („Baum
+  wählen“) benutzen sie.
+- `canSeeOrigin(scope)` — Administratoren und Bearbeiter mindestens einer
+  Familie.
+- `loadTreeOrigin(scope, graph, personIds?)` — Herkunft der Personen einer
+  Baumansicht: Kennungen je Person, Legende (nur vorkommende Importe, mit
+  Zahl der Personen; Importe zuerst, „von Hand erfasst“ zuletzt), Zahl der
+  Verbindungspersonen. Nur aufgerufen, wenn der Schalter `?herkunft=1`
+  gesetzt ist; `null` für Betrachter.
+- `getPersonOrigin(scope, personId)` — Importe der Person (erster/letzter
+  Import, Zahl der aufgegangenen Einträge, ob nur durch Zusammenführen
+  dazugekommen), Zusammenführungs-Geschichte und Chips je Ereignis,
+  weiterem Namen, Beziehung und Beleg. `null`, wenn die Person nicht
+  bearbeitbar ist.
+- `originOverview(scope)` — Personen je Import und je Import-Paar die
+  Verbindungspersonen (Personen in beiden), dazu Gesamtzahlen.
+- `listImportSources(scope)`, `renameImportSource(scope, {sourceTreeId,
+  displayName})` — Importverwaltung (nur Administratoren).
+
+**Regeln und Entscheidungen:**
+- **Buchstaben** in der Reihenfolge des ersten abgeschlossenen Laufs eines
+  Quell-Baums: A, B, C … ohne „H“ (steht für „von Hand erfasst“), nach Z
+  zweistellig. Neue Stände desselben Baums oder spätere Importe ändern
+  einen vergebenen Buchstaben nicht. Quell-Bäume ohne abgeschlossenen Lauf
+  (nur noch Herkunftsvermerke) folgen dahinter — diese teurere Abfrage
+  läuft nur, wenn eine gesuchte Kennung sonst unbekannt wäre. Vermerke ohne
+  Quell-Baum-Kennung erscheinen als „?“.
+- **Farben** aus der Okabe-Ito-Palette ohne Schwarz (für die häufigen
+  Farbsehschwächen unterscheidbar), Schriftfarbe mit Kontrast ≥ 4,5:1; ab
+  dem achten Import wiederholen sie sich — eindeutig bleibt der Buchstabe,
+  Farbe steht nie allein.
+- **Name** eines Imports: vergebener Anzeigename; sonst für Administratoren
+  Datei und Datum des letzten Laufs, für alle anderen „Import vom <Datum
+  des ersten Laufs>“.
+- Eine Person ohne Herkunftsvermerk ist „von Hand erfasst“ (H). Einträge
+  (Ereignis, Name, Beziehung, Beleg) ohne Vermerk bekommen **keinen** Chip
+  — sie sind in der App entstanden.
+- **Zusammengeführt:** gezählt über die `MERGE`-Einträge des Protokolls,
+  auch Ketten früherer Zusammenführungen (begrenzte Tiefe), ergänzt um
+  `ImportLink.mergedFromId` für Zusammenführungen vor dem Protokoll.
+- Für Name, Geburt und Tod gibt es bewusst **keine Herkunft je Feld**
+  (Import schreibt, App ändert; eine Geschichte je Feld gibt es erst seit
+  dem Changelog) — die Personenseite sagt das ausdrücklich.
+- Anzeigenamen: höchstens 60 Zeichen, Leerraum zusammengefasst, je Import
+  eindeutig (ohne Groß-/Kleinschreibung); leer entfernt den Namen.
+  Buchstabe und Farbe bleiben beim Umbenennen gleich.
+
+**Rechte/Datenschutz:**
+- Herkunft gibt es überall (Baum, Personenseite, Übersicht, KI-Zugang) nur
+  für Personen, die der Benutzer **bearbeiten** darf; alle Zahlen zählen
+  nur diese. Betrachter bekommen nichts (Übersicht: `FORBIDDEN`).
+- Chips an Beziehungen nur, wenn die andere Person sichtbar ist.
+- Dateinamen und die Kennung des Quell-Baums nur für Administratoren
+  (Importverwaltung); sonst steht der Buchstabe dafür.
+- Der Anzeigename ist für alle Bearbeiter sichtbar — er sollte nichts
+  enthalten, was nur Administratoren wissen dürfen.
+
+**Protokoll:** Umbenennen als eigenes Paket („Import A benannt: …“ bzw.
+„Name des Imports A entfernt“, Art APP) mit `UPDATE ImportBatch`
+(`renamed`, Buchstabe, Name vorher → nachher); der Changelog
+(`changes.ts`) beschreibt es in diesen Worten. Lesen wird nicht
+protokolliert.
+
+**Benutzt von:** `app/tree/page.tsx` (Schalter), `app/people/[id]/page.tsx`
+(Block „Herkunft“, Chips), `app/research/connect/page.tsx` (Übersicht),
+`app/api/origin/overview/route.ts`, `app/api/import/sources/route.ts`,
+`mcp/tools.ts` (`get_person.origin`); `duplicates.ts`, `merge.ts`,
+`import-linking.ts`, `gedcom-import.ts` (Bezeichnung der Importe).
+
+**Tests:** `tests/origin.test.ts` (Buchstaben, Farben, Kontrast),
+`tests/origin.db.test.ts` (Verzeichnis, Rechte, Baum, Personenseite samt
+Zusammenführungs-Kette, Übersicht, Umbenennen), `tests/mcp.db.test.ts`
+(`get_person.origin`); `e2e/read/origin.spec.ts`,
+`e2e/write/origin.spec.ts`.
 
 ---
 
