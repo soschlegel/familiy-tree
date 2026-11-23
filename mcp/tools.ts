@@ -86,6 +86,15 @@ import {
 } from "../lib/services/places";
 import { getPlacePage, placeLinksFor, placeRefForText } from "../lib/services/place-pages";
 import { placeKey } from "../lib/places/normalize";
+import { resolvePersonRedirect } from "../lib/services/redirects";
+import { getPersonOrigin } from "../lib/services/origin";
+import { resolvePersonArgs, withResolvedFrom } from "./person-redirects";
+// KI-Vorprüfung möglicher Dubletten (eigener Block am Dateiende).
+import { CONFIDENCE_LABEL } from "../lib/duplicates";
+import { DUPLICATE_VERDICTS, REVIEW_REASON_MAX, REVIEW_REASON_MIN } from "../lib/duplicate-verdicts";
+import { listDuplicateCandidates, reviewDuplicate } from "../lib/services/duplicates";
+import type { DuplicateReviewDto } from "../lib/services/duplicate-reviews";
+import { previewPersonMerge } from "../lib/services/merge";
 
 export type ToolContext = {
   /** Wer zugreift — nur für Meldungen (E-Mail bzw. Schlüssel-Präfix). */
@@ -139,7 +148,10 @@ function run<A>(ctx: ToolContext, fn: (scope: Scope, args: A) => Promise<Data>, 
       if (!auth.ok) {
         return errorResult(`Zugriff verweigert (${ctx.label}): ${auth.message} [${auth.reason}]`);
       }
-      return textResult(await fn(auth.scope, args));
+      // Alte Kennungen aufgegangener Personen still auflösen (mcp/person-redirects.ts).
+      const resolved = await resolvePersonArgs(auth.scope, args);
+      const data = await fn(auth.scope, resolved.args);
+      return textResult(resolved.resolvedFrom ? { ...data, resolvedFrom: resolved.resolvedFrom } : data);
     } catch (err) {
       if (err instanceof ServiceError) return errorResult(serviceErrorText(err));
       console.error("[mcp] Werkzeugfehler:", err);
@@ -516,7 +528,8 @@ const GAP_KINDS = [
 ] as const satisfies readonly DataGapKind[];
 const REL_GAP_KINDS = ["marriageWithoutPlace", "partnershipUnknownStatus"] as const satisfies readonly RelationshipGapKind[];
 
-export function registerReadTools(server: McpServer, ctx: ToolContext): void {
+export function registerReadTools(baseServer: McpServer, ctx: ToolContext): void {
+  const server = withResolvedFrom(baseServer);
   server.registerTool(
     "search_persons",
     {
@@ -614,7 +627,12 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
         "images of the cited source shown here as document image (not assigned to another citation of that source). " +
         "Each image has a `mediaId` usable with link_media. " +
         "Relatives the user may not see appear as {restricted: true} placeholders. " +
-        "`subtype` on relatives: BIOLOGICAL/ADOPTIVE/STEP/FOSTER for parents/children, MARRIED/UNMARRIED/DIVORCED/PARTNER_UNKNOWN (marital status unknown) for partners.",
+        "`subtype` on relatives: BIOLOGICAL/ADOPTIVE/STEP/FOSTER for parents/children, MARRIED/UNMARRIED/DIVORCED/PARTNER_UNKNOWN (marital status unknown) for partners. " +
+        "`origin` (only if the user may edit the person): which imports delivered this record — `imports[]` with `letter` " +
+        "(A, B, C … in order of first import), `name` (display name of the import), `firstImportedAt`/`lastImportedAt`, " +
+        "`records` and `viaMerge`; `manual: true` = entered in the app, no import; `merged` = the person was merged " +
+        "from `entries` records (`lastAt`). Origin is additional information only: the app is the truth, imports are " +
+        "sources — there is no per-field origin for name, birth and death.",
       inputSchema: { person_id: personId },
       outputSchema: {
         person: refSchema,
@@ -630,6 +648,14 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
         events: z.array(z.object({ id: z.string(), type: z.string(), title: z.string() }).passthrough()).optional(),
         otherNames: z.array(z.object({ id: z.string(), type: z.string(), name: z.string() }).passthrough()).optional(),
         places: placesOutput,
+        // Herkunft (Importe, Zusammenführungen) — nur, wenn der Benutzer die Person bearbeiten darf.
+        origin: z
+          .object({
+            manual: z.boolean(),
+            imports: z.array(z.object({ letter: z.string(), name: z.string() }).passthrough()),
+            merged: z.object({ entries: z.number(), firstAt: z.string().nullable(), lastAt: z.string().nullable() }).optional(),
+          })
+          .optional(),
       },
       annotations: { title: "Person abrufen", ...READ_ONLY },
     },
@@ -642,7 +668,27 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
         ...d.relations.flatMap((r) => (r.other.restricted ? [] : [r.startPlace, r.endPlace, ...r.events.map((e) => e.place)])),
         ...d.events.map((e) => e.place),
       ]);
-      return { ...personDetailOut(d), ...(places ? { places } : {}) };
+      const origin = d.canEdit ? await getPersonOrigin(scope, a.person_id) : null;
+      return {
+        ...personDetailOut(d),
+        ...(places ? { places } : {}),
+        ...(origin
+          ? {
+              origin: {
+                manual: origin.manual,
+                imports: origin.imports.map((i) => ({
+                  letter: i.letter,
+                  name: i.name,
+                  firstImportedAt: i.firstImportedAt,
+                  lastImportedAt: i.lastImportedAt,
+                  records: i.records,
+                  viaMerge: i.viaMerge,
+                })),
+                ...(origin.merged ? { merged: origin.merged } : {}),
+              },
+            }
+          : {}),
+      };
     }),
   );
 
@@ -1148,6 +1194,7 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
   );
 
   registerPlaceReadTools(server, ctx);
+  registerDuplicateReviewReadTools(server, ctx);
 }
 
 // ---------------------------------------------------------------------------
@@ -1231,7 +1278,8 @@ const summaryOut = (p: PersonLike & Record<string, unknown>) => ({
 const WRITE_NOTE =
   "Acts with the configured user's permissions; every change is written to the audit log (optionally into a change set, see begin_change_set).";
 
-export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
+export function registerWriteTools(baseServer: McpServer, ctx: ToolContext): void {
+  const server = withResolvedFrom(baseServer);
   server.registerTool(
     "begin_change_set",
     {
@@ -1955,12 +2003,17 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
   );
 
   registerPlaceWriteTools(server, ctx);
+  registerDuplicateReviewWriteTools(server, ctx);
 }
 
 /** Für die Ressource familytree://person/{id}. */
 export async function personResource(scope: Scope, id: string): Promise<Data | null> {
   const d = await getPersonDetail(scope, id);
-  return d ? personDetailOut(d) : null;
+  if (d) return personDetailOut(d);
+  // Alte Kennung einer aufgegangenen Person: die bleibende liefern und es sagen.
+  const to = await resolvePersonRedirect(scope, id);
+  const merged = to ? await getPersonDetail(scope, to) : null;
+  return merged ? { ...personDetailOut(merged), resolvedFrom: { [id]: to } } : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -2224,6 +2277,206 @@ function registerPlaceWriteTools(server: McpServer, ctx: ToolContext): void {
         assigned: results.filter((r) => r.ok).length,
         failed: results.filter((r) => !r.ok).length,
         results: results as unknown as Data[],
+      };
+    }),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// KI-Vorprüfung möglicher Dubletten: Kandidaten, Trockenlauf, Einschätzung.
+// Bewusst KEIN Werkzeug zum Zusammenführen — das tut nur ein Mensch in der App.
+// ---------------------------------------------------------------------------
+
+const VERDICT_INPUT = z.enum(DUPLICATE_VERDICTS);
+const NO_MERGE_NOTE =
+  "There is no tool that merges persons: merging is done only by a human in the web app, after looking at the same preview.";
+
+const reviewOut = (r: DuplicateReviewDto) => ({
+  verdict: r.verdict,
+  reason: r.reason,
+  ...(r.suggestedKeepId ? { suggestedKeepId: r.suggestedKeepId } : {}),
+  reviewedAt: r.reviewedAt,
+  stale: r.stale,
+});
+
+function registerDuplicateReviewReadTools(server: McpServer, ctx: ToolContext): void {
+  server.registerTool(
+    "list_duplicate_candidates",
+    {
+      title: "Dublettenkandidaten",
+      description:
+        "The app's list of possible duplicates (page 'Mögliche Dubletten'), page by page, for pre-checking: pairs of persons " +
+        "that are probably recorded twice, each with class (`confidence` high = 'sicher', medium = 'wahrscheinlich', " +
+        "low = 'unklar'), score, German `reasons` and `conflicts` (contradictions). Only pairs of which the user may see " +
+        "BOTH persons; pairs a human marked as 'kein Duplikat' are never listed. `canReview` = the user may edit both " +
+        "(needed for preview_person_merge and review_duplicate). `review` = the stored AI assessment, if any; `stale: true` " +
+        "means a person changed since — assess again. Filter with `confidence` and `review` ('unreviewed' = no assessment " +
+        "or a stale one, 'reviewed' = any, or one verdict). Same ranking as the app: class first, then score. " +
+        NO_MERGE_NOTE,
+      inputSchema: {
+        confidence: z.enum(["high", "medium", "low"]).optional().describe("Only this class: high = sicher, medium = wahrscheinlich, low = unklar."),
+        review: z
+          .enum(["unreviewed", "reviewed", ...DUPLICATE_VERDICTS])
+          .optional()
+          .describe("unreviewed = no AI assessment yet or a stale one; reviewed = any assessment; or exactly one verdict."),
+        limit: z.number().int().min(1).max(50).optional().describe("Default 20."),
+        offset: z.number().int().min(0).optional().describe("Default 0."),
+      },
+      outputSchema: {
+        total: z.number(),
+        offset: z.number(),
+        hasMore: z.boolean(),
+        counts: z.object({ high: z.number(), medium: z.number(), low: z.number() }),
+        candidates: z.array(z.object({ a: refSchema, b: refSchema, score: z.number(), confidence: z.string(), canReview: z.boolean() }).passthrough()),
+      },
+      annotations: { title: "Dublettenkandidaten", ...READ_ONLY },
+    },
+    run(ctx, async (scope, a) => {
+      const limit = a.limit ?? 20;
+      const offset = a.offset ?? 0;
+      const review = a.review === "unreviewed" ? "open" : a.review === "reviewed" ? "any" : a.review;
+      const list = await listDuplicateCandidates(scope, { confidence: a.confidence, review, limit, offset });
+      const side = (p: (typeof list.items)[number]["a"]) => ({ ...ref(p), ...(p.birthPlace ? { birthPlace: p.birthPlace } : {}) });
+      return {
+        total: list.total,
+        offset,
+        hasMore: offset + list.items.length < list.total,
+        counts: list.counts,
+        candidates: list.items.map((d) => ({
+          a: side(d.a),
+          b: side(d.b),
+          score: d.score,
+          confidence: d.confidence,
+          confidenceLabel: CONFIDENCE_LABEL[d.confidence],
+          reasons: d.reasons,
+          conflicts: d.conflicts,
+          ...(d.crossTree ? { crossTree: true } : {}),
+          canReview: d.canMerge,
+          ...(d.review ? { review: reviewOut(d.review) } : {}),
+        })),
+      };
+    }),
+  );
+
+  server.registerTool(
+    "preview_person_merge",
+    {
+      title: "Zusammenführen: Vorschau (Trockenlauf)",
+      description:
+        "DRY RUN — changes nothing. Exactly the preview the app shows a human before merging two persons: `keep_id` would " +
+        "stay, `merge_id` would be absorbed and deleted. Returns both sides (dates, parents, partners, number of children, " +
+        "families, imports, counts), `fields` (per field both values, whether they differ, the default choice and why), " +
+        "`sentences` (German: what would move, what becomes one, which differing facts stay as second records), " +
+        "`alternates`, `newNames`, `dropped` and `blockers` (reasons that make the merge impossible, e.g. the two are " +
+        "parent and child, different biological parents, incompatible dates; `suggestions` = pairs to compare first). " +
+        "`canMerge: false` means blocked. Requires edit rights for both persons, like the app. Use it to found a verdict " +
+        "for review_duplicate. " +
+        NO_MERGE_NOTE,
+      inputSchema: {
+        keep_id: personId.describe("Person that would stay."),
+        merge_id: personId.describe("Person that would be absorbed into keep_id."),
+      },
+      outputSchema: {
+        dryRun: z.literal(true),
+        keep: z.object({ id: z.string(), name: z.string() }).passthrough(),
+        other: z.object({ id: z.string(), name: z.string() }).passthrough(),
+        fields: z.array(z.object({ field: z.string(), label: z.string(), keep: z.string(), other: z.string(), differs: z.boolean() }).passthrough()),
+        sentences: z.array(z.string()),
+        blockers: z.array(z.object({ code: z.string(), message: z.string() }).passthrough()),
+        canMerge: z.boolean(),
+      },
+      annotations: { title: "Zusammenführen: Vorschau (Trockenlauf)", ...READ_ONLY },
+    },
+    run(ctx, async (scope, a) => {
+      const p = await previewPersonMerge(scope, a.keep_id, a.merge_id);
+      const sideOut = (s: typeof p.keep) => ({
+        id: s.id,
+        name: s.name,
+        born: s.born,
+        died: s.died,
+        parents: s.parents,
+        partners: s.partners,
+        children: s.children,
+        families: s.familyNames,
+        imports: s.imports,
+        counts: s.counts,
+      });
+      return {
+        dryRun: true as const,
+        keep: sideOut(p.keep),
+        other: sideOut(p.other),
+        fields: p.fields
+          .filter((f) => f.keep || f.other)
+          .map((f) => ({ field: f.field, label: f.label, keep: f.keep, other: f.other, differs: f.differs, choice: f.choice, ...(f.why ? { why: f.why } : {}) })),
+        sentences: p.summary.sentences,
+        alternates: p.summary.alternates.map((x) => x.text),
+        newNames: p.summary.newNames.map((x) => x.text),
+        dropped: p.summary.dropped,
+        blockers: p.blockers.map((b) => ({ code: b.code, message: b.message, ...(b.suggestions?.length ? { suggestions: b.suggestions } : {}) })),
+        canMerge: p.canMerge,
+        note: "Trockenlauf: nichts wurde geändert. Zusammenführen kann nur ein Mensch in der App.",
+      };
+    }),
+  );
+}
+
+function registerDuplicateReviewWriteTools(server: McpServer, ctx: ToolContext): void {
+  server.registerTool(
+    "review_duplicate",
+    {
+      title: "Dublette einschätzen",
+      description:
+        "Store your assessment of ONE candidate pair — nothing else: no person is changed, nothing is merged, the pair stays " +
+        "on the list with its class. A human sees the assessment at the pair in the app and decides. Verdicts: MERGE = " +
+        "certainly the same person and the preview shows no blocker; NOT_DUPLICATE = certainly different persons; " +
+        "DISPUTED = evidence points both ways or is too thin — when in doubt always DISPUTED, never guess. Before calling: " +
+        "get_person for BOTH persons and preview_person_merge. `reason` in German, naming the concrete evidence (dates, " +
+        "places, parents, partners, sources) and every contradiction. `suggested_keep_id` (only with MERGE): the better " +
+        "documented record — a hint, the human chooses. One assessment per pair; a new one replaces the old. Pairs a human " +
+        "marked as 'kein Duplikat' cannot be assessed. Requires edit rights for both persons. " +
+        NO_MERGE_NOTE +
+        " " +
+        WRITE_NOTE,
+      inputSchema: {
+        change_set_id: changeSetIdInput,
+        person_a_id: personId,
+        person_b_id: personId,
+        verdict: VERDICT_INPUT.describe("MERGE | DISPUTED | NOT_DUPLICATE — when in doubt DISPUTED."),
+        reason: z
+          .string()
+          .trim()
+          .min(REVIEW_REASON_MIN)
+          .max(REVIEW_REASON_MAX)
+          .describe("German reasoning with the concrete evidence and contradictions; shown to the user at the pair."),
+        suggested_keep_id: z.string().min(1).optional().describe("Only with MERGE: which of the two should stay (a hint only)."),
+      },
+      outputSchema: {
+        personAId: z.string(),
+        personBId: z.string(),
+        verdict: z.string(),
+        reviewedAt: z.string(),
+        merged: z.literal(false),
+      },
+      annotations: {
+        title: "Dublette einschätzen",
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    runWrite(ctx, async (scope, a) => {
+      const r = await reviewDuplicate(scope, {
+        personAId: a.person_a_id,
+        personBId: a.person_b_id,
+        verdict: a.verdict,
+        reason: a.reason,
+        suggestedKeepId: a.suggested_keep_id,
+      });
+      return {
+        ...r,
+        merged: false as const,
+        note: "Nur die Einschätzung wurde gespeichert. Zusammenführen kann nur ein Mensch in der App (Mögliche Dubletten).",
       };
     }),
   );

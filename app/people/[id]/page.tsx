@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PlaceText } from "@/components/PlaceText";
 import { placeLinksFor } from "@/lib/services/place-pages";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { cache } from "react";
 
 import { prisma } from "@/lib/prisma";
@@ -15,6 +15,7 @@ import {
   listFamilies,
   listPickablePersons,
   listSourceOptions,
+  resolvePersonRedirect,
   type EventDto,
   type PersonCitation,
   type PersonRef,
@@ -43,9 +44,11 @@ import type { InheritedItem, MediaCandidate } from "@/components/AttachedMedia";
 import { DeletePersonButton } from "@/components/DeletePersonButton";
 import { DuplicateBanner } from "@/components/DuplicateBanner";
 import { ReferencePanel } from "@/components/ReferencePanel";
-import { MergeWithPicker } from "@/components/MergeWithPicker";
+import { MergeDialog } from "@/components/MergeDialog";
 import { PersonFamilies } from "@/components/PersonFamilies";
 import { PersonChanges } from "@/components/PersonChanges";
+import { PersonOrigin } from "@/components/PersonOrigin";
+import { getPersonOrigin } from "@/lib/services/origin";
 import {
   RelationshipEditor,
   type RelationRow,
@@ -289,7 +292,13 @@ export default async function PersonPage({
   // dass es diese Person gibt. Verwandte, die der Benutzer nicht sehen darf,
   // liefert der Dienst bereits als Platzhalter.
   const { scope, detail } = await loadDetail(id);
-  if (!detail) notFound();
+  if (!detail) {
+    // Alte Kennung einer aufgegangenen Person: weiter zur bleibenden — nur,
+    // wenn sie für diesen Benutzer sichtbar ist (lib/services/redirects.ts).
+    const mergedInto = await resolvePersonRedirect(scope, id);
+    if (mergedInto) permanentRedirect(`/people/${mergedInto}`);
+    notFound();
+  }
 
   const { person, canEdit } = detail;
 
@@ -322,6 +331,10 @@ export default async function PersonPage({
         listDuplicatesOfPerson(scope, id),
       ])
     : [[], [], [], null];
+
+  // Herkunft (Importe, Zusammenführungen, Chips an den Einträgen) — nur für
+  // Bearbeiter; der Dienst prüft das Recht selbst noch einmal.
+  const origin = canEdit ? await getPersonOrigin(scope, id) : null;
 
   // Lebensereignisse: die der Person und die ihrer Beziehungen in einer
   // Liste (eine Stelle zum Lesen und Bearbeiten), chronologisch.
@@ -562,6 +575,7 @@ export default async function PersonPage({
             <Link href={`/tree?focus=${person.id}`} className="btn-secondary">
               Im Stammbaum zeigen
             </Link>
+            {canEdit && <MergeDialog personId={person.id} personName={name(person)} people={allPersons} />}
           </div>
         </div>
 
@@ -610,9 +624,10 @@ export default async function PersonPage({
         canEdit={canEdit}
         mediaCandidates={mediaCandidates}
         placeLinks={placeLinks}
+        origin={origin?.chips}
       />
 
-      <NameVariants personId={person.id} names={detail.names} canEdit={canEdit} />
+      <NameVariants personId={person.id} names={detail.names} canEdit={canEdit} origin={origin?.chips} />
 
       <section aria-labelledby="family-h" className="space-y-5">
         <h2 id="family-h" className="section-title">
@@ -722,6 +737,7 @@ export default async function PersonPage({
         canEdit={canEdit}
         canCreateSource={canCreateSources(scope)}
         mediaCandidates={mediaCandidates}
+        origin={origin?.chips}
       />
 
       {documentImages.size > 0 && <DocumentImages items={[...documentImages.values()]} />}
@@ -738,6 +754,9 @@ export default async function PersonPage({
           canDelete={canEdit}
         />
       </div>
+
+      {/* Herkunft: Inhalt in components/PersonOrigin.tsx */}
+      {origin && <PersonOrigin origin={origin} />}
 
       {/* Changelog: Inhalt in components/PersonChanges.tsx */}
       {canEdit && <PersonChanges personId={person.id} />}
@@ -758,6 +777,7 @@ export default async function PersonPage({
             relations={relations}
             people={allPersons}
             canEdit={canEdit}
+            origin={origin?.chips}
             newPersonFamilies={detail.families.filter(
               (f) => scope.isAdmin || editableFamilyIds(scope).includes(f.id),
             )}
@@ -773,10 +793,6 @@ export default async function PersonPage({
             canEdit={canEdit}
             isAdmin={scope.isAdmin}
           />
-
-          <div className="border-t border-stone-200 pt-4 dark:border-stone-800">
-            <MergeWithPicker personId={person.id} people={allPersons} />
-          </div>
 
           <div className="border-t border-stone-200 pt-4 dark:border-stone-800">
             <DeletePersonButton personId={person.id} personName={name(person)} />

@@ -61,6 +61,19 @@ Die App passt auf: höchstens zwei leibliche Eltern, niemand ist sein eigener Vo
 
 Im Abschnitt **Bilder** der Personenseite lädst du Fotos hoch (**Bilder hinzufügen**). Eines davon wählst du **Als Porträt** — es erscheint im Stammbaum. Hochzeitsbilder hängen an der Ehe (bei der Partnerkarte unter „Bilder zur Ehe“). Scans von Urkunden gehören besser an Ereignisse, Belege oder Quellen, siehe [Belegbilder](03-quellen-und-belege.md#belegbilder-wo-erscheint-welches-bild).
 
+## Herkunft
+
+Darfst du eine Person bearbeiten, steht auf ihrer Seite der Block **Herkunft**:
+
+- aus welchen **Importen** die Person stammt — je Import sein Buchstabe, sein Name und wann sie importiert wurde. Ohne Import steht dort **Von Hand erfasst** (Chip „H“).
+- ob sie **zusammengeführt** wurde: „Zusammengeführt am 12.03.2026 aus 2 Einträgen.“
+
+Kleine Buchstaben-Chips stehen außerdem an **Lebensereignissen**, **weiteren Namen**, **Beziehungen** (unter „Verwaltung“) und **Belegen**: Sie zeigen, welcher Import den Eintrag geliefert hat. Einträge ohne Buchstaben sind in der App entstanden.
+
+Für **Name, Geburt, Tod und Geschlecht** gibt es keine Herkunft je Angabe: Sie können aus jedem der genannten Importe stammen oder in der App geändert worden sein. Was seit Einführung der Änderungsgeschichte geändert wurde, zeigt der Abschnitt „Änderungen“.
+
+Dieselben Buchstaben und Farben verwendet der [Stammbaum](04-stammbaum.md#herkunft).
+
 ## Löschen
 
 **Person löschen** steht ebenfalls unter „Verwaltung“. Ist eine Person nur doppelt erfasst, lösch sie nicht, sondern führ die beiden Einträge zusammen — siehe [Dubletten](07-dubletten.md).

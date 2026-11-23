@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { CONFIDENCE_LABEL } from "@/lib/duplicates";
+import { VERDICT_LABEL } from "@/lib/duplicate-verdicts";
 import { HELP_LINKS } from "@/lib/help/links";
 import { lifeSpan } from "@/lib/tree-layout";
 import type { PersonDuplicates } from "@/lib/services/duplicates";
@@ -12,7 +13,9 @@ const fullName = (p: { givenName: string; familyName: string | null; birthName: 
  * Hinweis auf der Personenseite: mögliche Dubletten dieser Person, je mit
  * Lebensdaten, Herkunft und Link zum Vergleich. Führt selbst nichts zusammen —
  * „Vergleichen“ öffnet die Vergleichsseite für genau dieses Paar. Wer was
- * sehen darf, entscheidet der Dienst (listDuplicatesOfPerson).
+ * sehen darf, entscheidet der Dienst (listDuplicatesOfPerson). Liegt eine
+ * KI-Einschätzung zum Paar vor, steht ihr Urteil dezent dabei (Begründung in
+ * der Dublettenliste); an Klasse und Reihenfolge ändert sie nichts.
  */
 export function DuplicateBanner({ personId, duplicates }: { personId: string; duplicates: PersonDuplicates }) {
   const { total, items } = duplicates;
@@ -36,6 +39,12 @@ export function DuplicateBanner({ personId, duplicates }: { personId: string; du
               <span className="font-medium">{fullName(d.person)}</span> ({lifeSpan(d.person) || "Lebensdaten unbekannt"}, {d.origin.join(", ")})
             </span>
             <span className="badge">{CONFIDENCE_LABEL[d.confidence]}</span>
+            {d.review && (
+              <span className="text-xs" data-testid="duplicate-banner-review" data-verdict={d.review.verdict}>
+                KI-Einschätzung: {VERDICT_LABEL[d.review.verdict]}
+                {d.review.stale && " (veraltet)"}
+              </span>
+            )}
             <Link href={`/people/merge?keep=${personId}&other=${d.person.id}`} className="font-medium underline underline-offset-2" data-testid="duplicate-banner-compare">
               Vergleichen<span className="sr-only"> mit {fullName(d.person)}</span>
             </Link>

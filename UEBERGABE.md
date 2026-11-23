@@ -88,68 +88,83 @@ README, Abschnitt „Tests“.
   „unklar“ bleibt der Dublettenliste vorbehalten (Entscheidung des
   Eigentümers). Gemessen: rund 4 ms auf den Mock-Daten, rund 120 ms bei
   11 847 erzeugten Personen; mit echten Daten nicht gemessen.
-- **Knopf „Zusammenführen …“** neben „Im Stammbaum zeigen“ mit Dialog:
-  zuerst die Kandidaten dieser Person (Klasse, Begründungssatz über
-  `evidenceSentence` in `lib/import-linking.ts`), darunter die freie
-  Personensuche. Den Eintrag unter „Verwaltung“
-  (`components/MergeWithPicker.tsx`) entfernen.
-- **Folgedubletten** auf der Ergebnisseite: Eltern×Eltern, Partner×Partner,
-  Kinder×Kinder der bleibenden Person (`relaxedMatch` in
-  `lib/import-linking.ts`, noch nicht exportiert, plus `scoreDuplicate`);
-  „alle sicheren Folgedubletten zusammenführen“ über
-  `previewBulkMerge`/`bulkMerge` (`lib/services/merge-bulk.ts`).
-- **Alte Kennung als Umleitung**, neue Migration: Tabelle
-  `PersonRedirect(fromId PK, toId FK Person ON DELETE CASCADE, createdAt)`.
-  Im Merge-Schritt `X→K` anlegen und bestehende `…→X` auf `K` umbiegen.
-  Rückfüllung aus `AuditLog` (`MERGE`-Einträge: `diff->>'mergeId'` →
-  `entityId`; dazu `CONNECT`-Einträge mit `diff.clusters`).
-  **Bedingung:** Die Rückfüllung darf an keinen Daten scheitern können (nur
-  Zeilen mit den erwarteten Schlüsseln, keine werfenden Casts, Ziel existiert,
-  `ON CONFLICT DO NOTHING`) und ist nachzuweisen auf einer Datenbank mit
-  Zusammenführungen des veröffentlichten Codes: einzeln, gesammelt, Kette
-  A→B→C, bleibende Person später gelöscht. Geht das nicht beweisbar in SQL:
-  nur die Tabelle anlegen, Rückfüllung idempotent im Code.
-  Verhalten: `/people/<alt>` und `/tree?focus=<alt>` → 308, nur wenn die
-  Person sichtbar ist; `GET /api/persons/<alt>` → 308; PATCH/DELETE auf eine
-  alte Kennung → 409 mit `mergedInto`. MCP löst Personen-Kennungen still auf
-  und meldet `resolvedFrom`. Keine Umleitung für aufgegangene Beziehungen und
-  Ereignisse.
-- **KI-Vorprüfung**: Tabelle `DuplicateReview` (Paar als Schlüssel, `verdict`
-  MERGE | DISPUTED | NOT_DUPLICATE, `reason`, `suggestedKeepId`, Benutzer,
-  Schlüssel, Zeitpunkt, Stand beider Personen zur Erkennung „veraltet“).
-  MCP-Werkzeuge `list_duplicate_candidates`, `preview_person_merge`
-  (Trockenlauf, genau die Vorschau der Oberfläche), `review_duplicate`
-  (Schreibstufe; speichert nur die Einschätzung). Prompt `review_duplicates`.
-  In den Server-Hinweis ausdrücklich: Es gibt kein `merge_persons`.
-  Oberfläche: Einschätzung je Paar anzeigen, Filter „von der KI vorgeprüft“
-  je Urteil, Sammelaktionen nur über die normale Vorschau; nie vorausgewählt,
-  die Klasse bleibt unverändert.
-- Dazu klein: **„Erst die Eltern, dann dieses Paar zusammenführen“** in
-  einem Schritt auf der Vergleichsseite (Vorschläge liefert bereits
-  `MergeBlocker.suggestions` in `lib/services/merge.ts`).
+- **Knopf „Zusammenführen …“** — erledigt (`components/MergeDialog.tsx`,
+  `GET /api/persons/[id]/duplicates`): neben „Im Stammbaum zeigen“, Dialog
+  mit den Kandidaten dieser Person (Klasse, Begründungssatz) und darunter
+  der freien Suche; der Eintrag unter „Verwaltung“ ist entfernt. Der Dialog
+  zeigt auch „unklar“ (das Banner weiterhin nicht) — bei Bedarf mit dem
+  Eigentümer abstimmen.
+- **Folgedubletten** — erledigt (`lib/services/merge-followups.ts`,
+  `components/FollowUpDuplicates.tsx`): auf der Ergebnisseite, Klassen
+  genau wie die Dublettenliste, gleichnamige Geschwister „unklar“; „alle
+  sicheren“ nur über `previewBulkMerge`/`bulkMerge`.
+- **Alte Kennung als Umleitung** — erledigt (`lib/services/redirects.ts`,
+  Migration `20261125000000_person_redirect`, nur die Tabelle). Die
+  Rückfüllung aus dem Audit läuft im Code (`backfillPersonRedirects`, je
+  Serverprozess einmal beim ersten Nachschlagen ohne Treffer), nicht in der
+  Migration: So kann das Ausrollen an keinen Daten scheitern, und
+  `docker/schema-diff-check.mjs` lässt ohnehin kein `INSERT` zu.
+  Nachgewiesen in `tests/person-redirect.db.test.ts` (einzeln, gesammelt,
+  Kette A→B→C, „Importe verbinden“, bleibende Person später gelöscht,
+  unbrauchbare Audit-Einträge). Mit echten Daten noch nicht gelaufen — nach
+  dem Ausrollen einmal eine alte Adresse aufrufen und im Server-Log die
+  Zeile `[umleitungen] … nachgetragen` prüfen. `/tree` hat dafür kein
+  `loading.tsx` mehr (die Ladeanzeige kommt aus einem `Suspense` in der
+  Seite), sonst ließe sich kein 308 setzen.
+- **KI-Vorprüfung** — erledigt (Migration `20261125000001_duplicate_review`,
+  Tabelle `DuplicateReview`; `reviewDuplicate` in
+  `lib/services/duplicates.ts`, Bausteine in
+  `lib/services/duplicate-reviews.ts`). MCP-Werkzeuge
+  `list_duplicate_candidates`, `preview_person_merge` (Trockenlauf, genau
+  die Vorschau der App), `review_duplicate` (Schreibstufe; speichert nur die
+  Einschätzung, Ergebnis immer `merged: false`), Prompt `review_duplicates`;
+  der Server-Hinweis sagt ausdrücklich: kein `merge_persons`. Oberfläche:
+  Einschätzung je Paar in der Dublettenliste (Urteil, Begründung, wer/wann,
+  Vorschlag, „veraltet“), Filter „Von der KI vorgeprüft“ je Urteil, im
+  Banner nur das Urteil; nie vorausgewählt, Klasse unverändert. Ein
+  KI-„kein Duplikat“ blendet nichts aus — erst „Als „kein Duplikat“
+  übernehmen“ durch den Menschen. „Veraltet“ über einen Fingerabdruck
+  beider Personen (Stammdaten, Namen, Ereignisse, Familien, Beziehungen;
+  Belege und Bilder bewusst nicht). Sehen und Schreiben nur mit
+  Bearbeitungsrecht an beiden Personen; ein von Menschen als „kein
+  Duplikat“ markiertes Paar lässt sich nicht einschätzen. Beim
+  Zusammenführen geht die Einschätzung mit der aufgehenden Person unter
+  (Cascade). Im Dialog „Zusammenführen …“ steht die Einschätzung bisher
+  nicht.
+- **„Erst die Eltern, dann dieses Paar zusammenführen“** — erledigt
+  (`parentsFirst` in `mergePersons`, eine Transaktion; nur für Elternpaare,
+  die mindestens „wahrscheinlich“ dieselbe Person sind).
 
-### 2. Herkunft sichtbar machen und visualisieren (Entwurf freigegeben)
+### 2. Herkunft sichtbar machen und visualisieren — erledigt (Branch `herkunft`)
 
-- Je Import ein Buchstabe (A, B, C … nach Reihenfolge des ersten Imports) und
-  eine Farbe aus der Okabe-Ito-Palette; „von Hand erfasst“ = gestrichelter
-  Chip „H“. Nie nur Farbe.
-- **Lesbare Namen für Importe**: Anzeigename je Import, überall verwendet.
-  Falls dafür eine Spalte nötig ist: kleine ergänzende Migration, vorher
-  abstimmen.
-- **Stammbaum**: Schalter `?herkunft=1`, standardmäßig aus, nur Bearbeiter
-  und Administratoren. Zuordnung Person → Importe nur bei eingeschaltetem
-  Schalter laden; höchstens drei Chips je Karte, dann „+n“;
-  Verbindungspersonen mit dezentem Ring; Legende mit Hervorheben per Klick.
-- **Personenseite**: Block „Herkunft“ (Importe, „zusammengeführt am … aus N
-  Einträgen“ aus dem `MERGE`-Eintrag); kleine Chips an Ereignissen, Namen,
-  Beziehungen, Belegen. Bei den Hauptangaben nur ehrliche Aussagen — es gibt
-  keine Änderungsgeschichte je Feld.
-- **Übersicht** auf `/research/connect`: Importe als Kreise, Kanten mit der
-  Zahl der Verbindungspersonen, dazu dieselben Angaben als Liste.
-- MCP: `get_person.origin` nur, wenn der Benutzer die Person bearbeiten darf.
-- Ausgangspunkte: `ImportLink` (`sourceTreeId`, `mergedFromId`, `mergedAt`),
-  `components/PersonNode.tsx`, `components/FamilyTree.tsx`,
-  `app/tree/page.tsx`, `lib/services/tree.ts`.
+Umgesetzt wie im Entwurf; Beschreibung in `docs/komponenten/dienste.md`
+(`lib/services/origin.ts`), `bibliotheken.md` (`lib/origin.ts`),
+`oberflaeche-komponenten.md` (`OriginChips`, `PersonOrigin`,
+`OriginOverview`, `ImportSources`), Anwender-Hilfe in 02, 04, 07 und 08.
+
+- Je Import (Quell-Baum) ein Buchstabe A, B, C … ohne „H“ nach Reihenfolge
+  des ersten Laufs und eine Okabe-Ito-Farbe; „von Hand erfasst“ =
+  gestrichelter Chip „H“. Nie nur Farbe.
+- **Lesbare Namen**: neue, rein ergänzende Migration
+  `20261125000002_import_anzeigename` (Tabelle `ImportSource`, ohne
+  Rückfüllung). Administratoren benennen Importe unter Verwaltung → Daten;
+  der Name ersetzt überall den Dateinamen (Dubletten-Hinweis, Vergleich,
+  „Importe verbinden“, GEDCOM-Vorschau). `importLabel` ist entfallen.
+- **Stammbaum**: Schalter „Herkunft“ (`?herkunft=1`), Chips (höchstens drei,
+  dann „+n“), doppelter Rand für Verbindungspersonen, Legende mit
+  Hervorheben. **Personenseite**: Block „Herkunft“ und Chips an Ereignissen,
+  Namen, Beziehungen, Belegen. **Übersicht** auf `/research/connect`.
+  **MCP**: `get_person.origin`.
+
+**Entscheidungen fürs Protokoll:**
+- „Linien“ und „Herkunft“ gehen gleichzeitig und teilen sich die Karte:
+  Linien = Tönung, Streifen links, Kürzel oben; Herkunft = Chips unten
+  rechts, Ring außen.
+- Herkunft gibt es überall (Baum, Personenseite, Übersicht, KI-Zugang) nur
+  für Personen, die der Benutzer bearbeiten darf; Zahlen zählen nur diese.
+- Der Haken des Schalters folgt der Adresse: Er wechselt erst, wenn die
+  Seite mit bzw. ohne `herkunft=1` geladen ist (der Server lädt die
+  Zuordnung).
 
 ### 3. Vorschläge schon beim Import
 

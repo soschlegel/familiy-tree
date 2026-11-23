@@ -2116,7 +2116,20 @@ werden beide Einträge zu einem. Die App ist dabei die eine Wahrheit; ein
 Import ist eine Quelle, aus der sie sich bedient. Bearbeiter (Recht an
 **beiden** Personen nötig) finden das unter **Recherche → Mögliche
 Dubletten** (alle Paare: `/research/duplicates`) und auf jeder Personenseite
-unter „Verwaltung“ → **Mit anderer Person zusammenführen …**.
+mit dem Knopf **Zusammenführen …** neben „Im Stammbaum zeigen“ (Dialog:
+zuerst die möglichen Dubletten dieser Person mit Klasse und Begründung,
+darunter die freie Personensuche). Nach dem Zusammenführen nennt die
+Ergebnisseite **Folgedubletten** (Eltern, Partner, Kinder der bleibenden
+Person; „sichere“ gemeinsam nur über die Vorschau des
+Sammel-Zusammenführens); ein nur wegen doppelt erfasster Eltern gesperrtes
+Paar geht mit **„Erst die Eltern, dann dieses Paar“** in einem Schritt. Die
+**alte Kennung** der aufgegangenen Person leitet danach auf die bleibende um
+(`/people/<alt>`, `/tree?focus=<alt>` und `GET /api/persons/<alt>` mit 308;
+`PATCH`/`DELETE` mit 409 und `mergedInto`; nur, wenn die bleibende Person
+für den Benutzer sichtbar ist — sonst 404 wie bei einer unbekannten Kennung;
+der KI-Zugang löst still auf und meldet `resolvedFrom`). Einzelheiten:
+[docs/komponenten/dienste.md](docs/komponenten/dienste.md),
+`merge-followups.ts` und `redirects.ts`.
 
 ### Mögliche Dubletten
 

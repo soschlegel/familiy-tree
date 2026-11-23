@@ -21,6 +21,7 @@ import type { ImportEntity } from "../import-fingerprint";
 import { conflictError, forbiddenError, notFoundError, parseOrThrow, validationError } from "./errors";
 import { applyGenealogyImport, REJECTED_RAW_SUFFIX, type GenealogyImportResult, type ImportAction } from "./import-apply";
 import { createImportBatch, finishImportBatch, IMPORT_FILES_DIR, readImportBatchFile } from "./imports";
+import { loadImportDirectory } from "./origin";
 import { deleteCitation, deleteSource } from "./sources";
 import { deleteEvent } from "./events";
 import { deletePersonName } from "./names";
@@ -470,13 +471,15 @@ async function treeCandidates(mapped: MappedImport): Promise<TreeCandidate[]> {
     select: { sourceTreeId: true, fileName: true, createdAt: true, sourceSystemName: true },
   });
   const by = new Map<string, TreeCandidate>();
+  const importDir = await loadImportDirectory();
   for (const b of batches) {
     const c = by.get(b.sourceTreeId!);
     if (c) c.batches++;
     else
       by.set(b.sourceTreeId!, {
         sourceTreeId: b.sourceTreeId!,
-        label: `${b.fileName}${b.sourceSystemName ? ` (${b.sourceSystemName})` : ""}`,
+        // Buchstabe und (falls vergeben) Anzeigename des Imports voran — wie überall sonst.
+        label: `${importDir.get(b.sourceTreeId)?.letter ?? "?"} · ${importDir.get(b.sourceTreeId)?.displayName ? `${importDir.get(b.sourceTreeId)!.displayName} — ` : ""}${b.fileName}${b.sourceSystemName ? ` (${b.sourceSystemName})` : ""}`,
         lastImportAt: b.createdAt.toISOString(),
         batches: 1,
         uidOverlap: 0,

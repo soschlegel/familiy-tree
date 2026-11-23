@@ -1,22 +1,28 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { permanentRedirect } from "next/navigation";
 
 import { requireScope } from "@/lib/session";
 import { editableFamilyIds } from "@/lib/scope";
 import {
+  canSeeOrigin,
   listFamilies,
   loadFocusTree,
   loadGraph,
   loadTree,
+  loadTreeOrigin,
   referenceView,
+  resolvePersonRedirect,
   resolveReference,
   type TreeCounts,
 } from "@/lib/services";
 import { LINES_COOKIE, REFERENCE_COOKIE, type ReferenceView } from "@/lib/reference";
 import { FOCUS_COOKIE, FOCUS_DEPTH, parseDepth, type TreeView } from "@/lib/focus-tree";
+import { ORIGIN_PARAM } from "@/lib/origin";
 import { FamilyTree } from "@/components/FamilyTree";
 import { BrandMark } from "@/components/NavBar";
+import { PageLoading } from "@/components/PageLoading";
 import { ReferenceChip } from "@/components/ReferenceChip";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +36,8 @@ export const metadata = { title: "Baum" };
  * - `bezug` — vorübergehende Bezugsperson (README, „Bezugsperson“); ohne
  *   `focus` steht sie auch im Mittelpunkt. `bezug=ich` kehrt zur eigenen
  *   Person zurück.
+ * - `herkunft=1` — Schalter „Herkunft“: Importe je Person als Chips. Nur für
+ *   Bearbeiter und Administratoren; die Zuordnung wird nur dann geladen.
  */
 function parseView(view: string | undefined): TreeView {
   return view === "generations" || view === "timeline" ? view : "focus";
@@ -37,17 +45,47 @@ function parseView(view: string | undefined): TreeView {
 
 const ID_PATTERN = /^[\w-]{1,64}$/;
 
-export default async function TreePage({
+type TreeSearchParams = Promise<{
+  denied?: string;
+  focus?: string;
+  view?: string;
+  up?: string;
+  down?: string;
+  bezug?: string;
+  herkunft?: string;
+}>;
+
+/**
+ * Äußere Seite: prüft nur, ob `focus` die alte Kennung einer aufgegangenen
+ * Person ist (dann 308 auf die bleibende — lib/services/redirects.ts), und
+ * zeigt sonst sofort die Ladeanzeige, während der Baum (`TreeContent`) lädt.
+ *
+ * Deshalb gibt es hier kein `loading.tsx`: Dessen Ladeanzeige streamt die
+ * Antwort schon vor dieser Prüfung, und danach ließe sich kein Status 308
+ * mehr setzen. Die Prüfung selbst ist ein einziger Schlüsselzugriff; die
+ * Anmeldung wird nur geladen, wenn es wirklich eine Umleitung gibt.
+ */
+export default async function TreePage({ searchParams }: { searchParams: TreeSearchParams }) {
+  const params = await searchParams;
+  if (params.focus && ID_PATTERN.test(params.focus)) {
+    const mergedInto = await resolvePersonRedirect(async () => (await requireScope()).scope, params.focus);
+    if (mergedInto) {
+      const query = new URLSearchParams(Object.entries(params).filter((e): e is [string, string] => typeof e[1] === "string"));
+      query.set("focus", mergedInto);
+      permanentRedirect(`/tree?${query}`);
+    }
+  }
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <TreeContent searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function TreeContent({
   searchParams,
 }: {
-  searchParams: Promise<{
-    denied?: string;
-    focus?: string;
-    view?: string;
-    up?: string;
-    down?: string;
-    bezug?: string;
-  }>;
+  searchParams: TreeSearchParams;
 }) {
   const { scope } = await requireScope();
   const params = await searchParams;
@@ -70,6 +108,9 @@ export default async function TreePage({
   );
   const bezugParam = params.bezug && choice.source === "param" ? choice.id : null;
   const initialLines = jar.get(LINES_COOKIE)?.value === "1";
+  // Herkunft: Schalter standardmäßig aus; ohne Recht wirkt auch die Adresse nicht.
+  const canOrigin = canSeeOrigin(scope);
+  const originOn = canOrigin && params[ORIGIN_PARAM] === "1";
   let reference: ReferenceView | null = null;
 
   // Ohne freigegebene Familie gäbe es nur Platzhalter — dann gar nicht erst
@@ -116,6 +157,7 @@ export default async function TreePage({
       // Nur der Ausschnitt verlässt den Server — berechnet wird trotzdem in
       // einem Durchgang von der Bezugsperson aus.
       reference = graph ? referenceView(graph, choice, result.tree.persons.map((p) => p.id)) : null;
+      const origin = originOn && graph ? await loadTreeOrigin(scope, graph, result.tree.persons.map((p) => p.id)) : null;
       content = (
         <FamilyTree
           key="focus"
@@ -124,6 +166,8 @@ export default async function TreePage({
           families={families}
           reference={reference}
           initialLines={initialLines}
+          canOrigin={canOrigin}
+          origin={origin}
         />
       );
     }
@@ -137,6 +181,7 @@ export default async function TreePage({
     };
     if (visible > 0) {
       reference = graph ? referenceView(graph, choice) : null;
+      const origin = originOn && graph ? await loadTreeOrigin(scope, graph) : null;
       content = (
         <FamilyTree
           key="full"
@@ -146,6 +191,8 @@ export default async function TreePage({
           focusId={requested ?? bezugParam ?? undefined}
           reference={reference}
           initialLines={initialLines}
+          canOrigin={canOrigin}
+          origin={origin}
         />
       );
     }

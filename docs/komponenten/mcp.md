@@ -21,6 +21,7 @@ Schlüsselverwaltung in der Oberfläche: Seite `/ai-access` und die Routen
 | `mcp/register.ts` | Gemeinsamer Aufbau: `createMcpServer(ctx)` erzeugt einen `McpServer` mit Name `familytree`, Titel „Stammbaum“, Version `0.1.0` und dem Server-Hinweis (`INSTRUCTIONS`). Registriert immer die Lesewerkzeuge, Prompts und die Ressource, die Schreibwerkzeuge nur bei `ctx.allowWrite`. Ohne Seiteneffekte beim Import. |
 | `mcp/tools.ts` | Alle Werkzeuge (`registerReadTools`, `registerWriteTools`), Ausgabeaufbereitung, `personResource` für die Ressource. |
 | `mcp/prompts.ts` | Drei Prompt-Vorlagen und die Ressource `familytree://person/{id}`. |
+| `mcp/person-redirects.ts` | Alte Personen-Kennungen: `resolvePersonArgs` löst sie in den Eingaben jedes Werkzeugs auf (`person_id`, `other_person_id`, `from_person_id`, `to_person_id`, `person_ids`); `withResolvedFrom` ergänzt das Ausgabeschema dieser Werkzeuge um `resolvedFrom`. |
 | `mcp/format.ts` | Reine Formatierungsfunktionen: einheitliche Personenreferenz (`ref`), Lebensspanne, Datumsfelder in echter Genauigkeit (`dateFields`, `dateToken`), `appendResearchNote`. |
 | `mcp/http.ts` | Der reguläre Zugang: `handleMcpPost` für Streamable HTTP, Schlüsselprüfung, Origin-Prüfung, Sperre nach Fehlversuchen, Größenlimits. Bewusst ohne `next/*`, damit Tests den Handler direkt aufrufen können. |
 | `app/api/mcp/route.ts` | Route-Handler `/api/mcp`: `POST` → `handleMcpPost`; `GET`, `DELETE`, `PUT`, `PATCH`, `OPTIONS` → 405. Laufzeit Node.js, immer dynamisch, kein Caching. |
@@ -201,13 +202,24 @@ sagt sinngemäß:
   KI-Zuordnungen heißen „von KI“, bis ein Admin bestätigt; von Hand
   Bestätigtes wird nie geändert. Ablauf im Prompt `orte_zuordnen`; keine
   Personennamen in Pakettiteln.
+- **Dubletten (eigener Absatz):** Es gibt **kein** `merge_persons` und kein
+  anderes Werkzeug, das Personen zusammenführt, löscht oder ausblendet;
+  zusammenführen tut nur ein Mensch in der Web-App — eine falsche
+  Zusammenführung ist der schlimmste Fehler. Aufgabe der KI: vorprüfen und
+  vorschlagen. `list_duplicate_candidates` → beide Datensätze mit
+  `get_person` lesen → `preview_person_merge` (Trockenlauf) →
+  `review_duplicate` speichert nur die Einschätzung. Sie ändert nie die
+  Klasse, wählt nichts vor, entfernt nichts aus der Liste. Bei dünner oder
+  widersprüchlicher Lage `DISPUTED`, nie raten; das fehlende Werkzeug nicht
+  umgehen (keine Daten umkopieren oder Beziehungen löschen, um ein
+  Zusammenführen nachzuahmen). Ablauf im Prompt `review_duplicates`.
 
 ## Lesewerkzeuge (immer vorhanden, Stufe `READ`)
 
 | Werkzeug | Zweck | Parameter | Ergebnis |
 |---|---|---|---|
 | `search_persons` | Personen suchen, alle Filter mit UND verknüpft (`searchPersons`) | `query` (jedes Wort muss in Vor-, Familien-, Geburts- oder Rufname oder einem weiteren Namen vorkommen), `family_id`, `born_from`/`born_to` (Geburtsjahr; ungenaue Daten zählen mit ihrem Ankerjahr; ohne Geburtsdatum ausgeschlossen), `place` (Geburts-, Sterbe-, Ereignis-, Heirats-/Scheidungsort), `gender`, `deceased`, `sort` (Name, Geburtsdatum auf-/absteigend, zuletzt geändert), `limit` (Standard 20, höchstens 100), `offset` | `total`, `offset`, `hasMore`, `persons` (Referenz plus Geschlecht, Geburts-/Sterbeort, Familien-IDs, Zahl der Beziehungen, ob Notizen vorhanden) |
-| `get_person` | Voller Datensatz einer Person (`getPersonDetail`) | `person_id` | Personenfelder samt Notizen und Datumsangaben, `canEdit`, `families`, `parents`/`partners`/`children` (mit `relationshipId`, Art, Daten, Heirats-/Scheidungsort, Notizen, Bildzahl, Ereignissen der Beziehung), `siblings` (voll/halb), `media` (eigene Bilder, Porträt zuerst), `citations` (Quelle, Angabe, Fundstelle, Verlässlichkeit, `independent: false` bei abgeleiteten Quellen, Bezug zu Beziehung oder Ereignis, Bilder am Beleg und geerbte Bilder der Quelle), `events` und `otherNames` nur, wenn vorhanden; `places` (Freitext → zugeordneter Ort mit `placeId`, Anzeigename, Koordinaten; der Freitext in den Feldern bleibt) |
+| `get_person` | Voller Datensatz einer Person (`getPersonDetail`) | `person_id` | Personenfelder samt Notizen und Datumsangaben, `canEdit`, `families`, `parents`/`partners`/`children` (mit `relationshipId`, Art, Daten, Heirats-/Scheidungsort, Notizen, Bildzahl, Ereignissen der Beziehung), `siblings` (voll/halb), `media` (eigene Bilder, Porträt zuerst), `citations` (Quelle, Angabe, Fundstelle, Verlässlichkeit, `independent: false` bei abgeleiteten Quellen, Bezug zu Beziehung oder Ereignis, Bilder am Beleg und geerbte Bilder der Quelle), `events` und `otherNames` nur, wenn vorhanden; `places` (Freitext → zugeordneter Ort mit `placeId`, Anzeigename, Koordinaten; der Freitext in den Feldern bleibt); `origin` nur, wenn der Benutzer die Person bearbeiten darf (`getPersonOrigin`): `manual` (von Hand erfasst), `imports` (je Import `letter`, `name` wie in der App — ohne eigenen Namen „Import vom …“, nur für Administratoren Datei und Datum —, erster/letzter Import, `records`, `viaMerge`; nie die Quell-Baum-Kennung), `merged` (Zahl der Einträge, erstes/letztes Zusammenführen). Keine Herkunft je Feld; Chips je Eintrag gibt es nur in der App |
 | `get_ancestors` | Vorfahren nach Generationen (`getAncestors`) | `person_id`, `generations` (Standard 4, höchstens 12), `limit` (Standard 200, höchstens 500) | `root`, `generationsRequested`, `total`, `truncated`, `generations` mit deutscher Bezeichnung („Eltern“, „Großeltern“, „Urgroßeltern“ …, ab der 7. „n. Generation“); je Eintrag `viaPersonId` und `subtype` nur bei nicht leiblicher Verbindung |
 | `get_descendants` | Nachfahren nach Generationen (`getDescendants`) | wie `get_ancestors` | wie `get_ancestors` („Kinder“, „Enkel“, „Urenkel“ …) |
 | `get_kinship` | Verwandtschaft von `other_person_id` aus Sicht von `person_id` (`getKinship`) | `person_id`, `other_person_id` | `from`, `to`, `summary` (bevorzugt Blutsverwandtschaft; ohne Weg „keine Verbindung im Stammbaum gefunden“), `blood` (Begriff, Generationen hinauf/hinab, halb, adoptiv, Seite, gemeinsame Vorfahren) und `path` (kürzester Weg über Eltern-/Partnerkanten mit Begriff und Kette „Mutter → Bruder → Ehefrau“). Wege durch Platzhalter sind hier zugelassen (README: strenger in der Oberfläche) |
@@ -222,6 +234,8 @@ sagt sinngemäß:
 | `suggest_place` | Kandidaten für einen Ortstext (`suggestPlaces`) — für jeden Lesezugang, liest nur das mitgelieferte Verzeichnis und eigene Orte | `text` (wie in den Daten) | `text`, `recommended` (Wahl der automatischen Zuordnung bzw. passender eigener Ort), `ambiguous`, `candidates` je mit `source` (`directory`/`own` = eigener Ort), `gazetteerId`, `label` (heutiger Name, alter Name in Klammern), `kind` (Ort, Region, historische Landschaft, Land, eigener Ort), Genauigkeit, Koordinaten, Land, Einwohnerzahl, `matchedName` und `nameKind` (`historic` = früherer/deutscher Name, `alternate`, `official`), `distanceKm` zur Empfehlung; ohne Treffer Präfixtreffer. Nur für Admins `current` (vorhandene Zuordnung mit Status) |
 | `get_place` | Ein Ort wie auf seiner Seite (`getPlacePage`) — gleiche Sichtbarkeit | genau eines von `place_id` (aus `places` von `get_person`/`list_events`) oder `text`; `page` | `placeId`, Anzeigename, Name, Region, Land, Koordinaten, Art, Herkunft, weitere Namen, Freitexte mit Anzahl, `entries` (Person, Art, Jahr, Text), `total`; Begründungen nur für Admins |
 | `list_places` | Vorkommende Ortstexte mit Status (`listPlaces`, `placeTextContext`) — **nur Administratoren**, sonst Fehler „Keine Berechtigung …“ | `status` (`open`/`offen`, `auto`/`automatisch`, `ai`/`ki`, `manual`/`von_hand`, `unresolvable`/`nicht_zuordenbar`, `all`/`alle`), `query`, `page` (50 je Seite) | `total`, `page`, `pages`, `counts`, `places` je mit Text, Anzahl, Schreibweisen, Status, `context` (Feldarten birth/death/marriage/divorce/`event:<Art>` mit Anzahl, `fromYear`/`toYear` — ohne Personen), Zuordnung (Quelle, Bezeichnung, Koordinaten, ggf. `uncertain`, `note`), Vorschlag der Automatik |
+| `list_duplicate_candidates` | Die Liste „Mögliche Dubletten“ der App zum Vorprüfen (`listDuplicateCandidates`) — dieselbe Reihenfolge (Klasse, dann Punkte), nur Paare, deren beide Personen sichtbar sind, ohne als „kein Duplikat“ markierte | `confidence` (`high`/`medium`/`low`), `review` (`unreviewed` = keine oder veraltete Einschätzung, `reviewed` = irgendeine, oder ein Urteil), `limit` (Standard 20, höchstens 50), `offset` | `total`, `offset`, `hasMore`, `counts` je Klasse, `candidates` je mit beiden Personen, Punkten, Klasse samt deutscher Bezeichnung, Gründen, Widersprüchen, `crossTree`, `canReview` (= beide bearbeitbar) und `review` (Urteil, Begründung, Vorschlag, Zeitpunkt, `stale`) — die Einschätzung nur bei `canReview` |
+| `preview_person_merge` | **Trockenlauf**, ändert nichts: genau die Vorschau, die die App vor dem Zusammenführen zeigt (`previewPersonMerge`); Rechte wie in der App (beide bearbeitbar) | `keep_id`, `merge_id` | `dryRun: true`, beide Seiten (Daten, Eltern, Partner, Kinderzahl, Familien, Importe, Zählungen), `fields` (je Feld beide Werte, `differs`, Vorauswahl und Grund), `sentences`, `alternates`, `newNames`, `dropped`, `blockers` (mit `suggestions`), `canMerge`, Hinweis „nichts geändert“ |
 | `get_source` | Eine Quelle mit Abschrift/Notizen und allem, wofür sie zitiert wird (`getSource`) | `source_id` | `source`, `canEdit`, `citations` (Angabe, Fundstelle, Ziel Person/Beziehung, Ereignis, Bilder), `hiddenCitationCount` (Belege an verborgenen Personen nur gezählt), `images` (Hauptscan markiert) |
 
 ## Schreibwerkzeuge (nur bei wirksamer Stufe `WRITE`)
@@ -259,6 +273,7 @@ kann die KI bewusst nicht.
 | `add_name_variant` | Weiteren Namen erfassen (`createPersonName`) | `person_id`, `type` (Geburtsname, Ehename, Alias, religiöser Name, Name nach Einwanderung, Schreibvariante, sonstiger mit Bezeichnung), Vor-/Familienname, Vorsatz, Zusatz, Rufname, Bezeichnung, Notiz | `name`. Mindestens Vor-, Familien- oder Rufname; der Hauptname bleibt an der Person |
 | `add_media` | Neues Bild speichern und anhängen (`addMedia`) | **genau eines** von `url` oder `data_base64`; `mime_type`, `file_name`, `caption` (wird Alt-Text); Ziele `person_ids`, `relationship_ids`, `event_ids`, `citation_ids`, `source_ids` (mindestens eines, je Liste begrenzt durch `MAX_MEDIA_TARGETS`) | `media`, `linked`. Jedes Ziel muss bearbeitbar sein. Einziges Werkzeug mit „Außenwelt“-Hinweis |
 | `assign_place` | Ortstexten Koordinaten zuordnen (`assignPlacesByAi`) — **nur Administratoren**, wie `/admin/places`; der Freitext bleibt unverändert | entweder eine Zuordnung (`text` + genau eines von `gazetteer_id` \| `latitude`+`longitude`+`label` (eigener Ort, `precision` Standard Ort) \| `unresolvable`) oder `assignments` mit bis zu 50 solchen; je optional `uncertain`, `note` (Begründung, bis 1000 Zeichen); `change_set_id` | `assigned`, `failed`, `results` je mit `ok`, Status, Bezeichnung, Koordinaten, `replaced` (vorherige Herkunft) bzw. `error`. Herkunft `AI` („von KI“), gilt sofort für die Karte; überschreibt automatische und frühere KI-Zuordnungen, nie von Hand bestätigte (Eintrag mit Fehler, die übrigen laufen weiter); Text muss in den Daten vorkommen. Protokoll mit Kanal `MCP` und Schlüssel; Paket „Ort zugeordnet (KI): …“ bzw. „Orte zugeordnet (KI)“ ohne Kennung |
+| `review_duplicate` | Einschätzung **eines** Dublettenpaares speichern — sonst nichts (`reviewDuplicate`) | `person_a_id`, `person_b_id`, `verdict` (`MERGE` sicher dieselbe Person, `NOT_DUPLICATE` sicher verschiedene, `DISPUTED` alles andere — im Zweifel immer), `reason` (deutsch, 10 bis 2000 Zeichen, mit den konkreten Belegen und Widersprüchen), `suggested_keep_id` (nur bei `MERGE`, eine der beiden — nur ein Hinweis) | `personAId`, `personBId` (kanonisch), Urteil, Begründung, Vorschlag, `reviewedAt`, `replacedVerdict`, immer `merged: false`. Eine neue Einschätzung ersetzt die alte; ein von einem Menschen als „kein Duplikat“ markiertes Paar wird abgewiesen. Bearbeitungsrecht an beiden Personen nötig. Paket „Mögliche Dubletten vorgeprüft (KI)“ ohne Kennung |
 | `link_media` | Vorhandenes Bild an weitere Einträge hängen oder lösen (`linkMedia` / `unlinkMedia`) | `media_id`, `action` (verknüpfen, Standard, oder lösen), Ziele wie bei `add_media` | `mediaId`, `action`, `targets`, `changed`. Das Bild muss sichtbar, jedes Ziel bearbeitbar sein; die letzte Zuordnung lässt sich nicht lösen — die KI löscht nie ein Bild |
 
 ### Bild-Wege
@@ -304,6 +319,15 @@ oder 3 (Server-Hinweis und Werkzeugbeschreibung sagen das ausdrücklich).
   `begin_change_set` ohne Personennamen; am Ende Liste der unsicheren und
   offen gelassenen zur Prüfung auf `/admin/places`. Ohne Schreibrecht als
   Vorschlagsliste.
+- **Prompt `review_duplicates`** („Dubletten vorprüfen“, optional
+  `confidence` und `limit`, Standard 20): `list_duplicate_candidates`
+  (nicht vorgeprüft) → je Paar `get_person` für beide und
+  `preview_person_merge` → `review_duplicate` mit deutscher Begründung;
+  Regeln für die drei Urteile (im Zweifel `DISPUTED`, nie raten, verborgene
+  Verwandte nicht deuten), vorher `begin_change_set` ohne Personennamen.
+  Sagt ausdrücklich, dass es kein Werkzeug zum Zusammenführen gibt. Am
+  Ende Zahl je Urteil und die strittigen Paare mit offener Frage. Ohne
+  Schreibrecht als Liste.
 - `research_person` und `review_data_quality` hängen einen Schreibhinweis an: mit Schreibwerkzeugen
   „erst nach Rückfrage festhalten, nur mit Beleg, so genau wie die Quelle,
   Ereignisse statt Notizen, nichts nachweislich Richtiges überschreiben“;
@@ -313,6 +337,26 @@ oder 3 (Server-Hinweis und Werkzeugbeschreibung sagen das ausdrücklich).
   verweigert oder nicht sichtbar → Fehler. Keine Auflistung aller
   Personen (`list` nicht angeboten).
 
+## Alte Kennungen nach einem Zusammenführen
+
+Ist eine Person in der Web-App in einer anderen aufgegangen, bleibt ihre
+Kennung für die KI brauchbar: Jedes Werkzeug löst sie vor dem Aufruf des
+Dienstes still auf die bleibende Person auf und meldet das im Ergebnis als
+`resolvedFrom` (alte → heutige Kennung); der Server-Hinweis bittet, mit der
+heutigen Kennung weiterzuarbeiten. Das gilt auch für Schreibwerkzeuge (die
+Änderung trifft die bleibende Person) und für die Ressource
+`familytree://person/{id}`. Ohne alte Kennung fehlt das Feld. Aufgelöst
+werden die Eingaben `person_id`, `other_person_id`, `from_person_id`,
+`to_person_id`, `person_ids` und die Paar-Kennungen der Dubletten-Werkzeuge
+(`keep_id`, `merge_id`, `person_a_id`, `person_b_id`) —
+`mcp/person-redirects.ts`. Zeigen beide Kennungen danach auf dieselbe
+Person, lehnt der Dienst ab („zwei verschiedene Personen“).
+
+Aufgelöst wird nur, wenn der Benutzer die bleibende Person sehen darf
+(`lib/services/redirects.ts`); sonst antwortet das Werkzeug wie bei einer
+unbekannten Kennung. Kennungen aufgegangener Beziehungen und Ereignisse
+werden nicht aufgelöst.
+
 ## Datenschutz und Grenzen
 
 - Alles, was der Assistent abruft, geht an den KI-Anbieter.
@@ -321,7 +365,11 @@ oder 3 (Server-Hinweis und Werkzeugbeschreibung sagen das ausdrücklich).
 - Schlüssel, Rechte und Sperren verwaltet nur die Weboberfläche; es gibt
   kein Werkzeug dafür.
 - Zusammenführen von Dubletten, Löschen von Personen, Quellen und Bildern
-  geht über MCP nicht.
+  geht über MCP nicht. Die KI-Vorprüfung (`review_duplicate`) speichert nur
+  eine Einschätzung; kein Dienstweg macht daraus ein Zusammenführen oder ein
+  „kein Duplikat“ (`tests/duplicate-review.db.test.ts` prüft, dass die
+  Werkzeugliste kein Zusammenführen enthält und nach einer Einschätzung
+  beide Personen unverändert sind).
 
 ## Tests
 
@@ -329,6 +377,8 @@ oder 3 (Server-Hinweis und Werkzeugbeschreibung sagen das ausdrücklich).
 |---|---|
 | `tests/mcp-http.db.test.ts` | HTTP-Endpunkt mit dem HTTP-Client des SDK: Werkzeuglisten je Stufe, Lese-Schlüssel ohne Schreibwerkzeuge, Audit mit Kanal und Schlüssel-ID, Herabstufen und Widerruf beim nächsten Aufruf, 401/403-Matrix samt `WWW-Authenticate`, Cookie allein meldet nicht an, Maskierung für Betrachter, Körpergröße, Origin, Methoden, Sperre nach Fehlversuchen, keine Geheimnisse im Log, `.mcp.json` |
 | `tests/mcp.db.test.ts` | stdio-Server: alle Lesewerkzeuge, Prompts und Ressource, Maskierung, Schreibwerkzeuge mit Audit, Ereignisse/Namen/Orte/Belege an Ereignissen, Startverweigerung (ohne/unbekannter/gesperrter Benutzer, ohne KI-Recht, falsche Datenbank), KI-Recht „lesen“ trotz `MCP_ALLOW_WRITE`, Rechteänderung während der Sitzung, Start wie `npm run mcp:stdio` mit sauberem stdout |
+| `tests/person-redirect.db.test.ts` | Alte Kennungen: Auflösen in Eingaben (einzeln, Listen), `resolvedFrom` in Lese- und Schreibwerkzeugen samt Schema-Prüfung des Clients, Ressource, verborgene Zielperson wie unbekannt |
+| `tests/duplicate-review.db.test.ts` | KI-Vorprüfung: Werkzeuge und Prompt je Stufe, kein Zusammenführen-Werkzeug, Server-Hinweis; `list_duplicate_candidates` nur mit beiden sichtbaren Personen; `preview_person_merge` als Trockenlauf mit Rechten wie in der App; `review_duplicate` mit Rechten, ändert nichts außer der Einschätzung, Protokoll; „veraltet“ nach Änderung, Ersetzen; „kein Duplikat“ eines Menschen geht vor; Löschen entfernt die Einschätzung |
 | `tests/mcp-format.test.ts` | Formatierung: Personenreferenz, Lebensspanne, Recherchenotiz anhängen, ungenaue Daten |
 | `tests/media-links.db.test.ts` | `add_media` per base64 und per Adresse (mit ersetztem Netz), `link_media`, Rechte |
 | `tests/changelog.db.test.ts` | Bündeln je Schlüssel, `begin_change_set`, fremde Paketkennung abgelehnt |

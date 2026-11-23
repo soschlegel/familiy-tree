@@ -31,9 +31,10 @@ import { personDateIssues, MAX_BIOLOGICAL_PARENTS, PARENT_SUBTYPES, PARTNER_SUBT
 import { conflictError, forbiddenError, notFoundError, parseOrThrow, validationError } from "./errors";
 import { newId } from "./imports";
 import { plural } from "../plural";
-import { importLabel } from "./dto";
+import { loadImportDirectory, type ImportDirectory } from "./origin";
 import { auditActor, auditData, fieldChanges } from "../audit";
 import { nameChangeSet } from "../change-sets";
+import { recordPersonRedirect } from "./redirects";
 
 /**
  * Dubletten zusammenführen: Die Person `mergeId` geht in `keepId` auf.
@@ -78,6 +79,15 @@ export const mergeInputSchema = z.object({
   relationshipSubtypes: z.record(z.enum([...PARENT_SUBTYPES, ...PARTNER_SUBTYPES] as [string, ...string[]])).default({}),
   /** Kennung des Stands aus der Vorschau; abweichend → Konflikt statt Überraschung. */
   expectedToken: z.string().max(100).optional().nullable(),
+  /**
+   * „Erst die Eltern, dann dieses Paar“: genau die Elternpaare, die die Sperre
+   * `BIO_PARENTS` vorschlägt (keepId = Elternteil des bleibenden Eintrags),
+   * je mit dem Stand aus ihrer eigenen Vorschau. Alles in einer Transaktion.
+   */
+  parentsFirst: z
+    .array(z.object({ keepId: z.string().min(1).max(100), mergeId: z.string().min(1).max(100), expectedToken: z.string().max(100).optional().nullable() }))
+    .max(MAX_BIOLOGICAL_PARENTS)
+    .optional(),
 });
 export type MergeInput = z.input<typeof mergeInputSchema>;
 
@@ -190,6 +200,13 @@ export type MergeBlocker = {
   suggestPairs?: [string, string][];
   /** Dieselben Paare mit Beschriftung („Anna X (*1820) ↔ Anna Y (*1821) vergleichen“). */
   suggestions?: { a: string; b: string; label: string }[];
+  /**
+   * Nur `BIO_PARENTS`: Sind alle vorgeschlagenen Elternpaare zusammengeführt,
+   * bleiben höchstens zwei leibliche Elternteile — die Sperre wäre aufgehoben
+   * („Erst die Eltern, dann dieses Paar“). Nie, wenn ein Paar nicht sichtbar
+   * oder nur ein schwacher Treffer („unklar“) ist.
+   */
+  resolvable?: boolean;
 };
 
 type RelMove = { rel: RelBundle; from: string; to: string };
@@ -405,12 +422,12 @@ export function planMerge(
     const otherOnly = [...bioX.values()].filter((pp) => !bioK.has(pp.id));
     // Nur plausible Paare: gleiches (oder unbekanntes) Geschlecht und eine
     // Bewertung der Dublettenerkennung; bestes zuerst, jede Person einmal.
-    const cands: { a: ParentP; b: ParentP; score: number }[] = [];
+    const cands: { a: ParentP; b: ParentP; score: number; weak: boolean }[] = [];
     for (const a of keepOnly) {
       for (const b of otherOnly) {
         if (a.gender !== "UNKNOWN" && b.gender !== "UNKNOWN" && a.gender !== b.gender) continue;
         const sc = scoreDuplicate(dup(a), dup(b));
-        if (sc && sc.conflicts.length === 0) cands.push({ a, b, score: sc.score });
+        if (sc && sc.conflicts.length === 0) cands.push({ a, b, score: sc.score, weak: sc.confidence === "low" });
       }
     }
     cands.sort((x, y) => y.score - x.score);
@@ -451,6 +468,11 @@ export function planMerge(
       message: parts.join(" "),
       suggestPairs: shown.map((c) => [c.a.id, c.b.id]),
       suggestions: shown.map((c) => ({ a: c.a.id, b: c.b.id, label: `${label(c.a)} ↔ ${label(c.b)} vergleichen` })),
+      // Der Weg in einem Schritt nur für Elternpaare, die mindestens
+      // „wahrscheinlich“ dieselbe Person sind — nie für schwache Treffer
+      // (nur der erste Vorname gleich: „Johann Karl“ / „Johann Peter“).
+      resolvable:
+        pairs.length > 0 && shown.length === pairs.length && pairs.every((c) => !c.weak) && allBio.size - pairs.length <= MAX_BIOLOGICAL_PARENTS,
     });
   }
 
@@ -649,7 +671,7 @@ export type MergePersonSide = {
   parents: string[];
   partners: string[];
   children: number;
-  /** Importe (Datei und Datum; Dateinamen nur für Administratoren). */
+  /** Importe („A · Anzeigename“; Dateinamen nur für Administratoren). */
   imports: string[];
   /** Herkunft: Stammbaum (Datei des letzten Imports) je Link. */
   provenance: { sourceTreeId: string | null; fileName: string | null; externalKey: string | null; merged: boolean }[];
@@ -667,7 +689,7 @@ export type MergePreview = {
   token: string;
 };
 
-function side(scope: Scope, p: PersonBundle, rels: RelBundle[]): MergePersonSide {
+function side(scope: Scope, p: PersonBundle, rels: RelBundle[], importDir: ImportDirectory): MergePersonSide {
   const fact = (date: string, place: string | null) => [date, place].filter(Boolean).join(", ") || null;
   const mine = rels.filter((r) => r.fromPersonId === p.id || r.toPersonId === p.id);
   const parents = mine.filter((r) => r.type === "PARENT_OF" && r.toPersonId === p.id).map((r) => nameFor(scope, r.fromPerson).replace(/^„|“$/g, ""));
@@ -676,7 +698,7 @@ function side(scope: Scope, p: PersonBundle, rels: RelBundle[]): MergePersonSide
     .map((r) => nameFor(scope, r.fromPersonId === p.id ? r.toPerson : r.fromPerson).replace(/^„|“$/g, ""));
   const children = mine.filter((r) => r.type === "PARENT_OF" && r.fromPersonId === p.id).length;
   const dateText = (k: "birthDate" | "deathDate") => formatDateWithPhrase(fuzzyField(p, k), p[`${k}Phrase`]);
-  const imports = [...new Set(p.importLinks.map((l) => importLabel(scope, l.lastBatch)))];
+  const imports = [...new Set(p.importLinks.map((l) => importDir.label(scope, l.sourceTreeId)))];
   const values = Object.fromEntries(MERGE_FIELDS.map((f) => [f, ""])) as Record<MergeField, string>;
   const cmp = compareFields(p as unknown as PersonValues, p as unknown as PersonValues);
   for (const c of cmp) values[c.field] = c.keep;
@@ -704,11 +726,11 @@ function side(scope: Scope, p: PersonBundle, rels: RelBundle[]): MergePersonSide
   };
 }
 
-function toPreview(scope: Scope, plan: MergePlan): MergePreview {
+function toPreview(scope: Scope, plan: MergePlan, importDir: ImportDirectory): MergePreview {
   const { keep, other, relationships } = plan.snapshot;
   return {
-    keep: side(scope, keep, relationships),
-    other: side(scope, other, relationships),
+    keep: side(scope, keep, relationships, importDir),
+    other: side(scope, other, relationships, importDir),
     fields: plan.fields,
     relationshipChoices: plan.collapses
       .filter((c) => c.survivor.subtype !== c.removed.subtype)
@@ -738,7 +760,8 @@ export async function previewPersonMerge(
   const parsed = parseOrThrow(mergeInputSchema.safeParse({ keepId, mergeId, ...input }));
   const snap = await loadMergeSnapshot(prisma, keepId, mergeId);
   if (!snap) throw notFoundError("Person");
-  return toPreview(scope, planMerge(scope, snap, parsed));
+  const importDir = await loadImportDirectory([...snap.keep.importLinks, ...snap.other.importLinks].map((l) => l.sourceTreeId));
+  return toPreview(scope, planMerge(scope, snap, parsed), importDir);
 }
 
 // ---------------------------------------------------------------------------
@@ -751,6 +774,8 @@ export type MergeResult = {
   alreadyMerged: boolean;
   summary: MergeSummary;
   auditId: string | null;
+  /** „Erst die Eltern“: die im selben Schritt davor zusammengeführten Elternpaare. */
+  parentMerges?: { keepId: string; mergedId: string; name: string }[];
 };
 
 /** Wie ein Datensatz eines Typs in der Tabelle ImportLink heißt. */
@@ -1039,6 +1064,9 @@ async function executePlan(db: Db, scope: Scope, plan: MergePlan, input: z.infer
     db.importRawRecord.count({ where: { personId: X } }),
   ]);
   if (leftovers.some((n) => n > 0)) throw new Error(`Zusammenführen unvollständig (Reste an ${X}: ${leftovers.join(",")})`);
+  // 9b. Alte Kennung als Umleitung: X → K, und was bisher auf X zeigte, zeigt
+  // jetzt auf K. Vor dem Löschen — sonst fielen die Einträge auf X mit weg.
+  await recordPersonRedirect(db, X, K, now);
   await db.person.delete({ where: { id: X } });
 
   // 10. Audit (in derselben Transaktion) — genug, um von Hand zurückzubauen
@@ -1134,9 +1162,10 @@ export async function lockPersons(db: Db, ids: string[]) {
 export async function mergePersons(scope: Scope, inputRaw: unknown, options: { tx?: Db; now?: Date; parentEdges?: { from: string; to: string }[] } = {}): Promise<MergeResult> {
   const input = parseOrThrow(mergeInputSchema.safeParse(inputRaw));
   if (input.keepId === input.mergeId) throw validationError([{ path: "mergeId", message: "Eine Person lässt sich nicht mit sich selbst zusammenführen" }]);
-  nameChangeSet(scope, "Personen zusammengeführt", "MERGE");
+  const parentsFirst = input.parentsFirst ?? [];
+  nameChangeSet(scope, parentsFirst.length ? "Personen zusammengeführt (erst die Eltern)" : "Personen zusammengeführt", "MERGE");
   const run = async (db: Db): Promise<MergeResult> => {
-    await lockPersons(db, [input.keepId, input.mergeId]);
+    await lockPersons(db, [input.keepId, input.mergeId, ...parentsFirst.flatMap((p) => [p.keepId, p.mergeId])]);
     const stillThere = await db.person.count({ where: { id: input.mergeId } });
     if (!stillThere) {
       const earlier = await earlierMerge(db, input.keepId, input.mergeId);
@@ -1146,16 +1175,41 @@ export async function mergePersons(scope: Scope, inputRaw: unknown, options: { t
       }
     }
     await assertMergeRights(db, scope, input.keepId, input.mergeId);
-    const snap = await loadMergeSnapshot(db, input.keepId, input.mergeId, options.parentEdges);
+    let snap = await loadMergeSnapshot(db, input.keepId, input.mergeId, options.parentEdges);
     if (!snap) throw notFoundError("Person");
-    const plan = planMerge(scope, snap, input);
+    let plan = planMerge(scope, snap, input);
     if (input.expectedToken && input.expectedToken !== plan.token) {
       throw conflictError("Die beiden Personen wurden seit der Vorschau geändert — bitte die Vorschau neu laden und erneut prüfen.");
+    }
+    const now = options.now ?? new Date();
+    const parentMerges: NonNullable<MergeResult["parentMerges"]> = [];
+    if (parentsFirst.length && plan.blockers.length) {
+      // Dem Browser wird nicht geglaubt: Es müssen genau die Elternpaare sein,
+      // die die Sperre dieses Paars jetzt vorschlägt — und sonst darf nichts
+      // im Weg stehen. Jedes Elternpaar läuft durch dieselbe Prüfung wie ein
+      // einzelnes Zusammenführen (Rechte, Stand, Sperren); scheitert eines
+      // oder bleibt dieses Paar danach gesperrt, wird nichts geändert.
+      const suggested = new Set(plan.blockers.flatMap((b) => (b.code === "BIO_PARENTS" && b.resolvable ? (b.suggestPairs ?? []).map(([a, c]) => `${a}|${c}`) : [])));
+      const given = new Set(parentsFirst.map((p) => `${p.keepId}|${p.mergeId}`));
+      const exact = given.size === parentsFirst.length && given.size === suggested.size && [...given].every((k) => suggested.has(k));
+      if (!exact || plan.blockers.some((b) => !(b.code === "BIO_PARENTS" && b.resolvable))) {
+        throw conflictError("Die Eltern lassen sich nicht in einem Schritt mit zusammenführen — bitte die Vorschau neu laden und die Hinweise prüfen.", { blockers: plan.blockers });
+      }
+      for (const p of parentsFirst) {
+        const r = await mergePersons(scope, { keepId: p.keepId, mergeId: p.mergeId, expectedToken: p.expectedToken }, { tx: db, now });
+        const kept = await db.person.findUnique({ where: { id: r.keepId }, select: { givenName: true, familyName: true } });
+        parentMerges.push({ keepId: r.keepId, mergedId: r.mergedId, name: kept ? personName(kept) : "" });
+      }
+      // Die Eltern-Kind-Kanten haben sich geändert: neu laden statt der mitgegebenen.
+      snap = await loadMergeSnapshot(db, input.keepId, input.mergeId);
+      if (!snap) throw notFoundError("Person");
+      plan = planMerge(scope, snap, input);
     }
     if (plan.blockers.length) {
       throw conflictError(plan.blockers.map((b) => b.message).join(" "), { blockers: plan.blockers });
     }
-    return executePlan(db, scope, plan, input, options.now ?? new Date());
+    const result = await executePlan(db, scope, plan, input, now);
+    return parentMerges.length ? { ...result, parentMerges } : result;
   };
   if (options.tx) return run(options.tx);
   return prisma.$transaction(run, { timeout: 120_000, maxWait: 15_000 });

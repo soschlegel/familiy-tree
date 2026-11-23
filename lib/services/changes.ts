@@ -8,6 +8,7 @@ import { CITATION_FACT_LABEL, CONFIDENCE_LABEL, SOURCE_KIND_LABEL } from "../sou
 import { PARTNER_SUBTYPE_LABEL } from "../partner-labels";
 import { forbiddenError, notFoundError, validationError } from "./errors";
 import { plural } from "../plural";
+import { VERDICT_LABEL, type DuplicateVerdict } from "../duplicate-verdicts";
 
 /**
  * Changelog lesen: Verlauf einer Person (für ihre Bearbeiter) und Übersicht
@@ -288,6 +289,8 @@ function personRefsOf(row: Row): string[] {
     const v = strOf(d[k]);
     if (v) out.add(v);
   }
+  const reviewed = strOf(obj(d.duplicateReview).with);
+  if (reviewed) out.add(reviewed);
   return [...out];
 }
 
@@ -519,6 +522,17 @@ function describe(ctx: Ctx, row: Row): { what: string; note: string | null } {
       if (strOf(d.notDuplicateOf)) {
         return { what: `Als „keine Dublette“ markiert: ${personName(ctx, row.entityId)} und ${personName(ctx, d.notDuplicateOf as string)}`, note: null };
       }
+      // KI-Vorprüfung (MCP review_duplicate): nur eine Einschätzung, keine Änderung an den Personen.
+      const review = obj(d.duplicateReview);
+      if (strOf(review.with)) {
+        const verdict = VERDICT_LABEL[review.verdict as DuplicateVerdict] ?? String(review.verdict);
+        const names = [personName(ctx, row.entityId), personName(ctx, review.with as string)];
+        // Die Begründung kann Einzelheiten beider Personen nennen — nur zeigen, wenn beide sichtbar sind.
+        return {
+          what: `Mögliche Dublette vorgeprüft („${verdict}“): ${names[0]} und ${names[1]}`,
+          note: names.includes(RESTRICTED) ? null : strOf(review.reason),
+        };
+      }
       if (strOf(d.notDuplicateOfRemoved)) {
         return { what: `Markierung „keine Dublette“ aufgehoben: ${personName(ctx, row.entityId)} und ${personName(ctx, d.notDuplicateOfRemoved as string)}`, note: null };
       }
@@ -565,6 +579,10 @@ function describe(ctx: Ctx, row: Row): { what: string; note: string | null } {
     case "ApiToken":
       return { what: `KI-Schlüssel ${d.revoked ? "widerrufen" : act}${strOf(d.name) ? ` „${d.name}“` : ""}`, note: null };
     case "ImportBatch": {
+      if (d.renamed) {
+        const to = strOf(obj(obj(d.changes).displayName).to);
+        return { what: to ? `Import ${strOf(d.letter) ?? ""} benannt: „${to}“`.replace("  ", " ") : `Name des Imports ${strOf(d.letter) ?? ""} entfernt`.trimEnd(), note: null };
+      }
       if (d.exchange) return { what: "Daten eingespielt (Austauschformat)", note: null };
       if (d.gedcom) return { what: "GEDCOM-Import abgeschlossen", note: null };
       if (d.counts) {

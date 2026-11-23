@@ -5,6 +5,8 @@ import { useId, useState } from "react";
 
 import { apiFetch, jsonBody } from "./api-client";
 import { PERSON_NAME_TYPES, PERSON_NAME_TYPE_LABEL, type PersonNameTypeName } from "@/lib/events";
+import { OriginChips } from "./OriginChips";
+import type { OriginChipMap } from "@/lib/origin";
 
 /** Weiterer Name, wie die Personenseite ihn übergibt (PersonNameDto). */
 export type NameRow = {
@@ -144,7 +146,18 @@ const payload = (v: Values) =>
  * Lesende sehen die Liste, Bearbeiter können ergänzen, ändern und entfernen.
  * Ohne Namen und ohne Bearbeitungsrecht erscheint nichts.
  */
-export function NameVariants({ personId, names, canEdit }: { personId: string; names: NameRow[]; canEdit: boolean }) {
+export function NameVariants({
+  personId,
+  names,
+  canEdit,
+  origin,
+}: {
+  personId: string;
+  names: NameRow[];
+  canEdit: boolean;
+  /** Herkunft je Name als Chips (nur für Bearbeiter geladen). */
+  origin?: OriginChipMap | null;
+}) {
   const router = useRouter();
   const headingId = useId();
   const [adding, setAdding] = useState(false);
@@ -204,6 +217,7 @@ export function NameVariants({ personId, names, canEdit }: { personId: string; n
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                 <span className="font-medium">{n.display}</span>
                 <span className="badge px-2 py-0 text-[11px]">{n.typeLabel}</span>
+                <OriginChips keys={origin?.names[n.id]} entries={origin?.entries} />
                 {n.notes && <span className="text-xs muted">· {n.notes}</span>}
                 {canEdit && (
                   <span className="ml-auto flex shrink-0 gap-3">

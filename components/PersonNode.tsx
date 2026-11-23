@@ -20,6 +20,8 @@ import {
   shortYear,
 } from "@/lib/partner-labels";
 import { LineCodes, LineStripe, lineTint, linesText, ReferenceContext } from "./ReferenceLines";
+import { entryMap, OriginChips, originListText, TreeOriginContext } from "./OriginChips";
+import { MANUAL_KEY, type OriginEntry } from "@/lib/origin";
 import { GENDER_INITIALS_BG, GENDER_RING } from "./gender-style";
 import { plural } from "@/lib/plural";
 
@@ -106,7 +108,7 @@ export function LockIcon({ className = "h-4 w-4" }: { className?: string }) {
 function Card({
   person,
   highlighted,
-  dimmed,
+  dimmed: dimmedBySearch,
   hidden,
 }: {
   person: TreePerson;
@@ -116,6 +118,11 @@ function Card({
 }) {
   const nav = useContext(TreeNavContext);
   const reference = useContext(ReferenceContext);
+  // Herkunft (Schalter „Herkunft“): Importe dieser Person als Chips; ist in
+  // der Legende ein Import hervorgehoben, treten alle anderen Karten zurück.
+  const originState = useContext(TreeOriginContext);
+  const originKeys = originState.origin?.byPerson[person.id];
+  const dimmed = dimmedBySearch || (originState.highlight !== null && !originKeys?.includes(originState.highlight));
   const span = lifeSpan(person);
   const deceased = Boolean(person.deathDate);
 
@@ -162,6 +169,11 @@ function Card({
   const refocus = nav.mode === "focus" && !isFocus;
   const personHref = `/people/${person.id}`;
 
+  const originEntries = originKeys ? entryMap(originState.origin?.entries) : undefined;
+  const originList = (originKeys ?? []).map((k) => originEntries?.[k]).filter((e): e is OriginEntry => Boolean(e));
+  // Verbindungsperson: kommt in mehreren Importen vor („von Hand“ zählt nicht).
+  const connecting = (originKeys ?? []).filter((k) => k !== MANUAL_KEY).length > 1;
+
   const hiddenParents = hidden?.parents ?? 0;
   const hiddenChildren = hidden?.children ?? 0;
   const beyond = [
@@ -202,7 +214,19 @@ function Card({
       data-focus={isFocus ? "true" : undefined}
       data-reference={isRef ? "true" : undefined}
       data-kinship={relative?.term ?? undefined}
+      data-origin={originKeys ? originKeys.join(" ") : undefined}
+      data-connecting={connecting ? "true" : undefined}
     >
+    {connecting && (
+      // Dezenter zweiter Rand um die Karte — außerhalb von Fokus-Ring und
+      // Bezugsperson-Umrandung, damit alle drei nebeneinander lesbar bleiben.
+      <span
+        aria-hidden
+        data-testid="tree-connecting-ring"
+        title="Verbindungsperson: kommt in mehreren Importen vor"
+        className={`pointer-events-none absolute -inset-[7px] rounded-[22px] border-[1.5px] border-stone-500 dark:border-stone-400 ${dimmed ? "opacity-25" : "opacity-80"}`}
+      />
+    )}
     <Link
       href={refocus ? nav.focusHref(person.id) : personHref}
       onClick={refocus ? (e) => nav.onFocusClick(e, person.id) : undefined}
@@ -277,6 +301,7 @@ function Card({
         {beyond.length > 0 ? ` (${beyond.join(", ")})` : ""}
         {kinship ? ` — ${isRef ? kinship : `für ${refView!.name}: ${kinship}`}` : ""}
         {lines.length > 0 ? ` — ${linesText(lines)}` : ""}
+        {originList.length > 0 ? ` — ${originListText(originList)}${connecting ? " (Verbindungsperson)" : ""}` : ""}
       </span>
 
       {isFocus && (
@@ -308,6 +333,7 @@ function Card({
         </span>
       )}
       <LineCodes lines={lines} className="absolute -top-2.5 right-8" />
+      <OriginChips keys={originKeys} entries={originEntries} decorative className="absolute -bottom-2 right-3" />
     </Link>
 
     {kinship && (

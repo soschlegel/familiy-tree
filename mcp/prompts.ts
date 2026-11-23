@@ -1,5 +1,5 @@
 /**
- * Prompt-Vorlagen und Ressourcen. Bewusst klein: zwei Arbeitsabläufe, die
+ * Prompt-Vorlagen und Ressourcen. Bewusst klein: wenige Arbeitsabläufe, die
  * die Werkzeuge in sinnvoller Reihenfolge verbinden, und eine Ressource je
  * Person zum Einbinden in den Kontext.
  */
@@ -141,6 +141,60 @@ export function registerPrompts(server: McpServer, ctx: ToolContext): void {
         },
       ],
     }),
+  );
+
+  // KI-Vorprüfung möglicher Dubletten: prüfen und einschätzen — nie zusammenführen.
+  server.registerPrompt(
+    "review_duplicates",
+    {
+      title: "Dubletten vorprüfen",
+      description:
+        "Pre-check possible duplicates for a human: list_duplicate_candidates → per pair get_person for both + " +
+        "preview_person_merge → verdict with reason via review_duplicate. Never merges anything; never guesses.",
+      argsSchema: {
+        confidence: z.string().optional().describe("Optional: nur diese Klasse — high (sicher), medium (wahrscheinlich) oder low (unklar)."),
+        limit: z.string().optional().describe("Höchstens so viele Paare in diesem Durchgang (Standard 20)."),
+      },
+    },
+    ({ confidence, limit }) => {
+      const klass = (["high", "medium", "low"] as const).find((k) => k === confidence);
+      return {
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text: [
+                `Prüfe mögliche Dubletten im Stammbaum vor (höchstens ${Number(limit) || 20} Paare in diesem Durchgang${klass ? `, nur Klasse ${klass}` : ""}). Antworte auf Deutsch.`,
+                "Du führst NICHTS zusammen — es gibt dafür kein Werkzeug. Zusammenführen kann nur ein Mensch in der App; eine falsche " +
+                  "Zusammenführung ist der schlimmste Fehler. Deine Einschätzung ist ein Hinweis für diesen Menschen.",
+                "",
+                `1. list_duplicate_candidates(review: "unreviewed"${klass ? `, confidence: "${klass}"` : ""}): Paare ohne (aktuelle) Einschätzung mit Klasse, ` +
+                  "Gründen (reasons) und Widersprüchen (conflicts). Nur Paare mit canReview=true bearbeiten.",
+                "2. Je Paar get_person für BEIDE Personen: Namen und weitere Namen, Geburt/Tod mit Genauigkeit, Orte, Eltern, Partner, " +
+                  "Kinder, Geschwister, Ereignisse, Belege. Vergleiche Punkt für Punkt — gleiche Namen allein beweisen nichts " +
+                  "(Vater und Sohn, Geschwister nach verstorbenem Kind, Cousins gleichen Namens).",
+                "3. preview_person_merge(keep_id, merge_id): der Trockenlauf — genau die Vorschau der App. Blocker (blockers) und " +
+                  "abweichende Angaben (fields mit differs, alternates) ernst nehmen. Die Vorschau ändert nichts.",
+                "4. Urteil mit review_duplicate und deutscher Begründung, die die konkreten Belege nennt:",
+                "   - MERGE: sicher dieselbe Person — übereinstimmende Daten UND Verwandte, kein unerklärter Widerspruch, kein Blocker. " +
+                  "Optional suggested_keep_id (der besser belegte Eintrag).",
+                "   - NOT_DUPLICATE: sicher verschiedene Personen (z.B. verschiedene Eltern, unvereinbare Lebensdaten, beide zugleich an verschiedenen Orten).",
+                "   - DISPUTED: alles andere — Hinweise in beide Richtungen, zu wenige Daten, ein offener Widerspruch. Im Zweifel immer DISPUTED.",
+                "   Nie raten: Fehlt die Grundlage, schreibe in die Begründung, was fehlt und welche Quelle es klären könnte.",
+                "5. Als „Nicht freigegeben“ markierte Verwandte nicht deuten; hängt das Urteil an ihnen, ist es DISPUTED.",
+                ctx.allowWrite
+                  ? "Vorher begin_change_set mit einem Titel wie „Mögliche Dubletten vorgeprüft (KI)“ öffnen und die change_set_id mitgeben — ohne Personennamen im Titel."
+                  : "Der Server ist schreibgeschützt (kein review_duplicate): gib die Urteile mit Begründung als Liste aus.",
+                "",
+                "Zum Schluss: Zahl der Paare je Urteil und die Liste der strittigen mit der offenen Frage. Weise darauf hin, dass die " +
+                  "Einschätzungen in der App unter „Mögliche Dubletten“ stehen (Filter „Von der KI vorgeprüft“) und dort ein Mensch entscheidet.",
+              ].join("\n"),
+            },
+          },
+        ],
+      };
+    },
   );
 
   server.registerResource(

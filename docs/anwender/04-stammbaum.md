@@ -1,6 +1,6 @@
 # Stammbaum
 
-Die drei Ansichten Fokus, Generationen und Zeitstrahl, die Bezugsperson („Das bin ich“), der Verwandtschaftsgrad an jeder Karte und die farbigen Großeltern-Linien.
+Die drei Ansichten Fokus, Generationen und Zeitstrahl, die Bezugsperson („Das bin ich“), der Verwandtschaftsgrad an jeder Karte, die farbigen Großeltern-Linien und die Herkunft aus Importen.
 
 ## Die drei Ansichten
 
@@ -51,3 +51,19 @@ So funktioniert es:
 - Auch die **Verbindungslinien** einer Ahnenkette sind farbig; Verbindungen zu Vater, Mutter und Bezugsperson und zu Seitenverwandten bleiben grau.
 
 Die **Legende** nennt die vier Großeltern mit Namen („nicht erfasst“, wenn einer fehlt oder nicht freigegeben ist). Die Wahl „Linien an/aus“ merkt sich der Browser. Dieselben Farben verwendet die [Karte](05-karte.md).
+
+## Herkunft
+
+Wurden Stammbäume importiert, zeigt der Schalter **Herkunft**, aus welchem Import jede Person stammt. Den Schalter sehen Bearbeiter und Administratoren; er ist anfangs aus.
+
+- Jeder Import hat einen **Buchstaben** (A, B, C … in der Reihenfolge, in der die Importe zum ersten Mal eingespielt wurden) und eine feste Farbe. Der Buchstabe steht als kleiner Chip unten rechts an der Karte.
+- **H** mit gestricheltem Rand heißt „von Hand erfasst“ — die Person stammt aus keinem Import.
+- Stammt eine Person aus mehreren Importen (weil ihre Einträge zusammengeführt wurden), trägt sie mehrere Chips — höchstens drei, danach steht etwa „+2“. Solche **Verbindungspersonen** haben zusätzlich einen feinen zweiten Rand: An ihnen hängen die Importe zusammen.
+- Die **Legende** unten links nennt zu jedem Buchstaben den Namen des Imports und wie viele der gezeigten Personen daraus stammen. Ein Klick auf einen Eintrag hebt seine Personen hervor, alle anderen treten zurück; ein zweiter Klick hebt das wieder auf.
+- Chips gibt es nur an Personen, die du bearbeiten darfst. Personen, die du nur ansehen darfst, bleiben ohne Chip und werden nicht mitgezählt.
+
+**Herkunft** und **Linien** lassen sich zusammen einschalten: Die Linien färben die Karte und ihren linken Rand, die Herkunft steht als Buchstabe unten rechts.
+
+> Herkunft ist eine Zusatzinformation. Maßgeblich ist immer, was in der App steht — egal, aus welchem Import es einmal kam.
+
+Wie ein Import heißt, legt der Administrator fest, siehe [Import und Export](08-import-und-export.md#importe-benennen). Die Herkunft einer einzelnen Person steht auf ihrer Seite, siehe [Personen](02-personen.md#herkunft).

@@ -113,9 +113,11 @@ const READ_TOOLS = [
   "get_source",
   "get_statistics",
   "get_timeline",
+  "list_duplicate_candidates",
   "list_events",
   "list_families",
   "list_places",
+  "preview_person_merge",
   "search_persons",
   "search_sources",
   "suggest_place",
@@ -137,6 +139,7 @@ const WRITE_TOOLS = [
   "update_person",
   "update_relationship",
   "link_media",
+  "review_duplicate",
 ];
 
 describe.skipIf(Boolean(skipReason))("MCP-Server (stdio, Mock-Datenbank)", () => {
@@ -186,6 +189,8 @@ describe.skipIf(Boolean(skipReason))("MCP-Server (stdio, Mock-Datenbank)", () =>
       // Person im Detail
       const person = await s.call("get_person", { person_id: L.crossMarriedIntoA });
       expect(person.data.person.id).toBe(L.crossMarriedIntoA);
+      // Herkunft: nur, wer die Person bearbeiten darf (hier Admin); Mock-Personen sind von Hand erfasst.
+      expect(person.data.origin).toEqual({ manual: true, imports: [] });
       expect(person.data.families.map((f: { id: string }) => f.id).sort()).toEqual(["mock-family-a", "mock-family-b"]);
       expect(person.data.parents.some((p: { id: string; restricted?: boolean }) => p.id === L.inLawOnlyB && !p.restricted)).toBe(true);
       expect(person.data.partners.some((p: { id: string }) => p.id === L.crossMarriedPartnerA)).toBe(true);
@@ -284,7 +289,7 @@ describe.skipIf(Boolean(skipReason))("MCP-Server (stdio, Mock-Datenbank)", () =>
 
       // Prompts und Ressource
       const prompts = (await s.client.listPrompts()).prompts.map((p) => p.name).sort();
-      expect(prompts).toEqual(["orte_zuordnen", "research_person", "review_data_quality"]);
+      expect(prompts).toEqual(["orte_zuordnen", "research_person", "review_data_quality", "review_duplicates"]);
       const prompt = await s.client.getPrompt({ name: "research_person", arguments: { person_id: L.adoptee } });
       expect(JSON.stringify(prompt.messages)).toContain(L.adoptee);
       expect(JSON.stringify(prompt.messages)).toContain("citations");
@@ -301,6 +306,8 @@ describe.skipIf(Boolean(skipReason))("MCP-Server (stdio, Mock-Datenbank)", () =>
     "Betrachter: verborgene Personen bleiben verborgen",
     async () => {
       const s = await connect("viewer@example.test");
+      // Betrachter dürfen nichts bearbeiten — get_person nennt ihnen keine Herkunft.
+      expect((await s.call("get_person", { person_id: L.selfEditor })).data.origin).toBeUndefined();
       expect((await s.client.listTools()).tools.map((t) => t.name).sort()).toEqual(READ_TOOLS);
 
       const hiddenIds = [L.inLawOnlyB, ...L.noFamily];
