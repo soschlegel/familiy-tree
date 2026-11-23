@@ -247,6 +247,13 @@ describe.skipIf(Boolean(skipReason))("Mögliche Dubletten einer Person (Testdate
     expect(listed?.confidence).toBe("low");
     expect(await listDuplicatesOfPerson(admin, a.id)).toEqual({ total: 0, items: [] });
     expect(await listDuplicatesOfPerson(admin, b.id)).toEqual({ total: 0, items: [] });
+    // Der Dialog „Zusammenführen …“ fragt ausdrücklich auch nach „unklar“ — mit Begründungssatz.
+    const forDialog = await listDuplicatesOfPerson(admin, a.id, { limit: 20, includeUnclear: true });
+    expect(forDialog.total).toBe(1);
+    expect(forDialog.items[0]).toMatchObject({ person: { id: b.id }, confidence: "low" });
+    expect(forDialog.items[0].sentence).toBe("Gleicher Name, Geburtsdatum nur bei einer Person bekannt.");
+    // … aber nur für den, der beide bearbeiten darf.
+    expect(await listDuplicatesOfPerson(viewer, a.id, { includeUnclear: true })).toEqual({ total: 0, items: [] });
   });
 
   it("begrenzt die Einträge, zählt aber alle; „sicher“ steht vorn", async () => {

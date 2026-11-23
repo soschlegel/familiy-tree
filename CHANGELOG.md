@@ -17,6 +17,17 @@ Regeln für neue Einträge (AGENTS.md, Abschnitt 3 „Ausrollen“):
 - Geprüft von tests/release-notes.test.ts (lib/release-notes.ts).
 -->
 
+## 2026-11-22.5 — Orte in der Anzeige
+
+- Auf der Personenseite steht bei zugeordneten Orten jetzt der vollständige
+  Ort als Link, zum Beispiel „Karlsruhe, Baden-Württemberg, Deutschland“. Ein
+  Klick führt zur Ortsseite mit allen Schreibweisen und den Personen, die
+  ebenfalls mit diesem Ort zu tun haben.
+- Dein eingegebener Text bleibt gespeichert. Er steht klein daneben, wenn er
+  mehr sagt als der Ortsname, etwa eine Anschrift.
+- Nach dem Speichern erscheint der Ort sofort als Link — bisher erst nach
+  erneutem Laden der Seite.
+
 ## 2026-11-22.4 — Orte: Vorschlag beim Eingeben, Ortsseiten und KI
 
 - Beim Eintippen eines Orts siehst du gleich darunter, welcher Ort gemeint

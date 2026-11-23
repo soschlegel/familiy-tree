@@ -33,7 +33,7 @@ Abschnitt 1). Seiten und API-Routen selbst stehen in
 - [Import, Export, Dubletten und Zusammenführen](#import-export-dubletten-und-zusammenführen)
   — `GedcomImport`, `GedcomExportDialog`, `DataTransfer`, `ImportHistory`,
   `ConnectImports`, `DuplicateBanner`, `DuplicateList`, `MergeView`,
-  `MergeWithPicker`, `ChangeSetList`, `ChangeEntryList`
+  `MergeDialog`, `FollowUpDuplicates`, `ChangeSetList`, `ChangeEntryList`
 - [Verwaltung und KI-Zugang](#verwaltung-und-ki-zugang) — `UserAdmin`,
   `FamilyAdmin`, `PlaceAdmin` (exportiert `PlaceAutoAssign` und `PlaceTable`),
   `AiAccessManager`, `AiConnectGuide`, `ApiTokenList`
@@ -764,7 +764,7 @@ verweigert“). Unit (Dienst): `tests/changelog.test.ts`,
 und gleichnamigen Verwandten), optional mit Neuanlage aus dem Suchtext.
 
 **Wo eingesetzt:** nicht direkt in `app/`; in `RelationshipEditor`
-(Personenseite, mit Neuanlage), `MergeWithPicker` (Personenseite, Dubletten
+(Personenseite, mit Neuanlage), `MergeDialog` (Personenseite, Dubletten
 zusammenführen) und `UserAdmin` (`app/admin/users`, Person einem Benutzer
 zuordnen).
 
@@ -801,7 +801,7 @@ ohne `familyIds`).
 **Tests:** `e2e/write/person-lifecycle.spec.ts` (Auswahl über die Combobox
 „Person“, „Neu anlegen: …“), `e2e/write/reference.spec.ts` (Zuordnung in
 der Benutzerverwaltung), `e2e/write/merge.spec.ts` (Suche im Picker von
-`MergeWithPicker` über den Platzhalter). Kein Unit-Test.
+`MergeDialog` über den Platzhalter). Kein Unit-Test.
 
 ### components/AttachedMedia.tsx
 
@@ -1014,7 +1014,7 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 ### components/PageLoading.tsx
 
 - **Zweck:** Platzhalter, solange eine Seite lädt: ruhig pulsierende Balken und Kärtchen statt eines Spinners.
-- **Wo eingesetzt:** `app/tree/loading.tsx` und `app/research/loading.tsx`, sonst nirgends.
+- **Wo eingesetzt:** `app/research/loading.tsx` und als `Suspense`-Platzhalter in `app/tree/page.tsx`, sonst nirgends.
 - **Props:** `label` (optional; Standard „Wird geladen…“). Der Text ist nur für Screenreader sichtbar.
 - **Verhalten:** Hülle mit `role="status"` und `aria-live="polite"`; die Platzhalterformen sind `aria-hidden`. Das Kachelraster hat 1, 2 bzw. 3 Spalten je nach Breite.
 - **Server oder Client:** kein `"use client"`. Reine Darstellung, als Server-Komponente nutzbar.
@@ -1276,28 +1276,45 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
   - Personenkarten „Bleibt“ und „Geht darin auf“ mit Lebensdaten, Eltern, Partnern, Kindern, Familien, Importen und Zählern.
   - „⇄ Seiten tauschen“ ersetzt die URL; es wird kein innerer Zustand getauscht.
   - Blockaden stehen in einer Fehlerbox (`role="alert"`), gegebenenfalls mit Links zum Zusammenführen der Eltern zuerst.
+  - „Erst die Eltern, dann dieses Paar zusammenführen …“ erscheint in der Fehlerbox nur, wenn nichts anderes im Weg steht als doppelt erfasste Eltern, die sich alle zuordnen lassen (`resolvable` der Sperre). Der Knopf holt die Vorschau jedes Elternpaars und zeigt sie: wer bleibt, wer darin aufgeht, was dabei geschieht, Link „Einzeln vergleichen“. Erst „Eltern und dieses Paar zusammenführen“ (mit Rückfrage) führt aus — in einem Aufruf, mit dem Stand aller Vorschauen. Jede neue Vorschau des Paars schließt den Abschnitt wieder.
   - „Angaben einzeln ansehen und wählen“ ist ein eigens gesteuertes `<details>`. Je Feld gibt es Optionsfelder (bleibt, andere, gegebenenfalls „beide behalten“) und eine Begründung. Abweichende Felder sind farbig hinterlegt und für Screenreader als „weicht ab“ gekennzeichnet.
   - Für Beziehungen, die beide Personen haben, wählt man die Art (leiblich, Adoption usw.).
   - „Zusammenführen“ mit Rückfrage. Der Server bekommt den Token der Vorschau mit. Bei 409 (zwischenzeitlich geändert) wird die Vorschau neu geladen.
-  - Das Ergebnis zeigt Sätze und Links „Zur Person“ und „Weitere Dubletten prüfen“.
+  - Das Ergebnis zeigt Sätze und Links „Zur Person“ und „Weitere Dubletten prüfen“, nach „Erst die Eltern“ auch die dabei zusammengeführten Elternteile, und darunter `FollowUpDuplicates` für die bleibende Person (und diese Elternteile).
   - Auf dem Telefon stehen die Spalten untereinander; die Seitenbeschriftung „Bleibt“ bzw. „Andere“ erscheint dann sichtbar.
   - Der Bereich trägt `aria-busy`, solange geladen wird.
 - **Server oder Client:** Client.
-- **Ruft auf:** `POST /api/persons/merge/preview`, `POST /api/persons/merge`.
-- **Tests:** `e2e/write/merge.spec.ts` (Tauschen, Felder, Blockaden mit Eltern-Link, Ausführen); `e2e/read/duplicate-banner.spec.ts` und `e2e/write/duplicate-banner.spec.ts` (Weg vom Hinweis zum Vergleich). Die Logik prüfen `tests/merge.db.test.ts` und `tests/merge-rules.test.ts`.
+- **Ruft auf:** `POST /api/persons/merge/preview` (auch je Elternpaar), `POST /api/persons/merge` (gegebenenfalls mit `parentsFirst`).
+- **Tests:** `e2e/write/merge.spec.ts` (Tauschen, Felder, Blockaden mit Eltern-Link, Ausführen); `e2e/write/merge-comfort.spec.ts` (Eltern zuerst, Folgedubletten); `e2e/read/duplicate-banner.spec.ts` und `e2e/write/duplicate-banner.spec.ts` (Weg vom Hinweis zum Vergleich). Die Logik prüfen `tests/merge.db.test.ts` und `tests/merge-rules.test.ts`.
 
-### components/MergeWithPicker.tsx
+### components/MergeDialog.tsx
 
-- **Zweck:** Auf der Personenseite die andere, doppelt erfasste Person suchen und zum Vergleich springen.
-- **Wo eingesetzt:** `app/people/[id]/page.tsx`, im Bereich „Verwaltung“ der Personenseite.
-- **Props:** `personId` (bleibt), `people` (Auswahlliste für `PersonPicker`).
+- **Zweck:** Knopf „Zusammenführen …“ im Kopf der Personenseite mit Dialog: zuerst die möglichen Dubletten dieser Person, darunter die freie Personensuche.
+- **Wo eingesetzt:** `app/people/[id]/page.tsx`, neben „Im Stammbaum zeigen“; nur für Bearbeiter.
+- **Props:** `personId` (bleibt), `personName`, `people` (Auswahlliste für `PersonPicker`).
 - **Verhalten:**
-  - Zunächst nur ein Erklärsatz und der Knopf „Mit anderer Person zusammenführen …“.
-  - Aufgeklappt: `PersonPicker`, beschriftet über `aria-labelledby` mit „Welche Person ist dieselbe?“, dazu „Vergleichen“ (erst aktiv, wenn eine Person gewählt ist) und „Abbrechen“.
-  - Kein automatischer Fokuswechsel beim Aufklappen. Beabsichtigt oder nicht, ist unklar.
+  - Echtes `<dialog>` (`showModal`): Fokus bleibt im Dialog, Escape und ein Klick auf den Hintergrund schließen, danach kehrt der Fokus zum Knopf zurück.
+  - Die Kandidaten werden erst beim Öffnen geladen: Name, Lebensdaten, Herkunft, Klasse (alle drei, auch „unklar“), Begründungssatz, Widersprüche und „Vergleichen“. Eingetragene Vorfahren und Nachkommen sind nie darunter (Regel des Dienstes); ohne Kandidaten steht das dort.
+  - Darunter `PersonPicker` mit „Vergleichen“ (erst aktiv, wenn eine Person gewählt ist).
+  - Der Dialog führt selbst nichts zusammen: Jede Wahl öffnet `/people/merge?keep=<diese>&other=…`; dort lassen sich die Seiten tauschen.
+  - Der Dialog steht oben statt mittig und schneidet nicht ab, damit die Vorschlagsliste der Suche über seinen Rand hinaus aufklappen kann.
 - **Server oder Client:** Client.
-- **Ruft auf:** nichts direkt. Navigiert zu `/people/merge?keep=…&other=…`.
-- **Tests:** `e2e/write/merge.spec.ts` (`merge-open`, `merge-compare`).
+- **Ruft auf:** `GET /api/persons/[id]/duplicates`.
+- **Tests:** `e2e/write/merge-comfort.spec.ts` (Kandidaten, Suche, Escape, ohne Kandidaten), `e2e/write/merge.spec.ts` (`merge-open`, `merge-compare`; Betrachter ohne Knopf).
+
+### components/FollowUpDuplicates.tsx
+
+- **Zweck:** Folgedubletten auf der Ergebnisseite nach einem Zusammenführen: Eltern, Partner und Kinder der bleibenden Person, die jetzt selbst doppelt aussehen.
+- **Wo eingesetzt:** `components/MergeView.tsx` (Ergebnis).
+- **Props:** `personIds` (bleibende Person, gegebenenfalls dazu die im selben Schritt zusammengeführten Elternteile).
+- **Verhalten:**
+  - Ohne Folgedubletten erscheint der Abschnitt gar nicht.
+  - Je Paar: Klasse, beide Personen mit Lebensdaten als Links, über wen gefunden („Beide als Eltern von …“), Begründungssatz, Widersprüche, „Vergleichen“ (öffnet den Vergleich dieses Paars).
+  - Nichts ist angekreuzt oder vorausgewählt. Gibt es „sichere“ Paare: „Alle sicheren Folgedubletten zusammenführen … (N)“ zeigt zuerst die gemeinsame Vorschau des Sammel-Zusammenführens; erst deren Knopf führt aus. „Wahrscheinlich“ und „unklar“ gehen nie mit.
+  - Danach wird neu gesucht — auch bei den dabei bleibenden Personen, deren Eltern nun ebenfalls doppelt sein können.
+- **Server oder Client:** Client.
+- **Ruft auf:** `GET /api/persons/merge/followups`; `POST /api/persons/merge/bulk` (erst `dryRun`, dann Ausführen).
+- **Tests:** `e2e/write/merge-comfort.spec.ts`; Dienst: `tests/merge-followups.db.test.ts`.
 
 ### components/ChangeSetList.tsx
 
@@ -1402,7 +1419,7 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 
 ### components/PlaceText.tsx
 
-- **Zweck:** Ortsangabe als Freitext der Person, bei zugeordnetem Ort als Link auf die Ortsseite (Titel = Anzeigename) und — wenn der Ort anders heißt — dezent „→ Wrocław, Polen“. Ohne Zuordnung reiner Text.
+- **Zweck:** Ortsangabe in der Anzeige. Bei zugeordnetem Ort steht der systematische Ort (Anzeigename „Ort, Region, Land“, heutiger Name mit altem in Klammern) als Link auf die Ortsseite; Titel = „Eingegeben: <Freitext>“ (Entscheidung des Eigentümers, 22.11.). Der Freitext steht dezent daneben („· eingegeben: …“) nur, wenn er mehr sagt als der Anzeigename — `textCoveredByLabel`: jeder Kommateil des Texts kommt im Anzeigenamen vor (Anschrift oder alte Landschaft bleiben so sichtbar). Ohne Zuordnung reiner Text.
 - **Wo eingesetzt:** Personenseite (Geburt, Tod, Orte der Partnerschaften), `EventSection` (Ort je Ereignis).
 - **Props:** `text`, `links` (aus `placeLinksFor`, Schlüssel `placeKey`). Ohne Hooks, für Server- und Client-Komponenten.
 

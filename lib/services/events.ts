@@ -251,7 +251,7 @@ export async function createEvent(scope: Scope, input: unknown): Promise<EventDt
     entityId: event.id,
     diff: toEventDto(event, true),
   });
-  queuePlaceAutoAssign(scope, [event.place]);
+  await queuePlaceAutoAssign(scope, [event.place]);
   return toEventDto(event, true);
 }
 
@@ -288,7 +288,7 @@ export async function updateEvent(scope: Scope, id: string, patch: unknown): Pro
       diff: { subject: eventTitle(event), changes },
     });
   }
-  if (changes.place) queuePlaceAutoAssign(scope, [event.place]);
+  if (changes.place) await queuePlaceAutoAssign(scope, [event.place]);
   return toEventDto(event, true);
 }
 

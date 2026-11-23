@@ -139,8 +139,11 @@ test.describe("Ort auswählen, Personenseite, Ortsseite", () => {
     const id = page.url().split("/").pop()!;
     try {
       const birth = page.getByTestId("person-birth");
-      await expect(birth.getByTestId("place-link")).toHaveText("Danzig");
-      await expect(birth).toContainText("→ Gdańsk, Polen");
+      // Anzeige: der systematische Ort als Verweis; der eingegebene Text steht
+      // im Titel (und nur daneben, wenn er mehr sagt als der Ortsname).
+      await expect(birth.getByTestId("place-link")).toHaveText("Gdańsk (Danzig), Polen");
+      await expect(birth.getByTestId("place-link")).toHaveAttribute("title", "Eingegeben: Danzig");
+      await expect(birth.getByTestId("place-original")).toHaveCount(0);
       await birth.getByTestId("place-link").click();
       await expect(page.getByTestId("place-title")).toHaveText("Gdańsk (Danzig), Polen");
       await expect(page.getByTestId("place-entries")).toContainText(surname);

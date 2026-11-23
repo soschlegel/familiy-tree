@@ -29,7 +29,7 @@ export default async function MergePage({ searchParams }: { searchParams: Promis
       ) : (
         <p className="alert-info">
           Bitte zwei Personen wählen — über <Link href="/research/duplicates" className="underline">Mögliche Dubletten</Link> oder
-          auf einer Personenseite unter „Verwaltung“.
+          auf einer Personenseite mit dem Knopf „Zusammenführen …“.
         </p>
       )}
     </div>

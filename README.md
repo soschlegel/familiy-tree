@@ -632,8 +632,10 @@ alle Zuordnungen mit demselben Verzeichniseintrag bzw. bei eigenen Orten
 denselben Koordinaten. Es erscheinen nur Personen, die der Benutzer sehen
 darf; Freitexte nur gesperrter Personen fehlen, ein Ort ohne sichtbare
 Angabe gilt als nicht vorhanden. Auf der **Personenseite** wird jeder
-zugeordnete Ort zum Link, angezeigt bleibt der Freitext, dazu dezent der
-erkannte Ort, wenn er anders heißt („Breslau → Wrocław, Polen“).
+zugeordnete Ort zum Link mit dem systematischen Namen („Karlsruhe,
+Baden-Württemberg, Deutschland“, „Wrocław (Breslau), Polen“); der Freitext
+steht im Titel und dezent daneben, wenn er mehr sagt als der Ortsname
+(`textCoveredByLabel` in `components/PlaceText.tsx`).
 
 **Echte Orte auswählen:** Unter jedem Ortsfeld öffnet „Ort wählen …“ die
 Kandidaten (Verzeichnis und eigene Orte). Die Wahl wird nach dem Speichern
@@ -2114,7 +2116,20 @@ werden beide Einträge zu einem. Die App ist dabei die eine Wahrheit; ein
 Import ist eine Quelle, aus der sie sich bedient. Bearbeiter (Recht an
 **beiden** Personen nötig) finden das unter **Recherche → Mögliche
 Dubletten** (alle Paare: `/research/duplicates`) und auf jeder Personenseite
-unter „Verwaltung“ → **Mit anderer Person zusammenführen …**.
+mit dem Knopf **Zusammenführen …** neben „Im Stammbaum zeigen“ (Dialog:
+zuerst die möglichen Dubletten dieser Person mit Klasse und Begründung,
+darunter die freie Personensuche). Nach dem Zusammenführen nennt die
+Ergebnisseite **Folgedubletten** (Eltern, Partner, Kinder der bleibenden
+Person; „sichere“ gemeinsam nur über die Vorschau des
+Sammel-Zusammenführens); ein nur wegen doppelt erfasster Eltern gesperrtes
+Paar geht mit **„Erst die Eltern, dann dieses Paar“** in einem Schritt. Die
+**alte Kennung** der aufgegangenen Person leitet danach auf die bleibende um
+(`/people/<alt>`, `/tree?focus=<alt>` und `GET /api/persons/<alt>` mit 308;
+`PATCH`/`DELETE` mit 409 und `mergedInto`; nur, wenn die bleibende Person
+für den Benutzer sichtbar ist — sonst 404 wie bei einer unbekannten Kennung;
+der KI-Zugang löst still auf und meldet `resolvedFrom`). Einzelheiten:
+[docs/komponenten/dienste.md](docs/komponenten/dienste.md),
+`merge-followups.ts` und `redirects.ts`.
 
 ### Mögliche Dubletten
 

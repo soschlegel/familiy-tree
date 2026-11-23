@@ -4,6 +4,7 @@ import { prisma } from "../prisma";
 import { canEditPerson, canViewPerson, editableFamilyIds, viewableFamilyIds, type Scope } from "../scope";
 import { fuzzyField } from "../dates";
 import { findDuplicatePairs, scoreDuplicate, type Confidence, type DupPerson } from "../duplicates";
+import { evidenceSentence } from "../import-linking";
 import { firstGivenKey, nameKey } from "../name-keys";
 import { importLabel, MANUAL_ORIGIN_LABEL, toPersonBrief, type PersonBrief } from "./dto";
 import { loadGraph, type LoadedGraph } from "./graph-data";
@@ -207,6 +208,8 @@ export type PersonDuplicateCandidate = {
   confidence: Confidence;
   reasons: string[];
   conflicts: string[];
+  /** Die Gründe als ein Satz (evidenceSentence), für den Dialog „Zusammenführen …“. */
+  sentence: string;
   /** KI-Vorprüfung dieses Paares, falls vorhanden (nur Urteil und „veraltet“). */
   review?: Pick<DuplicateReviewDto, "verdict" | "stale">;
 };
@@ -253,7 +256,18 @@ const DUP_SELECT = {
  * Kandidaten bearbeiten darf (wie `canMerge` in der Liste). Alle anderen
  * erfahren nichts — auch keine Anzahl.
  */
-export async function listDuplicatesOfPerson(scope: Scope, personId: string, options: { limit?: number } = {}): Promise<PersonDuplicates> {
+export async function listDuplicatesOfPerson(
+  scope: Scope,
+  personId: string,
+  options: {
+    limit?: number;
+    /**
+     * Auch die Klasse „unklar“ — nur für den Dialog „Zusammenführen …“, den
+     * jemand ausdrücklich öffnet. Der Hinweis auf der Seite bleibt ohne.
+     */
+    includeUnclear?: boolean;
+  } = {},
+): Promise<PersonDuplicates> {
   const limit = Math.max(1, Math.min(50, Math.floor(options.limit ?? 3)));
   const self = await prisma.person.findUnique({
     where: { id: personId },
@@ -350,7 +364,7 @@ export async function listDuplicatesOfPerson(scope: Scope, personId: string, opt
     include: (a, b) => (a.id === personId || b.id === personId) && !dismissed.has(pairKey(a.id, b.id)),
     // Alle Paare enthalten diese Person (include) — Abstammung aus der Abfrage oben.
     lineage: (a, b) => lineal.has(a === personId ? b : a),
-  }).filter((p) => p.confidence !== "low");
+  }).filter((p) => options.includeUnclear || p.confidence !== "low");
   const shown = pairs.slice(0, limit);
   const shownKeys = new Set(shown.map((p) => reviewKey(p.a, p.b)));
   const reviews = await loadDuplicateReviews([...new Set(shown.flatMap((p) => [p.a, p.b]))], (a, b) => shownKeys.has(reviewKey(a, b)));
@@ -366,6 +380,7 @@ export async function listDuplicatesOfPerson(scope: Scope, personId: string, opt
         confidence: p.confidence,
         reasons: p.reasons,
         conflicts: p.conflicts,
+        sentence: evidenceSentence(p.reasons),
         ...(review ? { review: { verdict: review.verdict, stale: review.stale } } : {}),
       };
     }),

@@ -23,6 +23,8 @@ export * from "./duplicates";
 export * from "./duplicate-reviews";
 export * from "./merge";
 export * from "./merge-bulk";
+export * from "./merge-followups";
+export * from "./redirects";
 export * from "./families";
 export * from "./kinship";
 export * from "./reference";

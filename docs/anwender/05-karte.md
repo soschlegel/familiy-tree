@@ -55,7 +55,7 @@ Die Ländergrenzen sind die **heutigen** — die Karte zeigt keine historischen 
 
 ## Ortsseiten
 
-Jeder zugeordnete Ort hat eine eigene **Ortsseite**. Du erreichst sie über die Personenseite: Dort ist jeder zugeordnete Ort ein Link — angezeigt wird weiter der Text, wie er eingegeben ist, und dezent der erkannte Ort, wenn er anders heißt („Breslau → Wrocław, Polen“). Auf der Ortsseite stehen:
+Jeder zugeordnete Ort hat eine eigene **Ortsseite**. Du erreichst sie über die Personenseite: Dort steht bei jedem zugeordneten Ort der erkannte Ort als Link, zum Beispiel „Karlsruhe, Baden-Württemberg, Deutschland“ oder „Wrocław (Breslau), Polen“. Dein eingegebener Text bleibt gespeichert: Du siehst ihn beim Bearbeiten, auf der Ortsseite und — wenn er mehr sagt als der Ortsname, etwa eine Anschrift — klein daneben („eingegeben: …“). Auf der Ortsseite stehen:
 
 - der heutige Name mit dem früheren bzw. deutschen Namen, Region, Land, Koordinaten und eine kleine Lagekarte,
 - wie der Ort zugeordnet wurde (automatisch, von KI oder von Hand),
