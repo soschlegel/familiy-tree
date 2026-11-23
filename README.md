@@ -297,11 +297,8 @@ laufen die lesenden Tests (`e2e/read/`) parallel, erst
 dann die ändernden (`e2e/write/`); diese legen eigene, „E2E …“ benannte
 Datensätze an und räumen sie wieder ab. Jeder Test schlägt außerdem fehl, wenn
 im Browser ein unerwarteter Konsolenfehler oder eine nicht abgefangene
-Ausnahme auftritt (`e2e/support/fixtures.ts`) — mit einer Ausnahme: den
-bekannten, seltenen Hydration-Fehler beim Laden (React #418, siehe
-UEBERGABE) meldet die Wache gegen den Build nur (`[bekannt] …` in der
-Ausgabe, Anmerkung im Bericht); `E2E_STRICT_HYDRATION=1` macht ihn wieder
-zum Fehler. Die Tests sprechen nur mit der
+Ausnahme auftritt (`e2e/support/fixtures.ts`), auch bei einem
+Hydration-Fehler (React #418). Die Tests sprechen nur mit der
 App (Browser und HTTP-API), nie direkt mit Datenbank oder Medienordner. Den
 KI-Zugang prüfen `e2e/write/ai-access.spec.ts` (Recht vergeben, Schlüssel
 anlegen und widerrufen) und `e2e/read/mcp-http.spec.ts` (`/api/mcp` mit den

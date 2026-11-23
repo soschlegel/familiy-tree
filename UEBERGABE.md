@@ -342,24 +342,20 @@ Freigabe (21.11.): „bauen und Gas geben“ — die Wünsche werden umgesetzt.
   älterer Importe sind es noch nicht. Regeln: von Hand Geändertes nicht
   anfassen, Fingerabdrücke der Herkunftsvermerke nachziehen, doppelte Belege
   nur auf ausdrückliches Ankreuzen entfernen.
-- **Seltener Hydration-Fehler beim Laden (React #418)** — nicht nur
-  `/people`: auch `/people/[id]`, `/sources`, `/tree`, `/login`. Gegen den
-  Produktions-Build in wenigen Prozent der Seitenaufrufe unter Last (gegen
-  den Dev-Server selten). Untersucht mit einem Diagnose-Build (React
-  ungekürzt): Server-HTML und RSC-Daten sind byteweise gleich wie bei
-  fehlerfreien Aufrufen, vor dem Fehler ändert nichts das DOM, meist lädt
-  das Dokument noch. React erwartet an der Stelle der Seite deren äußeres
-  Element (`PeoplePage` → `div.space-y-5`, `PersonPage` → `div.space-y-8`),
-  steht aber schon eine Ebene tiefer — Wettlauf beim Streaming in
-  Next.js 15.5/React 19, kein Datenfehler; React baut die Seite selbst neu
-  auf (auf Seiten mit `loading.tsx` wie `/research` mit Folgefehlern
-  „Cannot read properties of null (reading 'parentNode')“ aus den
-  nachgeschobenen Streaming-Skripten). Die E2E-Wache meldet beides gegen
-  den Build nur (`[bekannt] …`);
-  `E2E_STRICT_HYDRATION=1` bzw. `--dev` werten ihn als Fehler. Nächste
-  Schritte: Next.js-/React-Aktualisierung prüfen; sonst minimal
-  nachstellen und melden. Früher dazu beobachtet: ein verlorener Klick auf
-  eine Seitenzahl (Klick vor der Hydration).
+- **Hydration-Fehler beim Laden (React #418) — behoben (Branch
+  `hydration`, noch nicht ausgerollt).** Ursache: Fehler im React, das
+  Next.js 15.5 mitbringt (facebook/react#35210, Korrektur #35494 erst in
+  React 19.3) — setzt die Hydration nach dem Warten auf nachgeschobene
+  RSC-Daten an einem Element wieder auf, steht der DOM-Zeiger schon eine
+  Ebene zu tief. Rückportierung als Webpack-Loader
+  (`lib/next-patches/react-hydration-replay-fix.cjs`, Regel in
+  `next.config.mjs`; bricht den Build ab, wenn die Stelle nach einer
+  Next-Aktualisierung nicht mehr passt). Nachgestellt mit
+  `scripts/hydration-rate.mjs --gap=50` (gestrecktes Streaming): ohne
+  Korrektur 13/240 Aufrufe mit #418, mit Korrektur 0/720. Die E2E-Wache
+  wertet #418 jetzt immer als Fehler. Mit Next.js 16 / React 19.3 Loader,
+  Regel und `tests/react-hydration-replay-fix.test.ts` entfernen (der Test
+  schlägt dann von selbst an).
 - **GEDCOM-Export**: eine abgelehnte Eltern-Kind-Verbindung (z.B. dritter
   leiblicher Elternteil) bleibt als Original erhalten, wird aber nicht
   zurückgeschrieben.

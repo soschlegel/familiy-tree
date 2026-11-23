@@ -505,8 +505,7 @@ selbst gelesen, nicht im eigenen Code.
 | `MCP_KEY_NAME` | intern: Übergabe des Schlüsselnamens an den `mcp-key`-Unterprozess |
 | `FAMILYTREE_MCP_KEY` | Schlüssel für den Eintrag in `.mcp.json` (Claude Code); im App-Code nicht gelesen |
 | `E2E_SKIP_SETUP` | `1` = Setup-Projekt weglassen |
-| `E2E_SERVER` | von `scripts/e2e.mjs` gesetzt: `prod` (Standard) oder `dev`; wählt Web-Server, Worker, Vorwärmen und Umgang mit dem bekannten Hydration-Fehler |
-| `E2E_STRICT_HYDRATION` | `1` = bekannten Hydration-Fehler (React #418) auch gegen den Produktions-Build als Testfehler werten |
+| `E2E_SERVER` | von `scripts/e2e.mjs` gesetzt: `prod` (Standard) oder `dev`; wählt Web-Server, Worker und Vorwärmen |
 | `E2E_WRITE_WORKERS` | Obergrenze der Worker für das Projekt `write` (Standard 2) übersteuern, für Messungen |
 | `E2E_PRODUCTION_DEV_LOGIN` | nur `scripts/mock.mjs start` setzt `mock-only`: Dev-Login im Produktions-Build — wirkt nur zusammen mit Datenbank `…_mock`/`…_test` und Medienordner `…-mock`/`…-test` (`lib/dev-login.ts`); im Stack nie gesetzt |
 | `E2E_AREA` | von `scripts/e2e.mjs` gesetzt; `write` hängt dann nur am Setup |
@@ -703,9 +702,9 @@ Benutzer bekommt keinen gespeicherten Zustand.
 
 - **`fixtures.ts`** — erweitertes `test`: eine automatische Wache, die jeden
   Test an unerwarteten Konsolen- oder Seitenfehlern scheitern lässt (mit eng
-  gefassten Ausnahmen und pro Test erlaubten Meldungen; den bekannten
-  Hydration-Fehler React #418 meldet sie gegen den Produktions-Build nur,
-  siehe Abschnitt 10), `loginAs` für weitere
+  gefassten Ausnahmen und pro Test erlaubten Meldungen; ein
+  Hydration-Fehler React #418 ist immer ein Testfehler, siehe
+  Abschnitt 10), `loginAs` für weitere
   Rollen in eigenen Kontexten; dazu Dev-Login, Dialoge annehmen,
   Barrierefreiheitsprüfung mit axe (WCAG 2.1 A/AA, begründete Ausnahmen),
   Prüfung auf waagerechte Scrollleiste, Warten auf Baum und Hydration,
@@ -815,27 +814,28 @@ zum nächsten Setup).
 
 ## 10. Bekannte Flakes und Stolperfallen
 
-- **Hydration-Fehler (React #418) beim Laden** — offen, Ursache nicht
-  in den Tests. Unter Last scheitert gelegentlich die Hydration einer Seite
-  (`/people`, `/people/[id]`, `/sources`, `/tree`, sogar `/login`).
-  Untersucht (Diagnose-Build mit ungekürzten React-Meldungen): Der Server
-  liefert dabei byteweise dasselbe HTML samt RSC-Daten wie bei fehlerfreien
-  Aufrufen, vor dem Fehler ändert nichts das DOM; meist tritt er auf,
-  solange das Dokument noch lädt. React erwartet an der Stelle der Seite
-  deren äußeres Element, steht aber schon eine Ebene tiefer — ein Wettlauf
-  beim Streaming in Next.js/React, kein Datenfehler. React baut die Seite
-  danach selbst neu auf. Gegen den Dev-Server selten, gegen den
-  Produktions-Build in wenigen Prozent der Seitenaufrufe (mehr Worker, mehr
-  Meldungen). Auf Seiten mit Streaming (`loading.tsx`, z.B. `/research`)
-  folgen ihm Seitenfehler „Cannot read properties of null (reading
-  'parentNode')“ — die nachgeschobenen Inline-Skripte finden ihre
-  Platzhalter im neu aufgebauten Baum nicht mehr. Die Wache in
-  `fixtures.ts` meldet beides gegen den Build deshalb nur (Konsole
-  `[bekannt] …`, Anmerkung „bekannter Fehler“ im HTML-Bericht; den
-  Folgefehler nur nach einem #418 auf derselben Seite bis zu deren
-  `load`);
-  gegen den Dev-Server und mit `E2E_STRICT_HYDRATION=1` bleibt er ein
-  Testfehler.
+- **Hydration-Fehler (React #418) beim Laden — behoben.** Früher
+  scheiterte in wenigen Prozent der Seitenaufrufe die Hydration (`/people`,
+  `/sources`, `/map`, `/tree`, `/login` …), obwohl der Server dasselbe HTML
+  lieferte; auf Seiten mit `loading.tsx` folgten Seitenfehler „Cannot read
+  properties of null (reading 'parentNode')“. Ursache ist ein Fehler im
+  React, das Next.js 15.5 mitbringt (facebook/react#35210): Kommen Teile
+  einer Seite als später gesendete RSC-Daten, hält die Hydration an einem
+  Element an und setzt später dort wieder auf — dabei stand der Zeiger auf
+  das nächste DOM-Element schon eine Ebene tiefer. Behoben in React 19.3
+  (#35494); bis dahin spielt der Webpack-Loader
+  `lib/next-patches/react-hydration-replay-fix.cjs` (Regel in
+  `next.config.mjs`, nur die Client-Dateien von
+  `next/dist/compiled/react-dom`) dieselbe Korrektur zurück. Passt die
+  Stelle nach einer Next-Aktualisierung nicht mehr, bricht der Build mit
+  klarer Meldung ab; enthält React die Korrektur selbst, bleibt die Datei
+  unverändert und `tests/react-hydration-replay-fix.test.ts` meldet, dass
+  Loader, Regel und Test entfallen können.
+  Messen: `scripts/hydration-rate.mjs` lädt Seiten gegen einen laufenden
+  `mock:start` in mehreren Tabs und zählt #418; `--gap=50` streckt das
+  Streaming über einen Zwischenserver und löst den Wettlauf gezielt aus
+  (ohne Korrektur 13 von 240 Aufrufen, mit Korrektur 0 von 720). Die Wache
+  in `fixtures.ts` wertet #418 seither immer als Testfehler.
 - **Nur mit `--dev`: Dev-Server unter Last** — er wächst auf mehrere GB,
   verwirft übersetzte Seiten, und die erste Übersetzung einer Route reißt
   Zeitgrenzen. Dann vor einem Gesamtlauf neu starten, zwischen read und
