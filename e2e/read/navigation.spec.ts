@@ -3,7 +3,7 @@ import { openAdminMenu } from "../support/nav";
 
 const ALL = ["Baum", "Karte", "Personen", "Recherche", "Quellen", "Daten"];
 /** Stehen im Untermenü „Verwaltung“ (components/NavBar.tsx). */
-const ADMIN_ONLY = ["Familien", "Benutzer", "Änderungen"];
+const ADMIN_ONLY = ["Familien", "Benutzer", "Änderungen", "Einstellungen"];
 
 const nav = (page: import("@playwright/test").Page) =>
   page.getByRole("navigation", { name: "Hauptnavigation" });
