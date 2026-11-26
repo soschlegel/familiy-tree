@@ -33,6 +33,13 @@ Nachkommen — für die Startperson der Mock-Daten 23 Personen auf rund
 - **Gesperrte Personen** erscheinen wie im ganzen Baum als Platzhalter (ohne
   Randhinweise) und können nicht in den Mittelpunkt rücken; eine unbekannte
   oder gesperrte `focus`-ID ergibt einen Hinweis statt eines leeren Bildes.
+- **Vollbild** — der Knopf „Vollbild“ rechts oben in der Baumfläche (auch im
+  ganzen Baum) zeigt die Fläche bildschirmfüllend, ohne Kopfzeile und
+  Werkzeugleiste; Legende, Zoom und Fokus-Verlauf bleiben, Klicks wirken wie
+  sonst. Zustand in der Adresse (`?vollbild=1`, wird bei Fokuswechseln
+  mitgenommen); „Vollbild beenden“, Escape oder Zurück beenden es, ohne die
+  Seite zu verlassen. Technik:
+  [useTreeFullscreen](../komponenten/oberflaeche-komponenten.md#componentsusetreefullscreents).
 - **Filter** — der Familienfilter ist in der Fokus-Ansicht abgeschaltet (der
   Ausschnitt zeigt ohnehin nur nahe Verwandte). „Ehen zeigen“ aus blendet
   Partner ohne gemeinsames Kind im Ausschnitt aus; Eltern der Nachkommen

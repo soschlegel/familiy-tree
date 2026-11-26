@@ -282,3 +282,11 @@ h3 {
 .react-flow .react-flow__minimap {
   background: rgb(var(--surface));
 }
+
+/* Stammbaum im Vollbild (components/useTreeFullscreen.ts): die Seite
+   dahinter scrollt nicht mit. */
+html.tree-fullscreen,
+html.tree-fullscreen body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}

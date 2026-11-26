@@ -6,6 +6,7 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -24,6 +25,7 @@ import ReactFlow, {
 } from "reactflow";
 
 import { useDismiss } from "./useDismiss";
+import { FULLSCREEN_PARAM, useTreeFullscreen } from "./useTreeFullscreen";
 import {
   FocusIcon,
   LockIcon,
@@ -97,6 +99,7 @@ export function treeUrl({
   up = FOCUS_DEPTH.up,
   down = FOCUS_DEPTH.down,
   herkunft = false,
+  vollbild = false,
 }: {
   view?: TreeView;
   focus?: string | null;
@@ -104,6 +107,8 @@ export function treeUrl({
   down?: number;
   /** Schalter „Herkunft“ (`?herkunft=1`); aus bleibt weg. */
   herkunft?: boolean;
+  /** Vollbild (`?vollbild=1`, components/useTreeFullscreen.ts); aus bleibt weg. */
+  vollbild?: boolean;
 }): string {
   const s = new URLSearchParams();
   if (view !== "focus") s.set("view", view);
@@ -113,6 +118,7 @@ export function treeUrl({
     if (down !== FOCUS_DEPTH.down) s.set("down", String(down));
   }
   if (herkunft) s.set(ORIGIN_PARAM, "1");
+  if (vollbild) s.set(FULLSCREEN_PARAM, "1");
   const query = s.toString();
   return query ? `/tree?${query}` : "/tree";
 }
@@ -254,7 +260,15 @@ function TreeCanvas({
   // Zuordnung Person → Importe lädt der Server nur dann. Alle Verweise der
   // Baumseite tragen ihn weiter (tUrl). Hervorheben per Klick in der Legende.
   const originOn = origin !== null;
-  const tUrl = useCallback((o: Parameters<typeof treeUrl>[0]) => treeUrl({ ...o, herkunft: originOn }), [originOn]);
+  // Vollbild: steht ebenfalls in der Adresse (`?vollbild=1`) und wird von
+  // allen Baum-Verweisen weitergetragen — ein Fokuswechsel im Vollbild
+  // bleibt im Vollbild.
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const fullscreen = useTreeFullscreen(overlayRef);
+  const tUrl = useCallback(
+    (o: Parameters<typeof treeUrl>[0]) => treeUrl({ ...o, herkunft: originOn, vollbild: fullscreen.on }),
+    [originOn, fullscreen.on],
+  );
   const [originHighlight, setOriginHighlight] = useState<string | null>(null);
   const originState = useMemo<TreeOriginState>(
     () => ({ origin, highlight: origin?.entries.some((e) => e.key === originHighlight) ? originHighlight : null }),
@@ -1038,6 +1052,34 @@ function TreeCanvas({
   const toolbarBox =
     "rounded-lg border border-stone-300 bg-surface text-sm dark:border-stone-700";
 
+  // Beim Wechsel ins Vollbild und zurück wächst bzw. schrumpft die Fläche.
+  // React Flow hielte die linke obere Ecke fest; stattdessen bleibt die Mitte
+  // des Bildes stehen. Die bisherige Größe merkt ein ResizeObserver.
+  const sizeRef = useRef<{ w: number; h: number } | null>(null);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      sizeRef.current = { w: el.clientWidth, h: el.clientHeight };
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    const before = sizeRef.current;
+    if (!el || !before) return;
+    const after = { w: el.clientWidth, h: el.clientHeight };
+    sizeRef.current = after;
+    const dx = (after.w - before.w) / 2;
+    const dy = (after.h - before.h) / 2;
+    if (dx === 0 && dy === 0) return;
+    const v = flow.getViewport();
+    flow.setViewport({ x: v.x + dx, y: v.y + dy, zoom: v.zoom });
+    // Nur beim Umschalten — nicht bei jeder anderen Größenänderung.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fullscreen.on]);
+
   const activeView: TreeView = focusData ? "focus" : mode;
   const trail = recent.filter((r) => r.id !== currentFocus).slice(0, 4);
   const focusPerson = focusData?.persons.find((p) => p.id === focusData.focusId);
@@ -1046,8 +1088,20 @@ function TreeCanvas({
     <TreeNavContext.Provider value={nav}>
     <ReferenceContext.Provider value={referenceCtx}>
     <TreeOriginContext.Provider value={originState}>
-    <div className="flex flex-1 flex-col gap-2">
-      <div className="flex flex-wrap items-start gap-2" role="toolbar" aria-label="Baumansicht">
+    <div
+      ref={overlayRef}
+      data-testid="tree-shell"
+      data-fullscreen={fullscreen.on ? "true" : undefined}
+      // Vollbild als Überlagerung innerhalb der Seite (verlässlich auch in
+      // iOS-Safari): fest über allem, so hoch wie der sichtbare Bereich
+      // (dvh), mit Abstand zu Kerbe und Gestenleiste (safe-area).
+      className={
+        fullscreen.on
+          ? "fixed inset-0 z-[60] flex h-[100dvh] flex-col bg-paper pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)]"
+          : "flex flex-1 flex-col gap-2"
+      }
+    >
+      <div className={`flex flex-wrap items-start gap-2 ${fullscreen.on ? "hidden" : ""}`} role="toolbar" aria-label="Baumansicht">
         <div className="relative w-full sm:w-64" ref={searchBoxRef}>
           <label htmlFor="tree-search" className="sr-only">
             {focusData ? "Person suchen und in den Mittelpunkt stellen" : "Person im Baum suchen"}
@@ -1261,8 +1315,8 @@ function TreeCanvas({
               onChange={(e) =>
                 navigate(
                   focusData
-                    ? treeUrl({ focus: currentFocus, up, down, herkunft: e.target.checked })
-                    : treeUrl({ view: mode, focus: focused, herkunft: e.target.checked }),
+                    ? treeUrl({ focus: currentFocus, up, down, herkunft: e.target.checked, vollbild: fullscreen.on })
+                    : treeUrl({ view: mode, focus: focused, herkunft: e.target.checked, vollbild: fullscreen.on }),
                   true,
                 )
               }
@@ -1373,7 +1427,11 @@ function TreeCanvas({
         data-view={activeView}
         data-focus-id={currentFocus ?? undefined}
         aria-busy={pending}
-        className="relative min-h-[320px] w-full flex-1 md:min-h-[420px] overflow-hidden rounded-2xl border border-stone-200 bg-[radial-gradient(ellipse_at_top,rgb(var(--surface)),rgb(var(--paper))_70%)] shadow-card dark:border-stone-800"
+        className={`relative w-full flex-1 overflow-hidden bg-[radial-gradient(ellipse_at_top,rgb(var(--surface)),rgb(var(--paper))_70%)] ${
+          fullscreen.on
+            ? "min-h-0"
+            : "min-h-[320px] rounded-2xl border border-stone-200 shadow-card md:min-h-[420px] dark:border-stone-800"
+        }`}
       >
         <ReactFlow
           nodes={nodes}
@@ -1410,18 +1468,34 @@ function TreeCanvas({
               }
               maskColor={dark ? "rgba(12,10,9,0.6)" : "rgba(245,245,244,0.6)"}
               style={{ width: 168, height: 112 }}
-              className="!hidden !overflow-hidden !rounded-lg !border !border-stone-200 !shadow-card sm:!block dark:!border-stone-700"
+              // Unter dem Knopf „Vollbild“ rechts oben.
+              className="!top-12 !hidden !overflow-hidden !rounded-lg !border !border-stone-200 !shadow-card sm:!block dark:!border-stone-700"
             />
           )}
         </ReactFlow>
 
         {display.timeline && <TimelineAxis ticks={display.timeline.axis.ticks} />}
 
+        <button
+          type="button"
+          data-testid="tree-fullscreen"
+          aria-pressed={fullscreen.on}
+          onClick={fullscreen.toggle}
+          title={fullscreen.on ? "Zurück zur normalen Ansicht (Escape)" : "Baum bildschirmfüllend zeigen"}
+          className="absolute right-3 top-3 z-20 inline-flex min-h-11 items-center gap-1.5 rounded-full bg-white/95 px-3 text-sm font-medium text-stone-700 shadow-sm ring-1 ring-stone-300 backdrop-blur transition hover:ring-accent-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 md:min-h-0 md:px-2.5 md:py-1 md:text-xs md:font-normal dark:bg-stone-900/95 dark:text-stone-200 dark:ring-stone-700 dark:hover:ring-accent-500"
+        >
+          <FullscreenIcon exit={fullscreen.on} />
+          {fullscreen.on ? "Vollbild beenden" : "Vollbild"}
+        </button>
+
         {focusData && focusPerson && (
           <nav
             aria-label="Fokus-Verlauf"
             data-testid="tree-focus-trail"
-            className="absolute left-3 right-3 top-3 z-10 flex items-center gap-1.5 overflow-x-auto text-xs sm:right-auto sm:max-w-[70%]"
+            // Rechts oben bleibt Platz für den Knopf „Vollbild“.
+            className={`absolute left-3 top-3 z-10 flex items-center gap-1.5 overflow-x-auto text-xs sm:right-auto sm:max-w-[70%] ${
+              fullscreen.on ? "right-[11rem]" : "right-[7.5rem]"
+            }`}
           >
             <span className="shrink-0 rounded-full bg-white/95 px-2.5 py-1 shadow-sm ring-1 ring-stone-200 backdrop-blur dark:bg-stone-900/95 dark:ring-stone-800">
               <span className="muted">Im Fokus: </span>
@@ -1504,6 +1578,16 @@ function TimelineAxis({ ticks }: { ticks: { year: number; y: number }[] }) {
         );
       })}
     </div>
+  );
+}
+
+/** Pfeile nach außen (Vollbild) bzw. nach innen (Vollbild beenden). */
+function FullscreenIcon({ exit }: { exit: boolean }) {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden className="h-4 w-4 shrink-0 md:h-3.5 md:w-3.5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      {/* Diagonale Pfeile — die vier Ecken „Alles einpassen“ der Zoom-Knöpfe sind schon vergeben. */}
+      {exit ? <path d="M14 2 9.5 6.5M9.5 3v3.5H13M2 14l4.5-4.5M6.5 13V9.5H3" /> : <path d="M9.5 6.5 14 2M10.5 2H14v3.5M6.5 9.5 2 14M5.5 14H2v-3.5" />}
+    </svg>
   );
 }
 

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiFetch, jsonBody } from "./api-client";
 import type { ConnectPair, ConnectRun } from "@/lib/services/import-linking";
 import { evidenceSentence } from "@/lib/import-linking";
+import { plural } from "@/lib/plural";
 
 type Group = ConnectRun["groups"][number];
 type RunView = ConnectRun & { total: number; counts: Record<string, number>; accepted: number };
@@ -113,9 +114,10 @@ export function ConnectImports() {
           <fieldset className="space-y-1 text-sm">
             <legend className="sr-only">Importe</legend>
             {groups.map((g) => (
-              <label key={g.id} className="flex items-center gap-2">
+              <label key={g.id} className="flex items-start gap-2 max-md:py-1">
                 <input
                   type="checkbox"
+                  className="mt-[0.2rem] shrink-0"
                   checked={chosen ? chosen.has(g.id) : true}
                   onChange={(e) => {
                     const next = new Set(chosen ?? groups.map((x) => x.id));
@@ -124,7 +126,11 @@ export function ConnectImports() {
                     setChosen(next);
                   }}
                 />
-                {g.label} <span className="muted">· {g.persons} Personen</span>
+                {/* Ein Textblock: lange Namen brechen um, die Personenzahl bleibt
+                    beisammen und hängt am Namen statt in einer eigenen Spalte. */}
+                <span className="min-w-0">
+                  {g.label} <span className="muted whitespace-nowrap">· {plural(g.persons, "Person", "Personen")}</span>
+                </span>
               </label>
             ))}
             <label className="mt-2 flex items-center gap-2">

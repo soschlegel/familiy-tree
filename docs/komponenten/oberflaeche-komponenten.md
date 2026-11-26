@@ -16,7 +16,7 @@ Abschnitt 1). Seiten und API-Routen selbst stehen in
 
 ## Inhalt
 
-- [Stammbaum und Karte](#stammbaum-und-karte) — `FamilyTree`, `PersonNode`,
+- [Stammbaum und Karte](#stammbaum-und-karte) — `FamilyTree`, `useTreeFullscreen`, `PersonNode`,
   `OriginChips`, `MarriageNode`, `MarriageEdge`, `ParentEdge`, `ReferenceLines`,
   `ReferenceChip`, `ReferencePanel`, `MapExplorer`, `MapPersonChooser`, `Avatar`,
   `gender-style`
@@ -51,6 +51,7 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 - `up`, `down` — Tiefe der Vorfahren bzw. Nachkommen in der Fokus-Ansicht (1–4, Standard 2, `FOCUS_DEPTH` in `lib/focus-tree.ts`). Standardwerte lässt `treeUrl` (exportiert aus `FamilyTree.tsx`) weg, damit Adressen kurz bleiben.
 - `bezug` — vorübergehende Bezugsperson; `bezug=ich` kehrt zur eigenen Person zurück.
 - `herkunft=1` — Schalter „Herkunft“ (`ORIGIN_PARAM` in `lib/origin.ts`). Nur für Bearbeiter und Administratoren (`canSeeOrigin`); bei anderen wirkt die Adresse nicht. Nur dann lädt der Server die Zuordnung (`loadTreeOrigin`, in der Fokus-Ansicht nur für den Ausschnitt). `treeUrl` trägt den Parameter bei allen Baum-Links mit, solange der Schalter an ist; kein Cookie.
+- `vollbild=1` — Vollbild der Baumfläche (`FULLSCREEN_PARAM` in `components/useTreeFullscreen.ts`). Wertet nur der Browser aus (`useSearchParams`), der Server ignoriert ihn. `treeUrl` trägt ihn wie `herkunft=1` bei allen Baum-Links mit, solange das Vollbild an ist.
 - `denied` — nur für den Hinweis „fehlende Berechtigung“ der Seite.
 - Cookies: `tree-focus` (zuletzt fokussierte Person, `FOCUS_COOKIE`), `tree-lines` (Schalter „Linien“, `LINES_COOKIE`), `tree-bezug` (vorübergehende Bezugsperson, `REFERENCE_COOKIE`). Gesetzt werden sie im Browser von `FamilyTree` bzw. `ReferenceChip`, gelesen vom Server.
 
@@ -124,6 +125,7 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 - *Zeitstrahl:* Jahresachse als feste Leiste links, die beim Verschieben stehen bleibt und Zoom/Verschiebung direkt aus dem React-Flow-Speicher liest.
 - *Leistung:* Knotenobjekte werden zwischengespeichert, solange sich ihr Zustand nicht ändert; Kanten hängen nur davon ab, *ob* gesucht wird. Im ganzen Baum werden nur sichtbare Elemente gezeichnet, in der Fokus-Ansicht alle (damit Tab alle Karten erreicht).
 - *Tastatur/Fokus:* Karten sind Links; beim Tab-Sprung auf eine Karte setzt die Komponente das Browser-Scrollen der Fläche zurück und zentriert stattdessen die Karte. React-Flow-eigene Knoten-/Kantenfokussierung ist aus.
+- *Vollbild* (Knopf „Vollbild“ rechts oben in der Baumfläche, alle drei Ansichten; Zustand über `useTreeFullscreen`): Die Hülle um Werkzeugleiste und Fläche (`data-testid="tree-shell"`, `data-fullscreen`) wird zur festen Überlagerung über der ganzen Seite (`fixed inset-0`, `100dvh`, Innenabstand `env(safe-area-inset-*)`, Papierfarbe, auch dunkel), die Werkzeugleiste ist ausgeblendet, die Fläche verliert Rand und Mindesthöhe. Alles in der Fläche bleibt: Zoom-Knöpfe, Fokus-Verlauf, Legende (samt Linien- und Herkunfts-Legende, falls eingeschaltet — so bleiben die Farben erklärbar, ohne die Leiste einzublenden), Jahresachse, MiniMap. Beim Umschalten bleibt die Bildmitte stehen (Verschiebung um die halbe Größenänderung, gemessene Größe per `ResizeObserver`). Der Knopf ist ein Umschalter mit `aria-pressed`, beschriftet „Vollbild“ bzw. „Vollbild beenden“, auf dem Telefon ≥ 44 px hoch, ab `md` klein und unaufdringlich; der Fokus-Verlauf lässt rechts Platz dafür, die MiniMap rückt darunter (`!top-12`). Weil es derselbe Knopf an derselben Stelle ist, bleibt der Tastaturfokus beim Umschalten erhalten.
 - *Telefonbreite:* Suche volle Breite, Werkzeugleiste umsortiert (Ansicht zuerst, „Ehen zeigen“ und Tiefe teilen sich eine Zeile), Tiefe-Beschriftungen als ▲/▼, Tippziele ≥ 44 px, Übersichtskarte (MiniMap) erst ab `sm`, aufgeklappte Legende rückt über die Zoom-Knöpfe.
 - *Barrierefreiheit:* Werkzeugleiste mit `role="toolbar"`, Menü mit `menuitemradio`/`menuitemcheckbox`, `aria-busy` und Statusanzeige „Lädt …“ während Navigationen, beschriftete Übersichtskarte. Leerer Filter zeigt „Keine Person in dieser Familie.“
 - Dunkles Schema: Hintergrundraster und MiniMap-Farben folgen `prefers-color-scheme`.
@@ -132,8 +134,27 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 **Ruft auf:** `GET /api/persons?q=…&limit=8` (Suche in der Fokus-Ansicht); Porträts indirekt über die Karten (`/api/media/<id>?variant=thumb`). Navigation über den Next-Router.
 
-**Tests:** `e2e/read/tree-focus.spec.ts` (Startperson, Fokus-Klick, Verlauf, Tiefe, Zurück/Vor, Suche, „Ganzer Baum“, gesperrte Personen), `e2e/read/tree-whole.spec.ts` (Ansichtswechsel, Hochzeitsknoten im Zeitstrahl, Suche, Familienfilter, „Ehen zeigen“, Legende), `e2e/read/reference.spec.ts` (Schalter „Linien“, farbige Kanten, Linienlegende), `e2e/read/origin.spec.ts` und `e2e/write/origin.spec.ts` (Schalter „Herkunft“, Rechte, Legende, Hervorheben, mit „Linien“ zugleich, Telefonbreite), `e2e/read/permissions.spec.ts` (keine fremden Namen, Suche), `e2e/read/mobile.spec.ts` und `e2e/read/quality.spec.ts` (Tippziele, Bildschirmhöhe, axe), `e2e/read/navigation.spec.ts` (Fußzeile auf der Baumseite). Layout-Logik: `tests/layout.test.ts`, `tests/focus.test.ts`, `tests/focus.db.test.ts`.
+**Tests:** `e2e/read/tree-focus.spec.ts` (Startperson, Fokus-Klick, Verlauf, Tiefe, Zurück/Vor, Suche, „Ganzer Baum“, gesperrte Personen), `e2e/read/tree-whole.spec.ts` (Ansichtswechsel, Hochzeitsknoten im Zeitstrahl, Suche, Familienfilter, „Ehen zeigen“, Legende), `e2e/read/reference.spec.ts` (Schalter „Linien“, farbige Kanten, Linienlegende), `e2e/read/origin.spec.ts` und `e2e/write/origin.spec.ts` (Schalter „Herkunft“, Rechte, Legende, Hervorheben, mit „Linien“ zugleich, Telefonbreite), `e2e/read/permissions.spec.ts` (keine fremden Namen, Suche), `e2e/read/mobile.spec.ts` und `e2e/read/quality.spec.ts` (Tippziele, Bildschirmhöhe, axe; Vollbild bei 360 px: ein/aus, Escape, Zurück, Karte antippen, `inert`, axe), `e2e/read/tree-whole.spec.ts` auch Vollbild per Adresse im dunklen Schema (MiniMap unter dem Knopf, Beenden ohne Verlaufsschritt), `e2e/read/navigation.spec.ts` (Fußzeile auf der Baumseite). Layout-Logik: `tests/layout.test.ts`, `tests/focus.test.ts`, `tests/focus.db.test.ts`.
 
+
+### components/useTreeFullscreen.ts
+
+**Zweck:** Hook für das Vollbild der Baumfläche: Zustand, Ein-/Ausschalten, Escape, Zurück-Taste, Stilllegen der übrigen Seite. Exportiert außerdem `FULLSCREEN_PARAM` (`"vollbild"`).
+
+**Wo eingesetzt:** nur in `FamilyTree`.
+
+**Verhalten:**
+
+- *Zustand in der Adresse* (`?vollbild=1`), passend zu `?herkunft=1`: Neuladen und Teilen behalten das Vollbild, und die Zurück-Taste bzw. -Geste des Telefons funktioniert ohne eigene Logik. Einschalten legt mit `history.pushState` einen Verlaufseintrag an — ohne Server-Anfrage; Next.js gleicht `useSearchParams` damit ab.
+- *Beenden* über Knopf oder Escape: Stammt der aktuelle Eintrag vom Einschalten, geht es einen Schritt zurück (kein doppelter Eintrag im Verlauf); sonst — Seite mit `?vollbild=1` geladen oder im Vollbild per Karte weiternavigiert — nimmt `history.replaceState` nur den Parameter weg. Die Zurück-Taste führt nach Fokuswechseln im Vollbild also erst durch die besuchten Personen (jeweils im Vollbild), dann aus dem Vollbild. Escape wirkt nur, wenn niemand die Taste schon verbraucht hat (`defaultPrevented`).
+- *Fullscreen-API zusätzlich* nur auf Touch-Geräten (`pointer: coarse`, z.B. Android: Adress- und Statusleiste verschwinden). Die eigentliche Darstellung ist immer die CSS-Überlagerung in `FamilyTree` — iOS-Safari unterstützt die API für Elemente nicht verlässlich; Fehler der API werden still übergangen. Verlässt der Browser sein Vollbild selbst (Zurück unter Android), endet auch das der Seite; endet das der Seite, wird das des Browsers verlassen.
+- *Stilllegen:* Solange an, bekommen alle Geschwister der Elemente auf dem Weg von der Überlagerung bis `<body>` das Attribut `inert` (Kopfzeile, Seitenkopf, Fußzeile …; nicht `script`/`style`/Route-Ansage) — Tab und Screenreader bleiben in der Baumfläche. Die Klasse `tree-fullscreen` an `<html>` verhindert das Scrollen der Seite dahinter (`app/globals.css`).
+
+**Grenzen:** `viewport-fit=cover` ist nicht gesetzt (gälte für alle Seiten); auf iOS liegen die Sicherheitsränder deshalb außerhalb der Seite und `env(safe-area-inset-*)` ist dort 0.
+
+**Server oder Client:** Client.
+
+**Tests:** `e2e/read/mobile.spec.ts` („Vollbild ein und aus …“), `e2e/read/tree-whole.spec.ts` („Adresse mit vollbild=1 …“).
 ### components/PersonNode.tsx
 
 **Zweck:** React-Flow-Knoten für eine Person oder eine Doppelkarte (Paar mit Verbindungsstück). Exportiert außerdem `TreeNavContext` (Klickverhalten), die Symbole `FocusIcon`, `OpenIcon`, `LockIcon` sowie die Typen `PersonNodeData` und `HiddenKin`.
@@ -350,6 +371,7 @@ Globale Styles plus wenige gemeinsame Bausteinklassen statt einer Komponentenbib
 
 - `html` und `body` in Papierfarbe (kein heller/dunkler Streifen beim Überziehen). `body` mindestens sichtbare Höhe (`100dvh`, mit `100vh` als Rückfall davor — bewusst nicht als Tailwind-Klassen, wegen deren Reihenfolge).
 - Sichtbarer Tastaturfokus überall über `:focus-visible` (Messing-Umriss), Mausklicks ohne Rahmen.
+- `html.tree-fullscreen`: kein Scrollen der Seite, solange der Stammbaum im Vollbild ist (`useTreeFullscreen`).
 
 **Knopf- und Feldklassen (`@layer components`)**
 
@@ -1286,7 +1308,7 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
   - „Gemeinsame Vorschau“: was umzieht, zusammenfällt oder blockiert ist, und eine Warnung, wenn danach mehr Personen für weitere Familien sichtbar werden.
   - „Jetzt zusammenführen“ mit Rückfrage. Danach Ergebnis und gegebenenfalls ein Knopf zum Folge-Abgleich.
   - Der Lauf-Bereich ist `aria-live="polite"`. Auf dem Telefon haben die Personen-Links größere Tippziele.
-  - Importe heißen in der Auswahl „Import A · Name“ (Bezeichnung aus `loadImportDirectory`). Ist ein Zusammenführen fertig, löst die Komponente das Fenster-Ereignis `origin-changed` aus, damit `OriginOverview` neu lädt.
+  - Importe heißen in der Auswahl „Import A · Name · 3 Personen“ (Bezeichnung aus `loadImportDirectory`). Name und Personenzahl bilden einen Textblock, die Zahl bricht nie in sich um; das Kontrollkästchen steht oben an der ersten Zeile. Ist ein Zusammenführen fertig, löst die Komponente das Fenster-Ereignis `origin-changed` aus, damit `OriginOverview` neu lädt.
 - **Server oder Client:** Client.
 - **Ruft auf:**
   - `GET` und `POST /api/connect` (Gruppen und Läufe laden bzw. Abgleich starten)
@@ -1299,10 +1321,10 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 - **Zweck:** Übersicht „Importe und ihre Verbindungen“ oben auf „Importe verbinden“: jeder Import (und „von Hand erfasst“) als Kreis, Fläche nach Zahl der Personen; je Import-Paar eine Linie mit der Zahl der Verbindungspersonen (Personen, die schon in beiden vorkommen). Ohne Linie hängen zwei Importe noch nicht zusammen.
 - **Wo eingesetzt:** `app/research/connect/page.tsx` (nur Administratoren), über `ConnectImports`.
 - **Props:** keine; lädt selbst.
-- **Verhalten:** Das Bild (SVG, Kreise auf einer Ellipse, lange Namen gekürzt) ist nur Veranschaulichung mit zusammenfassendem `aria-label`; dieselben Angaben stehen darunter als zwei Tabellen (Importe mit Personenzahl, Paare mit Verbindungspersonen). Lädt neu beim Ereignis `origin-changed`. Ohne Personen: „Noch keine Personen.“
+- **Verhalten:** Das Bild (SVG, Kreise auf einer Ellipse) ist nur Veranschaulichung. Es wird in der Breite seines Platzes gezeichnet (gemessen per `ResizeObserver`, 300–520 Einheiten), nicht verkleinert — so bleiben Beschriftungen auch bei 390 px lesbar groß. Namen stehen in bis zu zwei Zeilen (`labelLines`: nach Wörtern und nach Bindestrichen umbrochen, Rest mit „…“); bei schmaler Breite stehen die Namen der oberen Kreise über ihnen, damit sie nicht in die Linien nach unten laufen. Das Bild mit zusammenfassendem `aria-label`; dieselben Angaben stehen darunter als zwei Tabellen (Importe mit Personenzahl, Paare mit Verbindungspersonen). Lädt neu beim Ereignis `origin-changed`. Ohne Personen: „Noch keine Personen.“
 - **Server oder Client:** Client.
 - **Ruft auf:** `GET /api/origin/overview`.
-- **Tests:** `e2e/write/origin.spec.ts` (Kreise, Kante mit Zahl, Tabellen, Telefonbreite). Dienst: `tests/origin.db.test.ts`.
+- **Tests:** `e2e/write/origin.spec.ts` (Kreise, Kante mit Zahl, Tabellen, Telefonbreite). Beschriftung: `tests/origin-overview.test.ts` (`labelLines`). Dienst: `tests/origin.db.test.ts`.
 
 ### components/DuplicateBanner.tsx
 

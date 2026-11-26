@@ -265,6 +265,9 @@ Der Stammbaum in drei Ansichten. Bedienung: [fokus-ansicht.md](../fachlich/fokus
   - `herkunft=1` — Schalter „Herkunft“ (Chips je Import an den Karten).
     Wirkt nur für Bearbeiter und Administratoren (`canSeeOrigin`); für
     Betrachter gibt es weder Schalter noch Daten.
+  - `vollbild=1` — Baumfläche bildschirmfüllend (für alle Rollen). Nur im
+    Browser ausgewertet (`useTreeFullscreen`); der Server lädt dafür nichts
+    anders.
   - `denied` — Hinweis nach einer Umleitung wegen fehlender Rechte.
 - **Cookies:** `tree-focus` (zuletzt fokussierte Person), `tree-bezug`
   (Bezugsperson), `tree-lines` (Großeltern-Linien an/aus).

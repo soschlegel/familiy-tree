@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { test, expect, authFile, expectNoHorizontalOverflow, waitForTree } from "../support/fixtures";
+import { test, expect, authFile, expectNoA11yViolations, expectNoHorizontalOverflow, waitForTree } from "../support/fixtures";
 import { L } from "../support/mock";
 
 /**
@@ -170,6 +170,81 @@ test.describe("kleines Telefon (360 px), als Betrachter", () => {
       await expectNavigationReachable(page);
     });
   }
+
+  test("Baum: Vollbild ein und aus — Knopf, Escape, Zurück, Karte antippen", async ({ page }) => {
+    await page.goto("/tree");
+    const tree = await waitForTree(page);
+    const shell = page.getByTestId("tree-shell");
+    const button = page.getByTestId("tree-fullscreen");
+    await expect(button).toHaveAttribute("aria-pressed", "false");
+    await expect(button).toHaveAccessibleName("Vollbild");
+    const box = (await button.boundingBox())!;
+    expect(Math.round(box.height), "Höhe des Knopfs „Vollbild“").toBeGreaterThanOrEqual(44);
+    expect(box.x + box.width).toBeLessThanOrEqual(360);
+
+    const enter = async () => {
+      await button.click();
+      await expect(page).toHaveURL(/[?&]vollbild=1/);
+      await expect(shell).toHaveAttribute("data-fullscreen", "true");
+      await expect(button).toHaveAttribute("aria-pressed", "true");
+      await expect(button).toHaveAccessibleName("Vollbild beenden");
+    };
+    const expectNormal = async () => {
+      await expect(shell).not.toHaveAttribute("data-fullscreen", "true");
+      await expect(button).toHaveAttribute("aria-pressed", "false");
+      await expect(page).not.toHaveURL(/vollbild=/);
+      await expect(page.getByRole("toolbar", { name: "Baumansicht" })).toBeVisible();
+      await expect(page.getByRole("heading", { level: 1, name: "Stammbaum" })).toBeVisible();
+    };
+
+    // Ein: Baumfläche füllt den Bildschirm, Werkzeugleiste weg, Rest der Seite stillgelegt.
+    await enter();
+    await expect(page.getByRole("toolbar", { name: "Baumansicht" })).toBeHidden();
+    const area = (await tree.boundingBox())!;
+    expect(area.height, "Höhe der Baumfläche im Vollbild").toBeGreaterThanOrEqual(730);
+    expect(area.width).toBeGreaterThanOrEqual(355);
+    await expect(page.locator("footer")).toHaveAttribute("inert", "");
+    await expect(page.getByRole("button", { name: /Legende/ })).toBeInViewport();
+    await expectNoA11yViolations(page);
+    await expectNoHorizontalOverflow(page);
+
+    // Escape beendet es.
+    await page.keyboard.press("Escape");
+    await expectNormal();
+    await expect(page.locator("footer")).not.toHaveAttribute("inert", "");
+
+    // Zurück beendet es, ohne die Baumseite zu verlassen.
+    await enter();
+    await page.goBack();
+    await expectNormal();
+    await expect(page).toHaveURL(/\/tree/);
+
+    // Karte antippen: neue Fokusperson, das Vollbild bleibt; der Knopf beendet es.
+    await enter();
+    const before = await tree.getAttribute("data-focus-id");
+    let tapped = false;
+    for (const card of await page.getByTestId("tree-person").all()) {
+      const cardBox = await card.boundingBox();
+      const id = await card.getAttribute("data-person-id");
+      if (!cardBox || !id || id === before) continue;
+      const x = cardBox.x + cardBox.width * 0.4;
+      const y = cardBox.y + cardBox.height * 0.6;
+      // Nicht unter Fokus-Verlauf/Knopf oben und Legende/Zoom-Knöpfen unten.
+      if (x < 8 || x > 352 || y < 90 || y > 650) continue;
+      await page.touchscreen.tap(x, y);
+      tapped = true;
+      break;
+    }
+    expect(tapped, "keine antippbare Karte im Bild").toBe(true);
+    await expect(tree).not.toHaveAttribute("data-focus-id", before!);
+    await expect(tree).toHaveAttribute("aria-busy", "false");
+    await expect(shell).toHaveAttribute("data-fullscreen", "true");
+    await expect(page).toHaveURL(/[?&]vollbild=1/);
+    const after = await tree.getAttribute("data-focus-id");
+    await button.click();
+    await expectNormal();
+    await expect(tree).toHaveAttribute("data-focus-id", after!);
+  });
 
   test("Baumseite füllt genau den Bildschirm (kein senkrechtes Scrollen)", async ({ page }) => {
     await page.goto("/tree");
