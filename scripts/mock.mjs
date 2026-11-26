@@ -114,7 +114,7 @@ delete e2eEnv.NODE_ENV; // setzt next build/start selbst
 
 /** Alles, was in den Build eingeht (für --if-stale). */
 const BUILD_INPUTS = [
-  "app", "components", "lib", "public", "geo",
+  "app", "components", "lib", "public", "geo", "middleware.ts",
   "prisma/schema.prisma", "next.config.mjs", "package-lock.json",
   "tailwind.config.ts", "postcss.config.mjs", "tsconfig.json",
 ];

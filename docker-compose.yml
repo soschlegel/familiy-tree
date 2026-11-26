@@ -169,6 +169,10 @@ services:
       # der Ordner nicht beschreibbar ist.
       MEDIA_DIR: /data/media
       MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-15728640}
+      # Not-Schalter der Content-Security-Policy der Seiten (lib/csp.ts):
+      # enforce (Standard) | report-only | off — wirkt nach Neustart des
+      # Containers, ohne neues Image (docs/betrieb/fehlersuche.md).
+      CSP_MODE: ${CSP_MODE:-enforce}
       # Nur zur Fehlersuche: false überspringt Migrationen und Admin beim
       # Start (docs/betrieb/fehlersuche.md).
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}

@@ -10,6 +10,7 @@ Für den Proxy wichtig:
 | Zeitlimit | großer ZIP-Import kann über 60 s dauern — Lese-Timeout 300 s |
 | Header | `Host` unverändert durchreichen; `Authorization` durchreichen (KI-Zugang; tun alle drei unten ohne Zutun); `X-Forwarded-For` mit der Adresse des Clients **anhängen** — daran hängt die Sperre nach Fehlversuchen am KI-Zugang. Fehlt der Header, teilen sich alle KI-Clients eine Sperre |
 | WebSocket, SSE | nicht nötig (auch nicht für den KI-Zugang) |
+| Sicherheits-Header | `Strict-Transport-Security` setzt der Proxy. **Keine eigene `Content-Security-Policy`** setzen oder hinzufügen (auch nicht über Vorlagen wie „Security Headers“ in NPM): die App setzt sie selbst, für jede Seite mit einer neuen Nonce. Eine zweite Richtlinie gilt zusätzlich, der Browser muss beide erfüllen — ohne die Nonce blockiert sie die Skripte, die Seiten bleiben leer bzw. reagieren nicht. Ebenso keine vorhandene `Content-Security-Policy` der App entfernen oder umschreiben. Zum Abschalten dient `CSP_MODE` ([Fehlersuche](fehlersuche.md#content-security-policy)) |
 | Erreichbarkeit | die App nur über den Proxy: `APP_BIND` nie auf `0.0.0.0` — wer die App direkt erreicht, kann `X-Forwarded-For` selbst setzen |
 
 **Synology (DSM 7)** — Systemsteuerung → Anmeldeportal → Erweitert →

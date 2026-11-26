@@ -21,7 +21,8 @@ nicht sehen darf, existiert für ihn nicht** (Antwort wie „nicht gefunden“).
   Fehlermeldungen, Grenzen, Nebenwirkungen schreibender Werkzeuge.
 - **Verarbeitung von Fremdtext**: HTML-Fragmente aus Importen und Eingaben.
 - **Öffentliche Endpunkte**: Lebenszeichen `/api/health`.
-- **Kopfzeilen aller Antworten** (`next.config.mjs`).
+- **Kopfzeilen aller Antworten** (`next.config.mjs`) und
+  **Content-Security-Policy** (`lib/csp.ts`, `middleware.ts`).
 
 ## Behobene Befunde
 
@@ -33,6 +34,7 @@ nicht sehen darf, existiert für ihn nicht** (Antwort wie „nicht gefunden“).
 | Zwischenspeichern personenbezogener Antworten | API-Antworten ohne Vorgabe zum Zwischenspeichern; ein Proxy oder Browser-Verlauf hätte sie aufheben können. | Jede API-Antwort `Cache-Control: private, no-store` (Bilder: nur im Browser des Benutzers) und `nosniff`. |
 | Bildauslieferung | Die Inhaltsart kam ungeprüft aus dem Datensatz; ein Datensatz mit HTML- oder SVG-Typ wäre im Browser als Seite ausgeführt worden. | Nur feste Bildarten; alles andere als neutraler Download-Typ, dazu Sandbox-Richtlinie und `nosniff`. |
 | Einbetten in fremde Seiten, Referrer | Seiten ließen sich in fremde Seiten einbetten (Clickjacking); externe Links übermittelten die Adresse samt Kennungen. | `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`, ohne `X-Powered-By`. |
+| Eingeschleuste Skripte (XSS) | Keine Content-Security-Policy für die Seiten; ein eingeschleustes Skript wäre nur durch die Textausgabe der Oberfläche verhindert worden. | Zweite Sicherung: Richtlinie mit Nonce je Antwort — der Browser führt nur die Skripte der App aus, lädt nichts von fremden Adressen, kein Einbetten ([unten](#content-security-policy)). |
 | Baum ohne freigegebene Familie | Ein Benutzer ohne Familie bekam alle Personen als anonyme Platzhalter samt Verknüpfungen — Umfang und Struktur des Bestands. | Leere Antwort. |
 | Beziehung zu einer verborgenen Person anlegen | Die Antwort unterschied „gibt es nicht“ und „darfst du nicht“ und bestätigte so verborgene Personen. | Verborgen = nicht vorhanden (404). |
 | Scans gemeinsam genutzter Quellen | Wer einen einzigen Beleg einer Quelle bearbeiten durfte, konnte ihre Scans löschen — auch über „lösen“ mit Löschen des verwaisten Bildes. | Endgültiges Löschen nur, wer jeden Beleg der Quelle ändern dürfte (wie „Quelle löschen“), für Löschen und Lösen gleich. |
@@ -47,7 +49,76 @@ Tests zu den Befunden: `tests/request-guard.test.ts`,
 `tests/rate-limit.test.ts`, `tests/api-guard.db.test.ts`,
 `tests/sicherheit.db.test.ts`, `tests/gedcom-html.test.ts`,
 `tests/health.test.ts`, `tests/ai-token-delete.db.test.ts`,
-`tests/changelog-subject.db.test.ts`.
+`tests/changelog-subject.db.test.ts`, `tests/csp.test.ts`,
+`e2e/read/csp.spec.ts`.
+
+## Content-Security-Policy
+
+**Seiten** (alle Antworten außer `/api`, Build-Dateien, Icons, Geodaten):
+`middleware.ts` erzeugt je Anfrage eine Nonce (128 Bit) und setzt die
+Richtlinie aus `pagePolicy()` (`lib/csp.ts`) auf die Antwort und auf die
+Anfrage — Next.js liest sie beim Rendern und hängt die Nonce an jedes
+eigene Skript (Hydration, RSC-Daten, Chunks). Produktion, wörtlich:
+
+```
+default-src 'self'; script-src 'self' 'nonce-…' 'strict-dynamic';
+style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self';
+connect-src 'self'; object-src 'none'; frame-src 'none'; worker-src 'none';
+base-uri 'none'; form-action 'self' https://github.com https://accounts.google.com;
+frame-ancestors 'none'; upgrade-insecure-requests
+```
+
+| Direktive | Warum so |
+|---|---|
+| `default-src 'self'` | Rückfall für alles Ungenannte (z.B. Manifest, Medien): nur die eigene Adresse. |
+| `script-src 'nonce-…' 'strict-dynamic'` | Nur Skripte mit der Nonce dieser Antwort; was sie nachladen (Chunks von Next.js), erbt das Vertrauen. Kein `'unsafe-inline'`, kein `'unsafe-eval'`. `'self'` gilt nur in Browsern ohne `'strict-dynamic'`. |
+| `style-src 'self' 'unsafe-inline'` | React schreibt `style`-Attribute ins Server-HTML (Baum, Karte, Balken, Farben); React Flow setzt viele Stile. Ohne `'unsafe-inline'` fehlten sie. Bewusst **ohne** Nonce: eine Nonce macht `'unsafe-inline'` wirkungslos. Eingeschleuste Stile können keine Skripte ausführen; Restrisiko gering. |
+| `img-src 'self'` | Bilder kommen nur aus `/api/media` und den Icons; keine `data:`-/`blob:`-Bilder (am Build geprüft). |
+| `font-src 'self'` | Schriften liefert `next/font` selbst aus. |
+| `connect-src 'self'` | `fetch` nur an die eigene API und `/geo/countries.json`; keine externen Karten-Kacheln. |
+| `object-src 'none'`, `frame-src 'none'`, `worker-src 'none'` | Keine Plugins, keine eingebetteten Seiten, keine Web-Worker in der App. |
+| `base-uri 'none'` | Die App nutzt kein `<base>`; ein eingeschleustes könnte sonst relative Skript-Adressen umleiten. |
+| `form-action 'self' https://github.com https://accounts.google.com` | Formulare nur an die App — und an die OAuth-Anbieter: Die Anmelde-Knöpfe sind Formulare mit Server-Action. Mit JavaScript leitet der Client per Navigation zum Anbieter (`form-action` greift nicht). Abgeschickt vor der Hydration oder ohne JavaScript ist es ein echter Formular-POST mit 303 zum Anbieter, und Chromium prüft auch Weiterleitungsziele gegen `form-action`. Ziele laut Auth.js: `github.com/login/oauth/authorize`, `accounts.google.com/o/oauth2/v2/auth`. Festgehalten in `tests/csp.test.ts`. |
+| `frame-ancestors 'none'` | Nicht in fremde Seiten einbetten (wie `X-Frame-Options: DENY`, das für ältere Browser bleibt). |
+| `upgrade-insecure-requests` | Nur, wenn `AUTH_URL` mit `https://` beginnt — sonst würde die Mock-Umgebung auf `http://localhost` ihre eigenen Dateien nicht laden. |
+
+**Entwicklungsserver** (`next dev`): zusätzlich `'unsafe-eval'` (Fehlerhilfen
+von React/Next.js) und `ws:`/`wss:` (Neuladen bei Änderungen), kein
+`upgrade-insecure-requests` — nur dort.
+
+**API** (`/api/…`, fest in `next.config.mjs`, gleich `API_POLICY`):
+`default-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; sandbox`.
+JSON, Bilder und Downloads sind keine Seiten; öffnet ein Browser eine
+Antwort doch als Dokument, lädt sie nichts, führt nichts aus und lässt sich
+nicht einbetten. Diese Kopfzeile ersetzt die gleichnamige eines
+Route-Handlers, deshalb steht das `sandbox` der Bildroute mit drin.
+Downloads (Export, Importdateien) funktionieren damit unverändert.
+
+**Nonce statt fester Richtlinie:** Next.js kann eine Nonce nur in
+dynamisch gerenderte Seiten schreiben (Next.js-Doku „Content Security
+Policy“, Abschnitt „Nonces“). Hier kostet das nichts: Das Wurzel-Layout
+liest die Sitzung, alle Seiten waren schon vorher dynamisch (Build-Ausgabe:
+nur Icons statisch). Gemessen im Produktions-Build der Mock-Umgebung (Median
+aus 40 Aufrufen, vorher → nachher): `/login` 9,8 → 8,0 ms, `/tree` 29,5 →
+26,1 ms, `/people` 23,0 → 23,3 ms, `/hilfe` 9,5 → 10,4 ms — im Rauschen.
+Die Alternative ohne Nonce bräuchte `'unsafe-inline'` für Skripte (die
+Inline-Skripte von Next.js) und wäre gegen XSS fast wirkungslos; die
+experimentelle SRI-Variante deckt Inline-Skripte nicht ab.
+
+**Middleware in Node.js:** `CSP_MODE` wird zur Laufzeit gelesen (nicht beim
+Build). `/api` läuft bewusst nicht durch die Middleware — große Uploads und
+Importe sollen nicht durch ihre Körpergrenze.
+
+**Not-Schalter `CSP_MODE`:** `enforce` (Standard; unbekannte Werte ebenso),
+`report-only` (Kopfzeile `Content-Security-Policy-Report-Only`: nichts wird
+blockiert, Verstöße nur in der Browser-Konsole) oder `off`. Wirkt nur auf
+die Seiten, nach Neustart des Containers, ohne neues Image
+([Fehlersuche](betrieb/fehlersuche.md#content-security-policy)). Kein
+Report-Endpunkt — Verstöße landen weder auf dem Server noch bei Dritten.
+
+**Prüfung in jedem E2E-Lauf:** Der CSP-Wächter der Fixtures
+(`e2e/support/fixtures.ts`) lässt jeden Test scheitern, in dem der Browser
+eine Verletzung meldet.
 
 ## Bewusst akzeptierte Restrisiken
 
@@ -61,9 +132,9 @@ Tests zu den Befunden: `tests/request-guard.test.ts`,
 - **Platzhalter im Baum.** Wer mindestens einer Familie angehört, sieht
   verborgene Verwandte als „Nicht freigegeben“ — gewollt, damit der Baum
   zusammenhängt.
-- **Keine globale Content-Security-Policy** für die Seiten. Die Oberfläche
-  gibt Benutzertexte nur als Text aus (kein ungeprüftes HTML); eine
-  Richtlinie wäre eine zusätzliche Sicherung und ist für später vorgemerkt.
+- **`style-src 'unsafe-inline'`** in der Content-Security-Policy — nötig
+  für `style`-Attribute und React Flow. Eingeschleuste Stile führen keinen
+  Code aus; die Oberfläche gibt Benutzertexte ohnehin nur als Text aus.
 - **Lebenszeichen ohne Anmeldung** — nötig für Container und Proxy; es
   verrät nur „ok“ oder „Fehler“.
 
@@ -72,7 +143,10 @@ Tests zu den Befunden: `tests/request-guard.test.ts`,
 - Der Reverse-Proxy beendet TLS, setzt `Strict-Transport-Security`, setzt
   `X-Forwarded-Host` und hängt `X-Forwarded-For` an (vom Client gelieferte
   Werte überschreiben bzw. nicht ungeprüft durchreichen). Er begrenzt
-  Anfragen Unbekannter.
+  Anfragen Unbekannter. Er setzt **keine eigene Content-Security-Policy**
+  (die App setzt sie mit Nonce je Seite; eine zweite gälte zusätzlich und
+  blockierte die Skripte) — [Reverse-Proxy](betrieb/reverse-proxy.md).
+- `CSP_MODE` nur im Fehlerfall vorübergehend auf `report-only` oder `off`.
 - `AUTH_URL` muss die öffentliche Adresse der App sein — sie gilt auch als
   erlaubte Herkunft schreibender Anfragen.
 - `RATE_LIMIT=off` nie in Produktion setzen (nur für den E2E-Build

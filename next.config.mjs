@@ -5,6 +5,9 @@ const require = createRequire(import.meta.url);
 // mitbringt — siehe lib/next-patches/react-hydration-replay-fix.cjs.
 const hydrationFix = require("./lib/next-patches/react-hydration-replay-fix.cjs");
 
+/** Feste Richtlinie aller /api-Antworten — gleich API_POLICY in lib/csp.ts. */
+const API_POLICY = "default-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; sandbox";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Eigener Build-Ordner für den Mock-Server (scripts/mock.mjs), damit er
@@ -17,8 +20,12 @@ const nextConfig = {
   // Kopfzeilen für jede Antwort (docs/sicherheit.md): nicht in fremde Seiten
   // einbetten (Clickjacking), beim Klick auf externe Links (z.B. Adressen in
   // Quellen) keine Adresse der App samt Personen-Kennung mitschicken, keine
-  // Inhaltsart erraten. Bewusst ohne Content-Security-Policy hier — die
-  // Bildroute setzt ihre eigene, strengere.
+  // Inhaltsart erraten. Die Content-Security-Policy der Seiten setzt
+  // middleware.ts (Nonce je Anfrage, Not-Schalter CSP_MODE); hier nur die
+  // feste, strenge Richtlinie der API (API_POLICY in lib/csp.ts — beide
+  // Stellen gleich halten, tests/csp.test.ts prüft das). Sie ersetzt die
+  // gleichnamige Kopfzeile eines Route-Handlers — darum enthält sie das
+  // `sandbox` der Bildroute.
   async headers() {
     return [
       {
@@ -28,6 +35,10 @@ const nextConfig = {
           { key: "Referrer-Policy", value: "same-origin" },
           { key: "X-Content-Type-Options", value: "nosniff" },
         ],
+      },
+      {
+        source: "/api/:path*",
+        headers: [{ key: "Content-Security-Policy", value: API_POLICY }],
       },
     ];
   },

@@ -23,7 +23,36 @@ Die Ausgabe der Migrationen steht im Log von **`app`**, vor dem Serverstart
 | Nach der Anmeldung wieder auf `/login` | Seite über eine andere Adresse als `PUBLIC_URL` aufgerufen, oder `https://`-`PUBLIC_URL` über `http://` geöffnet |
 | „Anmeldung fehlgeschlagen … nicht freigeschaltet“ | E-Mail des Kontos steht nicht in der Benutzerliste (oder gesperrt); bei falscher OAuth-Konfiguration erscheint dieselbe Meldung — dann das Log von `app` lesen |
 | Upload bricht ab, 413 | Upload-Limit des Proxys (siehe Tabelle oben) |
+| Seite bleibt nach einem Update leer, Knöpfe reagieren nicht; Browser-Konsole meldet „Refused to … Content Security Policy“ | Schutzregeln des Browsers blockieren etwas → [Content-Security-Policy](#content-security-policy) |
 | Port 3080 belegt | `APP_PORT` ändern und im Proxy anpassen |
+
+## Content-Security-Policy
+
+Die App schickt mit jeder Seite eine Content-Security-Policy: Der Browser
+führt nur die Skripte der App selbst aus (mit einer Nonce, die für jede
+Antwort neu ist) und lädt nichts von fremden Adressen
+([Richtlinie und Begründung](../sicherheit.md#content-security-policy)).
+Blockiert sie nach einem Update etwas, das gebraucht wird, lässt sie sich
+**ohne neues Image** zurückschalten:
+
+1. In Portainer unter den Stack-Variablen `CSP_MODE=report-only` setzen
+   (nichts wird blockiert, Verstöße erscheinen nur in der Browser-Konsole,
+   F12 → Konsole, mit „[Report Only]“) — oder im Notfall `CSP_MODE=off`
+   (keine Richtlinie).
+2. Stack aktualisieren (*Update the stack*, kein *Pull* nötig); der
+   App-Container startet mit der neuen Einstellung.
+3. Prüfen: In den Entwicklerwerkzeugen des Browsers (Netzwerk → eine Seite
+   → Antwort-Header) steht dann `Content-Security-Policy-Report-Only` statt
+   `Content-Security-Policy` bzw. keines von beiden.
+4. Meldungen aus der Konsole als Fehler weitergeben; nach der Korrektur die
+   Variable wieder entfernen (Standard `enforce`).
+
+Die Variable wirkt nur auf die Seiten. Die feste Richtlinie der API
+(`/api/…`: JSON, Bilder, Downloads) steht im Image und bleibt.
+
+Ein zweiter Grund für dieselben Symptome: Der Reverse-Proxy setzt eine
+eigene `Content-Security-Policy` ([Reverse-Proxy](reverse-proxy.md)) —
+dann zeigt die Antwort zwei solche Kopfzeilen. Die des Proxys entfernen.
 
 ## Fehlgeschlagene Migration
 
