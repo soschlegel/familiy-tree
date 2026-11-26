@@ -15,6 +15,7 @@ export const HELP_LINKS = {
   dublettenKlassen: "/hilfe/dubletten#was-bedeuten-sicher-wahrscheinlich-und-unklar",
   dublettenKi: "/hilfe/dubletten#von-der-ki-vorgepruefte-paare",
   kiZugang: "/hilfe/ki-zugang",
+  einstellungen: "/hilfe/einstellungen",
 } as const;
 
 export type HelpLinkKey = keyof typeof HELP_LINKS;

@@ -1,8 +1,8 @@
 import { requireScope } from "@/lib/session";
-import { getAiAccessInfo, listApiTokens } from "@/lib/services";
+import { getAiAccessInfo, getSetting, listApiTokens } from "@/lib/services";
 import { AiAccessManager } from "@/components/AiAccessManager";
 import { HISTORY_PARAM } from "@/components/ai-access-labels";
-import { AiConnectGuide, connectorUrlFromEnv } from "@/components/AiConnectGuide";
+import { AiConnectGuide } from "@/components/AiConnectGuide";
 import { HelpLink } from "@/components/HelpLink";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +26,12 @@ export default async function AiAccessPage({
   const { scope } = await requireScope();
   // Verlauf (widerrufene und abgelaufene Schlüssel) eingeblendet?
   const showHistory = (await searchParams)[HISTORY_PARAM] === "1";
-  const [info, tokens] = await Promise.all([getAiAccessInfo(scope), listApiTokens(scope)]);
+  // Adresse des Connectors: Wert aus „Einstellungen“ (/admin/settings) vor MCP_CONNECTOR_URL.
+  const [info, tokens, connectorUrl] = await Promise.all([
+    getAiAccessInfo(scope),
+    listApiTokens(scope),
+    getSetting("mcpConnectorUrl"),
+  ]);
 
   return (
     <div className="space-y-5">
@@ -44,7 +49,7 @@ export default async function AiAccessPage({
       </div>
       <AiAccessManager info={info} tokens={tokens} initialShowHistory={showHistory} />
       <AiConnectGuide
-        connectorUrl={connectorUrlFromEnv(process.env.MCP_CONNECTOR_URL)}
+        connectorUrl={connectorUrl}
         canUse={info.aiAccess !== "NONE"}
       />
     </div>

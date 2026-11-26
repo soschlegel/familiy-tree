@@ -127,6 +127,7 @@ beide). Ereignisse, Belege, Namen und Rohdaten folgen ihrem Träger.
 | `gedcom-export.ts` | GEDCOM-Export (Datei bzw. ZIP mit Bildern) |
 | `export-selection.ts` | Familienauswahl für den GEDCOM-Export |
 | `release-notes.ts` | Neuigkeiten: zuletzt gesehenes Release je Benutzer merken |
+| `settings.ts` | Einstellungen der Installation: wirksamen Wert lesen (App vor Umgebung), pflegen (nur Admin) |
 
 ---
 
@@ -1546,7 +1547,8 @@ Paket und Momentaufnahme der betroffenen Personen und Familien.
 
 **Regeln und Entscheidungen:**
 - Je Eintrag: Kurzbeschreibung („Ereignis „Taufe“ geändert“, „Zusammengeführt:
-  … in …“, „Beim Import angelegt: …“, „Ort zugeordnet: …“), Benutzer, Kanal,
+  … in …“, „Beim Import angelegt: …“, „Ort zugeordnet: …“, „Einstellung „…“
+  geändert“), Benutzer, Kanal,
   Schlüsselname, Paket und je Feld vorher → nachher mit deutschen Feldnamen;
   Kennungen werden nie als Feld angezeigt, lange Texte gekürzt.
 - Ältere Einträge (vor dem Changelog) ohne Paket und Momentaufnahme: Der
@@ -1682,6 +1684,66 @@ Datenstand.
 
 **Tests:** `tests/release-notes.db.test.ts`; `e2e/read/neuigkeiten.spec.ts`,
 `e2e/write/whats-new.spec.ts`.
+
+---
+
+## Einstellungen
+
+### lib/services/settings.ts
+
+**Zweck:** Einstellungen der Installation, die Administratoren auf
+`/admin/settings` statt in der Server-Konfiguration pflegen (Tabelle
+`AppSetting`, Schlüssel → Text). Welche Schlüssel es gibt, mit Bezeichnung,
+Erklärung, Art des Werts und zugehöriger Umgebungsvariable, steht allein im
+Verzeichnis `lib/settings/registry.ts` (bibliotheken.md).
+
+**Wichtige Funktionen:**
+- `getSetting(key)` — wirksamer Wert für den Server (ohne Scope, nur
+  serverseitig dort aufrufen, wo er gebraucht wird): Eintrag aus der
+  Datenbank, sonst die Umgebungsvariable des Schlüssels, sonst `null`.
+- `listSettings(scope)` — je Schlüssel des Verzeichnisses `SettingStateDto`:
+  Bezeichnung, Erklärung, Art, Umgebungsvariable, Beispiel, `appValue`,
+  `envValue`, `effective`, `source` (`app`/`env`/`none`), `updatedAt`.
+- `createSetting(scope, key, value)`, `updateSetting(scope, key, value)`,
+  `deleteSetting(scope, key)` — anlegen, ändern, entfernen; Ergebnis ist der
+  neue Zustand des Schlüssels.
+
+**Regeln und Entscheidungen:**
+- **Vorrang:** Wert aus der App vor Umgebungsvariable; ohne Eintrag gilt die
+  Umgebungsvariable — bestehende Installationen ändern sich durch das
+  Einführen eines Schlüssels nicht. Entfernen stellt den Rückfall her.
+- **Nie ungeprüft:** Jeder Wert läuft beim Speichern durch
+  `checkSettingValue` nach der Art des Schlüssels (heute: http(s)-Adresse,
+  ohne Benutzername/Passwort, höchstens 2000 Zeichen; vereinheitlicht über
+  `URL`). Unbekannte Schlüssel → `VALIDATION` (Pfad `key`), ungültige Werte →
+  `VALIDATION` (Pfad `value`). Auch beim Lesen werden gespeicherte und
+  Umgebungswerte erneut geprüft; ein ungültiger gilt als nicht gesetzt.
+- Anlegen eines schon gesetzten Schlüssels → `CONFLICT`; Ändern/Entfernen
+  eines nicht gesetzten → `NOT_FOUND`. Ändern auf denselben Wert schreibt
+  nichts (auch kein Protokoll).
+- **Keine Geheimnisse:** Das Verzeichnis nimmt nur Werte auf, die jeder
+  Administrator im Klartext sehen darf; die Seite zeigt sie, das Protokoll
+  hält vorher → nachher fest. Zugangsdaten bleiben Umgebungsvariablen.
+- Kein Zwischenspeicher: `getSetting` liest bei jedem Aufruf (eine Abfrage
+  nach Primärschlüssel); Änderungen wirken sofort ohne Neustart.
+
+**Rechte/Datenschutz:** Lesen der Übersicht und Pflegen nur Administratoren
+(`FORBIDDEN`); die Routen prüfen zusätzlich `setting:manage`. `getSetting`
+selbst prüft keine Rechte — es liefert nur Werte, die keine Geheimnisse sind.
+
+**Protokoll:** Audit-Art `Setting`, `entityId` = Schlüssel: `CREATE` (`label`,
+`value`), `UPDATE` (`label`, `changes.value` vorher → nachher), `DELETE`
+(`label`, bisheriger `value`). In der Änderungsübersicht (`changes.ts`) als
+„Einstellung „…“ gesetzt / geändert / entfernt“ mit dem Feld „Wert“; ohne
+Personen- und Familienbezug, daher nur für Administratoren sichtbar.
+
+**Benutzt von:** `app/admin/settings/page.tsx`, `app/api/settings/route.ts`,
+`app/api/settings/[key]/route.ts`; `getSetting` in `app/ai-access/page.tsx`
+(Adresse des Connectors).
+
+**Tests:** `tests/settings.db.test.ts` (Vorrang, Rückfall, Prüfung, Rechte,
+Protokoll, Routen), `tests/settings.test.ts` (Verzeichnis und Prüfung);
+`e2e/write/settings.spec.ts`.
 
 ---
 

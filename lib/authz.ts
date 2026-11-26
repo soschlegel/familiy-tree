@@ -16,7 +16,8 @@ export type Action =
   | "audit:read"
   | "data:import"
   | "family:manage"
-  | "place:manage";
+  | "place:manage"
+  | "setting:manage";
 
 const ADMIN_ONLY: Action[] = [
   "user:read",
@@ -28,6 +29,8 @@ const ADMIN_ONLY: Action[] = [
   "family:manage",
   // Ortszuordnung: sieht alle Ortstexte, auch die gesperrter Personen.
   "place:manage",
+  // Einstellungen der Installation (/admin/settings) gelten für alle.
+  "setting:manage",
 ];
 
 const PERMISSIONS: Record<Role, Action[]> = {

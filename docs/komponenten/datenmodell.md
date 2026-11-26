@@ -24,6 +24,7 @@ Querverweise: Datumslogik `lib/dates.ts`, Rechte `lib/scope.ts` und
 | Import und Herkunft | `ImportBatch`, `ImportLink`, `ImportSource`, `ExternalId`, `ImportRawRecord`, `DuplicateDismissal`, `DuplicateReview`, `PersonRedirect` | `ImportStatus`, `DuplicateVerdict` |
 | Audit und Änderungsgeschichte | `AuditLog`, `ChangeSet` | `AuditChannel` |
 | Orte (Karte) | `Place` | `PlaceSource`, `PlacePrecision` |
+| Einstellungen | `AppSetting` | — |
 
 Allgemeine Konventionen:
 
@@ -589,7 +590,8 @@ Audit rollen die eigentliche Änderung nicht zurück (`audit` fängt Fehler ab).
 - `userId`, `action` (Text: `CREATE`, `UPDATE`, `DELETE`, `MERGE`,
   `CONNECT`), `entityType` (Text, z.B. `Person`, `Relationship`,
   `MediaAsset`, `User`, `Family`, `Source`, `Citation`, `ApiToken`, `Event`,
-  `PersonName`, `ImportBatch`, `ImportRawRecord`, `Place`), `entityId`.
+  `PersonName`, `ImportBatch`, `ImportRawRecord`, `Place`, `Setting`),
+  `entityId` (bei `Setting` der Schlüssel der Einstellung).
 - `diff` (JSON): bei `UPDATE` seit dem Changelog
   `{ changes: { feld: { from, to } } }` (Datumsspalten zu einem Feld in
   Anzeigeform zusammengefasst, `fieldChanges`); ältere Einträge enthalten
@@ -660,6 +662,22 @@ entsteht nur über den normalisierten Text.
 **Indizes:** eindeutig `key`; `source` (z.B. „alle automatischen neu
 zuordnen“, von Hand Bestätigtes nie überschreiben).
 
+### `AppSetting`
+**Bedeutung:** Einstellung der Installation, von einem Administrator in der
+App gesetzt (`/admin/settings`, `lib/services/settings.ts`). Welche
+Schlüssel es gibt, legt allein das Verzeichnis `lib/settings/registry.ts`
+fest — ein neuer Schlüssel braucht keine Migration. Eine Zeile gibt es nur
+für in der App gesetzte Werte; ohne Zeile gilt die zum Schlüssel gehörende
+Umgebungsvariable. Nur für Werte, die keine Geheimnisse sind.
+
+**Felder:** `key` (Primärschlüssel, Kennung aus dem Verzeichnis), `value`
+(Text, beim Speichern nach der Art des Schlüssels geprüft), `createdAt`,
+`updatedAt`.
+
+**Besonderheit:** Keine Fremdschlüssel; Zeilen mit Schlüsseln, die das
+Verzeichnis nicht (mehr) kennt, werden ignoriert. Änderungen stehen im
+`AuditLog` (`Setting`).
+
 ## Migrationen (`prisma/migrations/`)
 
 | Ordner | Inhalt |
@@ -679,6 +697,7 @@ zuordnen“, von Hand Bestätigtes nie überschreiben).
 | `20261125000000_person_redirect` | Tabelle `PersonRedirect` mit Index und Fremdschlüssel (Cascade). Bewusst ohne Daten: Die Rückfüllung aus dem Audit geschieht im Code (`backfillPersonRedirects`). |
 | `20261125000001_duplicate_review` | Enum `DuplicateVerdict` und Tabelle `DuplicateReview` mit Index und Fremdschlüsseln (Personen Cascade, Benutzer SetNull) — rein ergänzend. |
 | `20261125000002_import_anzeigename` | Tabelle `ImportSource` (Anzeigename je Quell-Baum) — nur `CREATE TABLE`, keine Rückfüllung. |
+| `20261126000000_einstellungen` | Tabelle `AppSetting` (Einstellungen der Installation, Schlüssel → Wert) — nur `CREATE TABLE`, keine Daten; ohne Zeile gilt weiter die Umgebungsvariable. |
 
 `migration_lock.toml` legt den Anbieter (PostgreSQL) fest.
 

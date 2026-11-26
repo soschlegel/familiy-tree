@@ -18,6 +18,7 @@ const TOPICS = [
   "aenderungen",
   "ki-zugang",
   "datenschutz",
+  "einstellungen",
 ];
 
 test.describe("Hilfe als Betrachter", () => {

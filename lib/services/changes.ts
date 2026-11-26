@@ -75,6 +75,7 @@ const ENTITY: Record<string, [string, string]> = {
   ImportBatch: ["Import", "Importe"],
   ImportRawRecord: ["Rohdaten", "Rohdaten"],
   Place: ["Ortszuordnung", "Ortszuordnungen"],
+  Setting: ["Einstellung", "Einstellungen"],
 };
 
 const SECTION_NOUN: Record<string, [string, string]> = {
@@ -216,6 +217,8 @@ const FIELDS: Record<string, Record<string, string>> = {
     note: "Begründung",
     uncertain: "Unsicher",
   },
+  // Einstellungen (lib/services/settings.ts): nur der Wert; `label` steht in der Beschreibung.
+  Setting: { value: "Wert" },
 };
 
 const DATE_KEYS: readonly FuzzyKey[] = ["birthDate", "deathDate", "startDate", "endDate", "date"];
@@ -606,6 +609,13 @@ function describe(ctx: Ctx, row: Row): { what: string; note: string | null } {
         return { what: `Ort als nicht zuordenbar markiert: „${text}“`, note: null };
       }
       return { what: `Ort zugeordnet: „${text}“${label ? ` → ${shorten(label)}` : ""}`, note: null };
+    }
+    case "Setting": {
+      // Einstellung (lib/services/settings.ts) — nur in /admin/changes sichtbar.
+      const label = strOf(d.label) ?? row.entityId;
+      if (row.action === "DELETE") return { what: `Einstellung „${label}“ entfernt`, note: null };
+      if (row.action === "CREATE") return { what: `Einstellung „${label}“ gesetzt`, note: null };
+      return { what: `Einstellung „${label}“ ${act}`, note: null };
     }
     default:
       return { what: `${ENTITY[row.entityType]?.[0] ?? row.entityType} ${act}`, note: null };

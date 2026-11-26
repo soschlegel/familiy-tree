@@ -44,7 +44,7 @@ Diese drei verbinden sich über einen **Custom Connector**, den du **einmal** au
 1. Schlüssel anlegen (siehe oben) und kopieren.
 2. Auf claude.ai mit demselben Konto wie auf dem Handy anmelden.
 3. **Customize → Connectors**, **„+ Add“**, **„Add custom connector“**.
-4. Name „Stammbaum“, als Adresse die, die auf der Seite „KI-Zugang“ steht (fehlt sie, bekommst du sie vom Administrator).
+4. Name „Stammbaum“, als Adresse die, die auf der Seite „KI-Zugang“ steht (fehlt sie, bekommst du sie vom Administrator). Administratoren tragen sie unter **Verwaltung → Einstellungen** ein, siehe [Einstellungen](12-einstellungen.md).
 5. „Add“ und „Connect“ — es öffnet sich die Anmeldeseite des Stammbaums: dort deinen Schlüssel einfügen.
 6. Auf dem Handy in der Claude-App im Chat über „+“ bzw. das Werkzeug-Symbol den Connector „Stammbaum“ einschalten.
 
