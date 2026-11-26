@@ -1413,6 +1413,7 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
   - Werte als Definitionsliste. Der alte Wert ist durchgestrichen (`<del>`), der neue eingefügt (`<ins>`). Für Screenreader stehen „vorher:“ und „nachher:“ dabei; der Pfeil ist ausgeblendet.
   - Beim Anlegen erscheint nur der neue Wert, beim Löschen nur der alte. Fehlt der alte Wert, steht der Hinweis „vorheriger Wert nicht erfasst“. Leere Werte erscheinen als „leer“.
   - Lange Werte brechen um; auf dem Telefon gibt es keinen waagerechten Überlauf.
+  - Einträge mit `fromMerged` (nur im Personenverlauf: Eintrag einer Person, die in dieser aufgegangen ist) tragen das Abzeichen „aus zusammengeführtem Eintrag“ (`change-entry-merged`).
 - **Server oder Client:** Client (`"use client"`; enthält aber keine Zustände oder Effekte).
 - **Ruft auf:** nichts. Die Zeit formatiert `formatChangeTime`.
 - **Tests:** `e2e/write/changelog.spec.ts` (`change-entry`, Kanal „KI über MCP“).

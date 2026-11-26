@@ -36,7 +36,8 @@ function Value({ value }: { value: string | null }) {
 /**
  * Einträge des Änderungsverlaufs: Zeitpunkt, Benutzer, Kanal, Paket,
  * Beschreibung und je Feld vorher → nachher. Lange Werte brechen um (kein
- * waagerechtes Überlaufen auf dem Telefon).
+ * waagerechtes Überlaufen auf dem Telefon). Einträge einer Person, die in
+ * dieser aufgegangen ist, tragen den Hinweis „aus zusammengeführtem Eintrag“.
  */
 export function ChangeEntryList({
   entries,
@@ -63,6 +64,15 @@ export function ChangeEntryList({
               <span className="min-w-0 break-words">
                 <span className="sr-only">Paket: </span>
                 <span aria-hidden>Paket </span>„{e.changeSet.title}“
+              </span>
+            )}
+            {e.fromMerged && (
+              <span
+                className="badge"
+                data-testid="change-entry-merged"
+                title="Dieser Eintrag stammt von einer Person, die später mit dieser zusammengeführt wurde."
+              >
+                aus zusammengeführtem Eintrag
               </span>
             )}
           </p>
