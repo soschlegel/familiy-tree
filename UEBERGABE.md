@@ -24,8 +24,8 @@ aktuell halten — Erledigtes streichen, keine Paketgeschichte sammeln.
   [datenmodell.md](docs/komponenten/datenmodell.md#migrationen-prismamigrations)).
 - Prüfstand dieses Releases: Migrationen ↔ Schema ohne Abweichung, keine
   neue Migration, Typecheck, Lint, Vitest 1041/1041; `npm run test:e2e`
-  (Produktions-Build, strenger Hydration-Wächter, CSP-Wächter): siehe
-  Git-Nachricht des Release-Commits.
+  (Produktions-Build, strenger Hydration-Wächter, CSP-Wächter): 362
+  bestanden, 1 übersprungen.
 - Git-Verlauf am 23.11. umgeschrieben (alle Zweige neu hochgeladen). Ältere
   Klone und Worktrees passen nicht mehr dazu — neu klonen statt
   zusammenführen.
