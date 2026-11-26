@@ -1,4 +1,4 @@
-# Übergabe (Stand 23.11.2026)
+# Übergabe (Stand 26.11.2026)
 
 Arbeitsnotiz für die Fortsetzung auf einem anderen Rechner. Beim Weiterarbeiten
 aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
@@ -10,19 +10,25 @@ aktuell halten oder entfernen, sobald die offenen Pakete erledigt sind.
   Portainer aktualisiert den Stack von dort. **Ein Merge ist ein
   Produktiv-Deployment auf echte Daten.**
 - `optimierung` = Arbeitsbranch, zum Zeitpunkt der Übergabe gleich `main`.
+- Release 2026-11-26.1 (26.11.): Seite „Einstellungen“ (Schlüssel → Wert aus
+  einem Verzeichnis im Code, `lib/settings/registry.ts`; Connector-Adresse in
+  der App, `MCP_CONNECTOR_URL` nur noch Rückfall;
+  `20261126000000_einstellungen`) und Familien der Person im
+  Änderungseintrag (`20261126000100_audit_personenfamilien`, letzter
+  Migrationsordner; ohne Rückfüllung).
 - Release 2026-11-23.1 (23.11.): Zusammenführen-Komfort mit Umleitung alter
   Kennungen (`20261125000000_person_redirect`), KI-Vorprüfung von Dubletten
   (`20261125000001_duplicate_review`), Herkunft der Importe
-  (`20261125000002_import_anzeigename`, letzter Migrationsordner),
+  (`20261125000002_import_anzeigename`),
   Hydration-Fehler behoben (Rückportierung einer React-Korrektur beim Bauen,
   `lib/next-patches/`), Sicherheitsprüfung (`docs/sicherheit.md`). Davor am
   22.11.: Orte in der Anzeige (2026-11-22.5), Orte ohne Knopfdruck und mit
   KI (2026-11-22.4), Neuigkeiten/Hilfe/E2E gegen Produktions-Build (.3),
   Karte/Orte, Schlüsselverwaltung, Komponenten-Doku (.2), Bilder an
   Einträgen (.1).
-- Prüfstand: Migrationen ↔ Schema ohne Abweichung, alle drei neuen
-  Migrationen rein ergänzend, Typecheck, Lint, Vitest 956/956; `npm run test:e2e` (Produktions-Build,
-  strenger Hydration-Wächter): 339 bestanden, 1 übersprungen.
+- Prüfstand: Migrationen ↔ Schema ohne Abweichung, beide neuen
+  Migrationen rein ergänzend, Typecheck, Lint, Vitest 975/975; `npm run test:e2e` (Produktions-Build,
+  strenger Hydration-Wächter): 349 bestanden, 1 übersprungen.
 - Arbeitsweise seit 23.11. (AGENTS.md, Abschnitt 2 und 3): höchstens zwei
   Sub-Agenten gleichzeitig, auf Opus, mit kurzem Auftrag; Agenten testen
   gezielt; der Playwright-Gesamtlauf läuft nur auf Anfrage des Eigentümers

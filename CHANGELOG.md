@@ -17,6 +17,18 @@ Regeln für neue Einträge (AGENTS.md, Abschnitt 3 „Ausrollen“):
 - Geprüft von tests/release-notes.test.ts (lib/release-notes.ts).
 -->
 
+## 2026-11-26.1 — Einstellungen in der App, Änderungen besser nachvollziehbar
+
+- Neue Seite „Einstellungen“ im Menü „Verwaltung“ (nur für
+  Administratoren): Einstellungen der Installation lassen sich direkt in der
+  App setzen, ändern und entfernen. Die Seite zeigt, welcher Wert gerade
+  gilt.
+- Die Adresse für den Claude-Connector, die auf der Seite „KI-Zugang“ in der
+  Anleitung steht, trägt ein Administrator jetzt dort ein.
+- In den Änderungen siehst du auch bei gelöschten oder zusammengeführten
+  Personen wieder die Werte vorher und nachher, wenn die Person zu einer
+  deiner Familien gehörte. Das gilt für Einträge ab diesem Update.
+
 ## 2026-11-23.1 — Zusammenführen leichter, Herkunft sichtbar, KI prüft Dubletten vor
 
 - Personenseite: Der neue Knopf „Zusammenführen …“ zeigt mögliche Dubletten
