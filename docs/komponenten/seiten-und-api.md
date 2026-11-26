@@ -8,8 +8,10 @@ Der MCP-Endpunkt `/api/mcp` ist in [mcp.md](mcp.md) beschrieben.
 
 ## Grundregeln für alle Seiten und Routen
 
-**Anmeldung.** Es gibt bewusst keine `middleware.ts`; geprüft wird in jeder
-Seite bzw. Route selbst (`lib/session.ts`, `lib/api.ts`). Die Sitzung ist
+**Anmeldung.** Die Middleware (`middleware.ts`) prüft keine Anmeldung —
+sie setzt nur die Content-Security-Policy der Seiten (siehe unten);
+geprüft wird in jeder Seite bzw. Route selbst (`lib/session.ts`,
+`lib/api.ts`). Die Sitzung ist
 ein JWT (Auth.js, `lib/auth.ts`); Rolle und Sperrstatus werden bei jeder
 Anfrage frisch aus der Datenbank gelesen, eine Sperre wirkt also sofort
 (die Sitzung gilt dann als leer).
@@ -30,6 +32,16 @@ Anfrage frisch aus der Datenbank gelesen, eine Sperre wirkt also sofort
   (`lib/rate-limit.ts`). Jede Antwort bekommt `Cache-Control: private,
   no-store` (außer die Route setzt selbst etwas, z.B. Bilder) und
   `X-Content-Type-Options: nosniff`.
+
+**Content-Security-Policy.** Jede Seite bekommt aus `middleware.ts` eine
+Richtlinie mit neuer Nonce (`lib/csp.ts`); Next.js hängt die Nonce selbst an
+seine Skripte. Folgen für Seiten und Komponenten: keine eigenen
+Inline-Skripte, keine `on…`-Attribute als Text, kein `eval`; Bilder,
+Schriften und `fetch` nur von der eigenen Adresse (externe Kacheln, CDNs
+oder `data:`-Bilder bräuchten eine Änderung der Richtlinie). `style`-Attribute
+sind erlaubt. Alle Antworten unter `/api` tragen die feste `API_POLICY`
+(`next.config.mjs`). Begründung je Direktive und Not-Schalter `CSP_MODE`:
+[docs/sicherheit.md](../sicherheit.md#content-security-policy).
 
 **Globale Rechte** (`lib/authz.ts`) hat nur die Rolle Administrator:
 `user:read`, `user:manage`, `audit:read`, `data:import`, `family:manage`,
@@ -701,8 +713,10 @@ Fehlercodes aus den Grundregeln.
   Liste von Bildarten (WebP, JPEG, PNG, GIF, AVIF, TIFF) — alles andere,
   auch SVG oder HTML in einem Datensatz, geht als
   `application/octet-stream` hinaus; dazu `nosniff`, `Content-Disposition:
-  inline` und `Content-Security-Policy: default-src 'none'; sandbox`, damit
-  ein Browser die Antwort nie als Seite ausführt.
+  inline` und eine Content-Security-Policy mit `default-src 'none'` und
+  `sandbox`, damit ein Browser die Antwort nie als Seite ausführt. Die
+  Route setzt `default-src 'none'; sandbox` selbst; ausgeliefert wird die
+  `API_POLICY` aus `next.config.mjs`, die sie ersetzt und beides enthält.
 - **`DELETE /api/media/[id]`**: unsichtbar 404, ohne Löschrecht
   (`canDeleteMedia`) 403. Löscht den Datensatz, danach die Dateien (eine
   verwaiste Datei wird hingenommen); Audit direkt in der Route mit den

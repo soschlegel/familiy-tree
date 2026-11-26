@@ -16,7 +16,7 @@ Netz nur `storage`, `media-processing`, `places/gazetteer-file`,
 
 | Bereich | Module |
 |---|---|
-| Anmeldung, Rechte, Anfrage-Rahmen | `auth`, `dev-login`, `authz`, `session`, `api`, `request-guard`, `rate-limit`, `health-cache`, `scope`, `ai-tokens`, `prisma` |
+| Anmeldung, Rechte, Anfrage-Rahmen | `auth`, `dev-login`, `authz`, `session`, `api`, `request-guard`, `csp`, `rate-limit`, `health-cache`, `scope`, `ai-tokens`, `prisma` |
 | Protokoll | `audit`, `change-sets`, `change-time` |
 | Daten und Regeln | `dates`, `date-fields`, `events`, `event-labels`, `validation`, `consistency`, `partner-labels`, `source-labels`, `source-classify` |
 | Graph und Verwandtschaft | `graph`, `kinship`, `reference` |
@@ -190,6 +190,33 @@ arbeitet (kein `next/*`, keine Datenbank).
   oder mit unlesbarer Länge: „Länge verlangt“.
 
 **Benutzt von:** `lib/api.ts`. **Tests:** `tests/request-guard.test.ts`.
+
+### lib/csp.ts
+**Zweck:** Content-Security-Policy als reine Funktionen (kein `next/*`,
+keine Datenbank); Begründung je Direktive in
+[docs/sicherheit.md](../sicherheit.md#content-security-policy).
+
+- `pagePolicy({ nonce, dev, https, reportOnly })` — Richtlinie der Seiten:
+  Skripte nur mit Nonce plus `'strict-dynamic'` (kein `'unsafe-inline'`,
+  kein `'unsafe-eval'`), Stile mit `'unsafe-inline'` und bewusst ohne
+  Nonce, alles andere nur `'self'` bzw. `'none'`, `form-action` mit
+  `OAUTH_FORM_TARGETS`. Dev-Server zusätzlich `'unsafe-eval'` und
+  `ws:`/`wss:`; `upgrade-insecure-requests` nur bei https-Adresse und nicht
+  im Report-Only-Modus.
+- `OAUTH_FORM_TARGETS` — `https://github.com`, `https://accounts.google.com`:
+  Ziel der 303-Weiterleitung, wenn ein Anmelde-Formular ohne JavaScript
+  abgeschickt wird (Chromium prüft Weiterleitungen gegen `form-action`).
+  Kommt ein Anbieter dazu, hier ergänzen.
+- `API_POLICY` — feste Richtlinie aller `/api`-Antworten (in
+  `next.config.mjs` gleichlautend eingetragen; mit `sandbox`).
+- `cspMode()` — Not-Schalter `CSP_MODE`: `enforce` (Standard, auch für
+  unbekannte Werte), `report-only`, `off`; `cspHeaderName(mode)` liefert die
+  passende Kopfzeile.
+- `createNonce()` — 128 Bit aus Web-Crypto, base64. `isHttpsUrl()` —
+  `AUTH_URL` beginnt mit `https://`.
+
+**Benutzt von:** `middleware.ts` (Seiten), `next.config.mjs` (Wert von
+`API_POLICY`). **Tests:** `tests/csp.test.ts`, `e2e/read/csp.spec.ts`.
 
 ### lib/rate-limit.ts
 **Zweck:** Einfache Anfragebegrenzung im Speicher des Prozesses (festes

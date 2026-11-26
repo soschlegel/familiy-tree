@@ -78,7 +78,7 @@ der `.env`.
     und Build stören sich nicht). Schreibt danach `e2e-build-stamp.json`
     mit dem Zeitpunkt des Build-Beginns. `--if-stale` baut nur, wenn eine
     Build-Eingabe (`app`, `components`, `lib`, `public`, `geo`,
-    `prisma/schema.prisma`, `next.config.mjs`, `package-lock.json`,
+    `middleware.ts`, `prisma/schema.prisma`, `next.config.mjs`, `package-lock.json`,
     Tailwind-/PostCSS-/TS-Konfiguration) jünger ist als dieser Stempel. Der
     Build enthält nichts Ortsabhängiges (Port, Datenbank, Medienordner und
     Anmeldung liest der Server erst beim Start).
@@ -269,6 +269,8 @@ dauerhaften Daten liegen als Bind-Mounts unter `DATA_ROOT`. Dienste:
   erst nach gesunder Datenbank, erfolgreichem `media-init` und `backup-db`.
   Port nur an `APP_BIND` (Standard localhost) und `APP_PORT`. Healthcheck auf
   `/api/health` mit großzügiger Startphase (Migrationen). Dev-Login fest aus.
+  `CSP_MODE` wird durchgereicht (Standard `enforce`; Not-Schalter der
+  Content-Security-Policy, wirkt ohne neues Image).
 - **`proxy`** (optional, Profil `caddy`) — eigener Reverse-Proxy mit inline
   erzeugter Caddy-Konfiguration (`CADDY_*`), Standard „tls internal“.
 
@@ -316,9 +318,13 @@ Workflow nicht — die Prüfungen dort sind Handarbeit (AGENTS.md, Abschnitt 3).
 - `poweredByHeader: false` und `headers()` für jede Antwort:
   `X-Frame-Options: DENY` (nicht in fremde Seiten einbetten),
   `Referrer-Policy: same-origin` (externe Links bekommen keine Adresse der
-  App samt Kennungen), `X-Content-Type-Options: nosniff`. Keine globale
-  Content-Security-Policy — die Bildroute setzt ihre eigene. Test:
-  `tests/request-guard.test.ts`.
+  App samt Kennungen), `X-Content-Type-Options: nosniff`. Für `/api/…`
+  zusätzlich die feste Content-Security-Policy `API_POLICY` (gleich der in
+  `lib/csp.ts`; enthält `sandbox`, weil diese Kopfzeile die gleichnamige
+  der Bildroute ersetzt). Die Richtlinie der Seiten setzt `middleware.ts`
+  (Abschnitt „middleware.ts“ unten). `headers()` wird beim Build
+  ausgewertet — Laufzeit-Schalter gehören deshalb in die Middleware. Tests:
+  `tests/request-guard.test.ts`, `tests/csp.test.ts`.
 - `sharp` als externes Server-Paket (nicht gebündelt).
 - `outputFileTracingIncludes`: `geo/gazetteer.tsv.gz` für alle API-Routen
   (`/api/**` — Admin-Seite, Vorschlag am Ortsfeld, automatische Zuordnung
@@ -333,6 +339,21 @@ Workflow nicht — die Prüfungen dort sind Handarbeit (AGENTS.md, Abschnitt 3).
   und braucht keinen Eintrag in `outputFileTracingIncludes`; im Dev-Server
   wirkt eine Änderung sofort. Gilt nur für Webpack (Turbopack ist nicht im
   Einsatz).
+
+### `middleware.ts`
+
+Content-Security-Policy der Seiten (Regeln in `lib/csp.ts`, Begründung je
+Direktive in [docs/sicherheit.md](../sicherheit.md#content-security-policy)).
+Je Anfrage eine neue Nonce; die Richtlinie geht auf die Antwort (für den
+Browser) und auf die Anfrage (Next.js liest daraus die Nonce und setzt sie
+an seine Skripte). Läuft in der Node.js-Laufzeit, damit `CSP_MODE` zur
+Laufzeit gilt. Der `matcher` lässt `/api` (eigene Richtlinie; große Uploads
+nicht durch die Körpergrenze der Middleware), `_next/static`,
+`_next/image`, die Icons, `geo/` und Vorabladen über `next/link` aus. Eine
+vom Client mitgeschickte CSP-Kopfzeile wird verworfen. Alle Seiten sind
+ohnehin dynamisch (Wurzel-Layout liest die Sitzung); die Nonce kostet
+deshalb kein statisches Rendern. Tests: `tests/csp.test.ts`,
+`e2e/read/csp.spec.ts`.
 
 ---
 
@@ -484,6 +505,7 @@ selbst gelesen, nicht im eigenen Code.
 | `NEXT_DIST_DIR` | eigener Build-Ordner (Mock-Dev-Server `.next-mock`, E2E-Build `.next-e2e`) | `next.config.mjs` |
 | `PORT` / `HOSTNAME` | Port und Bind-Adresse des Servers | Next.js (implizit); im Image gesetzt |
 | `SEED_DEMO` | Demofamilie beim `db:seed` | `prisma/seed.ts` |
+| `CSP_MODE` | Not-Schalter der Content-Security-Policy der Seiten: `enforce` (Standard, auch bei unbekanntem Wert), `report-only` (nur Meldungen in der Browser-Konsole), `off`; zur Laufzeit gelesen, `docker-compose.yml` reicht ihn durch, `stack.env.example` auskommentiert ([Fehlersuche](../betrieb/fehlersuche.md#content-security-policy)) | `lib/csp.ts` (`cspMode`), `middleware.ts` |
 
 ### Containerstart und Stack
 
@@ -601,6 +623,12 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   Größengrenzen des Anfragekörpers.
 - **`rate-limit.test.ts`** — Anfragegrenzen: Zeitfenster, Zuordnung der
   Pfade, KI-Schlüssel, Abschalten.
+- **`csp.test.ts`** — Content-Security-Policy: jede Direktive der Seiten
+  (Produktion, Dev-Server, http/https, Report-Only), Ziele der
+  OAuth-Anmeldung in `form-action` (abgeglichen mit den Anbietern von
+  Auth.js), Nonce, `CSP_MODE`, Middleware (Kopfzeilen auf Antwort und
+  Anfrage, fremde Richtlinie verworfen, `matcher`), `API_POLICY` gleich in
+  `lib/csp.ts` und `next.config.mjs`.
 - **`import-linking.test.ts`** — Genauigkeit und Trefferquote von „Importe
   verbinden“ gegen erfundene Wahrheit („sicher“ muss fehlerfrei sein).
 - **`kinship.test.ts`** — Verwandtschaftsbegriffe und Wegbeschreibung.
@@ -739,7 +767,11 @@ Benutzer bekommt keinen gespeicherten Zustand.
   Test an unerwarteten Konsolen- oder Seitenfehlern scheitern lässt (mit eng
   gefassten Ausnahmen und pro Test erlaubten Meldungen; ein
   Hydration-Fehler React #418 ist immer ein Testfehler, siehe
-  Abschnitt 10), `loginAs` für weitere
+  Abschnitt 10). Darin der **CSP-Wächter**: Ein Init-Skript meldet jedes
+  `securitypolicyviolation`-Ereignis als Konsolenfehler, und jede
+  Konsolenmeldung zur Content-Security-Policy (auch „[Report Only]“) zählt
+  als Testfehler — ein `allow` des Tests hebt das nicht auf. So prüft jeder
+  Lauf die Richtlinie auf allen besuchten Seiten mit. `loginAs` für weitere
   Rollen in eigenen Kontexten; dazu Dev-Login, Dialoge annehmen,
   Barrierefreiheitsprüfung mit axe (WCAG 2.1 A/AA, begründete Ausnahmen),
   Prüfung auf waagerechte Scrollleiste, Warten auf Baum und Hydration,
@@ -757,6 +789,10 @@ Benutzer bekommt keinen gespeicherten Zustand.
 
 - **`auth.spec.ts`** — Anmeldung über den Dev-Login ohne gespeicherten
   Zustand.
+- **`csp.spec.ts`** — Content-Security-Policy: Seite mit Nonce, jedes
+  Skript trägt sie, jede Antwort eine neue; feste Richtlinie der API; ein
+  eingeschleuster Inline-Handler wird blockiert und gemeldet (prüft den
+  CSP-Wächter selbst).
 - **`dates.spec.ts`** — ungenaue Daten erscheinen auf Personenseite, Liste
   und Baumkarte gleich.
 - **`duplicate-banner.spec.ts`** — Dubletten-Hinweis nur für Berechtigte,

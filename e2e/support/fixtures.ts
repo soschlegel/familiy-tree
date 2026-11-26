@@ -39,10 +39,28 @@ type Guard = {
 };
 
 /**
+ * CSP-Wächter: Konsolenmeldungen des Browsers zu einer Verletzung der
+ * Content-Security-Policy (lib/csp.ts) — auch im Modus Report-Only. Solche
+ * Meldungen zählen immer als Fehler, ein `allow` des Tests hebt das nicht auf.
+ */
+const CSP_CONSOLE = /Content Security Policy|Content-Security-Policy|\[CSP-Verletzung\]/i;
+
+/**
+ * Meldet jedes `securitypolicyviolation`-Ereignis als Konsolenfehler (für
+ * Fälle ohne eigene Browsermeldung). Playwright führt Init-Skripte außerhalb
+ * der Richtlinie aus — die CSP blockiert den Wächter selbst also nicht.
+ */
+function reportCspViolations() {
+  document.addEventListener("securitypolicyviolation", (e) => {
+    console.error(`[CSP-Verletzung] ${e.effectiveDirective} blockiert ${e.blockedURI || "(inline)"} (${e.disposition})`);
+  });
+}
+
+/**
  * Sammelt unerwartete Konsolenfehler und Seitenfehler (uncaught exceptions)
  * einer Seite. Am Testende schlägt der Test fehl, wenn etwas dabei war.
  */
-export function watchPage(page: Page, guard: Guard, extraAllow: RegExp[]) {
+export async function watchPage(page: Page, guard: Guard, extraAllow: RegExp[]) {
   const label = () => {
     try {
       return new URL(page.url()).pathname + new URL(page.url()).search;
@@ -50,12 +68,17 @@ export function watchPage(page: Page, guard: Guard, extraAllow: RegExp[]) {
       return page.url();
     }
   };
+  await page.addInitScript(reportCspViolations);
   page.on("pageerror", (err) => {
     guard.problems.push(`[pageerror @ ${label()}] ${err.message}`);
   });
   page.on("console", (msg) => {
-    if (msg.type() !== "error") return;
     const text = msg.text();
+    if (CSP_CONSOLE.test(text)) {
+      guard.problems.push(`[CSP @ ${label()}] ${text}`);
+      return;
+    }
+    if (msg.type() !== "error") return;
     if ([...GLOBAL_ALLOW, ...extraAllow].some((re) => re.test(text))) return;
     guard.problems.push(`[console.error @ ${label()}] ${text}`);
   });
@@ -81,7 +104,7 @@ export const test = base.extend<Fixtures>({
     { auto: true },
   ],
   page: async ({ page, consoleGuard }, use) => {
-    watchPage(page, consoleGuard, consoleGuard.patterns);
+    await watchPage(page, consoleGuard, consoleGuard.patterns);
     await use(page);
   },
   loginAs: async ({ browser, consoleGuard }, use) => {
@@ -92,7 +115,7 @@ export const test = base.extend<Fixtures>({
       });
       opened.push(context);
       const page = await context.newPage();
-      watchPage(page, consoleGuard, consoleGuard.patterns);
+      await watchPage(page, consoleGuard, consoleGuard.patterns);
       return { page, context };
     });
     for (const c of opened) await c.close();

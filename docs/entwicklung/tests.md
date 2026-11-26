@@ -110,7 +110,8 @@ dann die ändernden (`e2e/write/`); diese legen eigene, „E2E …“ benannte
 Datensätze an und räumen sie wieder ab. Jeder Test schlägt außerdem fehl, wenn
 im Browser ein unerwarteter Konsolenfehler oder eine nicht abgefangene
 Ausnahme auftritt (`e2e/support/fixtures.ts`), auch bei einem
-Hydration-Fehler (React #418). Die Tests sprechen nur mit der
+Hydration-Fehler (React #418) und bei jeder Verletzung der
+Content-Security-Policy (CSP-Wächter). Die Tests sprechen nur mit der
 App (Browser und HTTP-API), nie direkt mit Datenbank oder Medienordner. Was
 die einzelnen Spec-Dateien prüfen, Hilfen, Konfiguration und bekannte Flakes:
 [betrieb-und-tests.md](../komponenten/betrieb-und-tests.md#9-end-to-end-tests-e2e-playwright).
