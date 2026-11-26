@@ -12,17 +12,15 @@ aktuell halten — Erledigtes streichen, keine Paketgeschichte sammeln.
   (GitHub Actions, Workflow „Images“) und zieht den Branch `deploy` nach;
   Portainer aktualisiert den Stack von dort. **Ein Merge ist ein
   Produktiv-Deployment auf echte Daten.**
-- `optimierung` = Arbeitsbranch. Dort liegen, geprüft (Vitest, gezielte
-  Playwright-Specs), aber noch nicht ausgerollt: Verlauf aufgegangener
-  Personen bei der bleibenden Person (`listPersonChanges`) und die
-  verschlankte Doku. Vor dem Ausrollen: CHANGELOG-Eintrag und Gesamtlauf.
-- Letztes Release: **2026-11-26.1** (Seite „Einstellungen“; Familien der
-  Person im Änderungseintrag). Neueste Migration:
+- `optimierung` = Arbeitsbranch, zum Zeitpunkt der Übergabe gleich `main`.
+- Letztes Release: **2026-11-26.2** (Verlauf aufgegangener Personen bei der
+  bleibenden Person; verschlankte Doku). Davor am selben Tag 2026-11-26.1
+  (Seite „Einstellungen“; Familien der Person im Änderungseintrag). Neueste Migration:
   `20261126000100_audit_personenfamilien` (Liste aller Migrationen:
   [datenmodell.md](docs/komponenten/datenmodell.md#migrationen-prismamigrations)).
 - Prüfstand dieses Releases: Migrationen ↔ Schema ohne Abweichung, neue
-  Migrationen rein ergänzend, Typecheck, Lint, Vitest 975/975;
-  `npm run test:e2e` (Produktions-Build, strenger Hydration-Wächter): 349
+  Migrationen rein ergänzend, Typecheck, Lint, Vitest 982/982;
+  `npm run test:e2e` (Produktions-Build, strenger Hydration-Wächter): 350
   bestanden, 1 übersprungen.
 - Git-Verlauf am 23.11. umgeschrieben (alle Zweige neu hochgeladen). Ältere
   Klone und Worktrees passen nicht mehr dazu — neu klonen statt

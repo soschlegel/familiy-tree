@@ -1,8 +1,10 @@
 # Betrieb auf der NAS (Portainer)
 
-Gedacht für eine NAS (x86-64) mit Portainer, erreichbar **nur im Heimnetz
-bzw. über VPN**, hinter dem Reverse-Proxy, der auf der NAS ohnehin läuft
-(Synology-Reverse-Proxy oder Nginx Proxy Manager).
+Gedacht für eine NAS (x86-64) mit Portainer, hinter dem Reverse-Proxy, der
+auf der NAS ohnehin läuft (Synology-Reverse-Proxy oder Nginx Proxy Manager).
+Die App kann **nur im Heimnetz bzw. über VPN** oder **aus dem Internet**
+erreichbar sein; für den zweiten Fall gelten zusätzlich die Hinweise in
+[reverse-proxy.md](reverse-proxy.md) und [../sicherheit.md](../sicherheit.md).
 
 ```
 git push (main)

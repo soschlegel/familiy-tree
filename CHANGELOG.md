@@ -17,6 +17,12 @@ Regeln für neue Einträge (AGENTS.md, Abschnitt 3 „Ausrollen“):
 - Geprüft von tests/release-notes.test.ts (lib/release-notes.ts).
 -->
 
+## 2026-11-26.2 — Änderungen zusammengeführter Personen
+
+- Im Abschnitt „Änderungen“ einer Person stehen jetzt auch die früheren
+  Änderungen der Personen, die mit ihr zusammengeführt wurden —
+  gekennzeichnet mit „aus zusammengeführtem Eintrag“.
+
 ## 2026-11-26.1 — Einstellungen in der App, Änderungen besser nachvollziehbar
 
 - Neue Seite „Einstellungen“ im Menü „Verwaltung“ (nur für
