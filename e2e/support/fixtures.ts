@@ -102,7 +102,7 @@ export const test = base.extend<Fixtures>({
 /** Anmelden über den Dev-Login der Login-Seite. */
 export async function devLogin(page: Page, email: string) {
   await page.goto("/login");
-  await page.getByLabel("E-Mail-Adresse").fill(email);
+  await page.getByLabel("Dev-Login: E-Mail-Adresse").fill(email);
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
 }
 

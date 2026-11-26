@@ -12,6 +12,22 @@ Der Stammbaum ist privat. Hinein kommt nur, wen ein Administrator **eingeladen**
 
 Steht dort „Anmeldung fehlgeschlagen. Diese E-Mail-Adresse ist nicht freigeschaltet“, ist deine Adresse (noch) nicht eingeladen — oder du hast ein anderes Konto erwischt. Sag dem Administrator, mit welcher Adresse du dich anmeldest.
 
+### Ohne Google- oder GitHub-Konto: Anmelden mit E-Mail-Link
+
+Bietet eure Installation das an, steht auf der Anmeldeseite unten ein Feld „E-Mail-Adresse“. Damit meldest du dich ohne Passwort an:
+
+1. Gib die Adresse ein, die eingeladen wurde, zum Beispiel `oma.erna@example.org`, und tippe auf „Link zusenden“.
+2. Es erscheint „Wenn diese Adresse freigeschaltet ist, kommt gleich eine E-Mail …“. Diese Meldung kommt immer — auch bei einer vertippten Adresse. Kommt nach ein paar Minuten keine Mail, schau im Spam-Ordner nach und prüfe die Schreibweise.
+3. Öffne die Mail „Dein Anmeldelink für den Stammbaum“ und tippe auf „Zur Anmeldung“.
+4. Es öffnet sich die Seite „Mit E-Mail-Link anmelden“. Tippe auf „Jetzt anmelden“ — danach siehst du den Stammbaum.
+
+Gut zu wissen:
+
+- Der Link gilt **15 Minuten** und nur **einmal**. Forderst du einen neuen an, gilt nur noch der neueste.
+- Steht dort „Dieser Anmeldelink gilt nicht mehr“, tippe auf „Neuen Link anfordern“ und hol dir einen frischen.
+- Mehr als drei Links in einer Viertelstunde verschickt die App für dieselbe Adresse nicht — dann kurz warten.
+- Hast du gar keinen Link angefordert, ignoriere die Mail einfach. Ohne den Link kann sich niemand anmelden.
+
 Abmelden kannst du oben rechts mit „Abmelden“ (auf dem Telefon im „Menü“).
 
 ## Was du oben im Menü findest

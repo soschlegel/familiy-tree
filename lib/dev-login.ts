@@ -25,7 +25,8 @@ export function devLoginAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
   return isMockDatabase(env.DATABASE_URL) && isMockMediaDir(env.MEDIA_DIR);
 }
 
-function isMockDatabase(url: string | undefined): boolean {
+/** Datenbankname endet auf `_mock` oder `_test` (auch für lib/email-login.ts). */
+export function isMockDatabase(url: string | undefined): boolean {
   if (!url) return false;
   try {
     const name = decodeURIComponent(new URL(url).pathname.replace(/^\//, ""));
@@ -35,7 +36,8 @@ function isMockDatabase(url: string | undefined): boolean {
   }
 }
 
-function isMockMediaDir(dir: string | undefined): boolean {
+/** Medienordner endet auf `-mock` oder `-test` (auch für lib/email-login.ts). */
+export function isMockMediaDir(dir: string | undefined): boolean {
   if (!dir) return false;
   // Beide Trenner zulassen (Windows/Posix), abschließende Trenner ignorieren.
   const trimmed = dir.replace(/[\\/]+$/, "");

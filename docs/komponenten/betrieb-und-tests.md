@@ -468,7 +468,8 @@ selbst gelesen, nicht im eigenen Code.
 |---|---|---|
 | `DATABASE_URL` | Postgres-Verbindung | Prisma (implizit), `mcp/server.ts`, Mock-/Test-Werkzeuge |
 | `AUTH_SECRET` | Schlüssel für Sitzungen | Auth.js (implizit); Mock-Ersatzwert in `scripts/mock.mjs` |
-| `AUTH_URL` | öffentliche Adresse der App (Callbacks, Cookies) | Auth.js (implizit); `mcp/http.ts` als erlaubte Herkunft |
+| `AUTH_URL` | öffentliche Adresse der App (Callbacks, Cookies, Link in der Anmelde-Mail) | Auth.js (implizit); `mcp/http.ts` als erlaubte Herkunft; `lib/email-login.ts` (`publicBaseUrl`) |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_FROM` | Versand der Anmeldelinks über das eigene Postfach; nur vollständig (Host, Benutzer, Passwort, Absender) gibt es den E-Mail-Link. Port Standard 587, `SMTP_SECURE` Standard „an bei 465“. Geheimnisse — nur als Umgebungsvariablen, nie unter „Einstellungen“ | `lib/email-login.ts`, `lib/email-login-mail.ts`, `lib/auth.ts`, Login-Seite, `/admin/users` |
 | `AUTH_TRUST_HOST` | Host-Kopf hinter Proxy vertrauen | Auth.js (implizit) |
 | `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` | OAuth GitHub | `lib/auth.ts`, Login-Seite |
 | `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | OAuth Google | `lib/auth.ts`, Login-Seite |
@@ -518,7 +519,8 @@ selbst gelesen, nicht im eigenen Code.
 | `E2E_SERVER` | von `scripts/e2e.mjs` gesetzt: `prod` (Standard) oder `dev`; wählt Web-Server, Worker und Vorwärmen |
 | `E2E_WRITE_WORKERS` | Obergrenze der Worker für das Projekt `write` (Standard 2) übersteuern, für Messungen |
 | `E2E_PRODUCTION_DEV_LOGIN` | nur `scripts/mock.mjs start` setzt `mock-only`: Dev-Login im Produktions-Build — wirkt nur zusammen mit Datenbank `…_mock`/`…_test` und Medienordner `…-mock`/`…-test` (`lib/dev-login.ts`); im Stack nie gesetzt |
-| `RATE_LIMIT` | `off` schaltet die Anfragegrenzen ab (`lib/rate-limit.ts`); nur `scripts/mock.mjs start` setzt es für den E2E-Build, im Stack nie |
+| `RATE_LIMIT` | `off` schaltet die Anfragegrenzen ab (`lib/rate-limit.ts`); nur `scripts/mock.mjs start` setzt es für den E2E-Build, im Stack nie. Die Drosselung der Anmelde-Mails (`lib/email-login.ts`) bleibt trotzdem an |
+| `MAIL_TEST_OUTBOX` | `scripts/mock.mjs` setzt `mock-only` (Dev und E2E): Anmelde-Mails landen als JSON in `<Mock-Medienordner>/mail-outbox` statt im Versand — wirkt nur zusammen mit Datenbank `…_mock`/`…_test` und Medienordner `…-mock`/`…-test` (`lib/email-login.ts`); `scripts/mock.mjs` leert dazu `SMTP_HOST`/`SMTP_USER`/`SMTP_PASSWORD`; im Stack nie gesetzt |
 | `E2E_AREA` | von `scripts/e2e.mjs` gesetzt; `write` hängt dann nur am Setup |
 | `CI` | Playwright: 2 Worker, `forbidOnly` |
 | `MERGE_SCREENS` | Ordner für Bildschirmfotos in `e2e/write/merge.spec.ts`, `merge-comfort.spec.ts` und `connect.spec.ts` |
@@ -601,6 +603,12 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   Größengrenzen des Anfragekörpers.
 - **`rate-limit.test.ts`** — Anfragegrenzen: Zeitfenster, Zuordnung der
   Pfade, KI-Schlüssel, Abschalten.
+- **`email-login.test.ts`** — Anmeldung per E-Mail-Link: Einrichtung (SMTP
+  nur vollständig, Test-Briefkasten nur mit allen drei Bedingungen), nur
+  Eingeladene bekommen Mail, gleiche Mindestdauer, Drosselung auch bei
+  `RATE_LIMIT=off`, Route und Mailtext; der Ablauf mit der eingebauten
+  Auth.js-Version (Token gehasht, einmalig, abgelaufen, ersetzt, kein neues
+  Konto, nachträglich gesperrt).
 - **`import-linking.test.ts`** — Genauigkeit und Trefferquote von „Importe
   verbinden“ gegen erfundene Wahrheit („sicher“ muss fehlerfrei sein).
 - **`kinship.test.ts`** — Verwandtschaftsbegriffe und Wegbeschreibung.
@@ -740,7 +748,9 @@ Benutzer bekommt keinen gespeicherten Zustand.
   gefassten Ausnahmen und pro Test erlaubten Meldungen; ein
   Hydration-Fehler React #418 ist immer ein Testfehler, siehe
   Abschnitt 10), `loginAs` für weitere
-  Rollen in eigenen Kontexten; dazu Dev-Login, Dialoge annehmen,
+  Rollen in eigenen Kontexten; dazu Dev-Login (Feld „Dev-Login:
+  E-Mail-Adresse“ — „E-Mail-Adresse“ allein ist das Feld des
+  E-Mail-Links), Dialoge annehmen,
   Barrierefreiheitsprüfung mit axe (WCAG 2.1 A/AA, begründete Ausnahmen),
   Prüfung auf waagerechte Scrollleiste, Warten auf Baum und Hydration,
   Muster für erwartete HTTP-Fehler.
@@ -769,7 +779,10 @@ Benutzer bekommt keinen gespeicherten Zustand.
   Testschlüsseln (401/403/200, Werkzeuglisten, Sitzungs-Cookie meldet nicht
   an).
 - **`mobile.spec.ts`** — Telefonbreite: kein waagerechtes Scrollen,
-  erreichbare Navigation, ausreichend große Schrift in Eingabefeldern.
+  erreichbare Navigation, ausreichend große Schrift in Eingabefeldern;
+  Fußzeile am unteren Rand einer kurzen Seite (Bestätigungsseite
+  `/login/email` — die Anmeldeseite ist mit E-Mail-Link und Dev-Login länger
+  als ein Telefon).
 - **`neuigkeiten.spec.ts`** — Link „Neuigkeiten“ in der Fußzeile, Seite mit
   allen Releases, kein Fenster für Mock-Benutzer, ohne Anmeldung weder Link
   noch Seite; `PUT /api/me/release-seen` (401, 400 bei unbekannter Kennung
@@ -811,6 +824,14 @@ zum nächsten Setup).
   Abgleich; Bearbeiter sieht die Seite nicht.
 - **`dates.spec.ts`** — ungenaue Daten über das Formular eingeben, prüfen,
   anzeigen, zurück ins Formular.
+- **`email-login.spec.ts`** — Anmeldung per E-Mail-Link über den
+  Test-Briefkasten (`<Mock-Medienordner>/mail-outbox`) mit eigens
+  eingeladenen Benutzern und je Test eigener Absender-Adresse
+  (X-Forwarded-For): anfordern, Mailtext, Vorab-Abruf verbraucht nichts,
+  `GET /api/auth/callback/nodemailer` leitet nur auf die Bestätigung,
+  „Jetzt anmelden“, zweiter Versuch → „gilt nicht mehr“; unbekannt/gesperrt
+  gleiche Antwort ohne Mail; Drosselung (3 je Adresse); unvollständiger
+  Link; Telefon im dunklen Farbschema mit axe.
 - **`duplicate-banner.spec.ts`** — Dubletten-Hinweis mit eigenen Datensätzen,
   Begrenzung, „kein Duplikat“.
 - **`gedcom-import.spec.ts`** — GEDCOM-Import und -Export über die Oberfläche

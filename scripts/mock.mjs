@@ -83,6 +83,14 @@ const mockEnv = {
       ? process.env.AUTH_SECRET
       : "mock-secret-nur-fuer-lokale-tests-0123456789",
   ENABLE_DEV_LOGIN: "true",
+  // Anmeldung per E-Mail-Link: Mails landen als Datei im Test-Briefkasten
+  // (<Medienordner>/mail-outbox), nie im echten Versand — wirkt nur zusammen
+  // mit Mock-Datenbank und Mock-Medienordner (lib/email-login.ts). SMTP-Angaben
+  // aus der .env werden sicherheitshalber geleert.
+  MAIL_TEST_OUTBOX: "mock-only",
+  SMTP_HOST: "",
+  SMTP_USER: "",
+  SMTP_PASSWORD: "",
   // Eigener Build-Ordner, damit der Mock-Server parallel zum normalen
   // Dev-Server (Port 3000, .next) laufen kann.
   NEXT_DIST_DIR: ".next-mock",

@@ -31,7 +31,7 @@ for (const role of ROLES) {
   setup(`Anmelden als ${role}`, async ({ page }) => {
     mkdirSync(AUTH_DIR, { recursive: true });
     await page.goto("/login");
-    await page.getByLabel("E-Mail-Adresse").fill(USERS[role]);
+    await page.getByLabel("Dev-Login: E-Mail-Adresse").fill(USERS[role]);
     await page.getByRole("button", { name: "Anmelden", exact: true }).click();
     await page.waitForURL(/\/tree/);
     await expect(page.getByRole("heading", { name: "Stammbaum", level: 1 })).toBeVisible();

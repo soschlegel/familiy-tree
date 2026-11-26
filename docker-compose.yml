@@ -156,6 +156,15 @@ services:
       AUTH_GITHUB_SECRET: ${AUTH_GITHUB_SECRET:-}
       AUTH_GOOGLE_ID: ${AUTH_GOOGLE_ID:-}
       AUTH_GOOGLE_SECRET: ${AUTH_GOOGLE_SECRET:-}
+      # Anmeldung per E-Mail-Link über das eigene Postfach (SMTP). Nur wenn
+      # Host, Benutzer, Passwort und Absender gesetzt sind, gibt es das Feld
+      # auf der Anmeldeseite (docs/betrieb/email-anmeldung.md).
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_SECURE: ${SMTP_SECURE:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
       INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-}
       # Öffentliche Adresse des MCP-Gateways für claude.ai-Connectoren (Handy,
       # Browser, Desktop). Nur Anzeige in der Anleitung auf „KI-Zugang“;

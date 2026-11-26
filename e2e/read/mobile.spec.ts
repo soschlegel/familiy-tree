@@ -185,7 +185,7 @@ test.describe("Telefon (390 px), ohne Anmeldung", () => {
 
   test("Anmeldeseite: kein waagerechtes Scrollen, Feld mit 16 px Schrift", async ({ page }) => {
     await page.goto("/login");
-    await expect(page.getByLabel("E-Mail-Adresse")).toBeVisible();
+    await expect(page.getByLabel("E-Mail-Adresse", { exact: true })).toBeVisible();
     await expectNoHorizontalOverflow(page);
     expect(await smallFontFields(page)).toEqual([]);
   });
@@ -215,8 +215,11 @@ test.describe("Telefon (390 px), ohne Anmeldung", () => {
   });
 
   test("kurze Seite: Fußzeile sitzt am unteren Rand, auch wenn das Fenster wächst", async ({ page }) => {
-    await page.goto("/login");
-    await expect(page.getByLabel("E-Mail-Adresse")).toBeVisible();
+    // Die Anmeldeseite selbst ist mit E-Mail-Link und Dev-Login länger als
+    // ein Telefonbildschirm; die Bestätigungsseite des E-Mail-Links ist kurz
+    // und nutzt dasselbe Seitengerüst.
+    await page.goto("/login/email");
+    await expect(page.getByRole("heading", { name: "Mit E-Mail-Link anmelden" })).toBeVisible();
     const footer = page.locator("footer");
     // Wächst wie beim Ausblenden der Adressleiste auf Android.
     for (const height of [844, 920]) {
