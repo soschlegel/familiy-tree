@@ -13,15 +13,19 @@ aktuell halten — Erledigtes streichen, keine Paketgeschichte sammeln.
   Portainer aktualisiert den Stack von dort. **Ein Merge ist ein
   Produktiv-Deployment auf echte Daten.**
 - `optimierung` = Arbeitsbranch, zum Zeitpunkt der Übergabe gleich `main`.
-- Letztes Release: **2026-11-26.2** (Verlauf aufgegangener Personen bei der
-  bleibenden Person; verschlankte Doku). Davor am selben Tag 2026-11-26.1
-  (Seite „Einstellungen“; Familien der Person im Änderungseintrag). Neueste Migration:
-  `20261126000100_audit_personenfamilien` (Liste aller Migrationen:
+- Letztes Release: **2026-11-26.3** (Anmeldung per E-Mail-Link über SMTP,
+  Vollbild im Stammbaum, Vorschläge schon beim GEDCOM-Import gegen alle
+  vorhandenen Personen, Familien auch an Ereignis-/Namens-/Beleg-/Bild- und
+  Beziehungseinträgen der Änderungsgeschichte, Content-Security-Policy mit
+  Not-Schalter `CSP_MODE`). Davor am selben Tag .2 (Verlauf aufgegangener
+  Personen, verschlankte Doku) und .1 (Seite „Einstellungen“). Neueste
+  Migration: `20261126000100_audit_personenfamilien` (Liste aller
+  Migrationen:
   [datenmodell.md](docs/komponenten/datenmodell.md#migrationen-prismamigrations)).
-- Prüfstand dieses Releases: Migrationen ↔ Schema ohne Abweichung, neue
-  Migrationen rein ergänzend, Typecheck, Lint, Vitest 982/982;
-  `npm run test:e2e` (Produktions-Build, strenger Hydration-Wächter): 350
-  bestanden, 1 übersprungen.
+- Prüfstand dieses Releases: Migrationen ↔ Schema ohne Abweichung, keine
+  neue Migration, Typecheck, Lint, Vitest 1041/1041; `npm run test:e2e`
+  (Produktions-Build, strenger Hydration-Wächter, CSP-Wächter): siehe
+  Git-Nachricht des Release-Commits.
 - Git-Verlauf am 23.11. umgeschrieben (alle Zweige neu hochgeladen). Ältere
   Klone und Worktrees passen nicht mehr dazu — neu klonen statt
   zusammenführen.
@@ -98,16 +102,6 @@ Anleitungen: [docs/entwicklung/tests.md](docs/entwicklung/tests.md),
 
 ## Offene Punkte
 
-- **Vorschläge schon beim Import** (nächstes Paket): neue Personen der Datei
-  gegen vorhandene Personen aller anderen Importe abgleichen
-  (`lib/import-linking.ts`), Wahl „Mit vorhandener Person verknüpfen“,
-  Standard bleibt „neu anlegen“; in der Vorschau prominent „Dieser Import
-  hängt über N Personen mit vorhandenen Daten zusammen“. Heute verknüpft
-  `applyGedcomImport` Vorschläge nur mit von Hand erfassten Personen
-  (Prüfung `importLinks: { none: {} }` bei `decisions.suggestions` in
-  `lib/services/gedcom-import.ts`) — für importierte Personen öffnen.
-  `import-apply` legt beim Verknüpfen schon einen zusätzlichen
-  Herkunftsvermerk an.
 - **Umleitung alter Kennungen** mit echten Daten prüfen: eine alte Adresse
   aufrufen und im Server-Log `[umleitungen] … nachgetragen` suchen.
 - **Änderungsgeschichte, zur Entscheidung:** Paket-Titel aus
@@ -127,24 +121,33 @@ Anleitungen: [docs/entwicklung/tests.md](docs/entwicklung/tests.md),
   Importe (Art, Anbieter, Belegadressen). Regeln: von Hand Geändertes nicht
   anfassen, Fingerabdrücke der Herkunftsvermerke nachziehen, doppelte Belege
   nur auf ausdrückliches Ankreuzen entfernen.
-- **Stammbaum auf dem Telefon:** Kopf und Werkzeugleiste belegen bei
-  360×740 gut 40 % der Höhe, die Karten sind beim Standardzoom klein.
-  Braucht eine Gestaltungsentscheidung (Leiste einklappen, Vollbild, Titel
-  und Zähler weglassen). Dunkles Farbschema, Querformat und echtes
-  iOS-Safari sind nicht geprüft.
+- **Stammbaum auf dem Telefon:** Vollbild-Knopf vorhanden (Entscheidung des
+  Eigentümers); auf echtem iOS-Safari und Android-Chrome nicht geprüft
+  (Zurück-Geste, Adressleiste). Die Karten sind beim Standardzoom klein.
 - **Karte:** Kreise ab 70 px begrenzt; Kartendaten für „alle“ bei 12 000
   Personen 1,4 MB und gut 1 s auf dem Server.
 - **Bezugsperson:** kein MCP-Werkzeug für „ich“.
-- **Sicherheit:** Content-Security-Policy als eigenes Paket; Anfragegrenzen
-  für Unangemeldete und HSTS gehören in den Reverse-Proxy
-  ([docs/sicherheit.md](docs/sicherheit.md)).
+- **Sicherheit:** Anfragegrenzen für Unangemeldete und HSTS gehören in den
+  Reverse-Proxy ([docs/sicherheit.md](docs/sicherheit.md)). Nach dem
+  Ausrollen der Content-Security-Policy die echte Anmeldung mit GitHub und
+  Google einmal ausprobieren; Not-Schalter `CSP_MODE=report-only` bzw.
+  `off` in Portainer ([docs/betrieb/fehlersuche.md](docs/betrieb/fehlersuche.md)).
+- **E-Mail-Link:** SMTP-Versand mit echtem Postfach noch nicht erprobt
+  (Tests laufen über den Test-Briefkasten); einzurichten nach
+  [docs/betrieb/email-anmeldung.md](docs/betrieb/email-anmeldung.md). Idee:
+  automatische Einladungs-Mail beim Einladen.
+- **Vorschläge beim Import:** mit echten Datenmengen unerprobt (Laufzeit der
+  Vorschau, Liste „unklar“ bei Tausenden Einträgen, erneuter Import mit
+  verknüpften Personen). Beziehungsfelder (z. B. Heiratsdatum) werden beim
+  Verknüpfen nicht ergänzt.
+- **Herkunfts-Übersicht** bei 390 px: Beim seitlichen Kreis überdeckt die
+  Zahl an der Linie den Namensanfang.
 
 ## Wunschliste
 
 Gesammelte Wünsche des Eigentümers — **erst nach seiner Freigabe bauen**
 (AGENTS.md, Abschnitt 4).
 
-- Anmeldung per E-Mail-Link für Verwandte ohne GitHub-Konto.
 - OAuth-Zugang für claude.ai-Connectoren; Anbindung an das Gateway (eigenes
   Repository).
 - **Orte: zeitabhängige Staatszugehörigkeit** (Idee, nicht beauftragt):

@@ -17,6 +17,33 @@ Regeln für neue Einträge (AGENTS.md, Abschnitt 3 „Ausrollen“):
 - Geprüft von tests/release-notes.test.ts (lib/release-notes.ts).
 -->
 
+## 2026-11-26.3 — Anmelden per E-Mail-Link, Vollbild, Vorschläge beim Import
+
+- Du hast kein Google- oder GitHub-Konto? Ist der E-Mail-Versand
+  eingerichtet, kannst du dir auf der Anmeldeseite einen Anmeldelink per
+  E-Mail schicken lassen — ohne Passwort. Der Link gilt 15 Minuten und nur
+  einmal; du bestätigst die Anmeldung mit „Jetzt anmelden“.
+- Stammbaum im Vollbild: Der neue Knopf „Vollbild“ oben rechts im Baum zeigt
+  ihn bildschirmfüllend — besonders praktisch auf dem Handy. Beenden mit
+  „Vollbild beenden“, der Zurück-Taste des Handys oder Esc. Die Legende
+  bleibt erreichbar.
+- Beim Einspielen einer GEDCOM-Datei zeigt die Vorschau, welche Personen es
+  schon gibt — auch aus anderen Importen —, aufgeteilt nach „sicher“, „sehr
+  wahrscheinlich“, „wahrscheinlich“ und „unklar“. Du entscheidest je Person:
+  neu anlegen (vorausgewählt) oder mit der vorhandenen Person verknüpfen.
+- Verknüpfen ergänzt die vorhandene Person nur: Leeres wird gefüllt,
+  Abweichendes kommt als Zweitangabe dazu, nichts wird überschrieben. Hat
+  sich seit der Vorschau etwas geändert, wird nichts importiert, und die
+  Vorschau sagt dir, was du neu entscheiden musst.
+- Wurden Personen zusammengeführt, siehst du im Abschnitt „Änderungen“ jetzt
+  auch die Einzelheiten zu Ereignissen, Namen, Belegen, Bildern und
+  Beziehungen der früheren Person, wenn du diese damals sehen durftest. Das
+  gilt für Änderungen ab diesem Update.
+- „Importe verbinden“ auf dem Handy: Die Personenzahl steht ordentlich neben
+  dem Namen, und die Übersicht der Importe ist lesbar beschriftet.
+- Zusätzlicher Schutz: Der Browser führt auf den Seiten des Stammbaums nur
+  noch Programmteile der App selbst aus.
+
 ## 2026-11-26.2 — Änderungen zusammengeführter Personen
 
 - Im Abschnitt „Änderungen“ einer Person stehen jetzt auch die früheren
