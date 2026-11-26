@@ -26,6 +26,7 @@ Netz nur `storage`, `media-processing`, `places/gazetteer-file`,
 | Medien | `storage`, `media-processing`, `media-scope`, `safe-fetch` |
 | Karte und Orte | `map/*`, `places/*` |
 | Anwender-Hilfe | `help/markdown`, `help/content`, `help/links` |
+| Einstellungen | `settings/registry` |
 | Sonstiges | `build-info`, `plural`, `release-notes`, `release-notes-data` |
 
 ---
@@ -114,16 +115,17 @@ Familienrollen in `lib/scope.ts` entschieden — eine globale Rolle `EDITOR`
 wäre eine zweite, widersprüchliche Quelle.
 
 **Wichtige Funktionen/Typen:** `Action` (`user:read`, `user:manage`,
-`audit:read`, `data:import`, `family:manage`, `place:manage`), `can`,
-`assertCan`, `ForbiddenError`.
+`audit:read`, `data:import`, `family:manage`, `place:manage`,
+`setting:manage`), `can`, `assertCan`, `ForbiddenError`.
 
 **Regeln:** Alle Aktionen sind nur für `ADMIN`; `EDITOR` und `VIEWER`
 haben keine globalen Rechte. Begründungen im Code: Import verändert den
 ganzen Bestand, Familienverwaltung ist Rechtevergabe, Ortszuordnung zeigt
-Ortstexte auch gesperrter Personen.
+Ortstexte auch gesperrter Personen, Einstellungen gelten für die ganze
+Installation.
 
 **Benutzt von:** `lib/api.ts`, `lib/session.ts`, `app/layout.tsx`,
-`app/admin/data/page.tsx`.
+`app/admin/data/page.tsx`, `app/admin/settings/page.tsx`.
 
 **Tests:** keine eigenen.
 
@@ -292,7 +294,8 @@ welchem Paket, welche Personen und Familien betroffen.
 - `auditRefs` — Momentaufnahme der betroffenen Personen und Familien.
 - `defaultChangeSetTitle` — Paket-Titel aus dem ersten Eintrag („Person
   geändert“, beim Zusammenführen „Personen zusammengeführt“).
-- Typen `AuditInput`, `AuditEntityType` (inkl. `Place`), `FieldChange`.
+- Typen `AuditInput`, `AuditEntityType` (inkl. `Place` und `Setting` —
+  Einstellungen, `entityId` = Schlüssel, ohne Personen/Familien), `FieldChange`.
 
 **Regeln:** Betroffene Personen werden je Art abgeleitet: Beziehung → beide
 Personen; Ereignis/Name/Beleg → Träger; Bild → alle Träger (Personen,
@@ -1629,7 +1632,7 @@ Entwicklung bei jedem Aufruf. Ins Standalone-Image kommen die Dateien über
 ### lib/help/links.ts
 **Zweck:** Ziele der Kontexthilfe (`HELP_LINKS`: Karte, Orte zuordnen,
 Linien, Bezugsperson, Dubletten, Dubletten-Klassen, KI-Vorprüfung der
-Dubletten, KI-Zugang) an einer
+Dubletten, KI-Zugang, Einstellungen) an einer
 Stelle, damit der Test prüfen kann, dass Thema und Anker existieren.
 
 **Benutzt von:** `components/HelpLink.tsx`, `components/DuplicateBanner.tsx`.
@@ -1637,6 +1640,45 @@ Stelle, damit der Test prüfen kann, dass Thema und Anker existieren.
 **Tests:** `tests/help.test.ts` (Leser, Sicherheit der Links und gegen
 rohes HTML, alle Querverweise und Kontexthilfe-Ziele gegen die echten
 Dateien).
+
+---
+
+## Einstellungen
+
+### lib/settings/registry.ts
+**Zweck:** Zentrales Verzeichnis der Einstellungen, die Administratoren auf
+`/admin/settings` pflegen. Ein neuer Schlüssel braucht nur einen Eintrag in
+`SETTINGS` — keine Migration (die Tabelle `AppSetting` speichert Schlüssel →
+Text) und keine Änderung an Seite oder API, die Auswahl, Beschriftung,
+Erklärung und Prüfung von hier nehmen. Rein (keine Datenbank, kein
+`next/*`), auch im Browser nutzbar.
+
+**Wichtige Funktionen/Typen:**
+- `SETTINGS` — je Eintrag `key` (feste Kennung, so gespeichert; nie
+  umbenennen), `label`, `description`, `kind` (Art des Werts, heute nur
+  `httpUrl`), optional `envVar` (Umgebungsvariable als Rückfall) und
+  `placeholder` (erfundenes Beispiel). Erster Eintrag: `mcpConnectorUrl`
+  („Adresse des KI-Connectors“, Rückfall `MCP_CONNECTOR_URL`).
+- `SettingKey`, `SettingDefinition`, `settingDefinition(key)` (unbekannt →
+  `null`), `isSettingKey`.
+- `checkSettingValue(def, raw)` — Prüfung nach Art: Text, getrimmt, nicht
+  leer, höchstens `MAX_SETTING_LENGTH` (2000) Zeichen; `httpUrl`: nur
+  `http:`/`https:`, kein Benutzername/Passwort in der Adresse, Ergebnis in
+  der von `URL` vereinheitlichten Form. Liefert den Wert oder eine deutsche
+  Fehlermeldung.
+- `settingFromEnv(def, env)` — Wert der Umgebungsvariablen nach derselben
+  Prüfung; leer oder ungültig → `null`.
+
+**Regeln:** **Nur Werte, die keine Geheimnisse sind.** Die Seite zeigt jeden
+Wert im Klartext, das Protokoll hält vorher → nachher fest; Zugangsdaten,
+Schlüssel, Passwörter bleiben Umgebungsvariablen (im Code-Kommentar
+festgehalten, `tests/settings.test.ts` wacht über verdächtige Namen). Eine
+neue Art (`kind`) braucht einen Zweig in `checkSettingValue` und ggf. ein
+passendes Eingabefeld in `components/SettingsAdmin.tsx`.
+
+**Benutzt von:** `lib/services/settings.ts`.
+
+**Tests:** `tests/settings.test.ts`.
 
 ---
 

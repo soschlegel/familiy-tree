@@ -7,8 +7,10 @@
  * Den ruft Anthropic aus der Cloud auf und meldet sich per OAuth an — nicht
  * mit dem festen Schlüssel. Dafür steht ein Gateway vor der App, das beim
  * Verbinden eine Anmeldeseite zeigt, auf der man seinen persönlichen
- * Schlüssel einträgt. Seine öffentliche Adresse kommt aus MCP_CONNECTOR_URL
- * (nie fest im Repository); ohne sie nennt die Anleitung den Administrator.
+ * Schlüssel einträgt. Seine öffentliche Adresse ist die Einstellung
+ * `mcpConnectorUrl` (lib/settings/registry.ts: Wert aus „Einstellungen“, sonst
+ * MCP_CONNECTOR_URL; nie fest im Repository); ohne sie nennt die Anleitung
+ * den Administrator.
  */
 export function AiConnectGuide({
   connectorUrl,
@@ -170,16 +172,4 @@ export function AiConnectGuide({
       </details>
     </section>
   );
-}
-
-/** Öffentliche Adresse des Connectors (Gateway) — nur http(s), sonst keine. */
-export function connectorUrlFromEnv(value: string | undefined): string | null {
-  const v = value?.trim();
-  if (!v) return null;
-  try {
-    const u = new URL(v);
-    return u.protocol === "https:" || u.protocol === "http:" ? u.toString() : null;
-  } catch {
-    return null;
-  }
 }

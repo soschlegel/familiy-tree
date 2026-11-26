@@ -36,7 +36,7 @@ Abschnitt 1). Seiten und API-Routen selbst stehen in
   `MergeDialog`, `FollowUpDuplicates`, `ChangeSetList`, `ChangeEntryList`
 - [Verwaltung und KI-Zugang](#verwaltung-und-ki-zugang) — `UserAdmin`,
   `FamilyAdmin`, `PlaceAdmin` (exportiert `PlaceAutoAssign` und `PlaceTable`),
-  `AiAccessManager`, `AiConnectGuide`, `ApiTokenList`
+  `SettingsAdmin`, `AiAccessManager`, `AiConnectGuide`, `ApiTokenList`
 
 ## Stammbaum und Karte
 
@@ -1048,7 +1048,7 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
   - `NavBar`: `items` (Liste von `NavItem` = Ziel, Beschriftung, optional `group: "admin"`), `userLabel` (Anzeigename), `signOut` (fertiges Element, kommt vom Layout).
   - `BrandMark`: stilisiertes Stammbaum-Zeichen als SVG, Größe über `className`, für Screenreader ausgeblendet.
   - `MainContainer`: `<main id="inhalt">` (Ziel des Sprunglinks im Layout); unter `/tree` volle Breite, sonst Lesebreite.
-- **Welche Punkte erscheinen** (entscheidet `app/layout.tsx`, nicht die Komponente): Baum, Karte, Personen, Recherche, Quellen, Daten in der Hauptzeile; im Untermenü „Verwaltung“ KI-Zugang (nur bei KI-Recht oder noch nicht widerrufenen Schlüsseln), Familien, Benutzer, Änderungen (je nach Rechten). Ohne Anmeldung ist die Liste leer.
+- **Welche Punkte erscheinen** (entscheidet `app/layout.tsx`, nicht die Komponente): Baum, Karte, Personen, Recherche, Quellen, Daten in der Hauptzeile; im Untermenü „Verwaltung“ KI-Zugang (nur bei KI-Recht oder noch nicht widerrufenen Schlüsseln), Familien, Benutzer, Änderungen, Einstellungen (je nach Rechten). Ohne Anmeldung ist die Liste leer.
 - **Verhalten:**
   - Aktiver Bereich: exakter Pfad oder Unterpfad, Link bekommt `aria-current="page"`. Der Knopf „Verwaltung“ trägt `data-active`, solange man in einem seiner Bereiche ist.
   - Ab Breite `lg`: Hauptpunkte als eine Zeile; „Verwaltung“ als Knopf mit `aria-expanded`/`aria-controls`, der eine Liste aufklappt. Der Benutzername wird gekürzt (vollständig im Tooltip).
@@ -1105,7 +1105,7 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 ### components/api-client.ts
 
 - **Zweck:** Einheitliche Aufrufe der eigenen API aus Client-Komponenten, mit deutschen Fehlermeldungen.
-- **Wo eingesetzt:** nur in Komponenten, aus diesem Abschnitt in `GedcomImport`, `DataTransfer`, `ImportHistory`, `ConnectImports`, `DuplicateList`, `MergeView`, `ChangeSetList`, `UserAdmin`, `FamilyAdmin`, `PlaceAdmin` und `AiAccessManager`, dazu viele Komponenten zu Personen, Quellen und Medien. Keine Seite unter `app/` importiert die Datei direkt.
+- **Wo eingesetzt:** nur in Komponenten, aus diesem Abschnitt in `GedcomImport`, `DataTransfer`, `ImportHistory`, `ConnectImports`, `DuplicateList`, `MergeView`, `ChangeSetList`, `UserAdmin`, `FamilyAdmin`, `PlaceAdmin`, `SettingsAdmin` und `AiAccessManager`, dazu viele Komponenten zu Personen, Quellen und Medien. Keine Seite unter `app/` importiert die Datei direkt.
 - **Exporte:**
   - `apiFetch(url, init)` gibt entweder `{ ok: true, status, data }` oder `ApiFailure` zurück. `ApiFailure` enthält `status`, `message`, `fields` und den rohen `body`.
   - `jsonBody(method, data)` baut Methode, JSON-Kopf und Inhalt zusammen.
@@ -1151,7 +1151,7 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 ### components/HelpLink.tsx
 
 - **Zweck:** Kontexthilfe — kleiner Link zur passenden Seite der Anwender-Hilfe (`/hilfe/…`), und `FooterHelpLink`, der Link „Hilfe“ in der Fußzeile.
-- **Wo eingesetzt:** `HelpLink` auf `/map` (in „Wie wird gezählt?“ und am Admin-Hinweis „Orte zuordnen“), `/admin/data` (Orte zuordnen), `/research/duplicates`, `/ai-access`, in `ReferencePanel` und `LineLegend`; `FooterHelpLink` in `app/layout.tsx` (nur angemeldet).
+- **Wo eingesetzt:** `HelpLink` auf `/map` (in „Wie wird gezählt?“ und am Admin-Hinweis „Orte zuordnen“), `/admin/data` (Orte zuordnen), `/research/duplicates`, `/ai-access`, `/admin/settings`, in `ReferencePanel` und `LineLegend`; `FooterHelpLink` in `app/layout.tsx` (nur angemeldet).
 - **Props:** `to` (Schlüssel aus `HELP_LINKS` in `lib/help/links.ts` — nie eine freie Adresse, damit der Test alle Ziele kennt), `label` (Standard „Wie funktioniert das?“), `compact` (nur „?“ im Kreis; Text dann als `sr-only` und Tooltip; auf dem Telefon 44 px Tippziel), `className`.
 - **Verhalten:** `next/link`, `data-testid="help-link"`. Neue Stellen: Ziel in `HELP_LINKS` ergänzen (Anker aus der Überschrift, siehe `slugify`).
 - **Server oder Client:** neutral (kein `"use client"`), auch in Client-Komponenten nutzbar.
@@ -1466,6 +1466,20 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 - **Ruft auf:** `POST /api/families`, `DELETE /api/families/[id]?force=true`, `POST /api/families/[id]/members`. Die JSON-Inhalte werden hier von Hand gebaut, nicht über `jsonBody`.
 - **Tests:** `e2e/write/admin.spec.ts` (anlegen, Zugriff setzen, löschen); `e2e/read/permissions.spec.ts`; `e2e/read/navigation.spec.ts`; `e2e/read/mobile.spec.ts`. `e2e/global.setup.ts` und `e2e/write/gedcom-import.spec.ts` nutzen die Seite für ihre Vorbereitung bzw. Aufräumarbeit.
 
+### components/SettingsAdmin.tsx
+
+- **Zweck:** Einstellungen der Installation pflegen (Schlüssel → Wert): je Schlüssel des Verzeichnisses `lib/settings/registry.ts` sehen, welcher Wert wirkt und woher er kommt; in der App gesetzte Werte ändern und entfernen; neue Einträge anlegen.
+- **Wo eingesetzt:** `app/admin/settings/page.tsx` (Recht `setting:manage`).
+- **Exporte / Props:** `SettingsAdmin({ settings })` mit `SettingStateDto[]` aus `listSettings`; `SETTING_SOURCE_LABEL` (Herkunft in Worten: „in der App gesetzt“, „aus der Server-Konfiguration“, „nicht gesetzt“).
+- **Verhalten:**
+  - Abschnitt „Übersicht“: je Schlüssel eine Karte (`data-testid="setting-<key>"`) mit Bezeichnung, Herkunft als Plakette (`setting-source`), Erklärung, „Wirksamer Wert“ (`setting-effective`) und — wenn der Schlüssel eine Umgebungsvariable hat — deren Name und gültigen Wert („wird vom Wert aus der App überdeckt“). Nur in der App gesetzte Werte haben „Ändern“ (Formular „Neuer Wert“, Speichern/Abbrechen) und „Entfernen“ (Rückfrage nennt, was danach gilt).
+  - Abschnitt „Einstellung hinzufügen“: Drop-down „Einstellung“ mit **nur noch nicht in der App gesetzten** Schlüsseln (kein Freitext), darunter deren Erklärung, Feld „Wert“ (bei Adressen `type="url"`, Beispiel aus dem Verzeichnis), „Anlegen“. Sind alle gesetzt, steht dort ein Hinweis (`settings-all-set`).
+  - Geprüft wird nur auf dem Server; eine Meldung zum Wert (400 mit Pfad `value`) erscheint am Feld (`aria-invalid`, `field-error`), andere Fehler oben im `aria-live`-Bereich. Nach Erfolg Meldung und `router.refresh()`.
+  - Knöpfe und Felder über `btn-*`/`field` — auf dem Telefon 44 px hoch; lange Adressen brechen um (`break-all`).
+- **Server oder Client:** Client.
+- **Ruft auf:** `POST /api/settings`, `PATCH /api/settings/[key]`, `DELETE /api/settings/[key]` (über `apiFetch`/`jsonBody`).
+- **Tests:** `e2e/write/settings.spec.ts` (Menü, Ausgangszustand, axe hell/dunkel, anlegen mit Prüfung am Feld, ändern, entfernen, 390 px, Nicht-Admins).
+
 ### components/PlaceAdmin.tsx
 
 - **Zweck:** Freitext-Ortsangaben Koordinaten zuordnen, für die Karte.
@@ -1542,8 +1556,7 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
   - Claude Code direkt über den HTTP-Header.
 - **Wo eingesetzt:** `app/ai-access/page.tsx`, unter `AiAccessManager`.
 - **Exporte / Props:**
-  - `AiConnectGuide({ connectorUrl, canUse })`: `connectorUrl` ist die öffentliche Adresse des Gateways oder `null`. `canUse` sagt, ob der Benutzer ein KI-Recht hat; ohne Recht erscheint ein Vorab-Hinweis.
-  - `connectorUrlFromEnv(value)`: liest `MCP_CONNECTOR_URL` und übernimmt nur http(s)-Adressen. Bei leerem oder ungültigem Wert ergibt sie `null`.
+  - `AiConnectGuide({ connectorUrl, canUse })`: `connectorUrl` ist die öffentliche Adresse des Gateways oder `null` — die Seite holt sie mit `getSetting("mcpConnectorUrl")` (Wert aus `/admin/settings`, sonst `MCP_CONNECTOR_URL`, beides geprüft auf http(s); dienste.md, „Einstellungen“). `canUse` sagt, ob der Benutzer ein KI-Recht hat; ohne Recht erscheint ein Vorab-Hinweis.
 - **Verhalten:**
   - Drei `<details>`-Abschnitte: Handy (anfangs offen), Browser und Desktop, Claude Code.
   - Dazwischen der feste Block „So meldet sich die KI an“ (`ai-guide-auth`): Anmeldung über die API mit HTTP-Header `Authorization`, Wert `Bearer <Schlüssel>` (Wort „Bearer“, Leerzeichen, Schlüssel); Hinweise, dass Anführungszeichen oder ein Schlüssel in der URL abgelehnt werden (entspricht `bearerToken` in `mcp/http.ts`). Schritt 5 der Handy-Anleitung verweist darauf, falls die Anmeldeseite nach einem Header fragt.
@@ -1551,7 +1564,7 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
   - Auf dem Telefon sind die Zusammenfassungszeilen höher.
 - **Server oder Client:** Server (kein `"use client"`); reine Darstellung.
 - **Ruft auf:** nichts.
-- **Tests:** `tests/ai-connect-guide.test.ts` (`connectorUrlFromEnv`); `e2e/read/mobile.spec.ts` (Anleitung auf Telefonbreite, Fall ohne Adresse). Den Fall mit hinterlegter Adresse (`ai-connector-url`) prüft kein e2e-Test.
+- **Tests:** Prüfung der Adresse in `tests/settings.test.ts`; `e2e/read/mobile.spec.ts` (Anleitung auf Telefonbreite, Fall ohne Adresse); `e2e/write/settings.spec.ts` (Adresse in „Einstellungen“ gesetzt und geändert → `ai-connector-url`, entfernt → wieder ohne Adresse).
 
 ### components/ApiTokenList.tsx
 

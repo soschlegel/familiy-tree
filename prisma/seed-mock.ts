@@ -187,7 +187,7 @@ async function main() {
       `TRUNCATE TABLE "ImportLink", "ExternalId", "ImportRawRecord", "ImportBatch", "Event", "PersonName",
         "AuditLog", "Citation", "Source", "RelationshipMedia", "PersonMedia", "MediaAsset",
         "Relationship", "PersonFamily", "Person", "UserFamily", "Family",
-        "Session", "Account", "VerificationToken", "ApiToken", "User", "Place" CASCADE`,
+        "Session", "Account", "VerificationToken", "ApiToken", "User", "Place", "AppSetting" CASCADE`,
     );
 
     const familyId = new Map(data.families.map((f) => [f.key, f.id]));

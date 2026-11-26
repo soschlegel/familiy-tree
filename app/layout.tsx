@@ -100,6 +100,9 @@ export default async function RootLayout({
         ...(can(user.role, "audit:read")
           ? [{ href: "/admin/changes", label: "Änderungen", group: "admin" as const }]
           : []),
+        ...(can(user.role, "setting:manage")
+          ? [{ href: "/admin/settings", label: "Einstellungen", group: "admin" as const }]
+          : []),
         // Anwender-Hilfe (docs/anwender/) — für alle, zuletzt im Untermenü.
         { href: "/hilfe", label: "Hilfe", group: "admin" as const },
       ]

@@ -94,6 +94,7 @@ Alle Seiten außer `/login` und der Weiterleitung `/` sind
 | `/admin/users` | Benutzerverwaltung | `user:manage` (Admin) |
 | `/admin/changes` | Änderungsübersicht | `audit:read` (Admin) |
 | `/admin/places` | Orte zuordnen | `place:manage` (Admin) |
+| `/admin/settings` | Einstellungen der Installation (Schlüssel → Wert) | `setting:manage` (Admin) |
 | `/neuigkeiten` | Neuigkeiten: alle Releases aus `CHANGELOG.md` | angemeldet |
 | `/hilfe` | Anwender-Hilfe: Themenliste | angemeldet |
 | `/hilfe/[thema]` | Ein Hilfethema aus `docs/anwender/` | angemeldet; unbekanntes Thema 404 |
@@ -169,6 +170,8 @@ Dienst über den `Scope`.
 | `GET /api/places/search` | Suche im Ortsverzeichnis | `place:manage` |
 | `GET /api/places/suggest` | Vorschlag am Ortsfeld | angemeldet, Admin oder Bearbeiter |
 | `POST /api/places/choose` | Ort im Ortsfeld auswählen | wer den Eintrag bearbeiten darf |
+| `GET, POST /api/settings` | Einstellungen mit Zustand / Eintrag anlegen | `setting:manage` |
+| `PATCH, DELETE /api/settings/[key]` | Wert ändern / entfernen (Rückfall auf die Umgebung) | `setting:manage` |
 
 ---
 
@@ -180,8 +183,8 @@ Dienst über den `Scope`.
   (`NavBar`, `MainContainer` aus `components/NavBar.tsx`) mit Baum, Karte,
   Personen, Recherche, Quellen, Daten; im Untermenü „Verwaltung“:
   KI-Zugang (nur bei KI-Recht oder noch nicht widerrufenen Schlüsseln —
-  dafür eine kleine Abfrage am Benutzer), Familien, Benutzer, Änderungen
-  (je nach globalem Recht) und für alle zuletzt „Hilfe“ (`/hilfe`) — damit
+  dafür eine kleine Abfrage am Benutzer), Familien, Benutzer, Änderungen,
+  Einstellungen (je nach globalem Recht) und für alle zuletzt „Hilfe“ (`/hilfe`) — damit
   hat jeder Angemeldete das Untermenü. Dazu Benutzername mit Rolle und
   Abmelde-Knopf (Server-Aktion `signOut`, danach `/login`).
 - Ohne Anmeldung keine Navigation.
@@ -454,8 +457,9 @@ Die Personenseite.
 - **Rechte:** jeder angemeldete Benutzer (nur eigene Schlüssel). Ohne
   KI-Recht erklärt die Seite die Lage; vorhandene Schlüssel lassen sich
   trotzdem widerrufen.
-- **Daten:** `getAiAccessInfo`, `listApiTokens`, Umgebungsvariable
-  `MCP_CONNECTOR_URL`.
+- **Daten:** `getAiAccessInfo`, `listApiTokens`, Adresse des Connectors
+  über `getSetting("mcpConnectorUrl")` (Wert aus `/admin/settings`, sonst
+  Umgebungsvariable `MCP_CONNECTOR_URL`; dienste.md, „Einstellungen“).
 - **Anzeige:** `AiAccessManager` (Schlüssel anlegen/widerrufen; das
   Geheimnis kommt nur aus der Antwort von `POST /api/ai-tokens` im Browser,
   nie aus dem HTML der Seite), `AiConnectGuide` (Anleitungen Handy,
@@ -523,6 +527,19 @@ Die Personenseite.
   stehen als „von KI“ mit eigenem Filter, Begründung und „Bestätigen“. Link
   zur Anwender-Hilfe „Orte zuordnen“ (`HelpLink`).
 
+### `/admin/settings` — `app/admin/settings/page.tsx`
+
+- **Zweck:** Einstellungen der Installation in der App pflegen statt in der
+  Server-Konfiguration (Schlüssel → Wert). Welche Schlüssel es gibt, legt
+  allein das Verzeichnis `lib/settings/registry.ts` fest; ein neuer Schlüssel
+  braucht dort einen Eintrag, keine Änderung an dieser Seite.
+- **Rechte:** `setting:manage` (Admin), sonst `/tree?denied=1`.
+- **Daten:** `listSettings` — je Schlüssel des Verzeichnisses Bezeichnung,
+  Erklärung, in der App gesetzter Wert, gültiger Wert der Umgebungsvariablen,
+  wirksamer Wert und Herkunft.
+- **Anzeige:** `SettingsAdmin` (nutzt `/api/settings…`), Link zur
+  Anwender-Hilfe „Einstellungen“ (`HelpLink`, Ziel `einstellungen`).
+
 ### `/hilfe` und `/hilfe/[thema]` — `app/hilfe/page.tsx`, `app/hilfe/[thema]/page.tsx`
 
 - **Zweck:** Anwender-Hilfe für Familienmitglieder; Inhalt ausschließlich
@@ -543,7 +560,7 @@ Die Personenseite.
 - **Kontexthilfe** in anderen Seiten: `HelpLink` (siehe
   oberflaeche-komponenten.md) auf `/map` („Wie wird gezählt?“ und
   Admin-Hinweis „Orte zuordnen“), `/admin/data` (Orte zuordnen),
-  `/research/duplicates`, `/ai-access`, Personenseite (Bezugsperson,
+  `/research/duplicates`, `/ai-access`, `/admin/settings`, Personenseite (Bezugsperson,
   Dubletten-Hinweis) und Legende der Baumlinien.
 
 ---
@@ -862,12 +879,29 @@ Fehlercodes aus den Grundregeln.
 - **`GET /api/places/search`**: Suche im mitgelieferten Ortsverzeichnis,
   `q` höchstens 100 Zeichen.
 
+### Einstellungen
+
+Alle mit `route("setting:manage", …)` (nur Administratoren, Herkunftsprüfung
+für schreibende Anfragen, Anfragegrenzen wie üblich); Prüfung und Protokoll
+im Dienst (dienste.md, „Einstellungen“). Antwort jeweils der Zustand des
+Schlüssels (`SettingStateDto`: Bezeichnung, Erklärung, `appValue`,
+`envValue`, `effective`, `source` = `app`/`env`/`none`).
+
+- **`GET /api/settings`**: `listSettings` — alle Schlüssel des Verzeichnisses.
+- **`POST /api/settings`** (`key`, `value`): Eintrag anlegen → 201;
+  unbekannter Schlüssel oder ungültiger Wert 400 (`issues` mit Pfad
+  `value` bzw. `key`), schon gesetzt 409.
+- **`PATCH /api/settings/[key]`** (`value`): Wert ändern; nicht gesetzt 404,
+  ungültig 400.
+- **`DELETE /api/settings/[key]`**: in der App gesetzten Wert entfernen —
+  danach gilt wieder die Umgebungsvariable; nicht gesetzt 404.
+
 ## Tests
 
 Die Routen haben überwiegend keine eigenen Unit-Tests; geprüft werden die
 Dienste (`tests/*.db.test.ts`) und das Zusammenspiel im Browser
-(Playwright unter `e2e/`). Direkt auf Routen zielen `tests/health.test.ts`
-und `tests/mcp-http.db.test.ts`.
+(Playwright unter `e2e/`). Direkt auf Routen zielen `tests/health.test.ts`,
+`tests/mcp-http.db.test.ts` und `tests/settings.db.test.ts`.
 
 | Bereich | E2E-Tests |
 |---|---|
@@ -878,5 +912,5 @@ und `tests/mcp-http.db.test.ts`.
 | Recherche, Dubletten, Zusammenführen | `e2e/read/research.spec.ts`, `quality.spec.ts`, `duplicate-banner.spec.ts`; `e2e/write/merge.spec.ts`, `duplicate-banner.spec.ts`, `connect.spec.ts` |
 | Quellen, Bilder | `e2e/write/sources.spec.ts`, `import-sources.spec.ts`, `media.spec.ts`, `attached-media.spec.ts` |
 | Export, Import | `e2e/read/export.spec.ts`, `gedcom-export-dialog.spec.ts`; `e2e/write/import.spec.ts`, `gedcom-import.spec.ts` |
-| Verwaltung, KI-Zugang, Änderungen | `e2e/write/admin.spec.ts`, `ai-access.spec.ts`, `changelog.spec.ts`; `e2e/read/mcp-http.spec.ts` |
+| Verwaltung, KI-Zugang, Änderungen, Einstellungen | `e2e/write/admin.spec.ts`, `ai-access.spec.ts`, `changelog.spec.ts`, `settings.spec.ts`; `e2e/read/mcp-http.spec.ts` |
 | Anwender-Hilfe, Kontexthilfe | `e2e/read/help.spec.ts`; Unit: `tests/help.test.ts` |

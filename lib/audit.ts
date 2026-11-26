@@ -18,7 +18,8 @@ export type AuditEntityType =
   | "PersonName"
   | "ImportBatch"
   | "ImportRawRecord"
-  | "Place";
+  | "Place"
+  | "Setting";
 
 export type AuditInput = {
   userId?: string | null;
@@ -262,6 +263,7 @@ const ENTITY_TITLE: Record<AuditEntityType, string> = {
   ImportBatch: "Import",
   ImportRawRecord: "Rohdaten",
   Place: "Ortszuordnung",
+  Setting: "Einstellung",
 };
 
 /** Titel eines Pakets aus seinem ersten Eintrag („Person geändert“). */

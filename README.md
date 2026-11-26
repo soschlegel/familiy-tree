@@ -1141,9 +1141,12 @@ lebenden Personen bedenken.
 
    Die Seite `/ai-access` zeigt dazu eine Schritt-für-Schritt-Anleitung
    (Handy, Browser/Desktop, Claude Code). Die öffentliche Adresse des
-   Gateways kommt aus der Umgebungsvariablen **`MCP_CONNECTOR_URL`**
-   (Stack, `stack.env.example`) — nie fest im Repository. Ist sie leer,
-   verweist die Anleitung auf den Administrator. Eingerichtet wird der
+   Gateways pflegt ein Administrator unter **Verwaltung → Einstellungen**
+   (`/admin/settings`, „Adresse des KI-Connectors“) — nie fest im
+   Repository. Ohne Wert dort gilt als Rückfall die Umgebungsvariable
+   **`MCP_CONNECTOR_URL`** (Stack, `stack.env.example`); ein Wert in der App
+   hat Vorrang. Ist beides leer, verweist die Anleitung auf den
+   Administrator. Eingerichtet wird der
    Connector einmal auf claude.ai (Customize → Connectors → „+ Add“ →
    „Add custom connector“); die Handy-App übernimmt ihn danach automatisch.
    Im kostenlosen Claude-Tarif ist nur ein eigener Connector möglich.
@@ -2515,6 +2518,7 @@ Familie bearbeiten und in einer anderen nur lesen.
 | Daten importieren | | | ✓ |
 | Personen ohne Familienzuordnung sehen | | | ✓ |
 | KI-Zugang vergeben, fremde KI-Schlüssel widerrufen | | | ✓ |
+| Einstellungen der Installation pflegen | | | ✓ |
 
 Der **KI-Zugang** liegt quer dazu: Der Administrator gibt ihn je Benutzer
 (kein Zugang, lesen, lesen und schreiben), auch sich selbst ausdrücklich. Mit
@@ -2544,6 +2548,19 @@ Benutzer noch nie angemeldet hat. Danach hängt an der Adresse ein
 verknüpftes Google-/GitHub-Konto — eine Änderung würde die Anmeldung still
 auf eine andere Person umlenken; dann den Benutzer löschen und neu
 einladen.
+
+### Einstellungen
+
+Auf `/admin/settings` (Menü *Verwaltung → Einstellungen*, nur
+Administratoren) pflegt der Administrator Einstellungen der Installation als
+Schlüssel → Wert, statt sie im Stack zu setzen. Die Schlüssel kommen aus
+einem festen Verzeichnis im Code (`lib/settings/registry.ts`, Auswahl per
+Drop-down); heute gibt es einen: die *Adresse des KI-Connectors* (Rückfall
+`MCP_CONNECTOR_URL`). Ein Wert aus der App hat Vorrang; ohne ihn gilt die
+Umgebungsvariable, nach dem Entfernen ebenso. Die Seite zeigt je Schlüssel
+den wirksamen Wert und seine Herkunft. Jede Änderung steht im
+Änderungsprotokoll. **Nur für Werte, die keine Geheimnisse sind** —
+Zugangsdaten bleiben im Stack.
 
 ## Grenzen
 

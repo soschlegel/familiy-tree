@@ -474,7 +474,7 @@ selbst gelesen, nicht im eigenen Code.
 | `INITIAL_ADMIN_EMAIL` | erster Administrator | `prisma/seed.ts`, `docker/seed-admin.mjs`, `docker/entrypoint.sh` |
 | `MEDIA_DIR` | Ordner der Bilddateien (zur Laufzeit gelesen, Standard `data/media`) | `lib/storage.ts`, `prisma/seed-mock.ts`, Tests |
 | `MAX_UPLOAD_BYTES` | größte Bilddatei (Standard 15 MiB) | `lib/services/media-links.ts`, `lib/services/gedcom-photos.ts`, `mcp/http.ts` |
-| `MCP_CONNECTOR_URL` | öffentliche Adresse des MCP-Gateways, nur für die Anleitung auf `/ai-access` | `app/ai-access/page.tsx`, `components/AiConnectGuide` |
+| `MCP_CONNECTOR_URL` | öffentliche Adresse des MCP-Gateways, nur für die Anleitung auf `/ai-access` — **Rückfall:** ein Wert unter „Einstellungen“ (`/admin/settings`, Schlüssel `mcpConnectorUrl`) hat Vorrang; nur http(s), sonst ignoriert | `lib/settings/registry.ts`, `lib/services/settings.ts` (`getSetting`) |
 | `MCP_ALLOWED_ORIGINS` | weitere erlaubte `Origin`-Werte für `/api/mcp` (kommagetrennt) | `mcp/http.ts` — nur lokal (`.env.example`, auskommentiert); der Stack reicht sie bewusst nicht durch |
 | `NODE_ENV` | Produktion/Entwicklung (Dev-Login, Prisma-Logging, Client-Singleton) | `lib/dev-login.ts`, `lib/prisma.ts` |
 | `PLACE_AUTO_ASSIGN` | `off` schaltet die automatische Zuordnung neuer Ortstexte nach dem Speichern/Import ab (Standard an; `vitest.config.ts` setzt `off`) | `lib/services/places.ts` |
@@ -561,8 +561,6 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
 
 - **`ai-access.test.ts`** — Schlüsselformat und Hash, wirksame KI-Stufe,
   Eingabeschemas und die festen Mock-Schlüssel.
-- **`ai-connect-guide.test.ts`** — Ermittlung der Connector-Adresse aus
-  `MCP_CONNECTOR_URL`.
 - **`build-info.test.ts`** — Build-Angabe der Fußzeile, Rückfall „Build
   lokal“, ohne Anmeldung kein Commit.
 - **`changelog.test.ts`** — Feldänderungen und Paket-Titel des Changelogs.
@@ -633,6 +631,9 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   (Weiterleitungen, Größe, Typ, Zeit) und Nebenläufigkeitsgrenze.
 - **`scope.test.ts`** — Sicht- und Bearbeitungsrechte je Person/Beziehung,
   Familienfilter.
+- **`settings.test.ts`** — Verzeichnis der Einstellungen (eindeutige
+  Kennungen, keine Namen, die nach Geheimnissen klingen), Prüfung von
+  http(s)-Adressen, Rückfall auf die Umgebungsvariable.
 - **`source-classify.test.ts`** — Einordnung importierter Quellen und Anzeige
   älterer Importe.
 - **`storage.test.ts`** — Schlüsselprüfung gegen Pfad-Ausbrüche, atomares
@@ -698,6 +699,11 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   erweiterte Suche (nur lesend).
 - **`services.db.test.ts`** — die zentralen Dienste (Lesen mit Rechten,
   Anlegen/Ändern/Löschen eigener Personen).
+- **`settings.db.test.ts`** — Einstellungen: Vorrang App vor Umgebung,
+  Rückfall nach dem Entfernen, ungültige gespeicherte Werte, Prüfung, nur
+  Administratoren, Protokoll vorher → nachher samt Anzeige in der
+  Änderungsübersicht; Routen `/api/settings…` (Fehlercodes, 403 für
+  Nicht-Admins und fremde Herkunft).
 - **`sources.db.test.ts`** — Quellen, Belege und ungenaue Daten.
 
 ---
@@ -823,6 +829,11 @@ zum nächsten Setup).
 - **`places.spec.ts`** — Orte zuordnen (nicht zuordenbar, zurücksetzen,
   automatisch, aus Verzeichnis, von Hand, Protokoll), stellt den
   Ausgangszustand wieder her.
+- **`settings.spec.ts`** — Einstellungen: Menüpunkt, Ausgangszustand, axe
+  hell/dunkel, Adresse des KI-Connectors anlegen (Prüfung am Feld), auf
+  „KI-Zugang“ sichtbar, ändern (auch in der Änderungsübersicht), 390 px,
+  entfernen stellt den Rückfall her; Betrachter/Bearbeiter ohne Menüpunkt,
+  Seite und API. Entfernt den Eintrag vor und nach der Datei.
 - **`reference.spec.ts`** — „Das bin ich“ setzen und aufheben, selbst und
   durch den Admin.
 - **`sources.spec.ts`** — Quelle anlegen, zitieren, Beleg ändern/entfernen,
