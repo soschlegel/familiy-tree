@@ -213,10 +213,18 @@ Löschen).
 ### `Account`, `Session`, `VerificationToken`
 Tabellen des Auth.js-Prisma-Adapters (`@auth/prisma-adapter`).
 `Account` hält die Verknüpfung zum OAuth-Anbieter (eindeutig je
-`provider` + `providerAccountId`, Cascade mit dem Benutzer). `Session` und
-`VerificationToken` sind vom Adapter vorgegeben; da die App JWT-Sitzungen
-nutzt (`lib/auth.ts`), werden `Session`-Zeilen vermutlich nicht beschrieben
-(unklar, nicht geprüft).
+`provider` + `providerAccountId`, Cascade mit dem Benutzer). `Session` ist
+vom Adapter vorgegeben; da die App JWT-Sitzungen nutzt (`lib/auth.ts`),
+schreibt Auth.js dort keine Zeilen (bei JWT legt es keine DB-Sitzung an).
+
+`VerificationToken` (seit der ersten Migration vorhanden, ohne Bezug zu
+`User`) hält die Anmeldelinks des E-Mail-Anbieters: `identifier` = die
+vereinheitlichte Adresse, `token` = **SHA-256 über Token + `AUTH_SECRET`**
+(das Token selbst steht nur in der Mail), `expires` = 15 Minuten nach dem
+Anfordern; eindeutig `token` sowie `identifier` + `token`. Auth.js löscht
+eine Zeile beim Einlösen; vor jedem neuen Link löscht `withTokenCleanup`
+(`lib/email-login.ts`) ältere Zeilen derselben Adresse und alle
+abgelaufenen. Der E-Mail-Anbieter schreibt keine `Account`-Zeile.
 
 ### `ApiToken`
 **Bedeutung:** Persönlicher, widerrufbarer Zugangsschlüssel für den

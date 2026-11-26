@@ -2,7 +2,10 @@ import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
 
 import { auth, signIn } from "@/lib/auth";
+import { EMAIL_LINK_MINUTES, emailLoginMode } from "@/lib/email-login";
 import { BrandMark } from "@/components/NavBar";
+
+import { requestLoginLink } from "./actions";
 
 export const metadata = { title: "Anmelden" };
 
@@ -51,15 +54,19 @@ function Branches() {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; link?: string }>;
 }) {
   const session = await auth();
   if (session?.user) redirect("/tree");
 
-  const { error } = await searchParams;
+  const { error, link } = await searchParams;
   const devLogin = process.env.ENABLE_DEV_LOGIN === "true";
   const hasGitHub = Boolean(process.env.AUTH_GITHUB_ID);
   const hasGoogle = Boolean(process.env.AUTH_GOOGLE_ID);
+  const hasEmailLink = emailLoginMode() !== null;
+  // Abgelaufener, schon benutzter oder ersetzter E-Mail-Link (Auth.js: „Verification“).
+  const linkInvalid = error === "Verification";
+  const linkSent = link === "gesendet" && hasEmailLink;
 
   return (
     <div className="mx-auto mt-6 grid max-w-4xl overflow-hidden rounded-3xl border border-stone-200 bg-surface shadow-lift sm:mt-12 md:grid-cols-2 dark:border-stone-800">
@@ -92,10 +99,34 @@ export default async function LoginPage({
           </p>
         </div>
 
-        {error && (
+        {error && linkInvalid && (
+          <div role="alert" className="alert-error space-y-1">
+            <p>
+              Dieser Anmeldelink gilt nicht mehr. Er ist abgelaufen, wurde
+              schon benutzt oder durch einen neueren ersetzt.
+            </p>
+            {hasEmailLink && (
+              <p>
+                <a href="#link-email" className="font-semibold underline">
+                  Neuen Link anfordern
+                </a>
+              </p>
+            )}
+          </div>
+        )}
+
+        {error && !linkInvalid && (
           <p role="alert" className="alert-error">
             Anmeldung fehlgeschlagen. Diese E-Mail-Adresse ist nicht
             freigeschaltet — bitte beim Administrator melden.
+          </p>
+        )}
+
+        {linkSent && (
+          <p role="status" className="alert-success">
+            Wenn diese Adresse freigeschaltet ist, kommt gleich eine E-Mail mit
+            einem Anmeldelink. Er gilt {EMAIL_LINK_MINUTES} Minuten. Schau
+            auch im Spam-Ordner nach.
           </p>
         )}
 
@@ -122,13 +153,45 @@ export default async function LoginPage({
             </form>
           )}
 
-          {!hasGitHub && !hasGoogle && !devLogin && (
+          {!hasGitHub && !hasGoogle && !hasEmailLink && !devLogin && (
             <p className="alert-warning">
               Kein Anmeldeverfahren konfiguriert. Setze AUTH_GITHUB_ID /
-              AUTH_GOOGLE_ID oder ENABLE_DEV_LOGIN=true in der .env.
+              AUTH_GOOGLE_ID, die SMTP-Angaben oder ENABLE_DEV_LOGIN=true in
+              der .env.
             </p>
           )}
         </div>
+
+        {hasEmailLink && (
+          <form action={requestLoginLink} className="space-y-2">
+            {(hasGitHub || hasGoogle) && (
+              <div className="flex items-center gap-3 pb-1 text-xs muted" aria-hidden>
+                <span className="h-px flex-1 bg-stone-200 dark:bg-stone-700" />
+                oder ohne Konto
+                <span className="h-px flex-1 bg-stone-200 dark:bg-stone-700" />
+              </div>
+            )}
+            <label htmlFor="link-email" className="field-label">
+              E-Mail-Adresse
+            </label>
+            <input
+              id="link-email"
+              name="email"
+              type="email"
+              required
+              maxLength={254}
+              autoComplete="email"
+              inputMode="email"
+              aria-describedby="link-email-hint"
+              className="field w-full"
+            />
+            <p id="link-email-hint" className="text-xs muted">
+              Du bekommst einen Link per E-Mail und meldest dich damit ohne
+              Passwort an. Klappt nur mit der Adresse, die eingeladen wurde.
+            </p>
+            <button className="btn-secondary w-full py-2.5">Link zusenden</button>
+          </form>
+        )}
 
         {devLogin && (
           <form
@@ -144,7 +207,7 @@ export default async function LoginPage({
               Dev-Login — nur lokal, ohne Passwort
             </p>
             <label htmlFor="dev-email" className="field-label">
-              E-Mail-Adresse
+              Dev-Login: E-Mail-Adresse
             </label>
             <input
               id="dev-email"

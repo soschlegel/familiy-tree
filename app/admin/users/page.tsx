@@ -1,3 +1,4 @@
+import { emailLoginMode } from "@/lib/email-login";
 import { prisma } from "@/lib/prisma";
 import { loadScope } from "@/lib/scope";
 import { listPickablePersons } from "@/lib/services";
@@ -58,6 +59,14 @@ export default async function UsersPage({
           Nur hier eingetragene E-Mail-Adressen können sich anmelden — ein
           gültiges Google- oder GitHub-Konto allein genügt nicht.
         </p>
+        {emailLoginMode() && (
+          <p className="mt-1 text-sm muted">
+            Wer kein Google- oder GitHub-Konto hat, meldet sich auf der
+            Anmeldeseite mit „Link zusenden“ an: Die App schickt dann einen
+            Anmeldelink an die eingeladene Adresse. Beim Einladen selbst geht
+            keine E-Mail hinaus — sag der Person Bescheid.
+          </p>
+        )}
       </div>
 
       <UserAdmin

@@ -65,6 +65,11 @@ herabstufen oder sperren, ebenso wenig den letzten aktiven Administrator.
 Unter der E-Mail-Adresse ordnet er jedem Benutzer seine eigene Person zu
 („Person: zuordnen“, siehe [Bezugsperson](bezugsperson.md)).
 
+Angemeldet wird mit GitHub, Google oder — falls eingerichtet — per
+**E-Mail-Link** ([betrieb/email-anmeldung.md](../betrieb/email-anmeldung.md)).
+Für alle Wege gilt dieselbe Freigabeliste; beim Einladen selbst geht keine
+Mail hinaus.
+
 Eine **vertippte E-Mail-Adresse** lässt sich korrigieren, solange sich der
 Benutzer noch nie angemeldet hat. Danach hängt an der Adresse ein
 verknüpftes Google-/GitHub-Konto — eine Änderung würde die Anmeldung still

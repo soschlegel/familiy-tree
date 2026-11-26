@@ -32,6 +32,7 @@ hier nicht wiederholt. Weicht eine Beschreibung vom Code ab, gilt der Code.
 |---|---|
 | [betrieb/nas-portainer.md](betrieb/nas-portainer.md) | Betrieb auf der NAS mit Portainer: Dienste, Datenordner, erste Installation, Updates, Zurückrollen |
 | [betrieb/oauth.md](betrieb/oauth.md) | Anmeldung per GitHub/Google im Heimnetz und lokal |
+| [betrieb/email-anmeldung.md](betrieb/email-anmeldung.md) | Anmeldung per E-Mail-Link: SMTP in Portainer einrichten, Anbieter-Hinweise, Fehlersuche |
 | [betrieb/reverse-proxy.md](betrieb/reverse-proxy.md) | Anforderungen an den Reverse-Proxy; Synology, Nginx Proxy Manager, Caddy-Profil |
 | [betrieb/sicherung.md](betrieb/sicherung.md) | Sicherung (Dump + Bilderordner), Planung, Wiederherstellung |
 | [betrieb/migrationen.md](betrieb/migrationen.md) | Was beim Start mit Migrationen geschieht, Baselining, Prisma-CLI im Image |

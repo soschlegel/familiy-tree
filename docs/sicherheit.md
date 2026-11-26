@@ -21,6 +21,8 @@ nicht sehen darf, existiert für ihn nicht** (Antwort wie „nicht gefunden“).
   Fehlermeldungen, Grenzen, Nebenwirkungen schreibender Werkzeuge.
 - **Verarbeitung von Fremdtext**: HTML-Fragmente aus Importen und Eingaben.
 - **Öffentliche Endpunkte**: Lebenszeichen `/api/health`.
+- **Anmeldung per E-Mail-Link** (`lib/email-login.ts`, `lib/auth.ts`,
+  Abschnitt unten).
 - **Kopfzeilen aller Antworten** (`next.config.mjs`) und
   **Content-Security-Policy** (`lib/csp.ts`, `middleware.ts`).
 
@@ -120,6 +122,39 @@ Report-Endpunkt — Verstöße landen weder auf dem Server noch bei Dritten.
 (`e2e/support/fixtures.ts`) lässt jeden Test scheitern, in dem der Browser
 eine Verletzung meldet.
 
+## Anmeldung per E-Mail-Link
+
+Was gilt (Einzelheiten:
+[bibliotheken.md](komponenten/bibliotheken.md#libemail-logints), Betrieb:
+[betrieb/email-anmeldung.md](betrieb/email-anmeldung.md)):
+
+- **Nur Eingeladene:** Eine Mail geht nur an Adressen aus der
+  Benutzerliste, die nicht gesperrt sind — geprüft vor dem Anfordern und
+  erneut im `signIn`-Callback, beim Einlösen noch einmal. Die App ist kein
+  Mail-Verteiler für fremde Adressen; ein Konto entsteht auf diesem Weg nie,
+  übernommen werden kann nur das Konto mit genau dieser Adresse.
+- **Keine Auskunft über Konten:** dieselbe Antwort für bekannte,
+  unbekannte, gesperrte, ungültige und gedrosselte Adressen, frühestens
+  nach 800 ms plus Zufall; der SMTP-Versand läuft im Hintergrund. Das
+  Anfordern direkt bei Auth.js (`POST /api/auth/signin/nodemailer`) ist
+  gesperrt, damit niemand an diesen Regeln vorbei anfragt.
+- **Link:** 15 Minuten, einmalig, nur der neueste gilt; gespeichert nur als
+  SHA-256 über Token + `AUTH_SECRET`; abgelaufene werden beim nächsten
+  Anfordern gelöscht. Die Adresse im Link stammt aus `AUTH_URL`, nie aus
+  dem Host-Kopf der Anfrage.
+- **Vorab-Abruf:** Der Link öffnet nur eine Bestätigungsseite; angemeldet
+  wird erst mit „Jetzt anmelden“ (POST). Ein GET auf die Auth.js-Rückruf-
+  adresse löst nichts ein. POST von fremden Seiten → 403 (Anmelde-CSRF).
+- **Drosselung** je Adresse (3 in 15 Minuten) und je Absender (10 je
+  Stunde), unabhängig von `RATE_LIMIT`.
+- **SMTP-Zugang** nur als Umgebungsvariable, nie in der Datenbank
+  („Einstellungen“); ohne TLS von Anfang an wird STARTTLS verlangt.
+- **Test-Briefkasten** (Mail als Datei) nur bei `MAIL_TEST_OUTBOX=mock-only`
+  zusammen mit Mock-Datenbank und Mock-Medienordner — dieselbe enge
+  Absicherung wie beim Dev-Login.
+
+Tests: `tests/email-login.test.ts`, `e2e/write/email-login.spec.ts`.
+
 ## Bewusst akzeptierte Restrisiken
 
 - **Anfragegrenzen im Speicher eines Prozesses.** Sie gelten nur für den
@@ -137,6 +172,12 @@ eine Verletzung meldet.
   Code aus; die Oberfläche gibt Benutzertexte ohnehin nur als Text aus.
 - **Lebenszeichen ohne Anmeldung** — nötig für Container und Proxy; es
   verrät nur „ok“ oder „Fehler“.
+- **E-Mail-Link: Postfach = Zugang.** Wer das Postfach einer eingeladenen
+  Person liest, kann sich als sie anmelden — wie bei jedem
+  „Passwort vergessen“-Verfahren. Die Drosselung liegt im Speicher (nach
+  einem Neustart leer) und zählt je Absender den letzten
+  X-Forwarded-For-Eintrag; ohne Reverse-Proxy könnte ein direkt
+  verbundener Client ihn selbst setzen.
 
 ## Hinweise für den Betrieb
 
@@ -150,7 +191,10 @@ eine Verletzung meldet.
 - `AUTH_URL` muss die öffentliche Adresse der App sein — sie gilt auch als
   erlaubte Herkunft schreibender Anfragen.
 - `RATE_LIMIT=off` nie in Produktion setzen (nur für den E2E-Build
-  vorgesehen). `ENABLE_DEV_LOGIN` bleibt im Stack aus.
+  vorgesehen). `ENABLE_DEV_LOGIN` bleibt im Stack aus, `MAIL_TEST_OUTBOX`
+  ebenso.
+- Für den E-Mail-Link ein eigenes Postfach mit App-Passwort verwenden;
+  `SMTP_PASSWORD` nur in den Stack-Variablen.
 - Grenzen bei Bedarf über `MAX_UPLOAD_BYTES` anpassen; die
   Körpergrenzen der API wachsen mit.
 - KI-Schlüssel mit Schreibstufe nur an Personen geben, die auch in der App

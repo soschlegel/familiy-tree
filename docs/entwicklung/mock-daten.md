@@ -70,7 +70,10 @@ zwei weitere Namen (`mock-n-01`, `mock-n-02`).
 Die IDs dieser Sonderfälle liefert `generateMockData().landmarks`
 (`landmarks.genealogy` für die Ereignisse und Namen).
 
-**Benutzer** (Anmeldung per Dev-Login, nur E-Mail):
+**Benutzer** (Anmeldung per Dev-Login — Feld „Dev-Login: E-Mail-Adresse“,
+nur E-Mail — oder per E-Mail-Link: die Mail landet nicht im Versand,
+sondern als JSON-Datei in `<Mock-Medienordner>/mail-outbox/`, z.B.
+`data/media-mock/mail-outbox/`; der Link steht im Feld `url`):
 
 | E-Mail | Rolle | Familien | KI-Zugang |
 |---|---|---|---|

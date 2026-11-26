@@ -10,13 +10,14 @@ Netz, oft auch im Browser nutzbar), damit Oberfläche, Dienste, MCP-Server
 und Tests dieselben Regeln verwenden. Datenbankzugriff haben nur `prisma`,
 `auth`, `scope`, `audit`, `change-sets`, `media-scope`; Dateisystem bzw.
 Netz nur `storage`, `media-processing`, `places/gazetteer-file`,
-`help/content`, `safe-fetch`.
+`help/content`, `safe-fetch`, `email-login-mail` (SMTP bzw.
+Test-Briefkasten).
 
 Übersicht:
 
 | Bereich | Module |
 |---|---|
-| Anmeldung, Rechte, Anfrage-Rahmen | `auth`, `dev-login`, `authz`, `session`, `api`, `request-guard`, `csp`, `rate-limit`, `health-cache`, `scope`, `ai-tokens`, `prisma` |
+| Anmeldung, Rechte, Anfrage-Rahmen | `auth`, `dev-login`, `email-login`, `email-login-mail`, `authz`, `session`, `api`, `request-guard`, `csp`, `rate-limit`, `health-cache`, `scope`, `ai-tokens`, `prisma` |
 | Protokoll | `audit`, `change-sets`, `change-time` |
 | Daten und Regeln | `dates`, `date-fields`, `events`, `event-labels`, `validation`, `consistency`, `partner-labels`, `source-labels`, `source-classify` |
 | Graph und Verwandtschaft | `graph`, `kinship`, `reference` |
@@ -64,9 +65,32 @@ Seiten holen die Sitzung über `lib/session.ts`, API-Routen über `route()` in
   fragt er bei jeder Anmeldung `devLoginAllowed()` (`lib/dev-login.ts`) und
   verweigert damit in `NODE_ENV=production` jede Anmeldung — außer im
   Produktions-Build der Mock-Umgebung für die E2E-Tests (siehe dort).
-- `signIn`-Callback: unbekannte oder gesperrte E-Mail → abgelehnt; sonst
-  Status `ACTIVE`, `lastLoginAt`, Name/Bild werden nur ergänzt, nie
-  überschrieben.
+  **E-Mail-Link** (Auth.js-Anbieter Nodemailer, Kennung `nodemailer`) nur,
+  wenn `emailLoginMode()` (`lib/email-login.ts`) einen Zustellweg liefert:
+  vollständige `SMTP_*`-Angaben plus `AUTH_URL`, in der Mock-Umgebung der
+  Test-Briefkasten. Gültigkeit 15 Minuten, `normalizeIdentifier` =
+  `normalizeEmail`, Zustellung über `deliverLoginMail`
+  (`lib/email-login-mail.ts`) mit einem Link auf die Bestätigungsseite
+  (`confirmationUrl`).
+- Adapter: Prisma-Adapter (Tabellen `User`, `Account`, `VerificationToken`),
+  umhüllt von `withTokenCleanup` — vor jedem neuen Anmeldelink werden ältere
+  Links derselben Adresse und alle abgelaufenen gelöscht. Auth.js speichert
+  das Token nur als SHA-256 über Token + `AUTH_SECRET` und löscht es beim
+  Einlösen (`useVerificationToken`); abgelaufen, verbraucht oder ersetzt →
+  Fehler `Verification` → `/login?error=Verification`.
+- `signIn`-Callback: unbekannte oder gesperrte E-Mail → abgelehnt. Beim
+  Anfordern eines E-Mail-Links (`email.verificationRequest`) nur diese
+  Prüfung, sonst nichts; beim Einlösen läuft der Callback erneut wie bei
+  OAuth. Bei Anmeldung: Status `ACTIVE`, `lastLoginAt`, Name/Bild werden nur
+  ergänzt, nie überschrieben.
+- **Kein neues Konto über den E-Mail-Weg:** Auth.js ruft den Callback, bevor
+  es einen Benutzer sucht oder anlegt; abgelehnt wird jede Adresse außerhalb
+  der Benutzerliste. Der E-Mail-Anbieter legt keine `Account`-Zeile an und
+  findet den Benutzer nur über genau diese Adresse;
+  `allowDangerousEmailAccountLinking` betrifft nur GitHub/Google.
+- `pages`: Anmelden und Fehler → `/login`, „Mail ist unterwegs“ →
+  `/login?link=gesendet` (die eingebauten Auth.js-Seiten unter `/api/auth`
+  wären wegen der strengen CSP der API unbrauchbar).
 - JWT-Sitzungen (der Credentials-Anbieter kann keine DB-Sitzungen). Der
   `jwt`-Callback lädt Rolle und Status **bei jeder Anfrage** neu — Rollen-
   wechsel und Sperren wirken sofort.
@@ -74,10 +98,87 @@ Seiten holen die Sitzung über `lib/session.ts`, API-Routen über `route()` in
   keine Weiterleitungsschleife zwischen Login und Baum entsteht.
 
 **Benutzt von:** `app/api/auth/[...nextauth]/route.ts`, `app/layout.tsx`,
-`app/login/page.tsx`, `lib/api.ts`, `lib/session.ts`.
+`app/login/page.tsx`, `app/login/actions.ts`, `app/login/email/page.tsx`,
+`lib/api.ts`, `lib/session.ts`.
 
 **Tests:** keine direkten Tests (Ablauf wird in Playwright über den
-Dev-Login genutzt); die Freigaberegel prüft `tests/dev-login.test.ts`.
+Dev-Login genutzt); die Freigaberegel prüft `tests/dev-login.test.ts`, den
+E-Mail-Ablauf mit der eingebauten Auth.js-Version `tests/email-login.test.ts`
+und `e2e/write/email-login.spec.ts`.
+
+### lib/email-login.ts
+**Zweck:** Regeln der Anmeldung per E-Mail-Link, rein (ohne next/*,
+Datenbank, Versand) und damit direkt testbar. Betrieb:
+[docs/betrieb/email-anmeldung.md](../betrieb/email-anmeldung.md).
+
+**Wichtige Funktionen/Typen:**
+- `smtpSettings` — SMTP-Zugang nur vollständig (`SMTP_HOST`, `SMTP_USER`,
+  `SMTP_PASSWORD`, `SMTP_FROM`; `SMTP_PORT` Standard 587, `SMTP_SECURE`
+  Standard „an bei 465“), sonst `null`.
+- `mailTestOutboxAllowed` — Test-Briefkasten nur bei
+  `MAIL_TEST_OUTBOX=mock-only` **und** Mock-Datenbank **und**
+  Mock-Medienordner (Namensregeln aus `lib/dev-login.ts`), unabhängig von
+  `NODE_ENV`.
+- `emailLoginMode` — `"outbox"` (hat Vorrang), `"smtp"` oder `null` (aus);
+  verlangt immer eine gültige `AUTH_URL` (`publicBaseUrl`).
+- `normalizeEmail` — getrimmt, klein, genau ein „@“, keine Anführungszeichen,
+  Leerzeichen oder Listen-Trenner; auch `normalizeIdentifier` des Anbieters.
+- `requestEmailLink` — „Link zusenden“: Adresse prüfen → Drosselung
+  (`checkMailRate`) → Benutzer suchen → nur bei eingeladenem, nicht
+  gesperrtem Benutzer `sendLink`. Antwortet in jedem Fall frühestens nach
+  `MIN_RESPONSE_MS` (800 ms) plus bis zu 200 ms Zufall; Fehler beim Versand
+  werden nur protokolliert. Das Ergebnis dient Tests und Protokoll, der
+  Aufrufer zeigt immer dieselbe Antwort.
+- `checkMailRate` / `MAIL_RULES` — 3 Anforderungen je Adresse in 15
+  Minuten, 10 je Absender in der Stunde (eigener `RateLimiter` im Speicher).
+  **Immer aktiv**, auch bei `RATE_LIMIT=off`: Die Grenze schützt fremde
+  Postfächer und das SMTP-Konto. Gezählt wird jede gültige Anforderung, auch
+  für unbekannte Adressen.
+- `clientAddressFromHeaders` — Absender = letzter Eintrag in
+  X-Forwarded-For (wie `clientAddress` in `mcp/http.ts`).
+- `confirmationUrl` — Link für die Mail: Token und Adresse aus der
+  Auth.js-Adresse, aber Ziel `/login/email` unter `AUTH_URL` (nie der
+  Host-Header).
+- `plausibleLinkParams`, `callbackActionPath` — Form der Link-Angaben und
+  Ziel des Knopfs „Jetzt anmelden“ (POST an `/api/auth/callback/nodemailer`).
+- `authRouteDecision` — Vorprüfung der Auth.js-Route: `POST
+  /api/auth/signin/nodemailer` von außen → 404 (angefordert wird nur über
+  die Server-Aktion, sonst ginge die gleiche Antwort verloren); `GET
+  …/callback/nodemailer` → 303 auf die Bestätigungsseite (löst nichts ein);
+  `POST …/callback/nodemailer` von fremder Seite (`isCrossSiteWrite`) → 403.
+- `withTokenCleanup` — Adapter-Hülle, siehe `lib/auth.ts`.
+- `loginMail` — Betreff, Klartext und schlichtes HTML (deutsch, Gültigkeit,
+  „Wenn du das nicht warst, ignoriere diese Mail.“, keine externen Inhalte,
+  Link maskiert).
+
+**Benutzt von:** `lib/auth.ts`, `lib/email-login-mail.ts`,
+`app/login/actions.ts`, `app/login/page.tsx`, `app/login/email/page.tsx`,
+`app/api/auth/[...nextauth]/route.ts`, `app/admin/users/page.tsx`.
+
+**Tests:** `tests/email-login.test.ts` (Einrichtung, Test-Briefkasten nur
+mit allen drei Bedingungen, nur Eingeladene bekommen Mail, gleiche
+Mindestdauer, Drosselung je Adresse/Absender auch bei `RATE_LIMIT=off`,
+Route, Mailtext; Auth.js-Ablauf: Token gehasht, einmalig, abgelaufen,
+ersetzt, kein neues Konto, nachträglich gesperrt).
+
+### lib/email-login-mail.ts
+**Zweck:** Zustellung der Anmeldelinks (`deliverLoginMail`), aufgerufen aus
+`sendVerificationRequest` in `lib/auth.ts`.
+
+**Regeln:**
+- SMTP über `nodemailer` mit den Angaben aus `smtpSettings`; ohne TLS von
+  Anfang an wird STARTTLS verlangt (`requireTLS`), kein Passwort im
+  Klartext. Der Versand läuft im Hintergrund — die Anmeldeseite wartet
+  nicht auf den Mailserver, damit die Antwortzeit nichts verrät. Fehler und
+  Ablehnungen nur ins Server-Protokoll, ohne Adresse.
+- Test-Briefkasten (`emailLoginMode() === "outbox"`): die Mail als JSON
+  (`to`, `subject`, `text`, `html`, `url`) unter
+  `MEDIA_DIR/mail-outbox/`; nie ein echter Versand. Playwright liest dort
+  den Link.
+
+**Benutzt von:** `lib/auth.ts`.
+
+**Tests:** `e2e/write/email-login.spec.ts` (Test-Briefkasten).
 
 ### lib/dev-login.ts
 **Zweck:** Entscheidet, ob der Dev-Login eine Anmeldung annehmen darf
@@ -101,7 +202,9 @@ Dev-Login genutzt); die Freigaberegel prüft `tests/dev-login.test.ts`.
   Laufzeit gelesen, nicht beim Build eingesetzt; ein E2E-Build in einem
   fremden Ordner schaltet also nichts frei.
 
-**Benutzt von:** `lib/auth.ts` (`authorize` des Dev-Logins).
+**Benutzt von:** `lib/auth.ts` (`authorize` des Dev-Logins);
+`isMockDatabase`/`isMockMediaDir` auch `lib/email-login.ts`
+(Test-Briefkasten).
 
 **Tests:** `tests/dev-login.test.ts` (Entwicklung erlaubt; Produktion ohne
 oder mit falscher Freigabe gesperrt; nur mit Mock-Datenbank **und**

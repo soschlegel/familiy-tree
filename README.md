@@ -60,7 +60,7 @@ Diese Datei ist Einstieg und Wegweiser. Alles Weitere steht unter
 |---|---|
 | Frontend + API | Next.js 15 (App Router), React 19, TypeScript, Tailwind |
 | Datenbank | PostgreSQL 17 + Prisma |
-| Anmeldung | Auth.js v5 (GitHub, Google, Dev-Login) |
+| Anmeldung | Auth.js v5 (GitHub, Google, E-Mail-Link per SMTP, Dev-Login) |
 | Bilder | Dateien im Medienordner (`MEDIA_DIR`), sharp |
 | Visualisierung | React Flow (Layout selbst geschrieben) |
 | KI-Schnittstelle | MCP (`@modelcontextprotocol/sdk`), Streamable HTTP unter `/api/mcp` |
@@ -166,12 +166,15 @@ Erste Installation in Kurzform:
 3. Variablen aus [stack.env.example](stack.env.example) eintragen — Pflicht:
    `DATA_ROOT`, `POSTGRES_PASSWORD`, `AUTH_SECRET`, `PUBLIC_URL`,
    `INITIAL_ADMIN_EMAIL` und mindestens ein OAuth-Paar (GitHub/Google).
+   Optional `SMTP_*` für die Anmeldung per E-Mail-Link (Eingeladene ohne
+   GitHub-/Google-Konto).
 4. Reverse-Proxy auf die App zeigen lassen, mit dem Konto von
    `INITIAL_ADMIN_EMAIL` anmelden, weitere Benutzer unter *Benutzer*
    einladen, Sicherung planen.
 
 Ausführlich: [Betrieb auf der NAS](docs/betrieb/nas-portainer.md),
 [Anmeldung (OAuth)](docs/betrieb/oauth.md),
+[Anmeldung per E-Mail-Link](docs/betrieb/email-anmeldung.md),
 [Reverse-Proxy](docs/betrieb/reverse-proxy.md),
 [Sicherung](docs/betrieb/sicherung.md),
 [Migrationen im Betrieb](docs/betrieb/migrationen.md),

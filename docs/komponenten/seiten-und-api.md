@@ -76,7 +76,7 @@ ließe sich kein 404 oder 308 mehr setzen. `/tree` zeigt dieselbe
 Ladeanzeige über ein `Suspense` in der Seite selbst — erst nach der Prüfung
 auf eine alte Kennung.
 
-Alle Seiten außer `/login` und der Weiterleitung `/` sind
+Alle Seiten außer `/login`, `/login/email` und der Weiterleitung `/` sind
 `force-dynamic` (kein Zwischenspeichern). Seitentitel nach dem Muster
 „Titel · Stammbaum“.
 
@@ -85,7 +85,8 @@ Alle Seiten außer `/login` und der Weiterleitung `/` sind
 | Adresse | Zweck | Rechte |
 |---|---|---|
 | `/` | Weiterleitung nach `/tree` | — |
-| `/login` | Anmeldung (GitHub, Google, Dev-Login) | öffentlich; angemeldet → `/tree` |
+| `/login` | Anmeldung (GitHub, Google, E-Mail-Link, Dev-Login) | öffentlich; angemeldet → `/tree` |
+| `/login/email` | Bestätigung eines E-Mail-Links („Jetzt anmelden“) | öffentlich; angemeldet → `/tree` |
 | `/tree` | Stammbaum: Fokus-Ansicht, Generationen, Zeitstrahl | angemeldet |
 | `/map` | Karte „Wurzeln nach Jahr“ | angemeldet |
 | `/people` | Personenliste mit Suche und Filtern | angemeldet |
@@ -118,7 +119,7 @@ Dienst über den `Scope`.
 
 | Methode und Pfad | Zweck | Rechte |
 |---|---|---|
-| `GET, POST /api/auth/[...nextauth]` | Auth.js (Anmeldung, Rückruf, Abmeldung) | öffentlich |
+| `GET, POST /api/auth/[...nextauth]` | Auth.js (Anmeldung, Rückruf, Abmeldung); E-Mail-Link nur über Anmeldeseite und Bestätigung | öffentlich |
 | `GET /api/health` | Lebenszeichen | öffentlich |
 | `POST /api/mcp` (übrige Methoden 405) | MCP-Endpunkt für KI-Assistenten | eigener Schlüssel, siehe [mcp.md](mcp.md) |
 | `GET /api/tree` | Ganzer Graph mit Platzhaltern | angemeldet |
@@ -233,13 +234,37 @@ dort auf `/login`).
 - Öffentlich. Wer schon angemeldet ist, wird nach `/tree` geleitet.
 - Zeigt je nach Konfiguration „Mit GitHub anmelden“ (`AUTH_GITHUB_ID`),
   „Mit Google anmelden“ (`AUTH_GOOGLE_ID`) und den Dev-Login mit
-  E-Mail-Feld ohne Passwort (`ENABLE_DEV_LOGIN=true`, nur lokal); ohne
-  jedes Verfahren eine Warnung.
+  Feld „Dev-Login: E-Mail-Adresse“ ohne Passwort (`ENABLE_DEV_LOGIN=true`,
+  nur lokal); ohne jedes Verfahren eine Warnung.
+- **E-Mail-Link** (nur wenn `emailLoginMode()` ihn erlaubt, siehe
+  `lib/email-login.ts`): unter den OAuth-Knöpfen „oder ohne Konto“, Feld
+  „E-Mail-Adresse“ (`#link-email`) und Knopf „Link zusenden“. Die
+  Server-Aktion `requestLoginLink` (`app/login/actions.ts`) ruft
+  `requestEmailLink` (nur Eingeladene bekommen Mail, Drosselung,
+  Mindestdauer) und leitet **immer** auf `/login?link=gesendet` — dort die
+  neutrale Bestätigung „Wenn diese Adresse freigeschaltet ist, kommt gleich
+  eine E-Mail …“ (`role="status"`). Den Link fordert sie über `signIn(…,
+  { redirect: false })` direkt bei Auth.js an, nicht über die HTTP-Route.
 - Anmeldung über Server-Aktionen; Ziel nach Erfolg `/tree`. Lehnt Auth.js
   ab (E-Mail nicht eingeladen oder gesperrt), geht es zurück nach
   `/login?error=<Typ>` mit dem Hinweis, die Adresse sei nicht
-  freigeschaltet.
-- Suchparameter: `error`.
+  freigeschaltet. Bei `error=Verification` (E-Mail-Link abgelaufen,
+  benutzt oder ersetzt) stattdessen „Dieser Anmeldelink gilt nicht mehr …“
+  mit dem Link „Neuen Link anfordern“ zum Feld.
+- Suchparameter: `error`, `link`.
+
+### `/login/email` — `app/login/email/page.tsx`
+
+- Öffentlich; angemeldet → `/tree`. Ziel des Links aus der Anmelde-Mail
+  (`?token=…&email=…`, aufgebaut von `confirmationUrl`).
+- Löst beim Aufruf **nichts** ein (Mail-Vorschauen und Virenscanner rufen
+  Links vorab ab). Zeigt die Adresse und ein Formular mit „Jetzt anmelden“,
+  das per POST an `/api/auth/callback/nodemailer?token=…&email=…&callbackUrl=/tree`
+  schickt (`callbackActionPath`); Auth.js prüft und löscht das Token, setzt
+  die Sitzung und leitet nach `/tree` — oder bei ungültigem Link nach
+  `/login?error=Verification`.
+- Unplausible Angaben (`plausibleLinkParams`) oder E-Mail-Anmeldung aus:
+  Hinweis als `alert` und Link „Neuen Link anfordern“ (bzw. „Zur Anmeldung“).
 
 ### `/tree` — `app/tree/page.tsx`
 
@@ -493,7 +518,10 @@ Die Personenseite.
   verknüpfter Anmeldekonten und Familien; `listPickablePersons` für
   „Person zuordnen“. Daraus: „nie angemeldet“ (E-Mail korrigierbar) und
   „letzter aktiver Admin“.
-- **Anzeige:** `UserAdmin` (nutzt `/api/users…`, `/api/ai-tokens`).
+- **Anzeige:** `UserAdmin` (nutzt `/api/users…`, `/api/ai-tokens`). Ist
+  der E-Mail-Link eingerichtet (`emailLoginMode()`), ein Hinweis unter der
+  Einleitung: Eingeladene ohne Google-/GitHub-Konto melden sich mit „Link
+  zusenden“ an; beim Einladen selbst geht keine Mail hinaus.
 
 ### `/admin/changes` — `app/admin/changes/page.tsx`
 
@@ -589,7 +617,12 @@ Fehlercodes aus den Grundregeln.
 - **`/api/auth/[...nextauth]`** (`GET`, `POST`): die Handler von Auth.js.
   Nur eingeladene, nicht gesperrte E-Mail-Adressen kommen durch; bei der
   Anmeldung wird der Benutzer auf aktiv gesetzt und `lastLoginAt`
-  aktualisiert.
+  aktualisiert. Davor die Vorprüfung `authRouteDecision`
+  (`lib/email-login.ts`) für den E-Mail-Anbieter: `POST
+  /api/auth/signin/nodemailer` → 404 (anfordern nur über die
+  Anmeldeseite), `GET /api/auth/callback/nodemailer` → 303 auf
+  `/login/email` (löst nichts ein), `POST …/callback/nodemailer` von fremder
+  Seite → 403.
 - **`GET /api/health`**: bewusst ohne Anmeldung und ohne Inhalt. Prüft die
   Datenbank (`SELECT 1`) und ob der Medienordner samt Unterordnern
   beschreibbar ist (`checkMediaDir`), je mit 3 s Zeitgrenze. Antwort
