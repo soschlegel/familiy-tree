@@ -24,7 +24,7 @@ import { defineConfig, devices } from "@playwright/test";
  * Teilläufe über scripts/e2e.mjs (npm run test:e2e:read / :write / :setup):
  *   E2E_AREA=write      „write“ hängt dann nur am Setup, nicht an „read“
  *   E2E_SKIP_SETUP=1    kein Setup (Zustand schon vorbereitet)
- * Siehe README, Abschnitt „Tests“.
+ * Siehe docs/entwicklung/tests.md.
  */
 const PORT = Number(process.env.MOCK_PORT ?? 3100);
 const SETUP = process.env.E2E_SKIP_SETUP === "1" ? [] : ["setup"];

@@ -9,7 +9,7 @@ const input = z.object({ personId: z.string().min(1).max(64).nullable() });
 /**
  * „Das bin ich“: eigene Person des angemeldeten Benutzers setzen (oder mit
  * `null` aufheben). Nur Personen, die er sehen darf — sonst 404 wie überall
- * (README, „Bezugsperson“).
+ * (docs/fachlich/bezugsperson.md).
  */
 export const PUT = route(null, async (ctx, req) => {
   const parsed = input.safeParse(await req.json());

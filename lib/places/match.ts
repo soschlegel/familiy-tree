@@ -1,6 +1,6 @@
 /**
  * Automatische Zuordnung eines Ortstexts zu einem Eintrag des
- * Ortsverzeichnisses (README, „Karte und Orte“). Reine Funktion.
+ * Ortsverzeichnisses (docs/fachlich/karte-und-orte.md). Reine Funktion.
  *
  * Regel, vom spezifischen zum allgemeinen Teil:
  * 1. Der letzte Teil ist ein Land („Germany“, „Deutschland“, „USA“)? Dann ist

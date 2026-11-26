@@ -4,7 +4,7 @@
  * Ausgangsperson auf dem Server gerechnet. Der Browser wechselt die Jahre
  * dann ohne Neuladen (lib/map/year.ts).
  *
- * Regeln (README, „Karte und Orte“):
+ * Regeln (docs/fachlich/karte-und-orte.md):
  *
  * - Jahr einer Angabe: das Jahr des Datums; ungenaue Angaben zählen mit ihrem
  *   Jahr („um 1850“, „vor 1850“, „nach 1850“ als 1850), „zwischen 1850 und

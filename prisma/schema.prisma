@@ -38,7 +38,7 @@ model User {
   // KI-Zugang (MCP): nur ausdrücklich von einem Admin vergeben — auch die
   // Rolle ADMIN schließt ihn nicht ein (lib/services/ai-access.ts).
   aiAccess      AiAccess   @default(NONE)
-  // Bezugsperson „das bin ich“ (README, „Bezugsperson“). Verschwindet die
+  // Bezugsperson „das bin ich“ (docs/fachlich/bezugsperson.md). Verschwindet die
   // Person, bleibt der Benutzer ohne Zuordnung; beim Zusammenführen wandert
   // der Verweis auf die bleibende Person (lib/services/merge.ts).
   personId      String?
@@ -274,7 +274,7 @@ model Person {
   externalIds  ExternalId[]
   rawRecords   ImportRawRecord[]
   // Herkunft: je Datensatz der Quelle ein Link — nach dem Zusammenführen
-  // zweier importierter Personen mehrere (README, „Dubletten zusammenführen“).
+  // zweier importierter Personen mehrere (docs/fachlich/dubletten.md).
   importLinks  ImportLink[]
   // Als „kein Duplikat“ markierte Paare (lib/services/duplicates.ts).
   dismissedAsA DuplicateDismissal[] @relation("DismissalA")
@@ -289,8 +289,8 @@ model Person {
   @@index([familyName, givenName])
 }
 
-// Alte Kennung einer aufgegangenen Person → bleibende Person (README,
-// „Dubletten zusammenführen“; lib/services/redirects.ts). `fromId` verweist
+// Alte Kennung einer aufgegangenen Person → bleibende Person
+// (docs/fachlich/dubletten.md; lib/services/redirects.ts). `fromId` verweist
 // bewusst auf nichts: die Person gibt es nicht mehr. Wird die bleibende Person
 // gelöscht, verschwinden ihre alten Kennungen mit (Cascade). Ketten gibt es
 // nicht: Geht die bleibende Person später selbst auf, biegt das Zusammenführen
@@ -522,8 +522,7 @@ model MediaAsset {
   relationships RelationshipMedia[]
   // Hauptscan einer Quelle (Source.mediaId, älteres Feld) — siehe SourceMedia.
   sources       Source[]
-  // Bilder an Quellen, Ereignissen und Belegen (README, „Bilder an Quellen,
-  // Ereignissen und Belegen“).
+  // Bilder an Quellen, Ereignissen und Belegen (docs/fachlich/bilder-an-eintraegen.md).
   sourceLinks   SourceMedia[]
   eventLinks    EventMedia[]
   citationLinks CitationMedia[]
@@ -1055,7 +1054,7 @@ model ChangeSet {
 }
 
 // ---------------------------------------------------------------------------
-// Orte (Karte „Wurzeln nach Jahr“, README „Karte und Orte“)
+// Orte (Karte „Wurzeln nach Jahr“, docs/fachlich/karte-und-orte.md)
 // ---------------------------------------------------------------------------
 
 // Woher die Koordinaten eines Ortstexts stammen.

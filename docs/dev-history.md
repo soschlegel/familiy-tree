@@ -4,7 +4,7 @@ Die Versionsgeschichte selbst steht in Git (`git log`). Diese Datei erklärt
 nur Zusammenhänge für Leute mit **alten Installationen**: was es früher gab,
 wie man von dort auf den heutigen Stand kommt, und warum manche Meldungen
 noch auftauchen können. Für eine aktuelle Installation ist hier nichts nötig
-— Betrieb und Updates stehen in der [README](../README.md#betrieb-auf-der-nas-portainer).
+— Betrieb und Updates stehen in der [Betriebsdoku](betrieb/nas-portainer.md).
 
 Nach Thema, jeweils mit dem Datum, bis zu dem der alte Stand galt.
 
@@ -61,7 +61,7 @@ warnt „Found orphan containers“), stört nicht und kann in Portainer unter
 ### Privates Image mit Registry-Zugang (bis 19.11.2026)
 
 Heute ist das Paket auf ghcr.io öffentlich, und Portainer lädt es ohne
-Anmeldung (README, „Erste Installation“, Schritt 2). Wer das Paket privat
+Anmeldung ([nas-portainer.md](betrieb/nas-portainer.md#erste-installation), Schritt 2). Wer das Paket privat
 hält, braucht in Portainer ein Token (classic) mit nur `read:packages` —
 *fine-grained* Tokens unterstützt die Container-Registry laut GitHub-Doku
 nicht (geprüft November 2026) — und unter *Registries → Add registry →
@@ -110,7 +110,7 @@ vorgesehen):
 docker run --rm --network familytree_default -e RUN_MIGRATIONS=false \
   -e DATABASE_URL='postgresql://familytree:<POSTGRES_PASSWORD>@db:5432/familytree' \
   ghcr.io/soschlegel/familiy-tree:latest prisma migrate resolve --applied 0_init
-# … ebenso für jede weitere Migration (Liste: README, „Schema und Migrationen“)
+# … ebenso für jede weitere Migration (Liste: docs/komponenten/datenmodell.md, „Migrationen“)
 ```
 
 Danach startet die App normal.

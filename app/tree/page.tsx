@@ -33,7 +33,7 @@ export const metadata = { title: "Baum" };
  * - `view=generations|timeline` — ganzer Baum (`focus` zentriert nur darauf)
  * - sonst Fokus-Ansicht: `focus` (sonst die zuletzt fokussierte Person aus
  *   dem Cookie, sonst eine Startperson), Tiefe über `up` und `down`.
- * - `bezug` — vorübergehende Bezugsperson (README, „Bezugsperson“); ohne
+ * - `bezug` — vorübergehende Bezugsperson (docs/fachlich/bezugsperson.md); ohne
  *   `focus` steht sie auch im Mittelpunkt. `bezug=ich` kehrt zur eigenen
  *   Person zurück.
  * - `herkunft=1` — Schalter „Herkunft“: Importe je Person als Chips. Nur für

@@ -3,7 +3,7 @@ import { apiAs } from "../support/api";
 import { L, fullName, mock, person, visibleFor } from "../support/mock";
 
 /**
- * Karte „Wurzeln nach Jahr“ (README, „Karte und Orte“). Nur lesend; die
+ * Karte „Wurzeln nach Jahr“ (docs/fachlich/karte-und-orte.md). Nur lesend; die
  * Ortszuordnung kommt aus dem Mock-Seed (automatisch aus dem Ortsverzeichnis).
  */
 

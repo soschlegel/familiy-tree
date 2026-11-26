@@ -7,7 +7,7 @@ import { HelpLink } from "./HelpLink";
 
 /**
  * Bezugsperson im Baum: Verwandtschaft je Karte und die vier Ahnenlinien
- * (README, „Bezugsperson“). Als Kontext statt in den Knotendaten — so muss
+ * (docs/fachlich/bezugsperson.md). Als Kontext statt in den Knotendaten — so muss
  * React Flow beim Umschalten der Linien keine Knoten neu anlegen.
  */
 export type TreeReference = {

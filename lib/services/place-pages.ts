@@ -8,7 +8,7 @@ import { getGazetteer } from "../places/gazetteer-file";
 import { normalizeForLookup, placeKey } from "../places/normalize";
 
 /**
- * Ortsseiten und Ortsverweise (README, „Karte und Orte“).
+ * Ortsseiten und Ortsverweise (docs/fachlich/karte-und-orte.md).
  *
  * **Ein Ort** = alle Zuordnungen (Tabelle Place) mit demselben Eintrag des
  * Ortsverzeichnisses (`gazetteerId`), bei eigenen Orten ohne Verzeichnis-

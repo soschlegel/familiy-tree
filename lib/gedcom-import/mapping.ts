@@ -6,8 +6,8 @@
  *
  * Alle Einträge haben `action: "create"`; die `ref` ist zugleich der
  * Schlüssel in der Quelle (ImportLink.externalKey), siehe `personKey` usw.
- * Regeln (welche Angabe wohin) und Begründungen: README, Abschnitt
- * „GEDCOM-Import“.
+ * Regeln (welche Angabe wohin) und Begründungen: docs/fachlich/gedcom.md und
+ * docs/komponenten/bibliotheken.md (lib/gedcom-import).
  */
 import { createHash } from "node:crypto";
 

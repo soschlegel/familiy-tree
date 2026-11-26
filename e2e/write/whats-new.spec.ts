@@ -8,7 +8,7 @@ import { apiAs, uniq } from "../support/api";
 import { parseReleaseNotes, WHATS_NEW_LIMIT } from "../../lib/release-notes";
 
 /**
- * Fenster „Was ist neu?“ (README „Neuigkeiten“) mit einem eigenen,
+ * Fenster „Was ist neu?“ (docs/entwicklung/neuigkeiten.md) mit einem eigenen,
  * eingeladenen Benutzer — die Mock-Benutzer bleiben unberührt, damit
  * parallel laufende Tests nie ein unerwartetes Fenster sehen.
  *

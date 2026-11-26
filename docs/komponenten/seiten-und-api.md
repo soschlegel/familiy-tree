@@ -231,8 +231,8 @@ dort auf `/login`).
 
 ### `/tree` — `app/tree/page.tsx`
 
-Der Stammbaum in drei Ansichten. Bedienung: README, „Fokus-Ansicht“ und
-„Bezugsperson“.
+Der Stammbaum in drei Ansichten. Bedienung: [fokus-ansicht.md](../fachlich/fokus-ansicht.md) und
+[bezugsperson.md](../fachlich/bezugsperson.md).
 
 - **Aufbau:** Die äußere Seite prüft nur, ob `focus` die alte Kennung
   einer aufgegangenen Person ist — dann 308 auf dieselbe Adresse mit der
@@ -276,7 +276,7 @@ Der Stammbaum in drei Ansichten. Bedienung: README, „Fokus-Ansicht“ und
 
 ### `/map` — `app/map/page.tsx`
 
-Karte „Wurzeln nach Jahr“ (README, „Karte und Orte“).
+Karte „Wurzeln nach Jahr“ ([karte-und-orte.md](../fachlich/karte-und-orte.md)).
 
 - **Rechte:** angemeldet; gezählt werden nur sichtbare Personen.
 - **Suchparameter:** `person` (Ausgangsperson; ändert die Bezugsperson des

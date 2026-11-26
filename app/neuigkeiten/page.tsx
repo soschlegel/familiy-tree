@@ -6,8 +6,9 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Neuigkeiten" };
 
 /**
- * Neuigkeiten: alle Releases aus CHANGELOG.md, neueste zuerst (README
- * „Neuigkeiten“). Nur für Angemeldete — wie die genaue Build-Angabe geht der
+ * Neuigkeiten: alle Releases aus CHANGELOG.md, neueste zuerst
+ * (docs/entwicklung/neuigkeiten.md). Nur für Angemeldete — wie die genaue
+ * Build-Angabe geht der
  * Stand der App Fremde nichts an. Nicht zu verwechseln mit den Änderungen an
  * den Daten (`/admin/changes`).
  */

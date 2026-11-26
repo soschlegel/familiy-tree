@@ -12,7 +12,7 @@ type Search = { status?: string; q?: string; page?: string };
 const FILTERS: (PlaceStatus | "all")[] = ["all", "open", "auto", "ai", "manual", "unresolvable"];
 
 /**
- * Orte zuordnen (nur Administratoren, README „Karte und Orte“): alle
+ * Orte zuordnen (nur Administratoren, docs/fachlich/karte-und-orte.md): alle
  * vorkommenden Ortstexte mit Häufigkeit, Zuordnung und Vorschlag aus dem
  * mitgelieferten Ortsverzeichnis.
  */

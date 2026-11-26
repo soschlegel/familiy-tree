@@ -5,7 +5,7 @@ import { getGazetteer } from "../places/gazetteer-file";
 import { placeKey } from "../places/normalize";
 
 /**
- * Orte im Export (README, „Karte und Orte“ und „Export“).
+ * Orte im Export (docs/fachlich/karte-und-orte.md und docs/fachlich/gedcom.md, „Export“).
  *
  * GEDCOM (Entscheidung des Eigentümers, immer ohne Schalter): Für einen
  * zugeordneten Ortstext steht im PLAC die volle HEUTIGE Form „Ort, Region,

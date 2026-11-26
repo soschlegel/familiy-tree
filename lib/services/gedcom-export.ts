@@ -304,8 +304,8 @@ export async function buildGedcomExport(
     select: { personId: true, relationshipId: true, eventId: true, citationId: true, externalKey: true, sourceTreeId: true, mergedFromId: true },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
-  // Zusammengeführte Datensätze haben mehrere Links (README, „Dubletten
-  // zusammenführen“). Maßgeblich für Schlüssel, Originaldatensatz und _UID ist
+  // Zusammengeführte Datensätze haben mehrere Links
+  // (docs/fachlich/dubletten.md). Maßgeblich für Schlüssel, Originaldatensatz und _UID ist
   // der ursprüngliche Link des Datensatzes (ohne mergedFromId), sonst der
   // älteste. Die Kennungen der anderen Bäume bleiben in der App (Herkunft,
   // Fremdkennungen, Rohdaten) und im JSON-Export erhalten.

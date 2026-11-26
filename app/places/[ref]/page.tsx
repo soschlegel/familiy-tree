@@ -26,7 +26,7 @@ const coord = (v: number, pos: string, neg: string) => `${Math.abs(v).toFixed(4)
 const years = (a: number | null, b: number | null) => (a || b ? `${a ?? "?"} – ${b ?? ""}`.trim() : "");
 
 /**
- * Ortsseite (README, „Karte und Orte“): ein zugeordneter Ort mit Lage,
+ * Ortsseite (docs/fachlich/karte-und-orte.md): ein zugeordneter Ort mit Lage,
  * Herkunft der Zuordnung, weiteren Namen, den Freitexten, die auf ihn zeigen,
  * und den Angaben sichtbarer Personen. Für alle Angemeldeten; gesperrte
  * Personen erscheinen weder als Eintrag noch in einer Zahl.

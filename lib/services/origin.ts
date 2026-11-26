@@ -18,7 +18,7 @@ import { forbiddenError, notFoundError, parseOrThrow, validationError } from "./
 import type { LoadedGraph } from "./graph-data";
 
 /**
- * Herkunft sichtbar machen (UEBERGABE, Paket 2): Welche Importe haben eine
+ * Herkunft sichtbar machen (docs/komponenten/dienste.md): Welche Importe haben eine
  * Person bzw. einen Eintrag geliefert? Regeln für Buchstaben und Farben:
  * lib/origin.ts.
  *

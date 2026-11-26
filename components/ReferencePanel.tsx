@@ -9,7 +9,7 @@ import { SelfPersonButton } from "./SelfPersonButton";
 import { HelpLink } from "./HelpLink";
 
 /**
- * Bezugsperson auf der Personenseite (README, „Bezugsperson“): was diese
+ * Bezugsperson auf der Personenseite (docs/fachlich/bezugsperson.md): was diese
  * Person für die Bezugsperson ist, „Das bin ich“ und „Baum aus ihrer Sicht“.
  * Eigene Komponente, damit die Personenseite nur eine Zeile dazubekommt.
  *

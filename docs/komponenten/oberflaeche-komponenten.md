@@ -1070,7 +1070,7 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 
 ### components/WhatsNewDialog.tsx
 
-- **Zweck:** Fenster „Was ist neu?“ — zeigt nach einer neuen Version einmal die Neuigkeiten seit dem zuletzt gesehenen Release (`CHANGELOG.md`, README „Neuigkeiten“). Nicht zu verwechseln mit der Änderungsgeschichte der Daten.
+- **Zweck:** Fenster „Was ist neu?“ — zeigt nach einer neuen Version einmal die Neuigkeiten seit dem zuletzt gesehenen Release (`CHANGELOG.md`, [neuigkeiten.md](../entwicklung/neuigkeiten.md)). Nicht zu verwechseln mit der Änderungsgeschichte der Daten.
 - **Wo eingesetzt:** nur in `app/layout.tsx`, und nur für Angemeldete mit ungesehenen Releases (Auswahl `releasesSince` auf dem Server).
 - **Props:** `releases` (höchstens drei, neueste zuerst), `more` (Zahl weiterer ungesehener), `latestId` (neueste Kennung, wird als gesehen gespeichert).
 - **Verhalten:**

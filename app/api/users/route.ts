@@ -56,7 +56,7 @@ export const POST = route("user:manage", async (ctx, req) => {
   }
 
   // Neue Benutzer kennen noch keine frühere Version — „Was ist neu?“ beginnt
-  // für sie erst mit dem nächsten Release (README „Neuigkeiten“).
+  // für sie erst mit dem nächsten Release (docs/entwicklung/neuigkeiten.md).
   const user = await prisma.user.create({
     data: { ...parsed.data, status: "INVITED", lastSeenReleaseId: latestReleaseId() },
     select: { id: true, email: true, name: true, role: true, status: true },

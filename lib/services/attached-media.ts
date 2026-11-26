@@ -2,7 +2,7 @@ import { prisma } from "../prisma";
 
 /**
  * Bilder an Ereignissen, Belegen und Quellen lesen — und die Regel, wo ein
- * Bild erscheint (README, „Bilder an Quellen, Ereignissen und Belegen“):
+ * Bild erscheint (docs/fachlich/bilder-an-eintraegen.md):
  *
  * - Bild an einem Ereignis: beim Ereignis (Personenseite, auch bei
  *   Ereignissen einer Beziehung auf beiden Personenseiten).

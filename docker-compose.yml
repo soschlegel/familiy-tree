@@ -2,7 +2,7 @@
 #
 # Das App-Image baut GitHub Actions (.github/workflows/images.yml) und legt es
 # als öffentliches Paket in der GitHub Container Registry (ghcr.io) ab; die NAS
-# lädt es nur noch (ohne Anmeldung; privat halten: README, Erste Installation).
+# lädt es nur noch (ohne Anmeldung; privat halten: docs/betrieb/nas-portainer.md, "Erste Installation").
 # Diese Datei bindet deshalb keine Dateien aus dem Repository ein — Portainer
 # klont das Repo in sein eigenes Datenvolume, relative Pfade wären auf dem
 # Docker-Host nicht auffindbar.
@@ -64,7 +64,7 @@ services:
   #      Primärgruppe von nextjs im Image ist nogroup). Scheitert er trotz
   #      chown, liegt es an ACLs des gemeinsamen Ordners (Synology) oder an
   #      einem Netzlaufwerk ohne chown — dann bricht der Job mit Hinweis ab,
-  #      und die App startet nicht (README, "Fehlersuche").
+  #      und die App startet nicht (docs/betrieb/fehlersuche.md).
   # Warum ein eigener Dienst statt chown beim App-Start: die App läuft
   # bewusst nicht als root. postgres:17-alpine wird für db/backup-db ohnehin
   # geladen und bringt chown, find und gosu mit — kein zusätzliches Image.
@@ -89,7 +89,7 @@ services:
         else
           echo "[media-init] FEHLER: Die App (uid 1001) kann nicht in DATA_ROOT/media schreiben," >&2
           echo "[media-init] obwohl der Ordner ihr gehört — vermutlich ACLs des gemeinsamen" >&2
-          echo "[media-init] Ordners. Abhilfe: README, Abschnitt Fehlersuche (Bilderordner)." >&2
+          echo "[media-init] Ordners. Abhilfe: docs/betrieb/fehlersuche.md (Bilderordner)." >&2
           ls -lnd "$$dir" >&2 || true
           exit 1
         fi
@@ -170,7 +170,7 @@ services:
       MEDIA_DIR: /data/media
       MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-15728640}
       # Nur zur Fehlersuche: false überspringt Migrationen und Admin beim
-      # Start (README, "Fehlersuche").
+      # Start (docs/betrieb/fehlersuche.md).
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
       # Wie lange der Start höchstens auf die Datenbank wartet (Sekunden).
       DB_WAIT_SECONDS: ${DB_WAIT_SECONDS:-60}

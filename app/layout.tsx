@@ -73,7 +73,7 @@ export default async function RootLayout({
   const showAi = Boolean(ai && (ai.aiAccess !== "NONE" || ai._count.apiTokens > 0));
 
   // Neuigkeiten (CHANGELOG.md): einmal „Was ist neu?“ nach einer neuen
-  // Version, mit den Releases seit dem zuletzt gesehenen (README „Neuigkeiten“).
+  // Version, mit den Releases seit dem zuletzt gesehenen (docs/entwicklung/neuigkeiten.md).
   const releases = releaseNotes();
   const whatsNew = ai ? releasesSince(releases, ai.lastSeenReleaseId) : { show: [], more: 0 };
 

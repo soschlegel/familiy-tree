@@ -2,8 +2,8 @@ import { test, expect, authFile, acceptDialogs, expectNoA11yViolations, expectNo
 import { apiAs, createPerson, deletePerson, deleteSource, tinyPng, uniq, type CreatedPerson } from "../support/api";
 
 /**
- * Bilder an Ereignissen, Belegen und Quellen (README, „Bilder an Quellen,
- * Ereignissen und Belegen“) als Bearbeiter: hochladen an ein Ereignis und an
+ * Bilder an Ereignissen, Belegen und Quellen
+ * (docs/fachlich/bilder-an-eintraegen.md) als Bearbeiter: hochladen an ein Ereignis und an
  * eine Quelle, ein vorhandenes Bild an einen Beleg verknüpfen (dann erscheint
  * es nur noch dort), entfernen; Belegbilder getrennt von der Galerie;
  * Betrachter sehen die Bilder ohne Bedienelemente; Telefonbreite.

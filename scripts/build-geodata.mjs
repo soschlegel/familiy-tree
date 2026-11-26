@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Erzeugt die mitgelieferten Geodaten für Karte und Ortszuordnung
- * (README, „Karte und Orte“). Läuft NICHT zur Laufzeit und nicht im Build —
+ * (docs/fachlich/karte-und-orte.md). Läuft NICHT zur Laufzeit und nicht im Build —
  * nur, wenn jemand die Dateien neu erzeugen will. Die Eingaben lädt man
  * vorher selbst in einen eigenen, leeren Ordner außerhalb des Repositorys:
  *

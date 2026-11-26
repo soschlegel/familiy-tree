@@ -591,7 +591,7 @@ async function computePlan(scope: Scope, batch: { id: string; fileName: string }
   const items: PlanItem[] = [];
   const counts = emptyCounts();
   const newPersons = new Set<string>();
-  // Zusammengeführte Einträge (README, „Dubletten zusammenführen“): Hat die
+  // Zusammengeführte Einträge (docs/fachlich/dubletten.md): Hat die
   // Datei seit dem letzten Import nichts Neues dazu, ist „in der App
   // geändert“ nur die Folge des Zusammenführens — keine Frage an den
   // Administrator. Sie zählen als unverändert, der App-Stand bleibt. Bringt

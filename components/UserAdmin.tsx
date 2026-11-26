@@ -32,7 +32,7 @@ type Row = {
   neverSignedIn: boolean;
   /** Einziger aktiver Admin — darf weder gelöscht noch herabgestuft werden. */
   lastAdmin: boolean;
-  /** Eigene Person („das bin ich“, README „Bezugsperson“). */
+  /** Eigene Person („das bin ich“, docs/fachlich/bezugsperson.md). */
   person: { id: string; name: string } | null;
 };
 
