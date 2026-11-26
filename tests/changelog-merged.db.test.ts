@@ -147,14 +147,16 @@ describe.skipIf(Boolean(skipReason))("Verlauf mit Einträgen aufgegangener Perso
     expect(byId(all, event)!.fields).toEqual(expect.arrayContaining([expect.objectContaining({ to: "Verdecktkirche" })]));
   });
 
-  it("Bearbeiter mit passender Familie: Personeneinträge mit Werten, andere Arten nur für Administratoren", async () => {
+  it("Bearbeiter mit passender Familie: Personen- und Ereigniseinträge mit Werten", async () => {
     const k = await person([FAMILY_A]);
     const { x, created, event } = await xWithHistory([FAMILY_A], "Passend");
     await mergePersons(await admin(), { keepId: k, mergeId: x });
     const items = await history(await editor(), k);
     expect(byId(items, created)!.fields.length).toBeGreaterThan(0);
-    // Ereignisse speichern keine Familien der Person → im Zweifel verborgen.
-    expect(byId(items, event)).toMatchObject({ fromMerged: true, what: "Ereignis angelegt", fields: [] });
+    // Ereignisse speichern die Familien ihrer Person ebenfalls (Einzelheiten:
+    // tests/changelog-untereintraege.db.test.ts).
+    expect(byId(items, event)).toMatchObject({ fromMerged: true, what: "Ereignis „Taufe“ angelegt" });
+    expect(byId(items, event)!.fields).toEqual(expect.arrayContaining([expect.objectContaining({ to: "Passendkirche" })]));
   });
 
   it("Altbestand ohne gespeicherte Familien: nur Administratoren sehen Werte", async () => {

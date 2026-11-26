@@ -1582,7 +1582,9 @@ nicht mehr gibt“).
 **Tests:** `tests/changelog.db.test.ts` (Regeln der Pakete:
 `tests/changelog.test.ts`), `tests/changelog-subject.db.test.ts` (Personen,
 die es nicht mehr gibt), `tests/changelog-merged.db.test.ts` (Einträge
-aufgegangener Personen); `e2e/write/changelog.spec.ts`.
+aufgegangener Personen), `tests/changelog-untereintraege.db.test.ts`
+(Familien in Einträgen zu Namen, Ereignissen, Belegen, Bildern,
+Beziehungen); `e2e/write/changelog.spec.ts`.
 
 **Gelöschte Schlüssel im Verlauf (seit 22.11.):** `tokenLabels(ids)` löst `apiTokenId` zu Namen auf. Fehlt der Schlüssel (endgültig gelöscht oder mit seinem Benutzer entfernt), kommt der Name aus dem letzten `CREATE`/`DELETE`-Protokolleintrag des Schlüssels, dazu `tokenDeleted: true`; ohne solchen Eintrag `tokenName: null`. Gilt für `listPersonChanges`/`listChangeSetEntries` und `listChangeSets`; Anzeige „KI über MCP · Schlüssel „Name“ (gelöscht)“ bzw. „· Schlüssel (gelöscht)“.
 
@@ -1647,18 +1649,28 @@ Eintrag“).
   Einträge, die K und X betreffen (z.B. der Zusammenführen-Eintrag), gelten
   als eigene Einträge von K.
 - **Leserecht:** für jeden übernommenen Eintrag `subjectVisible` — also die
-  im Eintrag gespeicherten Familien, nie die heutigen Familien von K.
-  Ereignisse, Namen, Belege, Bilder und Beziehungen speichern keine
-  (`subjectFamiliesKnown = false`) und zeigen ihre Einzelheiten deshalb nur
-  Administratoren. Verborgene übernommene Einträge zeigen auch keine
-  Beschreibung (sie nennt Namen, Ereignis- oder Quellentitel), nur Art und
-  Aktion („Ereignis angelegt“), keine Feldwerte und keine Ergänzung.
+  im Eintrag gespeicherten Familien, nie die heutigen Familien von K. Seit
+  dem 26.11. speichern auch Namen, Ereignisse, Belege, Bilder und
+  Beziehungen die Familien ihrer Person(en) (siehe `lib/audit.ts` in
+  [bibliotheken.md](bibliotheken.md#libauditts)); bei mehreren Personen die
+  Vereinigung — das entspricht der Regel für vorhandene Datensätze
+  („sichtbar, sobald eine Seite sichtbar ist“, `carrierRights` in
+  `lib/media-scope.ts`, `citationAccess`, `relationshipAccess`): Wer nur
+  die andere Seite einer Beziehung sehen durfte, sieht die Werte, wer keine
+  Seite sehen durfte, nicht. Altbestand und nicht eindeutige Einträge
+  (`subjectFamiliesKnown = false`, z.B. Bild an einer Quelle) zeigen ihre
+  Einzelheiten weiterhin nur Administratoren; keine Rückfüllung. Verborgene
+  übernommene Einträge zeigen auch keine Beschreibung (sie nennt Namen,
+  Ereignis- oder Quellentitel), nur Art und Aktion („Ereignis angelegt“),
+  keine Feldwerte und keine Ergänzung.
 - **Namen:** In übernommenen Einträgen steht für eine alte Kennung der Name
   der heutigen Person K (statt „gelöschte Person“); das betrifft nur die
   Anzeige (`Ctx.aliases`), nie das Leserecht.
 - Wer K nicht bearbeiten darf, sieht wie bisher gar nichts.
-Tests: `tests/changelog-merged.db.test.ts`; `e2e/write/changelog.spec.ts`
-(„bleibende Person zeigt die Einträge aufgegangener Personen …“).
+Tests: `tests/changelog-merged.db.test.ts`,
+`tests/changelog-untereintraege.db.test.ts` (je Eintragsart, Mehr-Personen-Fall,
+Altbestand); `e2e/write/changelog.spec.ts` („bleibende Person zeigt die
+Einträge aufgegangener Personen …“).
 
 ### lib/services/ai-access.ts
 

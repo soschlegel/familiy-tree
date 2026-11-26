@@ -307,22 +307,37 @@ sind die Familien dieser Personen plus ausdrücklich genannte (Familie
 selbst, Benutzer mit `familyId`).
 
 **Familien der Person im Eintrag** (`subjectFamilyIds`,
-`subjectFamiliesKnown`): Bei Einträgen über eine Person (außer `CONNECT`)
-speichert `auditRefs` zusätzlich genau deren Familien zum Zeitpunkt des
-Eintrags — gelesen aus der Person (in der Transaktion des Dienstes, also
-nach der Änderung; beim Zusammenführen die bleibende Person samt
-übernommener Familien). Ist die Person beim Schreiben schon gelöscht, gilt
-das ausdrücklich übergebene `subjectFamilyIds` (Person löschen: die
-Familien vor dem Löschen); fehlt es, bleibt der Eintrag „nicht erfasst“ —
-nie geraten. Der Sammel-Eintrag beim Import (`import-apply.ts`, schreibt
-Zeilen selbst) setzt beide Felder ebenso. Ausgewertet in
+`subjectFamiliesKnown`): `auditRefs` speichert zusätzlich die Familien der
+Person(en), zu denen der Eintrag gehört, zum Zeitpunkt des Eintrags —
+gelesen in der Transaktion des Dienstes, also nach der Änderung
+(`subjectPersons`, `subjectFamilies`). Welche Personen zählen, folgt der
+heutigen Leseregel des Datensatzes: Person (außer `CONNECT`; beim
+Zusammenführen die bleibende Person samt übernommener Familien); Name →
+Person; Ereignis und Beleg → Träger (Person oder beide Seiten der
+Beziehung, Beleg an einem Ereignis über dessen Träger); Beziehung → beide
+Seiten; Bild → alle Träger (Personen, Beziehungen, Träger der Ereignisse
+und Belege). Bei mehreren Personen wird die **Vereinigung** gespeichert —
+`canViewPerson` darauf ergibt genau „sichtbar, sobald eine Person sichtbar
+ist“, wie bei vorhandenen Beziehungen, Paar-Ereignissen, Belegen und
+Bildern. Ist der Datensatz schon gelöscht, gelten die Felder des Eintrags
+(`personId`, `relationshipId`, `fromPersonId`/`toPersonId`, `eventId`).
+**Nicht erfasst** (known = false, nie geraten) bleibt ein Eintrag, wenn
+auch nur eine Person nicht mehr auffindbar ist, eine Beziehung nur eine
+bekannte Seite hat, ein Bild an einer Quelle hängt (dort entscheiden
+Ersteller und Belege, nicht Familien) oder an nichts hängt, sowie alle
+übrigen Arten (Quelle, Familie, …). Ausdrücklich übergebenes
+`subjectFamilyIds` hat Vorrang (Person löschen: Familien vor dem Löschen;
+Bild löschen: vorher ermittelte `auditRefs`, samt `subjectFamiliesKnown:
+false`). Der Sammel-Eintrag beim Import (`import-apply.ts`, schreibt
+Personen-Zeilen selbst) setzt beide Felder ebenso; Namen, Ereignisse,
+Belege und Beziehungen schreibt der Import nicht einzeln. Ausgewertet in
 `lib/services/changes.ts` (Leserecht, wenn es die Person nicht mehr gibt).
 
 **Benutzt von:** fast allen schreibenden Diensten, mehreren Admin- und
 Medienrouten.
 
 **Tests:** `tests/changelog.test.ts` (indirekt `changelog.db.test.ts`,
-`changelog-subject.db.test.ts`).
+`changelog-subject.db.test.ts`, `changelog-untereintraege.db.test.ts`).
 
 ### lib/change-sets.ts
 **Zweck:** Changelog-Pakete (`ChangeSet`) anlegen, benennen und für den

@@ -606,14 +606,18 @@ Audit rollen die eigentliche Änderung nicht zurück (`audit` fängt Fehler ab).
   Verlauf je Person und Übersicht je Familie kommen so ohne Rekonstruktion
   aus, auch wenn der Datensatz später gelöscht wird.
 - `subjectFamilyIds` (Text-Liste, Standard leer) und `subjectFamiliesKnown`
-  (Standard `false`): bei Einträgen **über eine Person** (`entityType`
-  `Person`, außer `CONNECT`) genau deren Familien zum Zeitpunkt des Eintrags
-  (beim Löschen der letzte Stand davor) — anders als `familyIds` keine
-  Vereinigung über alle betroffenen Personen. Daran prüft die
-  Änderungsgeschichte das Leserecht, wenn es die Person nicht mehr gibt
-  (`lib/services/changes.ts`). `subjectFamiliesKnown = false` heißt „nicht
-  erfasst“ (ältere Einträge, andere Arten); leere Liste mit `true` heißt
-  „ohne Familie“. Bewusst ohne Fremdschlüssel: Eine gelöschte Familie bleibt
+  (Standard `false`): die Familien der Person(en), **zu denen der Eintrag
+  gehört**, zum Zeitpunkt des Eintrags (beim Löschen der letzte Stand davor)
+  — bei Personen (außer `CONNECT`) genau deren Familien; bei Namen,
+  Ereignissen, Belegen, Beziehungen und Bildern (seit 26.11.) die ihres
+  Trägers bzw. bei mehreren Personen deren Vereinigung (entspricht „sichtbar,
+  sobald eine Person sichtbar ist“). Anders als `familyIds` keine
+  Vereinigung über alle *betroffenen* Personen (z.B. Verwandte beim
+  Zusammenführen). Daran prüft die Änderungsgeschichte das Leserecht, wenn
+  es die Person nicht mehr gibt (`lib/services/changes.ts`).
+  `subjectFamiliesKnown = false` heißt „nicht erfasst“ (ältere Einträge,
+  nicht eindeutige wie ein Bild an einer Quelle, übrige Arten); leere Liste
+  mit `true` heißt „ohne Familie“. Bewusst ohne Fremdschlüssel: Eine gelöschte Familie bleibt
   als Kennung stehen, passt dann aber zu keiner Mitgliedschaft mehr.
 - `createdAt`.
 

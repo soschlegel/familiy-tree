@@ -103,9 +103,10 @@ describe.skipIf(Boolean(skipReason))("Verlauf gelöschter und aufgegangener Pers
 
     const { r, k, row } = await mergedScenario([FAMILY_A], [FAMILY_C]);
     expect(row).toMatchObject({ subjectFamiliesKnown: true, subjectFamilyIds: [FAMILY_C] });
-    // Andere Arten erfassen nichts (hier: die Beziehung R → X).
+    // Beziehung R → X: die Familien beider Seiten (tests/changelog-untereintraege.db.test.ts).
     const rel = await prisma.auditLog.findFirstOrThrow({ where: { entityType: "Relationship", action: "CREATE", personIds: { has: r } } });
-    expect(rel).toMatchObject({ subjectFamiliesKnown: false, subjectFamilyIds: [] });
+    expect(rel).toMatchObject({ subjectFamiliesKnown: true });
+    expect([...rel.subjectFamilyIds].sort()).toEqual([FAMILY_A, FAMILY_C]);
 
     // Nach dem Löschen: der letzte Stand vor dem Löschen.
     await setPersonFamilies(await admin(), k, [FAMILY_A, FAMILY_C]);

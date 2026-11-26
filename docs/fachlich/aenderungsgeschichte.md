@@ -44,6 +44,17 @@ hinterlassen nichts. Ein „Paket rückgängig machen“ gibt es bewusst nicht.
   nicht sehen darf (z.B. der Partner aus einer fremden Familie), erscheinen
   als „nicht freigegeben“; Einträge über eine andere, nicht sichtbare Person
   (z.B. eine zusammengeführte Person aus fremder Familie) ohne Feldwerte.
+- **Personen, die es nicht mehr gibt** (gelöscht bzw. in einer anderen
+  aufgegangen; deren Einträge zeigt der Verlauf der bleibenden Person mit
+  „aus zusammengeführtem Eintrag“): Feldwerte nur, wenn der Betrachter die
+  Person nach den im Eintrag gespeicherten Familien zum Zeitpunkt des
+  Eintrags sehen durfte (`subjectFamilyIds`). Das gilt für Einträge zu
+  Personen und inzwischen auch zu Namen, Ereignissen, Belegen, Bildern
+  und Beziehungen; bei mehreren Personen (Beziehung, Paar-Ereignis) genügt
+  wie bei vorhandenen Datensätzen eine sichtbare. Ältere Einträge ohne diese
+  Angabe und nicht eindeutige (z.B. Bild an einer Quelle) zeigen die Werte
+  nur Administratoren. Einzelheiten: `lib/services/changes.ts` in
+  [dienste.md](../komponenten/dienste.md#libserviceschangests).
 - **Ältere Einträge** (vor der Migration) haben weder Paket noch
   Momentaufnahme: Der Personenverlauf findet sie über die Kennungen der
   Person und ihrer heutigen Ereignisse, Namen, Belege, Beziehungen und Bilder
