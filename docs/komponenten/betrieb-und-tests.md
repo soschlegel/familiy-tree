@@ -647,6 +647,10 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   Audit über den KI-Kanal.
 - **`changelog.db.test.ts`** — Pakete, Momentaufnahmen, Verlauf je Person mit
   Rechten und Maskierung, Admin-Übersicht, Bündeln über den KI-Zugang.
+- **`changelog-subject.db.test.ts`** — Verlauf zu gelöschten und
+  aufgegangenen Personen: gespeicherte Familien im Eintrag, Bearbeiter mit
+  und ohne passende Familie, Administrator, ohne Familie, Altbestand,
+  später gelöschte Familie, aufgegangene Person.
 - **`focus.db.test.ts`** — Fokus-Ausschnitt mit Sichtbarkeit und Rückfall auf
   die Startperson (nur lesend).
 - **`gedcom-export-selection.db.test.ts`** — GEDCOM-Export mit
@@ -798,7 +802,8 @@ zum nächsten Setup).
   (einmal sichtbar), Herabsetzen, Widerrufen.
 - **`attached-media.spec.ts`** — Bilder an Ereignissen, Quellen und Belegen
   hochladen, verknüpfen, entfernen; Betrachter- und Telefonsicht.
-- **`changelog.spec.ts`** — Änderungsabschnitt der Personenseite und
+- **`changelog.spec.ts`** — Änderungsabschnitt der Personenseite (auch
+  Feldwerte zu einer inzwischen gelöschten Person je nach Familie) und
   Admin-Übersicht mit einem KI-Paket.
 - **`connect.spec.ts`** — „Importe verbinden“ als Admin bis zum Folge-
   Abgleich; Bearbeiter sieht die Seite nicht.

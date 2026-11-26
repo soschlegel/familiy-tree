@@ -605,6 +605,16 @@ Audit rollen die eigentliche Änderung nicht zurück (`audit` fängt Fehler ab).
   der betroffenen Personen und deren Familien zum Zeitpunkt der Änderung —
   Verlauf je Person und Übersicht je Familie kommen so ohne Rekonstruktion
   aus, auch wenn der Datensatz später gelöscht wird.
+- `subjectFamilyIds` (Text-Liste, Standard leer) und `subjectFamiliesKnown`
+  (Standard `false`): bei Einträgen **über eine Person** (`entityType`
+  `Person`, außer `CONNECT`) genau deren Familien zum Zeitpunkt des Eintrags
+  (beim Löschen der letzte Stand davor) — anders als `familyIds` keine
+  Vereinigung über alle betroffenen Personen. Daran prüft die
+  Änderungsgeschichte das Leserecht, wenn es die Person nicht mehr gibt
+  (`lib/services/changes.ts`). `subjectFamiliesKnown = false` heißt „nicht
+  erfasst“ (ältere Einträge, andere Arten); leere Liste mit `true` heißt
+  „ohne Familie“. Bewusst ohne Fremdschlüssel: Eine gelöschte Familie bleibt
+  als Kennung stehen, passt dann aber zu keiner Mitgliedschaft mehr.
 - `createdAt`.
 
 **Löschverhalten:** Benutzer gelöscht → `userId` `NULL`; Paket gelöscht →
@@ -698,6 +708,7 @@ Verzeichnis nicht (mehr) kennt, werden ignoriert. Änderungen stehen im
 | `20261125000001_duplicate_review` | Enum `DuplicateVerdict` und Tabelle `DuplicateReview` mit Index und Fremdschlüsseln (Personen Cascade, Benutzer SetNull) — rein ergänzend. |
 | `20261125000002_import_anzeigename` | Tabelle `ImportSource` (Anzeigename je Quell-Baum) — nur `CREATE TABLE`, keine Rückfüllung. |
 | `20261126000000_einstellungen` | Tabelle `AppSetting` (Einstellungen der Installation, Schlüssel → Wert) — nur `CREATE TABLE`, keine Daten; ohne Zeile gilt weiter die Umgebungsvariable. |
+| `20261126000100_audit_personenfamilien` | Im `AuditLog` `subjectFamilyIds` (Liste, Standard leer) und `subjectFamiliesKnown` (Standard `false`) — rein ergänzend, **ohne Rückfüllung**: Ältere Einträge bleiben „nicht erfasst“ (Begründung bei `lib/services/changes.ts` in [dienste.md](dienste.md)). |
 
 `migration_lock.toml` legt den Anbieter (PostgreSQL) fest.
 

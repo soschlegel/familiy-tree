@@ -39,14 +39,15 @@ nicht sehen darf, existiert für ihn nicht** (Antwort wie „nicht gefunden“).
 | Bildverlust über den KI-Zugang | Löschte die KI ein Ereignis oder eine Beziehung, verschwanden Bilder, die nur daran hingen — obwohl die KI nie Bilder löschen soll. | Abgelehnt mit Hinweis; in der App (mit Rückfrage) weiterhin möglich. |
 | Abruf von Adressen über den KI-Zugang | Ein Schlüssel mit Schreibstufe konnte den Server Adressen abrufen lassen, auch ohne ein einziges Ziel bearbeiten zu dürfen. | Ziele und Rechte werden vor dem Abruf geprüft. |
 | Fehlermeldungen an KI-Clients | Unerwartete Fehler gingen samt Datenbankmeldung an den Client. | Nur eine Kennung; Einzelheiten im Server-Log. |
-| Änderungsgeschichte | Bearbeiter sahen Namen fremder KI-Schlüssel und Paket-Titel, die Dateinamen von Importen oder freie Texte nennen können; Einträge zu nicht mehr vorhandenen Personen zeigten Feldwerte. | Schlüsselnamen nur für Besitzer und Admins, Paket-Titel nur für Urheber und Admins (sonst neutral); Einträge zu nicht mehr vorhandenen Personen für Nicht-Admins ohne Feldwerte. |
+| Änderungsgeschichte | Bearbeiter sahen Namen fremder KI-Schlüssel und Paket-Titel, die Dateinamen von Importen oder freie Texte nennen können; Einträge zu nicht mehr vorhandenen Personen zeigten Feldwerte. | Schlüsselnamen nur für Besitzer und Admins, Paket-Titel nur für Urheber und Admins (sonst neutral); Einträge zu nicht mehr vorhandenen Personen zeigen Feldwerte nur, wenn der Betrachter die Person nach ihren im Eintrag gespeicherten Familien (Stand des Eintrags) sehen durfte — gleiche Prüffunktion wie bei vorhandenen Personen; ältere Einträge ohne diese Angabe bleiben für Nicht-Admins ohne Feldwerte. |
 | HTML aus Importen (ReDoS) | Reguläre Ausdrücke mit quadratischer bis kubischer Laufzeit; ein präparierter Text konnte den Server minutenlang blockieren. | Umwandlung in einem linearen Durchlauf. |
 | Lebenszeichen ohne Anmeldung | Jeder Aufruf löste eine Datenbankabfrage und Probedateien aus. | Ergebnis gilt einige Sekunden; gleichzeitige Aufrufe teilen sich eine Prüfung. |
 
 Tests zu den Befunden: `tests/request-guard.test.ts`,
 `tests/rate-limit.test.ts`, `tests/api-guard.db.test.ts`,
 `tests/sicherheit.db.test.ts`, `tests/gedcom-html.test.ts`,
-`tests/health.test.ts`, `tests/ai-token-delete.db.test.ts`.
+`tests/health.test.ts`, `tests/ai-token-delete.db.test.ts`,
+`tests/changelog-subject.db.test.ts`.
 
 ## Bewusst akzeptierte Restrisiken
 

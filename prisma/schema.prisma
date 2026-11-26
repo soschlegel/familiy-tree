@@ -1008,6 +1008,15 @@ model AuditLog {
   changeSetId String?
   personIds   String[]  @default([])
   familyIds   String[]  @default([])
+  // Einträge über eine Person (entityType Person): deren Familien zum
+  // Zeitpunkt des Eintrags (beim Löschen der letzte Stand). Damit lässt sich
+  // das Leserecht auch prüfen, wenn es die Person nicht mehr gibt (gelöscht
+  // oder aufgegangen). subjectFamiliesKnown = false: nicht erfasst (ältere
+  // Einträge, andere Arten) — dann bleibt der Eintrag für Nicht-Admins
+  // verborgen. Leeres subjectFamilyIds mit Known = true heißt „ohne Familie“
+  // (nur Admins).
+  subjectFamilyIds     String[] @default([])
+  subjectFamiliesKnown Boolean  @default(false)
 
   user      User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
   changeSet ChangeSet? @relation(fields: [changeSetId], references: [id], onDelete: SetNull)

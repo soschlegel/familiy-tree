@@ -1149,6 +1149,10 @@ async function applyInTx(
         changeSetId,
         personIds: [personId],
         familyIds: fams.get(personId) ?? [],
+        // Familien der Person selbst (wie auditRefs) — für das Leserecht im
+        // Verlauf, auch nachdem die Person gelöscht wurde oder aufging.
+        subjectFamilyIds: fams.get(personId) ?? [],
+        subjectFamiliesKnown: true,
         createdAt: now,
       };
     });

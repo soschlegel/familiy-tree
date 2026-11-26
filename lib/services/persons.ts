@@ -818,8 +818,10 @@ export async function deletePerson(
     entityType: "Person",
     entityId: id,
     diff: { subject: [existing.givenName, existing.familyName].filter(Boolean).join(" "), relationCount, removedMedia },
-    // Die Familienzuordnung ist mit der Person gelöscht — für die Übersicht je Familie.
+    // Die Familienzuordnung ist mit der Person gelöscht — für die Übersicht je
+    // Familie und als letzter Stand für das Leserecht im Verlauf.
     familyIds,
+    subjectFamilyIds: familyIds,
   });
 
   return { ok: true, relationCount };
