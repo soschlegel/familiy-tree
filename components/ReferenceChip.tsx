@@ -8,7 +8,7 @@ import { REFERENCE_COOKIE, REFERENCE_SELF, type ReferenceSource } from "@/lib/re
 const YEAR = 60 * 60 * 24 * 365;
 
 /**
- * Hinweis auf die Bezugsperson (README, „Bezugsperson“).
+ * Hinweis auf die Bezugsperson (docs/fachlich/bezugsperson.md).
  *
  * - Vorübergehende Bezugsperson (aus `?bezug=` oder dem Cookie): deutlich als
  *   „Sicht von: <Name>“ mit „zurück zu mir“ (bzw. „aufheben“ ohne eigene

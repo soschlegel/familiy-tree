@@ -163,7 +163,7 @@ export type MockUser = {
   /** KI-Recht (MCP). */
   aiAccess: "NONE" | "READ" | "WRITE";
   families: { familyKey: FamilyKey; role: "EDITOR" | "VIEWER" }[];
-  /** Eigene Person („das bin ich“, README „Bezugsperson“). */
+  /** Eigene Person („das bin ich“, docs/fachlich/bezugsperson.md). */
   personId?: string | null;
 };
 
@@ -236,7 +236,7 @@ export type MockLandmarks = {
   /** Ehe des Stammvaters A — mit Beleg (PARTNERSHIP). */
   citedMarriage: string;
   /**
-   * Eigene Person des Bearbeiters (README „Bezugsperson“): in Familie A, mit
+   * Eigene Person des Bearbeiters (docs/fachlich/bezugsperson.md): in Familie A, mit
    * allen vier Großeltern und der tiefsten Ahnenreihe. Ein Teil ihrer
    * Vorfahren gehört nur zu Familie D und ist für den Bearbeiter gesperrt.
    */
@@ -1412,7 +1412,7 @@ export function generateMockData(seed: number = MOCK_SEED): MockData {
     place: founderAMarriage.startPlace ?? null,
   });
 
-  // Für die Karte (README, „Karte und Orte“): einige Wohnorte in Ortsformen,
+  // Für die Karte (docs/fachlich/karte-und-orte.md): einige Wohnorte in Ortsformen,
   // wie GEDCOM-Programme sie schreiben, auch mit historischen Namen — nur zu
   // Lebzeiten, damit die Plausibilitätsprüfung nichts Neues meldet.
   const lifeYear = (p: Internal, offset: number): number | null => {

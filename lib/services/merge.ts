@@ -854,7 +854,7 @@ type CitationBundle = PersonBundle["citations"][number];
 
 /**
  * Bilder eines wegfallenden Belegs bzw. Ereignisses an den bleibenden hängen
- * (README, „Bilder an Quellen, Ereignissen und Belegen“) — sonst nähme das
+ * (docs/fachlich/bilder-an-eintraegen.md) — sonst nähme das
  * Löschen des Doppels die Zuordnung per Cascade mit.
  */
 async function moveAttachedMedia(db: Db, kind: "citation" | "event", fromId: string, toId: string) {

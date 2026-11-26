@@ -26,7 +26,7 @@ export default async function UsersPage({
       status: true,
       lastLoginAt: true,
       aiAccess: true,
-      // Eigene Person („das bin ich“, README „Bezugsperson“).
+      // Eigene Person („das bin ich“, docs/fachlich/bezugsperson.md).
       person: { select: { id: true, givenName: true, familyName: true } },
       // Aktive KI-Schlüssel: nicht widerrufen, nicht abgelaufen.
       _count: {

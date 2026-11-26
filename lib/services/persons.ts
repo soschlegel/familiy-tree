@@ -502,7 +502,7 @@ export async function getPersonDetail(
       .map((e) => toEventDto(e, relEditable.get(rel.relationshipId) ?? false));
   }
   const events = eventRows.filter((e) => e.personId === id).map((e) => toEventDto(e, personEditable));
-  // Bilder an Ereignissen (README, „Bilder an Quellen, Ereignissen und Belegen“).
+  // Bilder an Ereignissen (docs/fachlich/bilder-an-eintraegen.md).
   const eventImages = await imagesOfEvents(eventRows.map((e) => e.id));
   for (const e of [...events, ...relations.flatMap((r) => r.events)]) e.media = eventImages.get(e.id) ?? [];
 

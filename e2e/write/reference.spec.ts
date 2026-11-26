@@ -4,7 +4,7 @@ import { L, fullName, mock } from "../support/mock";
 
 /**
  * „Das bin ich“ setzen und aufheben — selbst auf der Personenseite und als
- * Administrator in der Benutzerverwaltung (README, „Bezugsperson“). Ändert
+ * Administrator in der Benutzerverwaltung (docs/fachlich/bezugsperson.md). Ändert
  * nur die eigene Person des Betrachters und setzt sie am Ende zurück.
  */
 test.describe.configure({ mode: "serial" });

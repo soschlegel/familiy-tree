@@ -16,7 +16,7 @@ import { notFoundError } from "./errors";
 import { loadGraph, type LoadedGraph } from "./graph-data";
 
 /**
- * Bezugsperson eines Benutzers (README, „Bezugsperson“).
+ * Bezugsperson eines Benutzers (docs/fachlich/bezugsperson.md).
  *
  * - „Das bin ich“: User.personId, vom Benutzer selbst (nur für Personen, die
  *   er sehen darf) oder von einem Administrator gesetzt.

@@ -6,7 +6,7 @@ import { assignPlace, listPlaces, placeAssignSchema, type PlaceStatus } from "@/
 const STATUSES: (PlaceStatus | "all")[] = ["all", "open", "auto", "ai", "manual", "unresolvable"];
 
 /**
- * Ortszuordnung (nur Administratoren, README „Karte und Orte“).
+ * Ortszuordnung (nur Administratoren, docs/fachlich/karte-und-orte.md).
  * GET ?status=all|open|auto|ai|manual|unresolvable&q=&page= — vorkommende
  * Ortstexte mit Häufigkeit, Zuordnung und Vorschlag.
  */

@@ -10,7 +10,7 @@ import { snapshot, type PlaceGroup } from "@/lib/map/year";
 import { LineCode } from "./ReferenceLines";
 
 /**
- * Karte „Wurzeln nach Jahr“ (README, „Karte und Orte“): eigene SVG-Karte
+ * Karte „Wurzeln nach Jahr“ (docs/fachlich/karte-und-orte.md): eigene SVG-Karte
  * ohne fremde Server — Ländergrenzen aus public/geo/countries.json (Natural
  * Earth, bereits projiziert), Kreise je Ort für das gewählte Jahr. Die Daten
  * aller Jahre kommen einmal vom Server; Jahreswechsel und Abspielen rechnen

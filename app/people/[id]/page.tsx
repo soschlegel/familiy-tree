@@ -355,7 +355,7 @@ export default async function PersonPage({
     ...detail.relations.flatMap((r) => r.events.map((e) => ({ ...e, ownerKey: r.relationshipId }))),
   ].sort(compareEvents);
   const eventLabelOf = new Map(allEvents.map((e) => [e.id, [e.title, e.dateText].filter(Boolean).join(" ")]));
-  // Belegbilder (README, „Bilder an Quellen, Ereignissen und Belegen“):
+  // Belegbilder (docs/fachlich/bilder-an-eintraegen.md):
   // Bilder an Ereignissen, an Belegen und — nach der Regel in
   // lib/services/attached-media.ts — Bilder der zitierten Quellen.
   const citationWhere = (c: PersonCitation) =>

@@ -14,7 +14,7 @@ import type { ChangeSetHandle } from "../change-sets";
 import { forbiddenError, notFoundError, ServiceError, validationError } from "./errors";
 
 /**
- * Ortszuordnung (README, „Karte und Orte“): Ortstexte → Koordinaten.
+ * Ortszuordnung (docs/fachlich/karte-und-orte.md): Ortstexte → Koordinaten.
  *
  * Nur für Administratoren. Die Liste enthält die Ortstexte ALLER Personen,
  * auch gesperrter — deshalb prüft jede Funktion hier selbst `isAdmin`

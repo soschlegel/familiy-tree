@@ -9,7 +9,7 @@ Sichtbarkeit nach Familien, Platzhalter für verborgene Personen,
 Rechteprüfung, Validierung und Audit gelten wie in der Weboberfläche. Einen
 Weg an der Dienstschicht vorbei zur Datenbank gibt es nicht.
 
-Bedienung und Einrichtung für Anwender: README, Abschnitt „KI-Zugang (MCP)“.
+Bedienung und Einrichtung für Anwender: [docs/betrieb/ki-zugang.md](../betrieb/ki-zugang.md).
 Schlüsselverwaltung in der Oberfläche: Seite `/ai-access` und die Routen
 `/api/ai-tokens…`, `/api/users/[id]/ai-access` (siehe
 [seiten-und-api.md](seiten-und-api.md)).
@@ -229,7 +229,7 @@ sagt sinngemäß:
 | `get_person` | Voller Datensatz einer Person (`getPersonDetail`) | `person_id` | Personenfelder samt Notizen und Datumsangaben, `canEdit`, `families`, `parents`/`partners`/`children` (mit `relationshipId`, Art, Daten, Heirats-/Scheidungsort, Notizen, Bildzahl, Ereignissen der Beziehung), `siblings` (voll/halb), `media` (eigene Bilder, Porträt zuerst), `citations` (Quelle, Angabe, Fundstelle, Verlässlichkeit, `independent: false` bei abgeleiteten Quellen, Bezug zu Beziehung oder Ereignis, Bilder am Beleg und geerbte Bilder der Quelle), `events` und `otherNames` nur, wenn vorhanden; `places` (Freitext → zugeordneter Ort mit `placeId`, Anzeigename, Koordinaten; der Freitext in den Feldern bleibt); `origin` nur, wenn der Benutzer die Person bearbeiten darf (`getPersonOrigin`): `manual` (von Hand erfasst), `imports` (je Import `letter`, `name` wie in der App — ohne eigenen Namen „Import vom …“, nur für Administratoren Datei und Datum —, erster/letzter Import, `records`, `viaMerge`; nie die Quell-Baum-Kennung), `merged` (Zahl der Einträge, erstes/letztes Zusammenführen). Keine Herkunft je Feld; Chips je Eintrag gibt es nur in der App |
 | `get_ancestors` | Vorfahren nach Generationen (`getAncestors`) | `person_id`, `generations` (Standard 4, höchstens 12), `limit` (Standard 200, höchstens 500) | `root`, `generationsRequested`, `total`, `truncated`, `generations` mit deutscher Bezeichnung („Eltern“, „Großeltern“, „Urgroßeltern“ …, ab der 7. „n. Generation“); je Eintrag `viaPersonId` und `subtype` nur bei nicht leiblicher Verbindung |
 | `get_descendants` | Nachfahren nach Generationen (`getDescendants`) | wie `get_ancestors` | wie `get_ancestors` („Kinder“, „Enkel“, „Urenkel“ …) |
-| `get_kinship` | Verwandtschaft von `other_person_id` aus Sicht von `person_id` (`getKinship`) | `person_id`, `other_person_id` | `from`, `to`, `summary` (bevorzugt Blutsverwandtschaft; ohne Weg „keine Verbindung im Stammbaum gefunden“), `blood` (Begriff, Generationen hinauf/hinab, halb, adoptiv, Seite, gemeinsame Vorfahren) und `path` (kürzester Weg über Eltern-/Partnerkanten mit Begriff und Kette „Mutter → Bruder → Ehefrau“). Wege durch Platzhalter sind hier zugelassen (README: strenger in der Oberfläche) |
+| `get_kinship` | Verwandtschaft von `other_person_id` aus Sicht von `person_id` (`getKinship`) | `person_id`, `other_person_id` | `from`, `to`, `summary` (bevorzugt Blutsverwandtschaft; ohne Weg „keine Verbindung im Stammbaum gefunden“), `blood` (Begriff, Generationen hinauf/hinab, halb, adoptiv, Seite, gemeinsame Vorfahren) und `path` (kürzester Weg über Eltern-/Partnerkanten mit Begriff und Kette „Mutter → Bruder → Ehefrau“). Wege durch Platzhalter sind hier zugelassen (die Oberfläche ist strenger, [bezugsperson.md](../fachlich/bezugsperson.md)) |
 | `list_families` | Sichtbare Familien mit Personenzahl und eigener Rolle (`listFamilies`) | keine | `families` |
 | `get_statistics` | Überblick über den sichtbaren Baum (`getStatistics`) | keine | Personen (lebend/verstorben, nach Geschlecht), Beziehungen nach Art, Personen je Familie, Bildzahl, fehlende Angaben, früheste/späteste Geburtsjahre |
 | `find_data_gaps` | Fehlende oder unplausible Angaben (`findDataGaps`) | `kinds` (Auswahl aus fehlendem Geburtsdatum/-ort, Eltern, Geschlecht, vermutlich verstorben ohne Sterbedatum, Sterbeort ohne Sterbedatum, unplausibles Elternalter, isoliert, ohne Familie — nur Admins sinnvoll —, unbelegt; sowie Ehe ohne Ort und Partnerschaft mit unbekanntem Ehestand), `limit` (Personen je Art, Standard 15, höchstens 200) | `counts` (immer alle Arten), `items` je angeforderter Art, `relationshipGaps` mit Paaren samt `relationshipId` |
@@ -294,8 +294,8 @@ Rückfrage, geht es weiterhin.
    https-Adressen, keine internen Netze, Größe begrenzt durch
    `MAX_UPLOAD_BYTES`. Die Inhaltsart der Antwort dient nur als Angabe;
    fehlt ein Dateiname, kommt er aus der Antwort. Einzelheiten des sicheren
-   Abrufs: README, „Bilder über die KI — drei Wege“, und die Doku der
-   Dienste.
+   Abrufs: `lib/safe-fetch.ts` in [bibliotheken.md](bibliotheken.md) und die Doku
+   der Dienste.
 2. **`add_media` mit `data_base64`** — nur für Clients, die die
    Originaldatei wirklich lesen können (z.B. Claude Code mit lokaler Datei);
    auch als `data:`-Adresse. Größe wird vor dem Dekodieren geprüft

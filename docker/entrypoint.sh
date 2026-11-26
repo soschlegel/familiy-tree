@@ -12,9 +12,9 @@
 # Stack-Start (Dienst backup-db) liegt dann bereits in ${DATA_ROOT}/backups.
 # Mit `restart: unless-stopped` startet Docker den Container erneut, mit
 # wachsender Pause (bis etwa 1 Minute); eine als fehlgeschlagen vermerkte
-# Migration wird dabei nicht erneut ausgeführt (README, "Fehlersuche").
+# Migration wird dabei nicht erneut ausgeführt (docs/betrieb/fehlersuche.md).
 #
-# RUN_MIGRATIONS=false überspringt 1. bis 3. (nur zur Fehlersuche, README).
+# RUN_MIGRATIONS=false überspringt 1. bis 3. (nur zur Fehlersuche, docs/betrieb/fehlersuche.md).
 set -e
 
 log() { echo "[start] $*"; }
@@ -61,7 +61,7 @@ migrate() {
     err "FEHLER: Eine Migration ist fehlgeschlagen und in der Datenbank als"
     err "fehlgeschlagen vermerkt (Meldung oben). Weitere Migrationen werden"
     err "nicht angewendet, auch nicht bei einem Neustart."
-    err "Abhilfe (README, \"Fehlersuche\"): Sicherung vom Stack-Start aus"
+    err "Abhilfe (docs/betrieb/fehlersuche.md): Sicherung vom Stack-Start aus"
     err "DATA_ROOT/backups zurückspielen, dann"
     err "  prisma migrate resolve --rolled-back <Migrationsname>"
     err "und ein Image mit korrigierter Migration einsetzen."

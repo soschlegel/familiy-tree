@@ -44,8 +44,8 @@ RUN npx prisma generate && npm run build
 #   - prisma-client (Vorlage für `prisma generate`), WebAssembly-Query-Engines
 #     und -Compiler (Studio, Driver-Adapter), Quelltexte und Typdateien
 #     von effect.
-# Nach einem Prisma-Update die Prüfschritte aus der README ("Schema und
-# Migrationen") wiederholen.
+# Nach einem Prisma-Update die Prüfschritte aus
+# docs/betrieb/migrationen.md ("Prisma-CLI im Image") wiederholen.
 # ---------------------------------------------------------------------------
 FROM node:22-alpine AS prisma-cli
 WORKDIR /src

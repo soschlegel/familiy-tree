@@ -14,7 +14,7 @@ export const metadata = { title: "Karte" };
 const ID_PATTERN = /^[\w-]{1,64}$/;
 
 /**
- * Karte „Wurzeln nach Jahr“ (README, „Karte und Orte“).
+ * Karte „Wurzeln nach Jahr“ (docs/fachlich/karte-und-orte.md).
  * Adresse: /map?person=<id>&mode=vorfahren|alle&jahr=<JJJJ>
  * - person: Ausgangsperson; ohne Angabe die Bezugsperson (Cookie bzw. „das
  *   bin ich“). Ändert die Bezugsperson des Baums nicht.

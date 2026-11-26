@@ -8,7 +8,7 @@ import { loadGraph } from "./graph-data";
 import { resolveReference, visibleIndex, type ReferenceChoice } from "./reference";
 
 /**
- * Karte „Wurzeln nach Jahr“ (README, „Karte und Orte“): Daten für eine
+ * Karte „Wurzeln nach Jahr“ (docs/fachlich/karte-und-orte.md): Daten für eine
  * Ausgangsperson, einmal auf dem Server gerechnet.
  *
  * Datenschutz: Grundlage sind nur Personen, die der Benutzer sehen darf —

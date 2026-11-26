@@ -6,7 +6,7 @@ import { useState } from "react";
 import { apiFetch, jsonBody } from "./api-client";
 
 /**
- * „Das bin ich“ auf der Personenseite (README, „Bezugsperson“). Ersetzt eine
+ * „Das bin ich“ auf der Personenseite (docs/fachlich/bezugsperson.md). Ersetzt eine
  * bereits gewählte eigene Person erst nach Rückfrage.
  */
 export function SelfPersonButton({

@@ -9,7 +9,7 @@ import { apiFetch } from "./api-client";
 import { ReleaseNoteList } from "./ReleaseNoteList";
 
 /**
- * Fenster „Was ist neu?“ (README „Neuigkeiten“): erscheint einmal nach einer
+ * Fenster „Was ist neu?“ (docs/entwicklung/neuigkeiten.md): erscheint einmal nach einer
  * neuen Version, mit den Releases seit dem zuletzt gesehenen (Auswahl auf
  * dem Server, `releasesSince` in lib/release-notes.ts). Das Layout bindet es
  * nur für Angemeldete ein, wenn es etwas zu zeigen gibt.

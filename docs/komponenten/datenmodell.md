@@ -731,11 +731,11 @@ Verzeichnis nicht (mehr) kennt, werden ignoriert. Änderungen stehen im
     Entfernt Kommentare (auch bei CRLF) und prüft jede Anweisung bzw. jede
     Teilaktion eines `ALTER TABLE` gegen eine Positivliste.
   - `prisma migrate diff` zwischen Migrationen und Schema: muss ohne
-    Abweichung sein (UEBERGABE/AGENTS, „Migrationen ↔ Schema“).
+    Abweichung sein (AGENTS.md, Abschnitt 3).
 - **Veröffentlichte Migrationen nie nachträglich ändern** (AGENTS.md,
   Abschnitt 3).
 - **Im Betrieb** wendet der App-Container beim Start `prisma migrate deploy`
   an (`docker/entrypoint.sh`), nach einer automatischen Sicherung
   (`backup-db`). Eine Datenbank mit Tabellen, aber ohne Migrationshistorie
   (früher per `db push`) führt zum Abbruch; Baselining beschreibt
-  `docs/dev-history.md` (die README verweist darauf).
+  `docs/dev-history.md` (Verweis aus [docs/betrieb/migrationen.md](../betrieb/migrationen.md)).

@@ -5,9 +5,10 @@ aber für Entwicklung, Prüfung und Betrieb nötig ist: Hilfsskripte, das
 Container-Image und die Compose-Dateien, die Build-Pipeline, die
 Mock-Umgebung, die mitgelieferten Geodaten, die Umgebungsvariablen und den
 Aufbau der Unit- und End-to-End-Tests. Bedienung und Schritt-für-Schritt-
-Anleitungen stehen in der [README](../../README.md) (Abschnitte „Lokal
-starten“, „Tests“, „Mock-Daten“, „Betrieb auf der NAS“, „Schema und
-Migrationen“, „Sicherung“), laufende Stolperfallen in
+Anleitungen stehen in der [README](../../README.md) („Schnellstart lokal“),
+unter [docs/entwicklung/](../entwicklung/tests.md) (Tests, Mock-Daten) und
+[docs/betrieb/](../betrieb/nas-portainer.md) (Betrieb auf der NAS,
+Migrationen im Betrieb, Sicherung), laufende Stolperfallen in
 [UEBERGABE.md](../../UEBERGABE.md).
 
 **Code bleibt die Wahrheit:** Weicht diese Beschreibung vom Code ab, gilt der
@@ -42,7 +43,7 @@ Code, und die Beschreibung wird berichtigt.
 | `mock:env` | `scripts/mock.mjs env` | berechnete Mock-Umgebung anzeigen |
 | `mcp:stdio` | `scripts/mock.mjs mcp` | lokaler MCP-Server über stdio gegen die Mock-Daten |
 | `mcp:key` | `scripts/mock.mjs mcp-key` | festen Mock-KI-Schlüssel ausgeben |
-| `gedcom:check` | `tsx lib/gedcom/cli.ts` | GEDCOM-Datei vorab prüfen (README, „Eine Datei vorab prüfen“) |
+| `gedcom:check` | `tsx lib/gedcom/cli.ts` | GEDCOM-Datei vorab prüfen ([gedcom.md](../fachlich/gedcom.md#eine-datei-vorab-prüfen)) |
 
 ---
 
@@ -356,7 +357,8 @@ Wiederheirat, Halb-, Stief-, Adoptiv- und Pflegeverhältnisse, Datenlücken,
 ungenaue Daten, mögliche Dubletten, Personen ohne Familie, eigene Person des
 Bearbeiters usw.). Unit-Tests (über `tests/helpers.ts`) und E2E-Tests (über
 `e2e/support/mock.ts`) lesen IDs und Namen von hier, statt sie
-abzuschreiben. Inhalt im Einzelnen: README, „Mock-Daten“.
+abzuschreiben. Inhalt im Einzelnen:
+[docs/entwicklung/mock-daten.md](../entwicklung/mock-daten.md).
 
 ### `prisma/seed-mock.ts`
 

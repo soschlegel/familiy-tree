@@ -4,7 +4,7 @@ import type { Scope } from "../scope";
 import { ServiceError } from "./errors";
 
 /**
- * Neuigkeiten (Versions-Changelog, README „Neuigkeiten“): merkt sich je
+ * Neuigkeiten (Versions-Changelog, docs/entwicklung/neuigkeiten.md): merkt sich je
  * Benutzer das zuletzt gesehene Release. Immer nur für den angemeldeten
  * Benutzer selbst (`scope.userId`) — eine fremde Kennung gibt es hier nicht.
  *

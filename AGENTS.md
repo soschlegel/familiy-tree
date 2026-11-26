@@ -6,8 +6,8 @@ Stammbaum-App (Next.js 15, React 19, Prisma/Postgres, Tailwind, MCP-Server
 unter `/api/mcp`). Oberfläche, Code-Kommentare, Commits und Doku auf Deutsch.
 
 Laufender Stand, offene Pakete und Stolperfallen dieser Umgebung stehen in
-[UEBERGABE.md](UEBERGABE.md); Bedienung, Betrieb und Tests in
-[README.md](README.md). Diese Datei regelt, **wie** gearbeitet wird.
+[UEBERGABE.md](UEBERGABE.md); Einstieg in [README.md](README.md), Bedienung,
+Betrieb und Tests unter [docs/](docs/README.md). Diese Datei regelt, **wie** gearbeitet wird.
 
 ## 1. Komponenten-Dokumentation fortschreiben (Pflicht)
 
@@ -101,7 +101,7 @@ Anwender** (Familienmitglieder ohne Technikwissen), je Thema eine Datei
   ganz oben in [CHANGELOG.md](CHANGELOG.md) — im selben Stand wie die
   Änderung (mit ihr zusammengeführt). **Ohne Eintrag kein Ausrollen.** Die
   App zeigt ihn den Benutzern einmal als „Was ist neu?“ und auf der Seite
-  „Neuigkeiten“ (README, „Neuigkeiten“).
+  „Neuigkeiten“ ([docs/entwicklung/neuigkeiten.md](docs/entwicklung/neuigkeiten.md)).
   - Überschrift `## JJJJ-MM-TT.N — Kurztitel`: `JJJJ-MM-TT` ist der Tag des
     Ausrollens, `N` die laufende Nummer an diesem Tag (erstes Release des
     Tages `.1`, zweites `.2` …). Keine Commit-Kennung — die Git-Historie

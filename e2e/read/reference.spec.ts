@@ -11,7 +11,7 @@ import {
 import { L, fullName, mock, person, visibleFor } from "../support/mock";
 
 /**
- * Bezugsperson und Ahnenlinien (README, „Bezugsperson“). Nur lesend: der
+ * Bezugsperson und Ahnenlinien (docs/fachlich/bezugsperson.md). Nur lesend: der
  * Bearbeiter hat in den Mock-Daten eine eigene Person (L.selfEditor);
  * vorübergehende Bezugspersonen und der Linien-Schalter leben nur in Cookies
  * des jeweiligen Testkontexts.

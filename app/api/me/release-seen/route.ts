@@ -11,7 +11,7 @@ const input = z.object({ releaseId: z.string().min(1).max(32) }).strict();
 
 /**
  * Neuigkeiten: „Gelesen“ — merkt das zuletzt gesehene Release des
- * angemeldeten Benutzers (Fenster „Was ist neu?“, README „Neuigkeiten“).
+ * angemeldeten Benutzers (Fenster „Was ist neu?“, docs/entwicklung/neuigkeiten.md).
  * Nur bekannte Kennungen aus CHANGELOG.md, sonst 400.
  */
 export const PUT = route(null, async (ctx, req) => {

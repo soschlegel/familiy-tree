@@ -1,6 +1,6 @@
 #!/bin/sh
 # Löst die Datenbanksicherung im laufenden Produktivstack aus: Dump nach
-# ${DATA_ROOT}/backups (siehe README, "Sicherung").
+# ${DATA_ROOT}/backups (siehe docs/betrieb/sicherung.md).
 #
 #   ./scripts/backup.sh [Stackname]      (Standard: familytree)
 #
