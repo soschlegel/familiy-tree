@@ -39,6 +39,12 @@ export type AuditInput = {
    */
   personIds?: string[];
   familyIds?: string[];
+  /**
+   * Nur bei Einträgen über eine Person, die es beim Schreiben schon nicht mehr
+   * gibt (Person löschen): ihre Familien unmittelbar vor dem Löschen. Sonst
+   * ermittelt auditRefs sie selbst aus der Person.
+   */
+  subjectFamilyIds?: string[];
 };
 
 /**
@@ -225,11 +231,36 @@ function derivedFamilies(input: AuditInput): string[] {
 }
 
 /**
+ * Familien der Person, um die es im Eintrag geht (entityType Person, außer
+ * CONNECT — dort ist entityId ein Lauf). Gespeichert, damit die
+ * Änderungsgeschichte das Leserecht auch nach dem Löschen oder Zusammenführen
+ * der Person prüfen kann (lib/services/changes.ts). Stand: zum Zeitpunkt des
+ * Eintrags, also nach der Änderung; bei einer schon gelöschten Person die
+ * ausdrücklich übergebenen Familien vor dem Löschen. Gibt es die Person nicht
+ * und wurde nichts übergeben, bleibt es „nicht erfasst“ (known = false) — nie
+ * raten.
+ */
+async function subjectFamilies(db: Db, input: AuditInput): Promise<{ known: boolean; familyIds: string[] }> {
+  if (input.entityType !== "Person" || input.action === "CONNECT") return { known: false, familyIds: [] };
+  if (input.subjectFamilyIds) return { known: true, familyIds: [...new Set(input.subjectFamilyIds)] };
+  const person = await db.person.findUnique({
+    where: { id: input.entityId },
+    select: { families: { select: { familyId: true } } },
+  });
+  if (!person) return { known: false, familyIds: [] };
+  return { known: true, familyIds: person.families.map((f) => f.familyId) };
+}
+
+/**
  * Momentaufnahme: betroffene Personen (aus dem Datensatz bzw. den Feldern des
  * Eintrags, plus ausdrücklich angegebene) und deren Familien zum Zeitpunkt
- * der Änderung.
+ * der Änderung; bei Einträgen über eine Person zusätzlich genau deren
+ * Familien (`subjectFamilyIds`, siehe subjectFamilies).
  */
-export async function auditRefs(input: AuditInput, db: Db = prisma): Promise<{ personIds: string[]; familyIds: string[] }> {
+export async function auditRefs(
+  input: AuditInput,
+  db: Db = prisma,
+): Promise<{ personIds: string[]; familyIds: string[]; subjectFamilyIds: string[]; subjectFamiliesKnown: boolean }> {
   const personIds = [...new Set([...(input.personIds ?? []), ...(await derivedPersons(db, input))])];
   const families = personIds.length
     ? await db.personFamily.findMany({ where: { personId: { in: personIds } }, select: { familyId: true } })
@@ -237,7 +268,8 @@ export async function auditRefs(input: AuditInput, db: Db = prisma): Promise<{ p
   const familyIds = [
     ...new Set([...(input.familyIds ?? []), ...derivedFamilies(input), ...families.map((f) => f.familyId)]),
   ];
-  return { personIds, familyIds };
+  const subject = await subjectFamilies(db, input);
+  return { personIds, familyIds, subjectFamilyIds: subject.familyIds, subjectFamiliesKnown: subject.known };
 }
 
 const ACTION_TITLE: Record<AuditInput["action"], string> = {
@@ -298,6 +330,8 @@ export async function auditData(
     changeSetId,
     personIds: refs.personIds,
     familyIds: refs.familyIds,
+    subjectFamilyIds: refs.subjectFamilyIds,
+    subjectFamiliesKnown: refs.subjectFamiliesKnown,
   };
 }
 

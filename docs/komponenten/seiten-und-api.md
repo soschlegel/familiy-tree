@@ -597,6 +597,9 @@ Fehlercodes aus den Grundregeln.
   (Fehler mit Zahl der Beziehungen). Erfordert Bearbeitungsrecht.
 - **`GET /api/persons/[id]/changes`**: `listPersonChanges`, neueste
   zuerst; Suchparameter `cursor`, `limit`. Nur für Bearbeiter der Person.
+  Einträge über Personen, die es nicht mehr gibt, zeigen Feldwerte nach den
+  im Eintrag gespeicherten Familien ([dienste.md](dienste.md),
+  `lib/services/changes.ts`); dasselbe gilt für `GET /api/changes/[key]`.
 - **`GET /api/persons/[id]/events`**: `listPersonEvents` (ohne die
   Ereignisse der Beziehungen); fehlt/unsichtbar → 404.
 - **`POST /api/persons/[id]/events`**: `createEvent` an dieser Person

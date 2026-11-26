@@ -1564,7 +1564,9 @@ Paket und Momentaufnahme der betroffenen Personen und Familien.
 Paketeinträge nur für Administratoren. Verweise auf Personen und Familien,
 die der Betrachter nicht sehen darf, erscheinen als „nicht freigegeben“;
 Einträge über eine andere, nicht sichtbare Person (z.B. Zusammenführen eines
-Verwandten aus fremder Familie) ohne Feldwerte.
+Verwandten aus fremder Familie) ohne Feldwerte. Ob die Person des Eintrags
+sichtbar ist, entscheidet `subjectVisible` (siehe unten, „Personen, die es
+nicht mehr gibt“).
 
 **Protokoll:** — (nur lesend)
 
@@ -1574,7 +1576,8 @@ Verwandten aus fremder Familie) ohne Feldwerte.
 `components/ChangeSetList.tsx`, `components/PersonChanges.tsx`.
 
 **Tests:** `tests/changelog.db.test.ts` (Regeln der Pakete:
-`tests/changelog.test.ts`); `e2e/write/changelog.spec.ts`.
+`tests/changelog.test.ts`), `tests/changelog-subject.db.test.ts` (Personen,
+die es nicht mehr gibt); `e2e/write/changelog.spec.ts`.
 
 **Gelöschte Schlüssel im Verlauf (seit 22.11.):** `tokenLabels(ids)` löst `apiTokenId` zu Namen auf. Fehlt der Schlüssel (endgültig gelöscht oder mit seinem Benutzer entfernt), kommt der Name aus dem letzten `CREATE`/`DELETE`-Protokolleintrag des Schlüssels, dazu `tokenDeleted: true`; ohne solchen Eintrag `tokenName: null`. Gilt für `listPersonChanges`/`listChangeSetEntries` und `listChangeSets`; Anzeige „KI über MCP · Schlüssel „Name“ (gelöscht)“ bzw. „· Schlüssel (gelöscht)“.
 
@@ -1584,10 +1587,39 @@ Pakets** sehen Admins und wer das Paket angelegt hat; alle anderen
 bekommen `neutralChangeSetTitle` — „Import“ bzw. „KI-Änderungen“ oder den
 Titel nur bis zum ersten Anführungszeichen (Titel können Dateinamen eines
 Imports, frei gewählte Texte der KI, fremde Schlüsselnamen oder Ortstexte
-enthalten). Ein Personeneintrag, dessen Person es nicht mehr gibt
-(gelöscht oder aufgegangen), gilt für Nicht-Admins als verborgen — ohne
-Feldwerte, weil sich ihre Sichtbarkeit nicht mehr feststellen lässt.
-Tests: `tests/ai-token-delete.db.test.ts`.
+enthalten). Tests: `tests/ai-token-delete.db.test.ts`.
+
+**Personen, die es nicht mehr gibt (seit 26.11.):** Ob ein Personeneintrag
+Feldwerte und Ergänzung zeigt, entscheidet `subjectVisible` — immer mit
+`canViewPerson` aus `lib/scope.ts`, keine eigene Rechte-Logik:
+- Gibt es die Person noch: ihre **heutigen** Familien (wie überall in der
+  App).
+- Gibt es sie nicht mehr (gelöscht oder aufgegangen): die im Eintrag
+  gespeicherten Familien **zum Zeitpunkt des Eintrags**
+  (`AuditLog.subjectFamilyIds`, geschrieben von `auditRefs` in
+  `lib/audit.ts`; beim Löschen der letzte Stand davor). Wer die Person damals
+  sehen durfte und die Familie heute noch hat, sieht die Werte wieder.
+  „Ohne Familie“ bleibt wie bei lebenden Personen nur für Admins.
+- Ältere Einträge ohne gespeicherte Familien (`subjectFamiliesKnown =
+  false`): für Nicht-Admins verborgen, ohne Feldwerte — im Zweifel verbergen.
+- Eine später gelöschte Familie gibt nichts frei: Ihre Mitgliedschaften
+  verschwinden mit ihr, die gespeicherte Kennung passt zu niemandem mehr.
+  Spätere Familien (der Person oder, nach dem Zusammenführen, der bleibenden
+  Person) zählen nicht.
+- „Person gelöscht: …“ zeigt den Namen nach derselben Regel (ältere
+  Einträge: `familyIds` des Eintrags, beim Löschen ebenfalls die Familien
+  der Person).
+
+**Keine Rückfüllung** älterer Einträge: `familyIds` ist eine Vereinigung über
+alle betroffenen Personen (beim Zusammenführen bleibende und aufgehende
+Person samt Verwandten, bei „keine Dublette“ beide Personen, beim Ändern der
+Familien alte und neue) und lässt sich nicht sicher der Person des Eintrags
+zuordnen. Die Umleitung zur bleibenden Person (`redirects.ts`) bedeutet nicht
+dieselbe Sichtbarkeit: Die bleibende Person hatte eigene Familien, übernimmt
+die der aufgehenden und kann später weitere bekommen — ihre heutigen
+Familien würden Bearbeitern Werte zeigen, die sie vorher nicht sahen.
+Tests: `tests/changelog-subject.db.test.ts`; `e2e/write/changelog.spec.ts`
+(„gelöschte Person: Feldwerte nur, wenn …“).
 
 ### lib/services/ai-access.ts
 

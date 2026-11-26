@@ -95,6 +95,43 @@ test.describe("als Bearbeiter", () => {
     await expectNoA11yViolations(page);
   });
 
+  test("gelöschte Person: Feldwerte nur, wenn der Bearbeiter sie vorher sehen durfte", async ({ page }) => {
+    // R (Familie A) ist Elternteil von X; X geht in K auf, danach wird K
+    // gelöscht. Der Eintrag „Zusammengeführt“ steht im Verlauf von R. Einmal
+    // liegt K in Familie A (für den Bearbeiter sichtbar), einmal in C (nicht).
+    const admin = await apiAs("admin");
+    const r = await createPerson(admin, { givenName: "E2E Rita", familyName: surname, familyIds: ["mock-family-a"] });
+    created.push(r.id);
+    for (const [family, place] of [["mock-family-a", "Feldstadt"], ["mock-family-c", "Fernstadt"]] as const) {
+      const k = await createPerson(admin, { givenName: "E2E Bleibt", familyName: surname, familyIds: [family] });
+      const x = await createPerson(admin, { givenName: "E2E Geht", familyName: surname, birthPlace: place, familyIds: [family] });
+      created.push(k.id, x.id);
+      await createRelationship(admin, { type: "PARENT_OF", subtype: "BIOLOGICAL", fromPersonId: r.id, toPersonId: x.id });
+      const merged = await admin.post("/api/persons/merge", { data: { keepId: k.id, mergeId: x.id } });
+      expect(merged.status(), await merged.text()).toBe(200);
+      await deletePerson(admin, k.id);
+    }
+    await admin.dispose();
+
+    await page.goto(`/people/${r.id}`);
+    const section = page.getByTestId("person-changes");
+    const toggle = section.getByRole("button", { name: /^Änderungen (anzeigen|ausblenden)$/ });
+    await expect(async () => {
+      if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+      await expect(section.getByTestId("change-entry").first()).toBeVisible({ timeout: 2_000 });
+    }).toPass();
+    const merges = section.getByTestId("change-entry").filter({ hasText: "Zusammengeführt:" });
+    await expect(merges).toHaveCount(2);
+    // Neueste zuerst: K in Familie C — ohne Namen und ohne Feldwerte.
+    await expect(merges.nth(0)).toContainText("Zusammengeführt: nicht freigegeben in gelöschte Person");
+    await expect(section).not.toContainText("Fernstadt");
+    // K in Familie A: Feldwerte wieder lesbar.
+    await expect(merges.nth(1)).toContainText("in gelöschte Person");
+    await expect(merges.nth(1)).toContainText("Geburtsort");
+    await expect(merges.nth(1)).toContainText("nachher: Feldstadt");
+    await expectNoA11yViolations(page);
+  });
+
   test("Übersicht und API der Übersicht sind Administratoren vorbehalten", async ({ page, consoleGuard }) => {
     consoleGuard.allow(httpError(403));
     expect((await page.request.get("/api/changes")).status()).toBe(403);

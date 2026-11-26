@@ -23,5 +23,5 @@ Unter **Verwaltung → Änderungen** sieht der Administrator alle Pakete: je Pak
 - Ein **Paket rückgängig machen** gibt es bewusst nicht. Die Geschichte zeigt aber genau, was vorher da stand.
 - Personen, die du nicht sehen darfst, erscheinen auch hier nur als „nicht freigegeben“.
 - Den **Namen eines KI-Schlüssels** siehst du nur bei deinen eigenen Schlüsseln. Den vollen **Paket-Namen** siehst du bei Paketen, die du selbst ausgelöst hast; bei fremden Paketen steht nur die Art, z.B. „Import“ oder „KI-Änderungen“. Administratoren sehen alles.
-- Bei einer Person, die es nicht mehr gibt (gelöscht oder in eine andere übergegangen), zeigt der Verlauf keine Feldwerte mehr — nur Administratoren sehen sie noch.
+- Bei einer Person, die es nicht mehr gibt (gelöscht oder in eine andere übergegangen), siehst du die Feldwerte, wenn du die Person damals sehen durftest — also wenn sie zu einer Familie gehörte, in der du heute noch bist. Bei älteren Einträgen ist das nicht gespeichert; dort sehen nur Administratoren die Feldwerte.
 - Ältere Einträge aus der Zeit, bevor es Pakete gab, zeigen nur den neuen Wert („vorheriger Wert nicht erfasst“).

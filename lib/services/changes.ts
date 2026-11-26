@@ -537,7 +537,11 @@ function describe(ctx: Ctx, row: Row): { what: string; note: string | null } {
         return { what: `Markierung „keine Dublette“ aufgehoben: ${personName(ctx, row.entityId)} und ${personName(ctx, d.notDuplicateOfRemoved as string)}`, note: null };
       }
       if (row.action === "DELETE") {
-        const visible = ctx.scope.isAdmin || row.familyIds.some((f) => ctx.scope.families.has(f));
+        // Neuere Einträge: die gespeicherten Familien der Person; ältere: die
+        // Familien des Eintrags (beim Löschen ebenfalls die der Person).
+        const visible = row.subjectFamiliesKnown
+          ? canViewPerson(ctx.scope, row.subjectFamilyIds)
+          : canViewPerson(ctx.scope, row.familyIds);
         return { what: `Person gelöscht: ${visible ? (subject ?? "ohne Namen") : RESTRICTED}`, note: null };
       }
       if (row.action === "UPDATE" && ("families" in d)) return { what: `Familien geändert: ${personName(ctx, row.entityId)}`, note: null };
@@ -617,16 +621,30 @@ function userLabel(u: { name: string | null; email: string } | null): string | n
   return u.name?.trim() || u.email.split("@")[0];
 }
 
+/**
+ * Darf der Betrachter die Person sehen, um die es in einem Personeneintrag
+ * geht? Gibt es sie noch, entscheiden ihre heutigen Familien (wie überall).
+ * Gibt es sie nicht mehr (gelöscht oder aufgegangen), entscheiden die im
+ * Eintrag gespeicherten Familien zum Zeitpunkt des Eintrags
+ * (`subjectFamilyIds`, lib/audit.ts) — mit derselben Prüffunktion
+ * `canViewPerson`, also auch „ohne Familie = nur Admins“. Ältere Einträge
+ * ohne diese Angabe: nur Admins (im Zweifel verbergen). Eine später
+ * gelöschte Familie gibt nichts frei: Ihre Mitgliedschaften verschwinden mit
+ * ihr, die gespeicherte Kennung passt dann zu niemandem mehr.
+ */
+function subjectVisible(ctx: Ctx, row: Row): boolean {
+  const subject = ctx.persons.get(row.entityId);
+  if (subject) return subject.visible;
+  if (row.subjectFamiliesKnown) return canViewPerson(ctx.scope, row.subjectFamilyIds);
+  return ctx.scope.isAdmin;
+}
+
 function toEntry(ctx: Ctx, row: Row): ChangeEntryDto {
   const { what, note } = describe(ctx, row);
-  // Eintrag über eine andere, nicht sichtbare Person (z.B. Zusammenführen
-  // eines Verwandten): keine Feldwerte.
-  // Gibt es die Person nicht mehr (gelöscht oder später selbst aufgegangen),
-  // lässt sich ihre Sichtbarkeit nicht mehr feststellen — für Nicht-Admins
-  // gilt sie dann als verborgen, sonst erschienen ihre Feldwerte unmaskiert.
-  const subject = ctx.persons.get(row.entityId);
-  const hiddenPerson =
-    row.entityType === "Person" && row.action !== "CONNECT" && (subject ? !subject.visible : !ctx.scope.isAdmin);
+  // Eintrag über eine Person, die der Betrachter nicht sehen darf (z.B.
+  // Zusammenführen eines Verwandten aus fremder Familie, oder eine gelöschte
+  // Person, deren Familien er nicht kannte): keine Feldwerte.
+  const hiddenPerson = row.entityType === "Person" && row.action !== "CONNECT" && !subjectVisible(ctx, row);
   const ownToken = ctx.scope.isAdmin || (row.userId !== null && row.userId === ctx.scope.userId);
   return {
     id: row.id,

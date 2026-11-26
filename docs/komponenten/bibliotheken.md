@@ -303,10 +303,23 @@ des Eintrags gelesen; zusätzlich übergebene IDs werden ergänzt. Familien
 sind die Familien dieser Personen plus ausdrücklich genannte (Familie
 selbst, Benutzer mit `familyId`).
 
+**Familien der Person im Eintrag** (`subjectFamilyIds`,
+`subjectFamiliesKnown`): Bei Einträgen über eine Person (außer `CONNECT`)
+speichert `auditRefs` zusätzlich genau deren Familien zum Zeitpunkt des
+Eintrags — gelesen aus der Person (in der Transaktion des Dienstes, also
+nach der Änderung; beim Zusammenführen die bleibende Person samt
+übernommener Familien). Ist die Person beim Schreiben schon gelöscht, gilt
+das ausdrücklich übergebene `subjectFamilyIds` (Person löschen: die
+Familien vor dem Löschen); fehlt es, bleibt der Eintrag „nicht erfasst“ —
+nie geraten. Der Sammel-Eintrag beim Import (`import-apply.ts`, schreibt
+Zeilen selbst) setzt beide Felder ebenso. Ausgewertet in
+`lib/services/changes.ts` (Leserecht, wenn es die Person nicht mehr gibt).
+
 **Benutzt von:** fast allen schreibenden Diensten, mehreren Admin- und
 Medienrouten.
 
-**Tests:** `tests/changelog.test.ts` (indirekt `changelog.db.test.ts`).
+**Tests:** `tests/changelog.test.ts` (indirekt `changelog.db.test.ts`,
+`changelog-subject.db.test.ts`).
 
 ### lib/change-sets.ts
 **Zweck:** Changelog-Pakete (`ChangeSet`) anlegen, benennen und für den
