@@ -1721,7 +1721,7 @@ ersetzt Next.js sie nicht.
 
 ### lib/release-notes.ts
 **Zweck:** Neuigkeiten — der Versions-Changelog für Anwender aus
-`CHANGELOG.md` (README „Neuigkeiten“). Nicht zu verwechseln mit der
+`CHANGELOG.md` (`docs/entwicklung/neuigkeiten.md`). Nicht zu verwechseln mit der
 Änderungsgeschichte der Daten (`change-sets`, `/admin/changes`). Rein, ohne
 Datei- und Datenbankzugriff (auch im Browser, in `prisma/seed-mock.ts` und
 in den E2E-Tests benutzt).

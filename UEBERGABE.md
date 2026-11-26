@@ -12,7 +12,10 @@ aktuell halten — Erledigtes streichen, keine Paketgeschichte sammeln.
   (GitHub Actions, Workflow „Images“) und zieht den Branch `deploy` nach;
   Portainer aktualisiert den Stack von dort. **Ein Merge ist ein
   Produktiv-Deployment auf echte Daten.**
-- `optimierung` = Arbeitsbranch, zum Zeitpunkt der Übergabe gleich `main`.
+- `optimierung` = Arbeitsbranch. Dort liegen, geprüft (Vitest, gezielte
+  Playwright-Specs), aber noch nicht ausgerollt: Verlauf aufgegangener
+  Personen bei der bleibenden Person (`listPersonChanges`) und die
+  verschlankte Doku. Vor dem Ausrollen: CHANGELOG-Eintrag und Gesamtlauf.
 - Letztes Release: **2026-11-26.1** (Seite „Einstellungen“; Familien der
   Person im Änderungseintrag). Neueste Migration:
   `20261126000100_audit_personenfamilien` (Liste aller Migrationen:
@@ -107,9 +110,6 @@ Anleitungen: [docs/entwicklung/tests.md](docs/entwicklung/tests.md),
   `lib/services/gedcom-import.ts`) — für importierte Personen öffnen.
   `import-apply` legt beim Verknüpfen schon einen zusätzlichen
   Herkunftsvermerk an.
-- **Zusammenführen:** Im Dialog „Zusammenführen …“ fehlt die Einschätzung
-  der KI. Der Dialog zeigt auch „unklar“, das Banner nicht — bei Bedarf mit
-  dem Eigentümer abstimmen.
 - **Umleitung alter Kennungen** mit echten Daten prüfen: eine alte Adresse
   aufrufen und im Server-Log `[umleitungen] … nachgetragen` suchen.
 - **Änderungsgeschichte, zur Entscheidung:** Paket-Titel aus

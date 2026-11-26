@@ -258,7 +258,7 @@ Orten, Hauptbild) und berechnet je Person `visible`.
 **Regeln und Entscheidungen:** Bewusst ein einziger Ladevorgang statt vieler
 Einzelabfragen — bei Familienstammbäumen (bis rund 1000 Personen) schneller
 und einfacher korrekt zu halten. Die Grenze dieses Ansatzes beschreibt das
-README („Grenzen“).
+`docs/fachlich/fokus-ansicht.md` („Grenzen“).
 
 **Rechte/Datenschutz:** Die Struktur (wer mit wem verbunden ist) bleibt
 vollständig; die Angaben einer Person dürfen das Ergebnis nur verlassen, wenn
@@ -1727,7 +1727,7 @@ beim KI-Recht (vorher → nachher).
 ### lib/services/release-notes.ts
 
 **Zweck:** Lesemarke für die Neuigkeiten (Versions-Changelog aus
-`CHANGELOG.md`, README „Neuigkeiten“) — nicht zu verwechseln mit der
+`CHANGELOG.md`, `docs/entwicklung/neuigkeiten.md`) — nicht zu verwechseln mit der
 Änderungsgeschichte der Daten oben.
 
 **Wichtige Funktionen:** `markReleaseSeen(scope, releaseId, known)` setzt
