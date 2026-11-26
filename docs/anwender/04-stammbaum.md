@@ -1,6 +1,6 @@
 # Stammbaum
 
-Die drei Ansichten Fokus, Generationen und Zeitstrahl, die Bezugsperson („Das bin ich“), der Verwandtschaftsgrad an jeder Karte, die farbigen Großeltern-Linien und die Herkunft aus Importen.
+Die drei Ansichten Fokus, Generationen und Zeitstrahl, die Bezugsperson („Das bin ich“), der Verwandtschaftsgrad an jeder Karte, die farbigen Großeltern-Linien, die Herkunft aus Importen und das Vollbild fürs Handy.
 
 ## Die drei Ansichten
 
@@ -15,6 +15,17 @@ Karten am Rand zeigen, dass es weitergeht: „▲ Vorfahren“ oder „▼ +3 Ki
 Weitere Werkzeuge: **Suche** (stellt den Treffer in die Mitte), **Ehen zeigen** (aus = nur die reine Abstammung), der **Familienfilter** im ganzen Baum und unten links die **Legende** mit allen Linienarten (leiblich, Adoption, Stief- und Pflegekind, Ehe, geschieden, Ehestand unbekannt, nicht freigegeben). Ziehen verschiebt, Mausrad bzw. zwei Finger zoomen.
 
 Von jeder Personenseite führt **Im Stammbaum zeigen** zurück in die Fokus-Ansicht.
+
+## Vollbild
+
+Gerade auf dem Handy bleibt unter Kopfzeile und Werkzeugen wenig Platz für den Baum. Der Knopf **Vollbild** oben rechts im Baum zeigt ihn bildschirmfüllend — in allen drei Ansichten.
+
+- Im Vollbild kannst du wie gewohnt verschieben und zoomen. Ein Tipp auf eine Karte stellt die Person in die Mitte bzw. öffnet ihre Seite — genau wie sonst.
+- Die **Legende** unten links bleibt da. Hast du vorher **Linien** oder **Herkunft** eingeschaltet, stehen deren Erklärungen ebenfalls darin.
+- Suche, Ansicht, „Ehen zeigen“, „Linien“ und „Herkunft“ sind im Vollbild ausgeblendet. Stell sie vorher ein, oder beende kurz das Vollbild.
+- **Beenden:** mit dem Knopf **Vollbild beenden** oben rechts, mit der Zurück-Taste bzw. Zurück-Wischgeste des Handys oder am Computer mit der Taste Esc. Du bleibst dabei auf der Baumseite. Hast du im Vollbild andere Personen in die Mitte gestellt, führt die Zurück-Taste erst Schritt für Schritt zu ihnen zurück, bevor das Vollbild endet.
+
+Auf manchen Handys verschwinden im Vollbild zusätzlich die Adress- und die Statusleiste des Browsers; auf dem iPhone bleiben sie stehen.
 
 ## Bezugsperson
 

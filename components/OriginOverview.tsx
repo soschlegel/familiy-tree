@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { originText } from "@/lib/origin";
 import { plural } from "@/lib/plural";
@@ -8,19 +8,49 @@ import type { OriginOverview as Overview } from "@/lib/services/origin";
 import { apiFetch } from "./api-client";
 import { OriginChip } from "./OriginChips";
 
-const W = 520;
-const H = 300;
+/** Breite des Bildes auf breiten Bildschirmen; schmaler wird es mitgemessen. */
+const WIDE = 520;
+const NARROW_MIN = 300;
 
-/** Kreise gleichmäßig auf einer Ellipse; ein einzelner in der Mitte. */
-function place(n: number): { x: number; y: number }[] {
-  if (n === 1) return [{ x: W / 2, y: H / 2 - 10 }];
+/**
+ * Kreise gleichmäßig auf einer Ellipse; ein einzelner in der Mitte. Seitlich
+ * bleibt Platz für die Beschriftung unter den äußeren Kreisen.
+ */
+function place(n: number, w: number, h: number): { x: number; y: number }[] {
+  if (n === 1) return [{ x: w / 2, y: h / 2 - 10 }];
+  const rx = w / 2 - (w < 420 ? 62 : 95);
+  // Schmal stehen die Namen der oberen Kreise über ihnen — dafür mehr Rand.
+  const ry = h / 2 - (w < 420 ? 95 : 62);
   return Array.from({ length: n }, (_, i) => {
     const a = (2 * Math.PI * i) / n - (n === 2 ? Math.PI : Math.PI / 2);
-    return { x: W / 2 + Math.cos(a) * 165, y: H / 2 - 12 + Math.sin(a) * 88 };
+    return { x: w / 2 + Math.cos(a) * rx, y: h / 2 - 12 + Math.sin(a) * ry };
   });
 }
 
-const short = (s: string, max = 22) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
+/**
+ * Name in höchstens zwei Zeilen zu je etwa `max` Zeichen, nach Wörtern
+ * umbrochen; was dann nicht passt, endet mit „…“.
+ */
+export function labelLines(name: string, max: number): string[] {
+  const lines: string[] = [];
+  let line = "";
+  // Auch nach Bindestrichen umbrechen („Muster-“ / „hausen“).
+  const words = name.split(/\s+/).filter(Boolean).flatMap((w) => w.split(/(?<=-)(?=.)/));
+  const join = (a: string, b: string) => (a ? (a.endsWith("-") ? `${a}${b}` : `${a} ${b}`) : b);
+  for (const word of words) {
+    const next = join(line, word);
+    if (next.length <= max || !line) {
+      line = next;
+    } else {
+      lines.push(line);
+      line = word;
+    }
+  }
+  if (line) lines.push(line);
+  const cut = (s: string) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
+  if (lines.length <= 2) return lines.map(cut);
+  return [cut(lines[0]), cut(lines.slice(1).reduce(join))];
+}
 
 /**
  * Übersicht der Herkunft auf „Importe verbinden“: jeder Import ein Kreis
@@ -34,6 +64,21 @@ const short = (s: string, max = 22) => (s.length > max ? `${s.slice(0, max - 1)}
 export function OriginOverview() {
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Das Bild wird in der Breite seines Platzes gezeichnet (nicht verkleinert):
+  // so bleiben Beschriftungen auch auf dem Telefon lesbar groß.
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [W, setW] = useState(WIDE);
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const measure = () => setW(Math.round(Math.max(NARROW_MIN, Math.min(WIDE, el.clientWidth || WIDE))));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [data]);
+  const narrow = W < 420;
+  const H = narrow ? 350 : 300;
 
   const load = useCallback(async () => {
     const res = await apiFetch<Overview>("/api/origin/overview");
@@ -50,7 +95,7 @@ export function OriginOverview() {
 
   const nodes = data?.nodes ?? [];
   const imports = nodes.filter((n) => !n.manual);
-  const pos = place(nodes.length);
+  const pos = place(nodes.length, W, H);
   const at = new Map(nodes.map((n, i) => [n.key, pos[i]]));
   const max = Math.max(1, ...nodes.map((n) => n.persons));
   const radius = (persons: number) => 20 + 24 * Math.sqrt(persons / max);
@@ -81,6 +126,7 @@ export function OriginOverview() {
       {data && nodes.length === 0 && <p className="text-sm muted">Noch keine Personen.</p>}
       {data && nodes.length > 0 && (
         <>
+          <div ref={boxRef}>
           <svg
             viewBox={`0 0 ${W} ${H}`}
             role="img"
@@ -91,23 +137,17 @@ export function OriginOverview() {
             {data.edges.map((e) => {
               const a = at.get(e.a)!;
               const b = at.get(e.b)!;
-              const mx = (a.x + b.x) / 2;
-              const my = (a.y + b.y) / 2;
-              const label = String(e.persons);
-              const w = 14 + label.length * 8;
               return (
-                <g key={`${e.a}|${e.b}`} data-testid="origin-edge" data-edge={`${e.a}-${e.b}`} data-persons={e.persons}>
-                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="currentColor" strokeOpacity="0.55" strokeWidth={1.5 + 4.5 * (e.persons / maxEdge)} strokeLinecap="round" />
-                  <rect x={mx - w / 2} y={my - 10} width={w} height={20} rx={10} className="fill-white stroke-stone-400 dark:fill-stone-900 dark:stroke-stone-500" />
-                  <text x={mx} y={my + 4} textAnchor="middle" fontSize="12" fontWeight="700" fill="currentColor">
-                    {label}
-                  </text>
-                </g>
+                <line key={`${e.a}|${e.b}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="currentColor" strokeOpacity="0.55" strokeWidth={1.5 + 4.5 * (e.persons / maxEdge)} strokeLinecap="round" />
               );
             })}
             {nodes.map((n) => {
               const p = at.get(n.key)!;
               const r = radius(n.persons);
+              const lines = labelLines(n.name, narrow ? 20 : 24);
+              // Schmal: Namen oberer Kreise darüber, sonst liefen sie in die Linien nach unten.
+              const above = narrow && nodes.length > 1 && p.y < H / 2 - 30;
+              const labelY = above ? p.y - r - 8 - (lines.length - 1) * 15 : p.y + r + 15;
               return (
                 <g key={n.key} data-testid="origin-node" data-origin={n.key} data-persons={n.persons}>
                   <title>{`${originText(n)} — ${plural(n.persons, "Person", "Personen")}`}</title>
@@ -125,27 +165,49 @@ export function OriginOverview() {
                   <text x={p.x} y={p.y + 2} textAnchor="middle" fontSize="17" fontWeight="700" fill={n.fg ?? "currentColor"}>
                     {n.letter}
                   </text>
-                  <text x={p.x} y={p.y + 16} textAnchor="middle" fontSize="10.5" fontWeight="600" fill={n.fg ?? "currentColor"}>
+                  <text x={p.x} y={p.y + 16} textAnchor="middle" fontSize="11" fontWeight="600" fill={n.fg ?? "currentColor"}>
                     {n.persons}
                   </text>
                   {/* Hof in Hintergrundfarbe: Linien zu anderen Kreisen laufen nicht durch den Namen. */}
                   <text
                     x={p.x}
-                    y={p.y + r + 14}
+                    y={labelY}
                     textAnchor="middle"
-                    fontSize="11.5"
+                    fontSize="12.5"
                     fill="currentColor"
                     strokeWidth={4}
                     strokeLinejoin="round"
                     paintOrder="stroke"
                     className="stroke-white dark:stroke-stone-900"
                   >
-                    {short(n.name)}
+                    {lines.map((line, i) => (
+                      <tspan key={i} x={p.x} dy={i === 0 ? 0 : 15}>
+                        {line}
+                      </tspan>
+                    ))}
+                  </text>
+                </g>
+              );
+            })}
+            {/* Zahlen an den Linien zuletzt: sie bleiben lesbar, auch wo ein Name heranreicht. */}
+            {data.edges.map((e) => {
+              const a = at.get(e.a)!;
+              const b = at.get(e.b)!;
+              const mx = (a.x + b.x) / 2;
+              const my = (a.y + b.y) / 2;
+              const label = String(e.persons);
+              const w = 14 + label.length * 8;
+              return (
+                <g key={`${e.a}|${e.b}`} data-testid="origin-edge" data-edge={`${e.a}-${e.b}`} data-persons={e.persons}>
+                  <rect x={mx - w / 2} y={my - 10} width={w} height={20} rx={10} className="fill-white stroke-stone-400 dark:fill-stone-900 dark:stroke-stone-500" />
+                  <text x={mx} y={my + 4} textAnchor="middle" fontSize="12" fontWeight="700" fill="currentColor">
+                    {label}
                   </text>
                 </g>
               );
             })}
           </svg>
+          </div>
 
           <p className="text-sm" data-testid="origin-overview-summary">
             {summary}

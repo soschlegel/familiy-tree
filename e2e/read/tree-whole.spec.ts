@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 
-import { test, expect, authFile, waitForTree } from "../support/fixtures";
+import { test, expect, authFile, expectNoA11yViolations, waitForTree } from "../support/fixtures";
 import { L, familyName, fullName, person } from "../support/mock";
 
 /** Gesamtansichten: Generationen und Zeitstrahl. */
@@ -193,4 +193,29 @@ test("Kartenklick öffnet die Personenseite, das Ecksymbol die Fokus-Ansicht", a
   await expect(page.getByTestId("family-tree")).toHaveAttribute("data-view", "focus");
   await expect(page.getByTestId("family-tree")).toHaveAttribute("data-focus-id", target);
   await expect(page).toHaveURL(`/tree?focus=${target}`);
+});
+
+test.describe("Vollbild im ganzen Baum (dunkles Schema)", () => {
+  test.use({ colorScheme: "dark" });
+
+  test("Adresse mit vollbild=1 öffnet im Vollbild; Beenden nimmt nur den Parameter weg", async ({ page }) => {
+    await page.goto("/tree?view=generations&vollbild=1");
+    await waitForTree(page);
+    const shell = page.getByTestId("tree-shell");
+    const button = page.getByTestId("tree-fullscreen");
+    await expect(shell).toHaveAttribute("data-fullscreen", "true");
+    await expect(button).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".react-flow__minimap")).toBeVisible();
+    // Knopf und Übersichtskarte überlappen nicht.
+    const b = (await button.boundingBox())!;
+    const m = (await page.locator(".react-flow__minimap").boundingBox())!;
+    expect(b.y + b.height).toBeLessThanOrEqual(m.y);
+    await expectNoA11yViolations(page);
+    await button.click();
+    await expect(shell).not.toHaveAttribute("data-fullscreen", "true");
+    await expect(page).toHaveURL("/tree?view=generations");
+    await expect(page.getByRole("toolbar", { name: "Baumansicht" })).toBeVisible();
+    // Auf dem Desktop unaufdringlich: kleiner als die Knöpfe der Werkzeugleiste.
+    expect((await button.boundingBox())!.height).toBeLessThan(36);
+  });
 });
