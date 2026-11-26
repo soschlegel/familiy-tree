@@ -983,8 +983,7 @@ Dublettensuche, Zusammenführen und Importvorschläge.
 **Wichtige Funktionen:** `nameKey` (klein, ohne Akzente, Umlaut → „e“-
 Schreibung, ß → ss, ph → f, th → t, Doppelbuchstaben einfach, nur
 Buchstaben), `firstGivenKey`, `placeCompareKey` (nur der Teil vor dem
-ersten Komma), `samePlace`, `editDistance` (Levenshtein, auch von
-`lib/gedcom-import/suggest.ts` genutzt).
+ersten Komma), `samePlace`, `editDistance` (Levenshtein).
 
 **Achtung:** `placeCompareKey` ist **nicht** `placeKey` aus
 `lib/places/normalize.ts` (vollständiger Schlüssel der Tabelle `Place`);
@@ -1108,13 +1107,22 @@ für Vorschau, Zusammenführen, Sammel-Zusammenführen und Tests. Dienst:
 **Zweck:** „Importe verbinden“ — Abgleich über mehrere Importe (Gruppen =
 `ImportLink.sourceTreeId`, von Hand erfasste Personen = Gruppe
 `manual`). Rein. Dienst und Oberfläche: `lib/services/import-linking.ts`,
-`/research/connect`.
+`/research/connect`. Derselbe Abgleich liefert die Vorschläge schon beim
+GEDCOM-Import (`lib/services/import-suggestions.ts`).
 
 **Wichtige Funktionen/Typen:** `LinkPerson`, `LinkPair` (Klasse, Punkte,
 Gründe, Widersprüche, `viaRelative`, `bridge`, `veryLikely`),
 `relaxedMatch` (gelockerte Prüfung für Verwandte; vergibt nie eine Klasse),
 `LinkResult` (Paare, sichere Cluster, Teile vorher/nachher, Brücken je
-Gruppenpaar, Dauer), `LinkOptions`, `linkImports`, `evidenceSentence`.
+Gruppenpaar, Dauer), `LinkOptions` (Gruppen, `withinGroup`, `dismissed`,
+`lineage`, `focus`), `linkImports`, `evidenceSentence`.
+
+**Option `focus`** (Menge von Personen-IDs): nur Paare, an denen eine dieser
+Personen beteiligt ist — für die Importvorschau (neue Personen der Datei
+gegen den Bestand). Bewertung, Klassen, Eindeutigkeit, Ausbreitung, Cluster
+und Brücken bleiben dieselben; es entstehen nur keine Paare innerhalb des
+Bestands (die sind Sache von „Importe verbinden“). Mit `focus` wird ein Paar
+nie „sicherer“ als ohne (`tests/import-suggestions.test.ts`).
 
 **Regeln und Algorithmen:**
 1. **Anker** aus `findDuplicatePairs` über Gruppengrenzen (oder innerhalb
@@ -1141,12 +1149,14 @@ Gruppenpaar, Dauer), `LinkOptions`, `linkImports`, `evidenceSentence`.
 - `evidenceSentence` macht aus den Gründen einen Satz („Gleicher Name,
   gleiches Geburtsdatum …; aus verschiedenen Importen.“).
 
-**Benutzt von:** `lib/services/import-linking.ts`, `lib/services/duplicates.ts`
+**Benutzt von:** `lib/services/import-linking.ts`,
+`lib/services/import-suggestions.ts`, `lib/services/duplicates.ts`
 und `lib/services/merge-followups.ts` (`evidenceSentence`, `relaxedMatch`),
 `components/ConnectImports.tsx`, `tests/fixtures/linking-generator.ts`.
 
 **Tests:** `tests/import-linking.test.ts` (erzeugte Testbäume),
-`tests/import-linking.db.test.ts`.
+`tests/import-linking.db.test.ts`, `tests/import-suggestions.test.ts`
+(mit `focus`).
 
 ---
 
@@ -1455,23 +1465,11 @@ Quellenarten ohne unabhängigen Beweiswert kommen aus
 `gedcom-photos`.
 **Tests:** `tests/gedcom-mapping.test.ts`, `tests/gedcom-import.db.test.ts`.
 
-#### lib/gedcom-import/suggest.ts
-**Zweck:** Vorschläge, welche Person der Datei eine schon in der App
-erfasste sein könnte. Nur Vorschläge, nie automatisch zusammengeführt.
-**Wichtige Funktionen:** `scorePair`, `suggestMatches`
-(Schwelle 0,6, höchstens 3 je Person, gruppiert nach erstem Vornamen).
-**Regeln (Punkte):** gleiches Geschlecht (wenn bekannt) und gleicher erster
-Vorname Pflicht; Nachname/Geburtsname gleich +0,4, Abstand 1 +0,3, sonst
-kein Kandidat; Vorname ganz gleich +0,2, sonst +0,1; Geburtsjahr gleich
-+0,3, höchstens 2 Jahre +0,2, weiter → kein Kandidat, einseitig +0,05;
-Geburtsort +0,1; gemeinsame Elternnamen +0,15 je (höchstens 2).
-**Hinweis:** Eigenes, einfacheres Punkteschema — nicht `lib/duplicates.ts`.
-Den Abstand rechnet `editDistance` aus `lib/name-keys.ts`; die
-Vergleichsform (`suggestKey`, intern) bleibt bewusst eigen: `nameKey`
-faltet Umlaute zu „ue“, ph/th und Doppelbuchstaben — ein Umstieg würde die
-Vorschläge ändern (z.B. „Müller“ = „Muller“ nur hier).
-**Benutzt von:** `lib/services/gedcom-import.ts`.
-**Tests:** `tests/gedcom-mapping.test.ts`.
+Vorschläge, welche Person der Datei eine schon vorhandene sein könnte, gibt
+es keine eigene Heuristik mehr (früher `lib/gedcom-import/suggest.ts`, nur
+gegen von Hand erfasste Personen): Sie kommen aus demselben Abgleich wie
+„Importe verbinden“ — `lib/services/import-suggestions.ts` mit
+`linkImports` aus `lib/import-linking.ts`.
 
 ---
 

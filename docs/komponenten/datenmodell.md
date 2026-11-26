@@ -476,9 +476,11 @@ Datensätze haben keine.
 - `mergedFromId`: Link kam beim Zusammenführen vom weggefallenen Datensatz
   (dessen ID, ohne Fremdschlüssel). Ohne Wert ist es der ursprüngliche Link;
   der GEDCOM-Export schreibt dessen Originaldaten (`_UID`).
-- `mergedAt`: Datensatz war an einem Zusammenführen beteiligt; ein erneuter
-  Import ohne neue Angaben meldet ihn dann still als unverändert statt als
-  „in der App geändert“.
+- `mergedAt`: Datensatz war an einem Zusammenführen beteiligt — oder die
+  Person wurde beim GEDCOM-Import mit einer Person der Datei verknüpft (dann
+  am neuen Link dieses Baums, ohne `mergedFromId`); ein erneuter Import ohne
+  neue Angaben meldet ihn dann still als unverändert statt als „in der App
+  geändert“.
 
 **Besonderheit:** Bewusst **kein** Unique auf (Datensatz, Baum) — wer eine
 Dublette innerhalb eines Baums zusammenführt, behält beide Links desselben

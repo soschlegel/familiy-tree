@@ -87,7 +87,13 @@ export type LinkOptions = {
    * die Dublettenliste, auch für die Ausbreitung über Verwandte.
    */
   lineage?: Lineage;
-  /** Zusätzliche Kanten des Stammbaums für die Teile (ohne diese: aus parents/partners/children). */
+  /**
+   * Nur Paare, an denen eine dieser Personen beteiligt ist (Vorschläge beim
+   * GEDCOM-Import: neue Personen der Datei gegen den Bestand). Bewertung,
+   * Klassen, Eindeutigkeit, Ausbreitung, Cluster und Brücken bleiben genau
+   * dieselben; es werden nur keine Paare innerhalb des Bestands gebildet.
+   */
+  focus?: Set<string>;
 };
 
 const RANK: Record<Confidence, number> = { high: 0, medium: 1, low: 2 };
@@ -158,8 +164,13 @@ export function linkImports(people: LinkPerson[], options: LinkOptions = {}): Li
   // Abstammung über ALLE übergebenen Personen, nicht nur die gewählten Gruppen:
   // Die Kette kann über Personen anderer Importe laufen.
   const lineage = options.lineage ?? lineageOf(people);
+  const focus = options.focus;
   const allowed = (a: LinkPerson, b: LinkPerson) =>
-    inScope(a) && inScope(b) && (options.withinGroup ? a.group === b.group : a.group !== b.group) && !dismissed.has(pk(a.id, b.id));
+    inScope(a) &&
+    inScope(b) &&
+    (options.withinGroup ? a.group === b.group : a.group !== b.group) &&
+    (!focus || focus.has(a.id) || focus.has(b.id)) &&
+    !dismissed.has(pk(a.id, b.id));
 
   // 1. Anker
   const cand = new Map<string, LinkPair>();

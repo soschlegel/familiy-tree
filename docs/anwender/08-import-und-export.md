@@ -22,9 +22,33 @@ Bearbeiter und Betrachter sehen den Import nicht. Ein Import ändert erst etwas,
 1. Exportiere den Stammbaum im anderen Programm als GEDCOM-Datei (`.ged`, oder ein `.zip`, das eine `.ged` enthält).
 2. Unter **Daten** die Datei wählen und **Vorschau der GEDCOM-Datei**. An den Daten ändert sich dabei nichts.
 3. Die Vorschau erkennt, ob dieser Baum schon einmal importiert wurde („Automatisch erkennen“), und sortiert alles in Gruppen: **Neu**, **In der Datei geändert**, **In der App geändert**, **Fehlt in der Datei**, **Nicht übernehmbar**, **Schon vorhanden**, **Unverändert**.
-4. Sieht eine neue Person einer schon vorhandenen ähnlich, fragt die Vorschau „Ist das eine dieser Personen?“. Nur wenn du eine auswählst, werden die beiden verbunden.
+4. Sieht eine neue Person einer schon vorhandenen ähnlich — von Hand erfasst oder aus einem anderen Import —, steht das oben in der Vorschau: **„Dieser Import hängt über … Personen mit vorhandenen Daten zusammen“**. Standard ist immer **Neu anlegen**; verbunden wird nur, was du einzeln auswählst (siehe [Vorschläge](#vorschlaege-personen-die-es-schon-gibt)).
 5. Wähle, zu welchen **Familien** die neuen Personen gehören sollen (siehe unten).
 6. „Was der Import tut“ fasst alles in Sätzen zusammen. **GEDCOM-Import ausführen** fragt noch einmal nach und läuft dann im Hintergrund.
+
+### Vorschläge: Personen, die es schon gibt
+
+Oft stehen in einer neuen Datei Menschen, die es in der App schon gibt — etwa die Urgroßeltern, die auch im Stammbaum von Tante Erika vorkommen. Die Vorschau vergleicht deshalb jede **neue** Person der Datei mit allen vorhandenen Personen (von Hand erfasste und aus allen anderen Importen) — genauso wie [Importe verbinden](07-dubletten.md). Wird ein Baum erneut eingespielt, erkennt die App ihre eigenen Personen ohnehin wieder; Vorschläge gibt es nur für die wirklich neuen.
+
+Oben in der Vorschau steht dann **„Dieser Import hängt über … Personen mit vorhandenen Daten zusammen“**, aufgeteilt nach Einstufung:
+
+| Einstufung | Bedeutung |
+|---|---|
+| **sicher** | gleicher ganzer Name, gleiche tagesgenaue Lebensdaten bzw. dieselben Verwandten, kein Widerspruch |
+| **sehr wahrscheinlich** | zwei passende Verwandte, oder gleiches Geburtsdatum plus ein passender Verwandter |
+| **wahrscheinlich** | Name und passende Daten plus ein weiterer Hinweis — bitte ansehen |
+| **unklar** | nur Name und ungefähres Jahr, ein Widerspruch oder mehrere ähnlich gute Kandidaten — meist verschiedene Menschen |
+
+Je Person siehst du, worin sie übereinstimmen und worin sie abweichen (z.B. „Geburtsort nur in der Datei: Neudorf“), und woher die vorhandene Person stammt. Du wählst:
+
+- **Neu anlegen** — das ist immer vorausgewählt, auch bei „sicher“.
+- **Mit vorhandener Person verknüpfen** — die Person aus der Datei wird keine neue Person, sondern gehört zur vorhandenen.
+
+Mit **Alle sicheren auswählen** wählst du in einem Schritt alle Vorschläge der Einstufung „sicher“; jede Wahl bleibt danach einzeln sichtbar, und du kannst sie mit **Neu anlegen** wieder abwählen. Eine vorhandene Person kannst du nur einmal wählen.
+
+**Was „verknüpfen“ bewirkt:** Die vorhandene Person bleibt, wie sie ist, und wird nur ergänzt. Leere Angaben werden aus der Datei gefüllt, von zwei passenden Daten gewinnt das genauere („12.03.1850“ statt „um 1850“). Weicht etwas ab, bleibt der Wert der App, und die Angabe aus der Datei kommt als **Zweitangabe** dazu (z.B. ein abweichendes Sterbedatum) bzw. als weiterer Name. Ereignisse, Namen und Belege aus der Datei hängen danach an der vorhandenen Person; ein Ereignis oder Name, den sie schon genauso hat, wird nicht doppelt angelegt. Die Familien der vorhandenen Person ändern sich nicht. Die Person trägt danach beide Importe als **Herkunft**, und in den **Änderungen** steht je verknüpfter Person ein Eintrag „Beim Import mit einer Person aus der Datei verknüpft“ mit vorher → nachher.
+
+Beim Ausführen prüft die App jede Wahl noch einmal. Hat sich seit der Vorschau etwas geändert (die vorhandene Person wurde bearbeitet, zusammengeführt oder gelöscht, oder sie passt jetzt schlechter), wird **gar nichts importiert**: Die Vorschau nennt die betroffenen Personen, setzt genau diese Wahl zurück, und du entscheidest neu.
 
 ### Wiederholte Importe
 

@@ -139,6 +139,19 @@ richtig (Vorsicht bei gleichnamigen Verwandten mit fehlenden Daten);
 `tests/import-linking.test.ts`. Laufzeit: zwei Importe à ~5000 Personen
 unter einer Sekunde, fünf Importe mit zusammen ~12 000 Personen etwa 5 s.
 
+**Schon beim GEDCOM-Import:** Derselbe Abgleich läuft in der Importvorschau
+für die neuen Personen der Datei gegen den ganzen sichtbaren Bestand
+(`linkImports` mit der Option `focus`: nur Paare mit einer Person der
+Datei, Bewertung und Klassen unverändert; [GEDCOM](gedcom.md), Schritt 4).
+Dort ist nichts vorausgewählt, auch „sicher“ nicht; verknüpft wird nur
+einzeln Gewähltes, und es reichert die vorhandene Person an wie ein
+Zusammenführen. „Kein Duplikat“ kann dort nur Paare vorhandener Personen
+betreffen — eine Person der Datei gibt es noch nicht. Auf denselben
+Testbäumen (letzter Import = Datei, die übrigen = Bestand; sieben
+Szenarien): „sicher“ 4 629 Paare und „sehr wahrscheinlich“ 4 157 Paare
+ohne Fehler, „wahrscheinlich“ 99,6 %, „unklar“ 3 % richtig
+(`tests/import-suggestions.test.ts`).
+
 Ausführen im Hintergrund; jede Personengruppe ist eine eigene Transaktion
 (danach ist der Stammbaum stimmig). Der Lauf liegt als Datei unter
 `MEDIA_DIR/connect/`; wird die App mitten im Lauf neu gestartet, zeigt die

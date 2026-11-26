@@ -533,7 +533,13 @@ function describe(ctx: Ctx, row: Row): { what: string; note: string | null } {
         const updated = tallyText(d.updated);
         const note = [created && `angelegt: ${created}`, updated && `geändert: ${updated}`].filter(Boolean).join("; ") || null;
         const what =
-          d.person === "created" ? "Beim Import angelegt" : d.person === "updated" ? "Beim Import aktualisiert" : "Beim Import ergänzt";
+          d.person === "created"
+            ? "Beim Import angelegt"
+            : d.person === "updated"
+              ? "Beim Import aktualisiert"
+              : d.person === "linked"
+                ? "Beim Import mit einer Person aus der Datei verknüpft"
+                : "Beim Import ergänzt";
         return { what: `${what}: ${personName(ctx, row.entityId)}`, note };
       }
       if (strOf(d.notDuplicateOf)) {

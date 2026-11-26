@@ -230,10 +230,16 @@ test("Vorschau: Kacheln, Gruppen, ungültige Beziehung, Baumwahl; Abbrechen verw
   const photo = page.getByRole("checkbox", { name: /Fotos jetzt herunterladen \(1 Verweis\)/ });
   await expect(photo).not.toBeChecked();
 
-  // Vorschlag für die von Hand angelegte Frieda.
-  const newGroup = group(page, "new");
-  await newGroup.locator("summary").click();
-  await expect(newGroup.getByLabel("Ist das eine dieser Personen?")).toHaveCount(1);
+  // Vorschlag für die von Hand angelegte Frieda (nur Name und Geburtsjahr → „unklar“);
+  // Standard „Neu anlegen“, die Gruppe ist eingeklappt.
+  const links = page.getByTestId("gedcom-links");
+  await expect(links).toContainText(/Dieser Import hängt über \d+ (Person|Personen) mit vorhandenen Daten zusammen/);
+  await expect(links.getByTestId("gedcom-links-chosen")).toHaveText("Noch keine Verknüpfung ausgewählt.");
+  await links.getByTestId("gedcom-links-low").locator("summary").click();
+  const row = links.getByTestId("gedcom-link-row").filter({ hasText: "Frieda" });
+  await expect(row.getByRole("radio", { name: "Neu anlegen" })).toBeChecked();
+  await expect(row.getByRole("radio", { name: /Mit vorhandener Person verknüpfen: Frieda/ })).not.toBeChecked();
+  await expect(page.getByTestId("gedcom-what-links")).toContainText("Keine Verknüpfung ausgewählt");
 
   // Abbrechen verwirft den Lauf (DELETE), nichts wurde angelegt.
   const discarded = page.waitForResponse((r) => r.url().endsWith(`/api/import/gedcom/${batchId}`) && r.request().method() === "DELETE");
@@ -253,6 +259,9 @@ test("Vorschau ist barrierefrei und passt auf 390 px", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await preview(page, `e2e-${tag}-schmal.ged`, V1);
   await expect(group(page, "invalid").getByTestId("gedcom-item")).toBeVisible();
+  // Abschnitt „Zusammenhang mit vorhandenen Daten“ aufgeklappt mitprüfen.
+  await page.getByTestId("gedcom-links-low").locator("summary").click();
+  await expect(page.getByTestId("gedcom-link-row").first()).toBeVisible();
   await expectNoHorizontalOverflow(page);
   await expectNoA11yViolations(page);
   await page.getByRole("button", { name: "Abbrechen" }).click();
@@ -265,10 +274,12 @@ test("erster Import in eine neue Familie: Vorschlag angenommen, ungültige Bezie
   await preview(page, `e2e-${tag}.ged`, V1);
 
   // Vorschlag annehmen: Datei-Frieda = von Hand angelegte Frieda.
-  const newGroup = group(page, "new");
-  await newGroup.locator("summary").click();
-  const suggestion = newGroup.getByLabel("Ist das eine dieser Personen?");
-  await suggestion.selectOption({ value: handMadeId });
+  const links = page.getByTestId("gedcom-links");
+  await links.getByTestId("gedcom-links-low").locator("summary").click();
+  const row = links.getByTestId("gedcom-link-row").filter({ hasText: "Frieda" });
+  await row.getByRole("radio", { name: /Mit vorhandener Person verknüpfen: Frieda/ }).check();
+  await expect(links.getByTestId("gedcom-links-chosen")).toContainText("1 Verknüpfung ausgewählt");
+  await expect(page.getByTestId("gedcom-what-links")).toContainText("1 Person der Datei wird mit einer vorhandenen Person verknüpft");
 
   await page.getByRole("radio", { name: "Neue Familie anlegen" }).check();
   await page.getByLabel("Name der neuen Familie").fill(FAMILY_NEW);
@@ -280,6 +291,7 @@ test("erster Import in eine neue Familie: Vorschlag angenommen, ungültige Bezie
   const result = page.getByTestId("gedcom-result");
   await expect(result).toContainText("Import abgeschlossen");
   await expect(result).toContainText("Personen: 5 neu");
+  await expect(result).toContainText("1 mit vorhandenen Personen verknüpft");
   await expect(result).toContainText("1 ausgelassen");
   await expect(result).not.toContainText("Fotos:");
 

@@ -1,7 +1,7 @@
 import type { Scope } from "../scope";
 import { prisma } from "../prisma";
 import { forbiddenError } from "./errors";
-import { applyGedcomImport, type GedcomApplyResult } from "./gedcom-import";
+import { applyGedcomImport, checkGedcomDecisions, type GedcomApplyResult } from "./gedcom-import";
 
 /**
  * Ein großer Import (Tausende Personen) dauert länger, als ein Reverse-Proxy
@@ -16,26 +16,32 @@ export type ImportJobState =
   | { state: "idle" }
   | { state: "running"; startedAt: string }
   | { state: "done"; result: GedcomApplyResult }
-  | { state: "error"; message: string; issues?: unknown };
+  | { state: "error"; message: string; issues?: unknown; linkIssues?: unknown };
 
 const g = globalThis as unknown as { __gedcomJobs?: Map<string, ImportJobState> };
 const jobs = (g.__gedcomJobs ??= new Map());
 
-export function startImportJob(scope: Scope, batchId: string, decisions: unknown): ImportJobState {
+export async function startImportJob(scope: Scope, batchId: string, decisions: unknown): Promise<ImportJobState> {
   if (!scope.isAdmin) throw forbiddenError("Daten zu importieren");
   const current = jobs.get(batchId);
   if (current?.state === "running") return current;
+  // Gewählte Verknüpfungen vorab nachprüfen: Abweichungen kommen sofort als
+  // Konflikt (409, details.linkIssues) zurück statt erst aus dem Hintergrund.
+  // applyGedcomImport prüft beim Ausführen noch einmal.
+  await checkGedcomDecisions(scope, batchId, decisions);
+  if (jobs.get(batchId)?.state === "running") return jobs.get(batchId)!;
   const running: ImportJobState = { state: "running", startedAt: new Date().toISOString() };
   jobs.set(batchId, running);
   void applyGedcomImport(scope, batchId, decisions)
     .then((result) => jobs.set(batchId, { state: "done", result }))
     .catch((err: unknown) => {
-      const e = err as { message?: string; issues?: unknown; code?: string };
+      const e = err as { message?: string; issues?: unknown; code?: string; details?: { linkIssues?: unknown } };
       if (!e.code) console.error("[gedcom-import]", err);
       jobs.set(batchId, {
         state: "error",
         message: e.code ? (e.message ?? "Fehler") : "Interner Fehler beim Import. Details stehen im Server-Log.",
         issues: e.issues,
+        ...(e.details?.linkIssues ? { linkIssues: e.details.linkIssues } : {}),
       });
     });
   return running;

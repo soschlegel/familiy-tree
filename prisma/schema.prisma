@@ -826,7 +826,8 @@ model ImportLink {
   // mergedFromId: Der Link kam beim Zusammenführen vom weggefallenen
   // Datensatz (dessen ID, ohne Fremdschlüssel). Ohne: ursprünglicher Link des
   // Datensatzes — der GEDCOM-Export schreibt dessen Originaldaten (_UID).
-  // mergedAt: Der Datensatz war an einem Zusammenführen beteiligt; ein
+  // mergedAt: Der Datensatz war an einem Zusammenführen beteiligt (oder die
+  // Person wurde beim GEDCOM-Import mit einer Person der Datei verknüpft); ein
   // erneuter Import ohne neue Angaben in der Datei meldet ihn dann nicht als
   // „in der App geändert“, sondern still als unverändert.
   mergedFromId        String?

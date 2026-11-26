@@ -120,6 +120,7 @@ beide). Ereignisse, Belege, Namen und Rohdaten folgen ihrem Träger.
 | `origin.ts` | Herkunft sichtbar machen: Buchstabe/Farbe/Name je Import, Herkunft im Baum, auf der Personenseite, Übersicht, Importe benennen |
 | `import-apply.ts` | Massenimport in einer Transaktion |
 | `gedcom-import.ts` | GEDCOM-Import mit Vorschau und Abgleich |
+| `import-suggestions.ts` | Vorschläge beim GEDCOM-Import: neue Personen der Datei gegen den Bestand (Abgleich wie „Importe verbinden“) |
 | `gedcom-photos.ts` | Fotos aus einer GEDCOM-Datei herunterladen |
 | `import-jobs.ts` | GEDCOM-Import im Hintergrund ausführen |
 | `import-linking.ts` | „Importe verbinden“ (Abgleich und Zusammenführen im Hintergrund) |
@@ -148,7 +149,8 @@ Grundsätze der Schicht (reine async-Funktionen, Scope, kein `next/*`,
 
 **Regeln und Entscheidungen:** Nicht über den Sammel-Export erreichbar sind
 `map`, `places`, `export-selection`, `exchange-export`, `gedcom-export`,
-`gedcom-import`, `gedcom-photos`, `import-jobs`, `import-linking` und `media`;
+`gedcom-import`, `gedcom-photos`, `import-jobs`, `import-linking`,
+`import-suggestions` und `media`;
 sie werden mit ihrem Pfad importiert (z.B. `@/lib/services/map`). Warum
 gerade diese, ist im Code nicht begründet (unklar; vermutlich, um schwere
 Abhängigkeiten wie JSZip, GEDCOM-Parser und Ortsverzeichnis nicht überall
@@ -1905,8 +1907,8 @@ Beziehungen, Ereignisse, Quellen, Belege, Fremdkennungen und Rohdaten in
 - `applyGenealogyImport(scope, input, {tx, onInvalid, now, dryRun})` —
   validiert die Eingabe (`genealogyImportSchema`), löst Verweise auf, prüft
   alle Regeln und schreibt; Ergebnis: neue IDs je `ref`, Ergebnis je Eintrag
-  (`created`, `updated`, `unchanged`, `skippedEdited`, `skipped`, `invalid`),
-  Zählungen, ungültige Einträge mit Grund, Feldänderungen.
+  (`created`, `updated`, `unchanged`, `skippedEdited`, `skipped`, `linked`,
+  `invalid`), Zählungen, ungültige Einträge mit Grund, Feldänderungen.
 - `resolveBulkDate(datum)`, `bulkDateSchema` — strukturiertes Datum
   (`"1850"`, `"1850-03"`, `"1850-03-12"` oder ISO, Genauigkeit, Zusatz,
   Bereichsende, Wortlaut) → ungenaues Datum.
@@ -1921,8 +1923,24 @@ Beziehungen, Ereignisse, Quellen, Belege, Fremdkennungen und Rohdaten in
   Fingerabdruck), `update` (überschreiben), `updateIfUnchanged` (nur, wenn
   seit dem letzten Import nicht in der App geändert; sonst `skippedEdited`),
   `skip` (nichts schreiben, `ref` zeigt auf `id`), `link` (App-Version
-  behalten, Herkunft auf die neuen Dateiwerte setzen). Gleiche Werte →
-  `unchanged`, nur die Herkunft wird fortgeschrieben. **Gelöscht wird nie.**
+  behalten, Herkunft auf die neuen Dateiwerte setzen), `enrich` (nur
+  Personen: mit der vorhandenen Person verknüpfen, siehe unten). Gleiche
+  Werte → `unchanged`, nur die Herkunft wird fortgeschrieben. **Gelöscht
+  wird nie.**
+- **Verknüpfen (`enrich`)** — vom Administrator in der Importvorschau
+  einzeln gewählt: anreichern nach den Vorgaben des Zusammenführens
+  (`resolvePersonMerge` aus `lib/merge-rules.ts` mit vorhandener Person als
+  „keep“ und Dateiwerten als „other“): Leeres füllen, genaueres Datum
+  gewinnt, sonst App-Wert; nicht gedeckte Geburts-/Todesangaben werden
+  Ereignisse mit `isAlternative`, andere Namen Namensvarianten (beides ohne
+  Herkunftsvermerk und ohne Doppel: gegen vorhandene und in diesem Lauf
+  angelegte Ereignisse/Namen der Person geprüft), Notizen angehängt. Dazu
+  ein Herkunftsvermerk dieses Baums mit `mergedAt` (erneuter Import ohne
+  Neues bleibt still). Ergebnis `linked`.
+- **Rohdaten ersetzen** (`replace`) überholt nur Rohdaten desselben
+  Quell-Baums (bzw. ohne Lauf): Trägt eine Person auch Rohdaten eines
+  anderen Imports (verknüpft oder zusammengeführt), bleiben diese gültig —
+  der GEDCOM-Export braucht sie für den Originaldatensatz.
 - Ein Datensatz kann mehrere Herkunftsangaben haben; maßgeblich ist die des
   gleichen Quell-Baums und Quell-Schlüssels; sonst entsteht eine neue, ohne
   die anderer Bäume zu verlieren.
@@ -1952,6 +1970,11 @@ Beziehungen, Ereignisse, Quellen, Belege, Fremdkennungen und Rohdaten in
 den Zählungen und je betroffener Person ein Eintrag (`CREATE` bzw. `UPDATE
 Person`, Kennzeichen `import`, Feldänderungen, Zahl der angelegten bzw.
 geänderten Untereinträge) im Paket des Aufrufs (Titel-Vorgabe „Import“).
+Verknüpfte Personen bekommen immer einen Eintrag `UPDATE Person` mit
+`person: "linked"`, `changes` (vorher → nachher, auch leer), `linked`
+(Quell-Baum, Schlüssel, ggf. verworfene Angaben) und den angelegten
+Zweitangaben/Namen; der Changelog zeigt „Beim Import mit einer Person aus
+der Datei verknüpft“.
 
 **Benutzt von:** `gedcom-import.ts`; `lib/gedcom-import/mapping.ts` (Typbezug).
 Der Austausch-Import (`app/api/import/route.ts`, „Daten einspielen“) benutzt
@@ -1979,14 +2002,19 @@ Administratoren.
 - `rereadGedcomBatch(scope, batchId)` — ausgeführte Datei aus dem Original
   erneut einlesen (neuer Lauf, übliche Vorschau).
 - `getGedcomPlan`, `listGedcomPlanItems(scope, batchId, {kind, group, q,
-  offset, limit})` — Zusammenfassung bzw. Einträge seitenweise (Gruppen: neu,
-  geändert, unverändert, in der App geändert, fehlt in der Datei, vorhanden,
-  ungültig).
+  offset, limit, suggest})` — Zusammenfassung bzw. Einträge seitenweise
+  (Gruppen: neu, geändert, unverändert, in der App geändert, fehlt in der
+  Datei, vorhanden, ungültig); `suggest` = neue Personen, deren bester
+  Vorschlag in dieser Klasse liegt.
 - `applyGedcomImport(scope, batchId, entscheidungen)` — Import mit den
   Entscheidungen des Administrators (`applyDecisionsSchema`: Umgang mit „in
-  der App geändert“ je Eintrag, zu löschende fehlende Einträge, Zuordnung zu
-  von Hand angelegten Personen, Familie (keine, vorhandene, neue),
-  Privatsphäre-markierte Personen ohne Familie, Fotos herunterladen).
+  der App geändert“ je Eintrag, zu löschende fehlende Einträge,
+  Verknüpfungen `suggestions` (ref → vorhandene Person), Familie (keine,
+  vorhandene, neue), Privatsphäre-markierte Personen ohne Familie, Fotos
+  herunterladen).
+- `checkGedcomDecisions(scope, batchId, entscheidungen)` — prüft gewählte
+  Verknüpfungen vorab (für den Start im Hintergrund, `import-jobs.ts`).
+- `verifyImportLinks(…)` — die Nachprüfung selbst (exportiert für Tests).
 - `listImportHistory(scope, limit)` — Importverlauf mit Zusammenfassung.
 - `discardGedcomPreview(scope, batchId)`, `discardStalePreviews(scope,
   {...})` — nie ausgeführte Vorschauen verwerfen (nach 7 Tagen automatisch,
@@ -2003,11 +2031,33 @@ Administratoren.
   keinem anderen Quell-Baum gehört) → bei Beziehungen dieselbe Beziehung
   zwischen zwei zugeordneten Personen (in der App angelegte bleiben
   unangetastet) → Quellen ohne Kennung über Xref + Titel, Titel + Autor, nur
-  Xref. Ähnliche, von Hand angelegte Personen sind nur Vorschläge.
+  Xref. Ähnliche vorhandene Personen (von Hand erfasst oder aus anderen
+  Importen) sind nur Vorschläge (`import-suggestions.ts`).
 - „In der App geändert“: Standard „App behalten“ (`link`), je Eintrag
   umschaltbar auf „Datei übernehmen“ (`update`).
-- Vorschläge: jede App-Person höchstens einmal und nur von Hand angelegte.
-  Eine neue Familie darf nicht schon existieren.
+- **Vorschläge** (Plan-Version 2, `PLAN_VERSION`): je neuer Person bis zu
+  drei (`PlanItem.suggestions`), Zusammenfassung `links` (Personen je
+  Klasse, verglichene Personen, Dauer, ggf. `skipped`). Standard „neu
+  anlegen“; eine gewählte Verknüpfung wird beim Import zur Aktion `enrich`
+  (import-apply.ts).
+- **Nachprüfung** (`verifyImportLinks`, vor der Transaktion, in
+  `checkGedcomDecisions` schon beim Start): angeboten in der Vorschau, Person
+  der Datei weiter neu, kein Ziel doppelt, Ziel sichtbar und bearbeitbar,
+  neuer Abgleich (`suggestImportLinks` ohne Begrenzung je Person) findet das
+  Paar mindestens so gut eingestuft. Sonst `CONFLICT` mit
+  `details.linkIssues` (je Abweichung Datei-Person, vorhandene Person —
+  bei Unsichtbarem nur „eine vorhandene Person“ —, Grund); nichts wird
+  geschrieben, der Lauf bleibt offen. In der Transaktion zusätzlich: alle
+  Ziele gibt es noch. Ältere Vorschauen (Version 1) mit Verknüpfungen →
+  `CONFLICT` „neu laden“.
+- **Gleiche Untereinträge** (`linkEqualSubRecords`): Ereignisse und Namen
+  einer verknüpften Person (und Ereignisse an einer schon vorhandenen
+  Beziehung zweier zugeordneter Personen), die es dort nach `eventKey` bzw.
+  `personNameKey` schon gibt, werden zugeordnet (`link`) statt doppelt
+  angelegt.
+- Rohdaten-Vergleich („nur Geänderte schicken“) berücksichtigt nur Rohdaten
+  desselben Quell-Baums.
+- Eine neue Familie darf nicht schon existieren.
 - Fremdkennungen werden nur ergänzt, wo sie fehlen; Rohdaten nur, wo sie sich
   geändert haben.
 - **Doppeltes Absenden** ändert nichts: Lock je Lauf, abgeschlossener Lauf
@@ -2041,9 +2091,65 @@ ungültiger und gelöschter Einträge); `UPDATE ImportBatch` beim Abschluss
 Hintergrund).
 
 **Tests:** `tests/gedcom-import.db.test.ts`, `tests/import-sources.db.test.ts`,
-`tests/import-linking.db.test.ts`, `tests/merge.db.test.ts` (Parser und
-Zuordnung: `tests/gedcom-*.test.ts`); `e2e/write/gedcom-import.spec.ts`,
+`tests/import-linking.db.test.ts`, `tests/import-suggestions.db.test.ts`
+(Vorschläge, Verknüpfen, Nachprüfung, Rollback), `tests/merge.db.test.ts`
+(Parser und Zuordnung: `tests/gedcom-*.test.ts`);
+`e2e/write/gedcom-import.spec.ts`, `e2e/write/import-suggestions.spec.ts`,
 `e2e/write/import-sources.spec.ts`.
+
+### lib/services/import-suggestions.ts
+
+**Zweck:** Vorschläge schon beim GEDCOM-Import: neue Personen der Datei
+gegen alle vorhandenen Personen (von Hand erfasste und aus allen anderen
+Importen) abgleichen — mit demselben Abgleich wie „Importe verbinden“, keine
+zweite Heuristik. Entscheidet nichts.
+
+**Wichtige Funktionen/Typen:**
+- `suggestImportLinks(scope, {mapped, newRefs, matched, sourceTreeId,
+  limit})` — Vorschläge je ref (`ImportSuggestion`: vorhandene Person,
+  Bezeichnung mit Lebensjahren, Herkunft „von Hand erfasst“ bzw. „Import
+  A · Name“, Klasse, Teilklasse, Punkte, Begründungssatz
+  `evidenceSentence`, Widersprüche, Abweichungen, über Verwandte gefunden,
+  einzige Brücke) und Zusammenfassung (`ImportLinkSummary`: Personen je
+  bester Klasse, verglichene Personen, Dauer, ggf. `skipped`).
+- `pairDifferences` (worin Datei und vorhandene Person abweichen:
+  Nachname, Vorname, Geburt, Tod, Geburtsort, auch einseitig),
+  `suggestionClass`, `SUGGESTION_CLASS_RANK`, `MAX_LINK_PERSONS`,
+  `MAX_SUGGESTIONS_PER_PERSON`, `fileLinkId`.
+
+**Regeln und Entscheidungen:**
+- Bestand aus `loadDuplicatePeople` (nur sichtbare Personen), Gruppen wie
+  bei „Importe verbinden“ (Quell-Bäume bzw. `manual`); neue Personen der
+  Datei als eigene Gruppe mit Verwandten, Namensvarianten und Daten aus der
+  Datei. Schon wiedererkannte Personen der Datei gehören zur Gruppe der
+  Datei: Sie verbinden als Verwandte, sind aber nie Kandidat.
+- `linkImports` mit `focus` auf die neuen Personen: nur Paare Datei ×
+  Bestand; Klassen, Eindeutigkeit, Ausbreitung, Cluster, Brückenregel,
+  Vorfahren/Nachkommen und „kein Duplikat“ (zwischen vorhandenen Personen)
+  wie dort. Vorgeschlagen werden nur Personen, die der Importierende sehen
+  **und** bearbeiten darf; die Zahlen zählen nur diese.
+- Je Person höchstens drei Vorschläge (beste Klasse, dann Punkte); die
+  Nachprüfung beim Ausführen nimmt alle.
+- Über `MAX_LINK_PERSONS` (100 000 Personen zusammen) wird nicht
+  abgeglichen; `skipped` nennt den Grund, die Vorschau zeigt ihn.
+
+**Rechte/Datenschutz:** Dienst ohne eigene Rollenprüfung (die Aufrufer in
+`gedcom-import.ts` sind nur für Administratoren); Sichtbarkeit und
+Bearbeitungsrecht über den Scope.
+
+**Leistung:** 2 000 neue gegen gut 12 000 vorhandene Personen (erzeugte
+Testbäume in der Mock-Datenbank, 17 500 Beziehungen): Bestand laden
+(`loadDuplicatePeople`) gut 1,1 s, Abgleich 0,5–0,7 s — zusätzlich zur
+übrigen Vorschau. Beim Ausführen mit gewählten Verknüpfungen läuft der
+Abgleich zur Nachprüfung noch einmal (beim Start und im Hintergrund). Mit
+echten Datenmengen noch nicht gemessen.
+
+**Benutzt von:** `gedcom-import.ts` (Vorschau und Nachprüfung),
+`app/api/import/gedcom/[id]/items/route.ts` (Klassen).
+
+**Tests:** `tests/import-suggestions.test.ts` (Trefferquote je Klasse auf
+erzeugten Testbäumen, `focus`, Laufzeit, Abweichungen),
+`tests/import-suggestions.db.test.ts`.
 
 ### lib/services/gedcom-photos.ts
 
@@ -2083,8 +2189,11 @@ eine Antwort wartet. Das Ausführen läuft deshalb im Hintergrund des
 Node-Prozesses; die Oberfläche fragt den Stand ab.
 
 **Wichtige Funktionen:**
-- `startImportJob(scope, batchId, entscheidungen)` — startet
-  `applyGedcomImport` im Hintergrund; Zustand `running`.
+- `startImportJob(scope, batchId, entscheidungen)` — prüft gewählte
+  Verknüpfungen vorab (`checkGedcomDecisions`; Abweichung → `CONFLICT` mit
+  `linkIssues` sofort als Antwort) und startet dann `applyGedcomImport` im
+  Hintergrund; Zustand `running`. Scheitert die erneute Nachprüfung im
+  Hintergrund, trägt der Zustand `error` die `linkIssues` mit.
 - `importJobState(scope, batchId)` — `idle`, `running`, `done` (Ergebnis)
   oder `error` (Meldung); ohne laufenden Auftrag aus dem Lauf in der
   Datenbank (abgeschlossen → `done` mit `alreadyApplied`).

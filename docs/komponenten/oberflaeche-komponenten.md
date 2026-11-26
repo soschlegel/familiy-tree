@@ -31,7 +31,7 @@ Abschnitt 1). Seiten und API-Routen selbst stehen in
   `WhatsNewDialog`, `ReleaseNoteList`, `HelpLink` (mit `FooterHelpLink`),
   `help-render`
 - [Import, Export, Dubletten und Zusammenführen](#import-export-dubletten-und-zusammenführen)
-  — `GedcomImport`, `GedcomExportDialog`, `DataTransfer`, `ImportHistory`,
+  — `GedcomImport`, `ImportLinkSuggestions`, `GedcomExportDialog`, `DataTransfer`, `ImportHistory`,
   `ImportSources`, `ConnectImports`, `OriginOverview`, `DuplicateBanner`, `DuplicateList`, `MergeView`,
   `MergeDialog`, `FollowUpDuplicates`, `ChangeSetList`, `ChangeEntryList`
 - [Verwaltung und KI-Zugang](#verwaltung-und-ki-zugang) — `UserAdmin`,
@@ -1105,7 +1105,7 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 ### components/api-client.ts
 
 - **Zweck:** Einheitliche Aufrufe der eigenen API aus Client-Komponenten, mit deutschen Fehlermeldungen.
-- **Wo eingesetzt:** nur in Komponenten, aus diesem Abschnitt in `GedcomImport`, `DataTransfer`, `ImportHistory`, `ConnectImports`, `DuplicateList`, `MergeView`, `ChangeSetList`, `UserAdmin`, `FamilyAdmin`, `PlaceAdmin`, `SettingsAdmin` und `AiAccessManager`, dazu viele Komponenten zu Personen, Quellen und Medien. Keine Seite unter `app/` importiert die Datei direkt.
+- **Wo eingesetzt:** nur in Komponenten, aus diesem Abschnitt in `GedcomImport`, `ImportLinkSuggestions`, `DataTransfer`, `ImportHistory`, `ConnectImports`, `DuplicateList`, `MergeView`, `ChangeSetList`, `UserAdmin`, `FamilyAdmin`, `PlaceAdmin`, `SettingsAdmin` und `AiAccessManager`, dazu viele Komponenten zu Personen, Quellen und Medien. Keine Seite unter `app/` importiert die Datei direkt.
 - **Exporte:**
   - `apiFetch(url, init)` gibt entweder `{ ok: true, status, data }` oder `ApiFailure` zurück. `ApiFailure` enthält `status`, `message`, `fields` und den rohen `body`.
   - `jsonBody(method, data)` baut Methode, JSON-Kopf und Inhalt zusammen.
@@ -1185,16 +1185,18 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
     - Einträge werden seitenweise zu je 50 nachgeladen („Weitere laden“).
     - „In der App geändert“: eine Vorgabe für alle (App-Version behalten oder Dateiversion übernehmen) und je Eintrag eine Ausnahme.
     - „Fehlt in der Datei“: Einträge einzeln oder alle angezeigten zum Löschen vormerken (mit Rückfrage).
-    - Neue Personen: Vorschläge ähnlicher, von Hand angelegter Personen zur Zuordnung. Ohne Wahl gilt „Nein — neu anlegen“.
+    - Neue Personen mit Vorschlag: kurzer Hinweis „Ähnlich: … — wird neu angelegt, solange du oben nichts anderes wählst“ bzw. „Wird mit … verknüpft“. Gewählt wird im Abschnitt „Zusammenhang mit vorhandenen Daten“ (`ImportLinkSuggestions`).
+  - **Zusammenhang mit vorhandenen Daten:** `ImportLinkSuggestions` direkt unter der Baumwahl, vor der Übersicht (siehe dort). Nach einer neuen Baumwahl wird die Auswahl zurückgesetzt.
   - **Familienzuordnung neuer Personen:** keine Familie (dann nur für Administratoren sichtbar), vorhandene Familien (Mehrfachauswahl) oder neue Familie mit Name. Ein Haken lässt Personen ohne Familie, die in der Datei als privat bzw. lebend markiert sind; er ist voreingestellt. Hinweis auf Personen ohne Sterbeangabe, die vor weniger als 100 Jahren geboren sind.
   - **Fotos:** optional jetzt von fremden Servern herunterladen. Lokale Bildpfade werden nie gelesen.
   - **Hinweise:** Vollständigkeit (wie viele Zeilen gedeutet, als Rohdaten erhalten oder verloren sind), Prüfmeldungen, Übernahmehinweise, Lesewarnungen und nicht gedeutete Tags.
-  - **Kasten „Was der Import tut“:** fasst die Entscheidungen in Sätzen zusammen.
+  - **Kasten „Was der Import tut“:** fasst die Entscheidungen in Sätzen zusammen, bei Vorschlägen auch, wie viele Personen verknüpft werden bzw. dass ohne Wahl alle neu angelegt werden.
   - **Ausführen:**
-    - Zuerst kommt eine Rückfrage. Sie warnt, wenn Löschungen vorgemerkt sind oder Fotos heruntergeladen werden.
+    - Zuerst kommt eine Rückfrage. Sie nennt die Zahl der Verknüpfungen und warnt, wenn Löschungen vorgemerkt sind oder Fotos heruntergeladen werden.
+    - Antwortet der Server mit `linkIssues` (Nachprüfung der Verknüpfungen, sofort als 409 oder aus dem Hintergrund), zeigt die Komponente sie im Abschnitt „Zusammenhang mit vorhandenen Daten“, setzt genau diese Auswahl zurück und scrollt dorthin — es wurde nichts importiert.
     - Erst danach werden die Familienangaben geprüft: Name bzw. mindestens eine Familie muss gewählt sein.
     - Dann wird der Import gestartet; der Stand wird einmal je Sekunde abgefragt.
-  - **Ergebnis:** Zahlen je Art, gelöschte Einträge, Fotos; Links „Zum Importverlauf“ (Anker `#importe`) und „Weitere Datei importieren“.
+  - **Ergebnis:** Zahlen je Art (auch „mit vorhandenen Personen verknüpft“), gelöschte Einträge, Fotos; Links „Zum Importverlauf“ (Anker `#importe`) und „Weitere Datei importieren“.
   - **Abbrechen:** verwirft die Vorschau auf dem Server.
   - **Fensterereignisse:** löst `import-finished` aus und hört auf `import-preview-started`. Über dieses Ereignis übernimmt die Komponente eine Vorschau aus `ImportHistory`.
   - **Bedienbarkeit:** Status- und Fehlerzeilen haben `role="status"` bzw. `role="alert"`. Auf dem Telefon ist das Dateifeld mindestens 44 px hoch.
@@ -1204,7 +1206,24 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
   - `POST` und `DELETE /api/import/gedcom/[id]` (Baumwahl neu berechnen bzw. Vorschau verwerfen)
   - `GET /api/import/gedcom/[id]/items` (Einträge einer Gruppe, seitenweise)
   - `POST` und `GET /api/import/gedcom/[id]/apply` (Import starten bzw. Stand abfragen)
-- **Tests:** `e2e/write/gedcom-import.spec.ts` (Kacheln, Gruppen, Einträge, Familienwahl, App-Version, Ergebnis). Die Logik dahinter prüfen `tests/gedcom-import.db.test.ts` und die übrigen `tests/gedcom-*.test.ts`.
+- **Tests:** `e2e/write/gedcom-import.spec.ts` (Kacheln, Gruppen, Einträge, Familienwahl, App-Version, Vorschlag „unklar“ annehmen, Ergebnis), `e2e/write/import-suggestions.spec.ts` (neuer Ablauf). Die Logik dahinter prüfen `tests/gedcom-import.db.test.ts`, `tests/import-suggestions.db.test.ts` und die übrigen `tests/gedcom-*.test.ts`.
+
+### components/ImportLinkSuggestions.tsx
+
+- **Zweck:** Abschnitt „Zusammenhang mit vorhandenen Daten“ der GEDCOM-Vorschau: neue Personen der Datei, die vorhandenen Personen ähneln (von Hand erfasst oder aus anderen Importen), mit der Wahl „Neu anlegen“ oder „Mit vorhandener Person verknüpfen“.
+- **Wo eingesetzt:** nur in `GedcomImport` (Vorschau), unter der Baumwahl.
+- **Props / Exporte:** `ImportLinkSuggestions({ batchId, links, choices, setChoices, issues, disabled })` — `links` ist die Zusammenfassung des Servers (Personen je Klasse, verglichene Personen, ggf. `skipped`), `choices` ref → vorhandene Person (ohne Eintrag: neu anlegen), `issues` die gemeldeten Abweichungen der Nachprüfung. Typen `SuggestionClass`, `LinkSuggestion`, `LinkSummary`, `LinkIssue`, `CLASSES`, `CLASS_INFO`.
+- **Verhalten:**
+  - Überschrift prominent „Dieser Import hängt über N Personen mit vorhandenen Daten zusammen“, darunter die Zahlen je Klasse (sicher, sehr wahrscheinlich, wahrscheinlich, unklar), der Hinweis „Standard ist immer „Neu anlegen““ und was Verknüpfen bewirkt; Kontexthilfe `importVorschlaege`. Ohne Treffer: „hängt mit keiner vorhandenen Person zusammen“ mit der Zahl der verglichenen Personen; ausgelassener Abgleich als Warnung mit Grund. Ohne neue Personen erscheint der Abschnitt nicht.
+  - Zähler der gewählten Verknüpfungen (`role="status"`) und „Alle Auswahlen aufheben“.
+  - Je Klasse ein `<details>`; „sicher“ ist offen, die übrigen eingeklappt. Einträge seitenweise zu 50 (`suggest=<Klasse>`), „Weitere laden“.
+  - Je Person ein `<fieldset>` mit Radioknöpfen: „Neu anlegen“ (Standard, auch bei „sicher“) und je Vorschlag „Mit vorhandener Person verknüpfen: Name *Jahr †Jahr“ (Link zur Person in neuem Tab), Klasse, „einzige Verbindung zweier Familien“, Herkunft, Übereinstimmung, Widerspruch, Abweichungen. Eine vorhandene Person, die schon für eine andere Person der Datei gewählt ist, ist dort gesperrt.
+  - „Alle sicheren auswählen (N)“ in der Gruppe „sicher“: lädt alle Personen dieser Klasse und wählt je Person ihren sicheren Vorschlag (keine vorhandene Person doppelt, Bestehendes bleibt); jede Wahl bleibt einzeln sichtbar und abwählbar.
+  - Abweichungen der Nachprüfung als `role="alert"`: Datei-Person ↔ vorhandene Person: Grund.
+  - Tippflächen auf dem Telefon mindestens 44 px (Radiozeilen, Knöpfe, Gruppenköpfe).
+- **Server oder Client:** Client.
+- **Ruft auf:** `GET /api/import/gedcom/[id]/items?kind=persons&group=new&suggest=<Klasse>`.
+- **Tests:** `e2e/write/import-suggestions.spec.ts` (Zusammenhang, Standard, Sammelknopf, Abwahl, Nachprüfung mit 409, Verknüpfen; 390 px, axe hell und dunkel), `e2e/write/gedcom-import.spec.ts`.
 
 ### components/GedcomExportDialog.tsx
 
