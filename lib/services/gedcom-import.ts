@@ -16,10 +16,19 @@ import {
   recentWithoutDeath,
   type MappedImport,
 } from "../gedcom-import/mapping";
-import { suggestMatches, type Suggestion, type SuggestPerson } from "../gedcom-import/suggest";
 import type { ImportEntity } from "../import-fingerprint";
+import { fuzzyColumns } from "../dates";
+import { eventKey, personNameKey } from "../merge-rules";
+import { canEditPerson, canViewPerson } from "../scope";
 import { conflictError, forbiddenError, notFoundError, parseOrThrow, validationError } from "./errors";
-import { applyGenealogyImport, REJECTED_RAW_SUFFIX, type GenealogyImportResult, type ImportAction } from "./import-apply";
+import { applyGenealogyImport, REJECTED_RAW_SUFFIX, resolveBulkDate, type GenealogyImportResult, type ImportAction } from "./import-apply";
+import {
+  SUGGESTION_CLASS_RANK,
+  suggestImportLinks,
+  type ImportLinkSummary,
+  type ImportSuggestion,
+  type SuggestionClass,
+} from "./import-suggestions";
 import { createImportBatch, finishImportBatch, IMPORT_FILES_DIR, readImportBatchFile } from "./imports";
 import { loadImportDirectory } from "./origin";
 import { deleteCitation, deleteSource } from "./sources";
@@ -54,7 +63,10 @@ import type { SafeFetchOptions } from "../safe-fetch";
  * anderen Quell-Baum gehört) → bei Beziehungen: dieselbe Beziehung zwischen
  * zwei zugeordneten Personen (in der App angelegte bleiben unangetastet) →
  * Quellen ohne Kennung: Xref + Titel, dann Titel + Autor (umnummeriert), dann
- * nur Xref. Ähnliche, von Hand angelegte Personen sind nur Vorschläge.
+ * nur Xref. Ähnliche vorhandene Personen (von Hand erfasst oder aus anderen
+ * Importen) sind nur Vorschläge (import-suggestions.ts); verknüpft wird nur,
+ * was der Administrator einzeln wählt — nach exakter Nachprüfung
+ * (verifyImportLinks) und als Anreicherung (Aktion `enrich`).
  */
 
 // ---------------------------------------------------------------------------
@@ -89,7 +101,8 @@ export type PlanItem = {
   /** edited: Datei hat seit dem letzten Import ebenfalls etwas geändert. */
   conflict?: boolean;
   reason?: string;
-  suggestions?: (Suggestion & { label: string })[];
+  /** Nur neue Personen: mögliche vorhandene Personen (lib/services/import-suggestions.ts). */
+  suggestions?: ImportSuggestion[];
 };
 
 export type TreeCandidate = {
@@ -101,8 +114,11 @@ export type TreeCandidate = {
   uidOverlap: number;
 };
 
+/** Version 2: Vorschläge gegen alle vorhandenen Personen (Klassen wie „Importe verbinden“). */
+export const PLAN_VERSION = 2;
+
 export type GedcomPlan = {
-  version: 1;
+  version: number;
   batchId: string;
   fileName: string;
   createdAt: string;
@@ -123,7 +139,10 @@ export type GedcomPlan = {
   records: { persons: number; families: number; sources: number; notes: number; media: number; unknown: number };
   privacy: { marked: number; markedNew: number; recentWithoutDeath: number; recentWithoutDeathNew: number };
   photos: { total: number; newPersons: number; alreadyStored: number; localPaths: number };
+  /** Neue Personen mit mindestens einem Vorschlag. */
   suggestions: number;
+  /** Zusammenhang mit vorhandenen Daten: Personen je Klasse, Laufzeit, ggf. ausgelassen. */
+  links: ImportLinkSummary;
   otherTreeHits: number;
 };
 
@@ -378,8 +397,14 @@ export const applyDecisionsSchema = z.object({
     })
     .default({}),
   missing: z.object({ delete: z.array(z.string().min(1)).max(100000).default([]) }).default({}),
+  /**
+   * Ausdrücklich gewählte Verknüpfungen: ref der neuen Person der Datei →
+   * vorhandene Person. Ohne Eintrag gilt „neu anlegen“ (Standard, auch bei
+   * „sicher“). Verknüpfen reichert an, überschreibt nie (`enrich` in
+   * import-apply.ts); jede Wahl prüft der Server beim Ausführen nach.
+   */
   suggestions: z
-    .record(z.object({ personId: z.string().min(1), mode: z.enum(["link", "update"]).default("link") }))
+    .record(z.object({ personId: z.string().min(1).max(100), mode: z.literal("link").optional() }))
     .default({}),
   family: z
     .discriminatedUnion("mode", [
@@ -408,9 +433,7 @@ function buildInput(mapped: MappedImport, match: Match, batchId: string, sourceT
   const privacyRefs = new Set(mapped.personMeta.filter((m) => m.privacyMarked).map((m) => m.ref));
   const act = (kind: PlanKind, ref: string): { action: ImportAction; id?: string } => {
     const id = match.ids[kind].get(ref);
-    if (kind === "persons" && suggestion[ref]) {
-      return { action: suggestion[ref].mode === "update" ? "update" : "link", id: suggestion[ref].personId };
-    }
+    if (kind === "persons" && suggestion[ref]) return { action: "enrich", id: suggestion[ref].personId };
     if (!id) return { action: "create" };
     if (kind === "relationships" && match.existingRels.has(ref)) return { action: "skip", id };
     if (match.secondary.has(`${kind}|${ref}`)) return { action: "link", id };
@@ -583,6 +606,8 @@ async function computePlan(scope: Scope, batch: { id: string; fileName: string }
     unchanged: "unchanged",
     skippedEdited: "edited",
     skipped: "existing",
+    // Verknüpfen gibt es nur beim Ausführen, nie in der Vorschau.
+    linked: "existing",
     invalid: "invalid",
   };
   const invalidReason = new Map<string, string>();
@@ -661,59 +686,17 @@ async function computePlan(scope: Scope, batch: { id: string; fileName: string }
     counts[m.kind].missing++;
   }
 
-  // Vorschläge für neue Personen (gegen von Hand angelegte)
+  // Vorschläge für neue Personen: gegen alle vorhandenen Personen (von Hand
+  // erfasste und aus anderen Importen), derselbe Abgleich wie „Importe
+  // verbinden“. Wiedererkannte Personen dieser Datei sind keine Kandidaten.
   let suggestionCount = 0;
-  if (newPersons.size) {
-    const manual = await prisma.person.findMany({
-      where: { importLinks: { none: {} } },
-      select: {
-        id: true,
-        givenName: true,
-        familyName: true,
-        birthName: true,
-        gender: true,
-        birthDate: true,
-        birthPlace: true,
-        relationsTo: { where: { type: "PARENT_OF" }, select: { fromPerson: { select: { givenName: true } } } },
-      },
-    });
-    if (manual.length) {
-      const metaByRef = new Map(mapped.personMeta.map((m) => [m.ref, m]));
-      const fromFile: SuggestPerson[] = [...newPersons].map((ref) => {
-        const m = metaByRef.get(ref)!;
-        return {
-          id: ref,
-          givenName: m.givenName,
-          familyName: m.familyName,
-          birthName: m.birthName,
-          gender: m.gender,
-          birthYear: m.birthYear,
-          birthPlace: m.birthPlace,
-          parentNames: m.parentRefs.map((p) => metaByRef.get(p)?.givenName ?? ""),
-        };
-      });
-      const inApp: SuggestPerson[] = manual.map((p) => ({
-        id: p.id,
-        givenName: p.givenName,
-        familyName: p.familyName,
-        birthName: p.birthName,
-        gender: p.gender,
-        birthYear: p.birthDate ? p.birthDate.getUTCFullYear() : null,
-        birthPlace: p.birthPlace,
-        parentNames: p.relationsTo.map((r) => r.fromPerson.givenName),
-      }));
-      const found = suggestMatches(fromFile, inApp);
-      const appLabel = new Map(
-        manual.map((p) => [p.id, `${p.givenName} ${p.familyName ?? ""}`.trim() + (p.birthDate ? ` (*${p.birthDate.getUTCFullYear()})` : "")]),
-      );
-      for (const item of items) {
-        if (item.kind !== "persons" || item.group !== "new") continue;
-        const s = found.get(item.ref);
-        if (!s) continue;
-        item.suggestions = s.map((x) => ({ ...x, label: appLabel.get(x.personId) ?? x.personId }));
-        suggestionCount++;
-      }
-    }
+  const linked = await suggestImportLinks(scope, { mapped, newRefs: newPersons, matched: match.ids.persons, sourceTreeId });
+  for (const item of items) {
+    if (item.kind !== "persons" || item.group !== "new") continue;
+    const s = linked.byRef.get(item.ref);
+    if (!s?.length) continue;
+    item.suggestions = s;
+    suggestionCount++;
   }
 
   // Privatsphäre und Fotos
@@ -735,7 +718,7 @@ async function computePlan(scope: Scope, batch: { id: string; fileName: string }
 
   const h = doc.header;
   return {
-    version: 1,
+    version: PLAN_VERSION,
     batchId: batch.id,
     fileName: batch.fileName,
     createdAt: new Date().toISOString(),
@@ -782,6 +765,7 @@ async function computePlan(scope: Scope, batch: { id: string; fileName: string }
       localPaths: mapped.counts.localMediaPaths,
     },
     suggestions: suggestionCount,
+    links: linked.summary,
     otherTreeHits: match.otherTreeHits,
   };
 }
@@ -933,7 +917,7 @@ export async function getGedcomPlan(scope: Scope, batchId: string): Promise<Gedc
 export async function listGedcomPlanItems(
   scope: Scope,
   batchId: string,
-  query: { kind?: PlanKind; group?: PlanGroup; offset?: number; limit?: number; q?: string },
+  query: { kind?: PlanKind; group?: PlanGroup; offset?: number; limit?: number; q?: string; suggest?: SuggestionClass },
 ): Promise<{ total: number; items: PlanItem[] }> {
   assertAdmin(scope);
   await pendingBatch(batchId);
@@ -943,6 +927,8 @@ export async function listGedcomPlanItems(
     (i) =>
       (!query.kind || i.kind === query.kind) &&
       (!query.group || i.group === query.group) &&
+      // Vorschläge: neue Personen, deren bester Vorschlag in dieser Klasse liegt.
+      (!query.suggest || i.suggestions?.[0]?.cls === query.suggest) &&
       (!q || i.label.toLowerCase().includes(q)),
   );
   const offset = Math.max(0, query.offset ?? 0);
@@ -987,13 +973,6 @@ export async function applyGedcomImport(
   const plan = await loadPlan(batchId);
   const sourceTreeId = plan.sourceTreeId;
 
-  // Vorschläge prüfen: jede App-Person höchstens einmal, nur von Hand angelegte
-  const chosen = Object.values(decisions.suggestions).map((s) => s.personId);
-  if (new Set(chosen).size !== chosen.length) throw validationError([{ path: "suggestions", message: "Eine Person der App ist mehrfach gewählt" }]);
-  if (chosen.length) {
-    const n = await prisma.person.count({ where: { id: { in: chosen }, importLinks: { none: {} } } });
-    if (n !== chosen.length) throw validationError([{ path: "suggestions", message: "Zuordnung nur zu von Hand angelegten Personen" }]);
-  }
   if (decisions.family.mode === "existing") {
     const n = await prisma.family.count({ where: { id: { in: decisions.family.familyIds } } });
     if (n !== decisions.family.familyIds.length) throw validationError([{ path: "family", message: "Unbekannte Familie" }]);
@@ -1004,14 +983,15 @@ export async function applyGedcomImport(
 
   const { mapped } = parseAndMap(await batchBytes(scope, batchId, b.fileName), false);
   const plain = await matchExisting(mapped, sourceTreeId);
-  for (const ref of Object.keys(decisions.suggestions)) {
-    if (plain.ids.persons.has(ref)) delete decisions.suggestions[ref];
-  }
+  // Jede gewählte Verknüpfung exakt nachprüfen — bei einer Abweichung wird
+  // nichts importiert (auch nicht still neu angelegt), sondern gemeldet.
+  await verifyImportLinks(scope, plan, mapped, plain, decisions.suggestions, sourceTreeId);
   const match = await matchExisting(
     mapped,
     sourceTreeId,
     Object.fromEntries(Object.entries(decisions.suggestions).map(([ref, s]) => [ref, s.personId])),
   );
+  await linkEqualSubRecords(mapped, match, decisions.suggestions);
 
   // Fremdkennungen nur, wo sie fehlen
   const input = buildInput(mapped, match, batchId, sourceTreeId, { plan, decisions, forPreview: false });
@@ -1057,6 +1037,12 @@ export async function applyGedcomImport(
       if (fresh?.status !== "PENDING") {
         state.already = true;
         return;
+      }
+      // Ziele der Verknüpfungen gibt es noch (zwischen Prüfung und Transaktion
+      // gelöscht oder zusammengeführt → alles zurück, neu entscheiden).
+      const targets = Object.values(decisions.suggestions).map((s) => s.personId);
+      if (targets.length && (await tx.person.count({ where: { id: { in: targets } } })) !== targets.length) {
+        throw conflictError("Eine gewählte vorhandene Person gibt es inzwischen nicht mehr. Bitte die Vorschau neu berechnen und neu entscheiden.");
       }
       let familyIds: string[] = [];
       if (decisions.family.mode === "existing") familyIds = decisions.family.familyIds;
@@ -1142,6 +1128,184 @@ export async function applyGedcomImport(
   return result;
 }
 
+// ---------------------------------------------------------------------------
+// Verknüpfen mit vorhandenen Personen (Vorschläge der Vorschau)
+// ---------------------------------------------------------------------------
+
+/** Eine gewählte Verknüpfung, die beim Ausführen nicht mehr stimmt. */
+export type LinkIssue = { ref: string; personId: string; file: string; existing: string; reason: string };
+
+const CLASS_LABEL: Record<SuggestionClass, string> = {
+  high: "sicher",
+  veryLikely: "sehr wahrscheinlich",
+  medium: "wahrscheinlich",
+  low: "unklar",
+};
+
+/**
+ * Jede gewählte Verknüpfung exakt nachprüfen (Leitlinie: falsche
+ * Zusammenführungen sind der schlimmste Fehler): Sie muss in der Vorschau
+ * angeboten worden sein; die Person der Datei ist weiter neu (nicht
+ * inzwischen wiedererkannt); keine vorhandene Person ist zweimal Ziel; der
+ * Importierende darf das Ziel sehen und bearbeiten; ein neuer Abgleich mit
+ * dem heutigen Stand findet das Paar noch, und zwar nicht schlechter
+ * eingestuft als in der Vorschau. Weicht etwas ab, wird NICHTS importiert —
+ * auch nicht still neu angelegt —, sondern ein Konflikt mit allen
+ * Abweichungen gemeldet (`details.linkIssues`), damit neu entschieden wird.
+ * Exportiert nur für Tests (Rechteprüfung mit einem Nicht-Administrator).
+ */
+export async function verifyImportLinks(
+  scope: Scope,
+  plan: GedcomPlan,
+  mapped: MappedImport,
+  plain: Match,
+  chosen: z.infer<typeof applyDecisionsSchema>["suggestions"],
+  sourceTreeId: string,
+): Promise<void> {
+  const entries = Object.entries(chosen);
+  if (!entries.length) return;
+  if (plan.version !== PLAN_VERSION) {
+    throw conflictError("Diese Vorschau stammt aus einer älteren Version. Bitte die Datei erneut in die Vorschau laden und neu entscheiden.");
+  }
+  const newItems = new Map(plan.items.filter((i) => i.kind === "persons" && i.group === "new").map((i) => [i.ref, i]));
+  const persons = await prisma.person.findMany({
+    where: { id: { in: entries.map(([, s]) => s.personId) } },
+    select: { id: true, givenName: true, familyName: true, families: { select: { familyId: true } } },
+  });
+  const personBy = new Map(persons.map((p) => [p.id, p]));
+  const targetCount = new Map<string, number>();
+  for (const [, s] of entries) targetCount.set(s.personId, (targetCount.get(s.personId) ?? 0) + 1);
+
+  // Neuer Abgleich mit dem heutigen Stand (dieselbe Funktion wie in der Vorschau).
+  const newRefs = [...newItems.keys()].filter((r) => !plain.ids.persons.has(r));
+  const fresh = await suggestImportLinks(scope, { mapped, newRefs, matched: plain.ids.persons, sourceTreeId, limit: Number.POSITIVE_INFINITY });
+
+  const issues: LinkIssue[] = [];
+  for (const [ref, s] of entries) {
+    const item = newItems.get(ref);
+    const offered = item?.suggestions?.find((x) => x.personId === s.personId);
+    const target = personBy.get(s.personId);
+    const visible = target ? canViewPerson(scope, target.families.map((f) => f.familyId)) : false;
+    const issue = (reason: string) =>
+      issues.push({
+        ref,
+        personId: s.personId,
+        file: item?.label ?? ref,
+        existing: offered?.label ?? (visible && target ? [target.givenName, target.familyName].filter(Boolean).join(" ") : "eine vorhandene Person"),
+        reason,
+      });
+    if (!item || !offered) {
+      issue("wurde in der Vorschau nicht vorgeschlagen");
+      continue;
+    }
+    if (plain.ids.persons.has(ref)) {
+      issue("wird inzwischen als Person dieses Imports wiedererkannt");
+      continue;
+    }
+    if ((targetCount.get(s.personId) ?? 0) > 1) {
+      issue("dieselbe vorhandene Person ist für mehrere Personen der Datei gewählt");
+      continue;
+    }
+    if (!target || !visible) {
+      issue("die vorhandene Person gibt es nicht mehr (gelöscht, zusammengeführt oder nicht sichtbar)");
+      continue;
+    }
+    if (!canEditPerson(scope, target.families.map((f) => f.familyId))) {
+      issue("keine Berechtigung, die vorhandene Person zu bearbeiten");
+      continue;
+    }
+    const now = fresh.byRef.get(ref)?.find((x) => x.personId === s.personId);
+    if (!now) {
+      issue("passt nach den heutigen Daten nicht mehr (geändert, zusammengeführt oder ein anderer Kandidat ist hinzugekommen)");
+      continue;
+    }
+    if (SUGGESTION_CLASS_RANK[now.cls] > SUGGESTION_CLASS_RANK[offered.cls]) {
+      issue(`Einstufung jetzt „${CLASS_LABEL[now.cls]}“ statt „${CLASS_LABEL[offered.cls]}“`);
+    }
+  }
+  if (issues.length) {
+    throw conflictError(
+      issues.length === 1
+        ? "Eine gewählte Verknüpfung stimmt nicht mehr — es wurde nichts importiert. Bitte neu entscheiden."
+        : `${issues.length} gewählte Verknüpfungen stimmen nicht mehr — es wurde nichts importiert. Bitte neu entscheiden.`,
+      { linkIssues: issues },
+    );
+  }
+}
+
+/**
+ * Vorab prüfen, ob die Entscheidungen ausführbar sind (für den Start im
+ * Hintergrund: Abweichungen bei Verknüpfungen kommen so sofort als Antwort
+ * zurück). `applyGedcomImport` prüft beim Ausführen trotzdem selbst noch
+ * einmal.
+ */
+export async function checkGedcomDecisions(scope: Scope, batchId: string, decisionsInput: unknown): Promise<void> {
+  assertAdmin(scope);
+  const decisions = parseOrThrow(applyDecisionsSchema.safeParse(decisionsInput ?? {}));
+  if (!Object.keys(decisions.suggestions).length) return;
+  const b = await pendingBatch(batchId);
+  if (b.status !== "PENDING") return;
+  const plan = await loadPlan(batchId);
+  const { mapped } = parseAndMap(await batchBytes(scope, batchId, b.fileName), false);
+  const plain = await matchExisting(mapped, plan.sourceTreeId);
+  await verifyImportLinks(scope, plan, mapped, plain, decisions.suggestions, plan.sourceTreeId);
+}
+
+/**
+ * Untereinträge verknüpfter Personen, die es an der vorhandenen Person schon
+ * gleich gibt (dieselbe Taufe, derselbe weitere Name — aus einem anderen
+ * Import oder von Hand), werden ihr zugeordnet statt doppelt angelegt
+ * („link“: Wert der App bleibt, Herkunftsvermerk dieses Baums kommt dazu).
+ * Ebenso Ereignisse an einer schon vorhandenen Beziehung zweier verknüpfter
+ * Personen. Gleich heißt: gleich nach `eventKey` bzw. `personNameKey`
+ * (lib/merge-rules.ts, wie beim Zusammenführen).
+ */
+async function linkEqualSubRecords(mapped: MappedImport, match: Match, chosen: z.infer<typeof applyDecisionsSchema>["suggestions"]) {
+  const linkedRefs = new Set(Object.keys(chosen));
+  if (!linkedRefs.size) return;
+  const personIds = [...linkedRefs].map((r) => chosen[r].personId);
+  const relIds = [...match.existingRels].map((r) => match.ids.relationships.get(r)).filter((x): x is string => Boolean(x));
+  const [events, names] = await Promise.all([
+    prisma.event.findMany({ where: { OR: [{ personId: { in: personIds } }, ...(relIds.length ? [{ relationshipId: { in: relIds } }] : [])] } }),
+    prisma.personName.findMany({ where: { personId: { in: personIds } } }),
+  ]);
+  const used = new Set<string>([...match.ids.events.values(), ...match.ids.names.values()]);
+  const eventBy = new Map<string, string>();
+  for (const e of events) {
+    const key = `${e.personId ?? e.relationshipId}|${eventKey(e)}`;
+    if (!eventBy.has(key)) eventBy.set(key, e.id);
+  }
+  for (const e of mapped.events) {
+    if (match.ids.events.has(e.ref)) continue;
+    const owner = e.personRef && linkedRefs.has(e.personRef)
+      ? chosen[e.personRef].personId
+      : e.relationshipRef && match.existingRels.has(e.relationshipRef)
+        ? match.ids.relationships.get(e.relationshipRef)
+        : undefined;
+    if (!owner) continue;
+    const date = resolveBulkDate(e.date ?? undefined);
+    const key = `${owner}|${eventKey({ ...e, ...fuzzyColumns("date", date.value), datePhrase: date.phrase })}`;
+    const id = eventBy.get(key);
+    if (!id || used.has(id)) continue;
+    used.add(id);
+    match.ids.events.set(e.ref, id);
+    match.secondary.add(`events|${e.ref}`);
+  }
+  const nameBy = new Map<string, string>();
+  for (const n of names) {
+    const key = `${n.personId}|${personNameKey(n)}`;
+    if (!nameBy.has(key)) nameBy.set(key, n.id);
+  }
+  for (const n of mapped.names) {
+    if (match.ids.names.has(n.ref) || !linkedRefs.has(n.personRef)) continue;
+    const id = nameBy.get(`${chosen[n.personRef].personId}|${personNameKey(n)}`);
+    if (!id || used.has(id)) continue;
+    used.add(id);
+    match.ids.names.set(n.ref, id);
+    match.secondary.add(`names|${n.ref}`);
+  }
+}
+
 /** Rohdaten nur schicken, wo sich der Inhalt gegenüber dem gültigen Stand ändert. */
 async function changedRawRecords(
   mapped: MappedImport,
@@ -1181,7 +1345,12 @@ async function changedRawRecords(
     const rows = await prisma.importRawRecord.findMany({
       where: {
         supersededAt: null,
-        OR: [{ personId: { in: chunk } }, { relationshipId: { in: chunk } }, { sourceId: { in: chunk } }],
+        AND: [
+          { OR: [{ personId: { in: chunk } }, { relationshipId: { in: chunk } }, { sourceId: { in: chunk } }] },
+          // Nur Rohdaten dieses Baums: Eine verknüpfte oder zusammengeführte
+          // Person trägt auch die eines anderen Imports — die zählen hier nicht.
+          { OR: [{ batchId: null }, { batch: { sourceTreeId } }] },
+        ],
         // Abgelehnte Familien bei einer Person zählen nicht zu deren eigenen Rohdaten.
         NOT: { recordType: { endsWith: REJECTED_RAW_SUFFIX } },
       },

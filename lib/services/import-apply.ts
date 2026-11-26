@@ -40,6 +40,7 @@ import { forbiddenError, notFoundError, parseOrThrow, validationError } from "./
 import { auditActor, auditData, fieldChanges } from "../audit";
 import { changeSetIdOf } from "../change-sets";
 import { importLinkColumn, loadRowsForFingerprint, MAX_RAW_RECORD_BYTES, newId } from "./imports";
+import { eventKey, resolvePersonMerge, type ExistingName, type PersonValues } from "../merge-rules";
 
 /**
  * Massenimport für GEDCOM- und andere Importe: Personen, Namen, Beziehungen,
@@ -84,8 +85,18 @@ import { importLinkColumn, loadRowsForFingerprint, MAX_RAW_RECORD_BYTES, newId }
  * ändern, aber seine Herkunft (ImportLink) auf die neuen Dateiwerte setzen —
  * „App-Version behalten, diese Dateiversion ist gesehen“. Ergebnis
  * `unchanged` (gleiche Werte) bzw. `skippedEdited` (App-Werte behalten).
+ *
+ * `enrich` (nur Personen; Vorschlag beim GEDCOM-Import, vom Administrator
+ * ausdrücklich gewählt): die Person der Datei mit der vorhandenen Person `id`
+ * verknüpfen — anreichern wie beim Zusammenführen (lib/merge-rules.ts,
+ * `resolvePersonMerge` mit den Vorgaben): Leeres wird gefüllt, das genauere
+ * Datum gewinnt, sonst bleibt der Wert der App; Widersprüchliches wird
+ * Zweitangabe (Ereignis mit isAlternative) bzw. Namensvariante, Notizen
+ * werden angehängt. Dazu ein weiterer Herkunftsvermerk dieses Baums (mit
+ * `mergedAt`, damit ein erneuter Import ohne Neues still bleibt). Ergebnis
+ * `linked`; je Person ein Eintrag „verknüpft“ mit vorher → nachher.
  */
-const ACTIONS = ["create", "update", "updateIfUnchanged", "skip", "link"] as const;
+const ACTIONS = ["create", "update", "updateIfUnchanged", "skip", "link", "enrich"] as const;
 export type ImportAction = (typeof ACTIONS)[number];
 
 const txt = (max = 2000) =>
@@ -316,7 +327,7 @@ export type GenealogyImportInput = z.input<typeof genealogyImportSchema>;
 // Ergebnis
 // ---------------------------------------------------------------------------
 
-export type ImportOutcome = "created" | "updated" | "unchanged" | "skippedEdited" | "skipped" | "invalid";
+export type ImportOutcome = "created" | "updated" | "unchanged" | "skippedEdited" | "skipped" | "linked" | "invalid";
 
 type Section = "persons" | "names" | "relationships" | "events" | "sources" | "citations";
 const SECTION_ENTITY: Record<Section, ImportEntity> = {
@@ -426,6 +437,7 @@ async function applyInTx(
     const wanted = items.filter((i) => i.action !== "create");
     for (const i of wanted) {
       if (!i.id && i.action !== "skip") bad(section, i.ref, "id", `Aktion ${i.action} braucht eine id`);
+      if (i.action === "enrich" && section !== "persons") bad(section, i.ref, "action", "Verknüpfen (enrich) gibt es nur für Personen");
     }
     const targetIds = wanted.map((i) => i.id).filter((x): x is string => Boolean(x));
     const rows = await loadRowsForFingerprint(db, entity, targetIds);
@@ -784,7 +796,7 @@ async function applyInTx(
   // --- Schreiben ---------------------------------------------------------------
   const linkCreates: Prisma.ImportLinkCreateManyInput[] = [];
   const counts = Object.fromEntries(
-    sections.map((s) => [s, { created: 0, updated: 0, unchanged: 0, skippedEdited: 0, skipped: 0, invalid: 0 }]),
+    sections.map((s) => [s, { created: 0, updated: 0, unchanged: 0, skippedEdited: 0, skipped: 0, linked: 0, invalid: 0 }]),
   ) as Record<Section, Record<ImportOutcome, number>>;
 
   const familyOf = new Map(data.persons.map((p) => [p.ref, p.familyIds ?? data.familyIds]));
@@ -830,6 +842,20 @@ async function applyInTx(
   }
   if (write) await db.importLink.createMany({ data: linkCreates });
 
+  // Verknüpfen (enrich): vorhandene Namen und Ereignisse der Zielpersonen,
+  // damit Zweitangaben und Namensvarianten nichts doppelt anlegen.
+  const enrichTargets = [...new Set(personUpdates.filter((u) => u.item.action === "enrich").map((u) => u.id))];
+  const enrichExisting = {
+    names: enrichTargets.length ? await db.personName.findMany({ where: { personId: { in: enrichTargets } } }) : [],
+    events: enrichTargets.length ? await db.event.findMany({ where: { personId: { in: enrichTargets } } }) : [],
+  };
+  const enriched = new Map<
+    string,
+    { ref: string; before: Record<string, unknown>; patch: Record<string, unknown>; alternates: number; names: number; dropped: string[] }
+  >();
+  const enrichEventRows: Prisma.EventCreateManyInput[] = [];
+  const enrichNameRows: Prisma.PersonNameCreateManyInput[] = [];
+
   // Aktualisierungen (einzeln — bei einem erneuten Import meist wenige).
   // Herkunft unveränderter Datensätze wird gesammelt fortgeschrieben.
   const changes = Object.fromEntries(sections.map((s) => [s, {}])) as GenealogyImportResult["changes"];
@@ -863,7 +889,9 @@ async function applyInTx(
         continue;
       }
       const changed = currentHash !== u.hash;
-      if (u.item.action === "link") {
+      if (u.item.action === "enrich") {
+        await enrichPerson(u.id, u.item.ref, current, u.row);
+      } else if (u.item.action === "link") {
         outcomes[section][u.item.ref] = changed ? "skippedEdited" : "unchanged";
         counts[section][changed ? "skippedEdited" : "unchanged"]++;
       } else {
@@ -889,6 +917,9 @@ async function applyInTx(
         importHash: u.hash,
         sourceStamp: u.item.sourceStamp ?? link?.sourceStamp ?? null,
         missingSinceBatchId: null,
+        // Verknüpft wie beim Zusammenführen: ein erneuter Import ohne neue
+        // Angaben meldet die Person nicht als „in der App geändert“.
+        ...(u.item.action === "enrich" ? { mergedAt: now } : {}),
       };
       if (!write) continue;
       if (link) await db.importLink.update({ where: { id: link.id }, data: linkData });
@@ -898,6 +929,8 @@ async function applyInTx(
         });
     }
   }
+  if (write && enrichEventRows.length) await db.event.createMany({ data: enrichEventRows });
+  if (write && enrichNameRows.length) await db.personName.createMany({ data: enrichNameRows });
   for (let i = 0; i < refreshOnly.length; i += 5000) {
     if (write) await db.importLink.updateMany({
       where: { id: { in: refreshOnly.slice(i, i + 5000) } },
@@ -985,7 +1018,18 @@ async function applyInTx(
     if (write) {
       superseded += (
         await db.importRawRecord.updateMany({
-          where: { OR: or, supersededAt: null, NOT: { recordType: { endsWith: REJECTED_RAW_SUFFIX } } },
+          where: {
+            AND: [
+              { OR: or },
+              // Nur Rohdaten desselben Baums (bzw. ohne Lauf): Hat der Träger
+              // auch Rohdaten eines anderen Imports (verknüpft oder
+              // zusammengeführt), bleiben diese gültig — der GEDCOM-Export
+              // braucht sie für dessen Originaldatensatz.
+              ...(sourceTreeId ? [{ OR: [{ batchId: null }, { batch: { sourceTreeId } }] }] : []),
+            ],
+            supersededAt: null,
+            NOT: { recordType: { endsWith: REJECTED_RAW_SUFFIX } },
+          },
           data: { supersededAt: now },
         })
       ).count;
@@ -1033,14 +1077,85 @@ async function applyInTx(
   // --- Hilfsfunktionen (Closures) -------------------------------------------
 
   /**
+   * Person der Datei mit der vorhandenen Person `id` verknüpfen (Aktion
+   * `enrich`): anreichern nach den Vorgaben des Zusammenführens, nie
+   * überschreiben. Die App ist die Wahrheit, die Datei eine Quelle.
+   */
+  async function enrichPerson(id: string, refName: string, current: Record<string, unknown>, fileRow: Record<string, unknown>) {
+    // Namen und Ereignisse, die es an der Person schon gibt oder die dieser
+    // Lauf aus der Datei an ihr anlegt bzw. ihr zuordnet.
+    const names: ExistingName[] = [
+      ...enrichExisting.names.filter((n) => n.personId === id),
+      ...[...nameCreates, ...nameUpdates].filter((n) => n.row.personId === id).map((n) => n.row as ExistingName),
+      ...enrichNameRows.filter((n) => n.personId === id).map((n) => ({ type: n.type as string, givenName: n.givenName ?? null, familyName: n.familyName ?? null })),
+    ];
+    const resolved = resolvePersonMerge(current as PersonValues, fileRow as PersonValues, {}, names, {
+      keep: "der vorhandenen Person",
+      other: "der Person aus der Datei",
+    });
+    const patch: Record<string, unknown> = {};
+    for (const [col, v] of Object.entries(resolved.columns)) {
+      if (canonicalValue(current[col]) !== canonicalValue(v)) patch[col] = v;
+    }
+    if (write && Object.keys(patch).length) await updateRow(db, "PERSON", id, patch);
+
+    const eventKeys = new Set<string>([
+      ...enrichExisting.events.filter((e) => e.personId === id).map((e) => eventKey(e)),
+      ...[...eventCreates, ...eventUpdates].filter((e) => e.row.personId === id).map((e) => eventKey(e.row)),
+      ...enrichEventRows.filter((e) => e.personId === id).map((e) => eventKey(e as Record<string, unknown>)),
+    ]);
+    let alternates = 0;
+    for (const a of resolved.alternates) {
+      const row = {
+        personId: id,
+        relationshipId: null,
+        type: a.type,
+        label: null,
+        isAlternative: true,
+        ...fuzzyColumns("date", a.date),
+        datePhrase: a.datePhrase,
+        place: a.place,
+        address: null,
+        value: null,
+        cause: a.cause,
+        age: null,
+        agency: null,
+        notes: null,
+        sortOrder: 0,
+      };
+      const key = eventKey(row);
+      if (eventKeys.has(key)) continue;
+      eventKeys.add(key);
+      enrichEventRows.push({ id: newId(), ...row });
+      alternates++;
+    }
+    for (const n of resolved.names) {
+      enrichNameRows.push({
+        id: newId(),
+        personId: id,
+        type: n.type,
+        givenName: n.givenName,
+        familyName: n.familyName,
+        prefix: n.prefix,
+        suffix: n.suffix,
+        nickname: n.nickname,
+      });
+    }
+    enriched.set(id, { ref: refName, before: current, patch, alternates, names: resolved.names.length, dropped: resolved.dropped });
+    outcomes.persons[refName] = "linked";
+    counts.persons.linked++;
+  }
+
+  /**
    * Je betroffener Person ein Eintrag für ihren Verlauf: Person angelegt bzw.
    * welche Felder sich geändert haben (vorher → nachher), dazu die Zahl der
    * angelegten bzw. geänderten Namen, Beziehungen, Ereignisse und Belege.
    */
   async function writePersonAudit() {
     type Tally = {
-      person?: "created" | "updated";
+      person?: "created" | "updated" | "linked";
       changes?: Record<string, unknown>;
+      linked?: { sourceTreeId: string | null; externalKey: string | null; dropped?: string[] };
       created: Record<string, number>;
       updated: Record<string, number>;
     };
@@ -1058,6 +1173,22 @@ async function applyInTx(
       t.person = "updated";
       const current = existing.persons.rows.get(u.id);
       if (current) t.changes = fieldChanges(current, u.row);
+    }
+    // Verknüpfte Personen: immer ein Eintrag, mit vorher → nachher (auch ohne
+    // geänderte Hauptangaben) und den angelegten Zweitangaben/Namen.
+    for (const u of personUpdates) {
+      const e = enriched.get(u.id);
+      if (!e || e.ref !== u.item.ref) continue;
+      const t = tally(u.id);
+      t.person = "linked";
+      t.changes = fieldChanges(e.before, e.patch);
+      t.linked = {
+        sourceTreeId: sourceTreeId ?? null,
+        externalKey: (u.item as { externalKey?: string | null }).externalKey ?? null,
+        ...(e.dropped.length ? { dropped: e.dropped } : {}),
+      };
+      if (e.alternates) t.created.events = (t.created.events ?? 0) + e.alternates;
+      if (e.names) t.created.names = (t.created.names ?? 0) + e.names;
     }
     // Personen der Beziehungen und Träger der Ereignisse: aus diesem Lauf,
     // sonst aus der Datenbank.
@@ -1141,6 +1272,7 @@ async function applyInTx(
           import: data.batchId ?? true,
           ...(t.person ? { person: t.person } : {}),
           ...(t.changes && Object.keys(t.changes).length ? { changes: t.changes } : {}),
+          ...(t.linked ? { linked: t.linked } : {}),
           ...(Object.keys(t.created).length ? { created: t.created } : {}),
           ...(Object.keys(t.updated).length ? { updated: t.updated } : {}),
         } as Prisma.InputJsonValue,

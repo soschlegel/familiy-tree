@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { apiFetch, jsonBody } from "./api-client";
+import { ImportLinkSuggestions, type LinkIssue, type LinkSuggestion, type LinkSummary } from "./ImportLinkSuggestions";
 import { plural } from "@/lib/plural";
 
 /**
@@ -35,6 +36,7 @@ type Summary = {
   privacy: { marked: number; markedNew: number; recentWithoutDeath: number; recentWithoutDeathNew: number };
   photos: { total: number; newPersons: number; alreadyStored: number; localPaths: number };
   suggestions: number;
+  links: LinkSummary;
   otherTreeHits: number;
 };
 
@@ -47,7 +49,7 @@ type Item = {
   fields?: string[];
   conflict?: boolean;
   reason?: string;
-  suggestions?: { personId: string; score: number; reasons: string[]; label: string }[];
+  suggestions?: LinkSuggestion[];
 };
 
 type Result = {
@@ -180,7 +182,9 @@ export function GedcomImport({ families }: { families: { id: string; name: strin
   const [editedDefault, setEditedDefault] = useState<"keep" | "file">("keep");
   const [overrides, setOverrides] = useState<Record<string, "keep" | "file">>({});
   const [toDelete, setToDelete] = useState<Record<string, string>>({});
+  // Verknüpfungen: ref der neuen Person → vorhandene Person (ohne Eintrag: neu anlegen).
   const [suggestions, setSuggestions] = useState<Record<string, string>>({});
+  const [linkIssues, setLinkIssues] = useState<LinkIssue[] | null>(null);
   const [family, setFamily] = useState<FamilyChoice>({ mode: "none" });
   const [privacyUnassigned, setPrivacyUnassigned] = useState(true);
   const [downloadPhotos, setDownloadPhotos] = useState(false);
@@ -203,6 +207,7 @@ export function GedcomImport({ families }: { families: { id: string; name: strin
     setOverrides({});
     setToDelete({});
     setSuggestions({});
+    setLinkIssues(null);
     setEditedDefault("keep");
     setFamily({ mode: "none" });
     setDownloadPhotos(false);
@@ -232,25 +237,43 @@ export function GedcomImport({ families }: { families: { id: string; name: strin
     setOverrides({});
     setToDelete({});
     setSuggestions({});
+    setLinkIssues(null);
     setSummary(res.data);
+  }
+
+  /** Abweichende Verknüpfungen: melden und genau diese Auswahl zurücksetzen (neu entscheiden). */
+  function showLinkIssues(raw: unknown) {
+    const issues = Array.isArray(raw) ? (raw as LinkIssue[]) : null;
+    if (!issues?.length) return false;
+    setLinkIssues(issues);
+    setSuggestions((o) => {
+      const n = { ...o };
+      for (const i of issues) delete n[i.ref];
+      return n;
+    });
+    document.querySelector("[data-testid=gedcom-links]")?.scrollIntoView({ block: "start" });
+    return true;
   }
 
   async function apply() {
     if (!summary || busy) return;
     const del = Object.keys(toDelete).length;
+    const linkCount = Object.keys(suggestions).length;
     const msg =
       `Import jetzt ausführen?` +
+      (linkCount ? `\n\n${plural(linkCount, "Person der Datei wird", "Personen der Datei werden")} mit vorhandenen Personen verknüpft (ergänzt, nicht überschrieben).` : "") +
       (del ? `\n\nAchtung: ${plural(del, "Eintrag wird", "Einträge werden")} endgültig gelöscht.` : "") +
       (downloadPhotos ? `\n\nFotos werden von fremden Servern heruntergeladen.` : "");
     if (!confirm(msg)) return;
     if (family.mode === "new" && !family.name.trim()) return setError("Bitte einen Namen für die neue Familie angeben.");
     if (family.mode === "existing" && family.familyIds.length === 0) return setError("Bitte mindestens eine Familie wählen.");
     setError(null);
+    setLinkIssues(null);
     setBusy("Import läuft …");
     const decisions = {
       edited: { default: editedDefault, overrides },
       missing: { delete: Object.keys(toDelete) },
-      suggestions: Object.fromEntries(Object.entries(suggestions).filter(([, v]) => v).map(([ref, personId]) => [ref, { personId, mode: "link" }])),
+      suggestions: Object.fromEntries(Object.entries(suggestions).filter(([, v]) => v).map(([ref, personId]) => [ref, { personId }])),
       family,
       privacyUnassigned,
       downloadPhotos,
@@ -258,11 +281,12 @@ export function GedcomImport({ families }: { families: { id: string; name: strin
     const start = await apiFetch(`/api/import/gedcom/${summary.batchId}/apply`, jsonBody("POST", decisions));
     if (!start.ok) {
       setBusy(null);
+      if (showLinkIssues(start.body.linkIssues)) return;
       return setError(start.message);
     }
     for (;;) {
       await new Promise((r) => setTimeout(r, 1000));
-      const s = await apiFetch<{ state: string; result?: Result; message?: string }>(`/api/import/gedcom/${summary.batchId}/apply`);
+      const s = await apiFetch<{ state: string; result?: Result; message?: string; linkIssues?: unknown }>(`/api/import/gedcom/${summary.batchId}/apply`);
       if (!s.ok) {
         setBusy(null);
         return setError(s.message);
@@ -273,7 +297,7 @@ export function GedcomImport({ families }: { families: { id: string; name: strin
         setResult(s.data.result);
         window.dispatchEvent(new Event("import-finished"));
         router.refresh();
-      } else setError(s.data.message ?? "Der Import ist fehlgeschlagen.");
+      } else if (!showLinkIssues(s.data.linkIssues)) setError(s.data.message ?? "Der Import ist fehlgeschlagen.");
       return;
     }
   }
@@ -340,6 +364,7 @@ export function GedcomImport({ families }: { families: { id: string; name: strin
           setToDelete={setToDelete}
           suggestions={suggestions}
           setSuggestions={setSuggestions}
+          linkIssues={linkIssues}
           family={family}
           setFamily={setFamily}
           privacyUnassigned={privacyUnassigned}
@@ -378,6 +403,7 @@ function Preview(props: {
   setToDelete: (f: (o: Record<string, string>) => Record<string, string>) => void;
   suggestions: Record<string, string>;
   setSuggestions: (f: (o: Record<string, string>) => Record<string, string>) => void;
+  linkIssues: LinkIssue[] | null;
   family: FamilyChoice;
   setFamily: (f: FamilyChoice) => void;
   privacyUnassigned: boolean;
@@ -394,6 +420,7 @@ function Preview(props: {
   const deleteCount = Object.keys(props.toDelete).length;
   const editedTotal = props.total("edited");
   const exceptions = Object.values(props.overrides).filter((v) => v !== props.editedDefault).length;
+  const linkCount = Object.keys(props.suggestions).length;
 
   return (
     <div className="mt-4 space-y-5" data-testid="gedcom-preview">
@@ -440,6 +467,19 @@ function Preview(props: {
           ))}
         </select>
       </fieldset>
+
+      {/* Zusammenhang mit vorhandenen Daten (Vorschläge zum Verknüpfen) */}
+      {s.links && (
+        <ImportLinkSuggestions
+          key={`${s.batchId}-${s.sourceTreeId}`}
+          batchId={s.batchId}
+          links={s.links}
+          choices={props.suggestions}
+          setChoices={props.setSuggestions}
+          issues={props.linkIssues}
+          disabled={props.disabled}
+        />
+      )}
 
       {/* Übersicht */}
       <div>
@@ -604,6 +644,13 @@ function Preview(props: {
           <li>
             {plural(props.total("new"), "Eintrag wird", "Einträge werden")} neu angelegt, {props.total("changed")} mit den Werten der Datei aktualisiert.
           </li>
+          {s.suggestions > 0 && (
+            <li data-testid="gedcom-what-links">
+              {linkCount
+                ? `${plural(linkCount, "Person der Datei wird", "Personen der Datei werden")} mit einer vorhandenen Person verknüpft statt neu angelegt — die vorhandene wird nur ergänzt, nicht überschrieben.`
+                : "Keine Verknüpfung ausgewählt — alle neuen Personen werden neu angelegt, auch die mit Vorschlag."}
+            </li>
+          )}
           {editedTotal > 0 && (
             <li>
               {plural(editedTotal, "in der App geänderter Eintrag", "in der App geänderte Einträge")}{" "}
@@ -756,9 +803,9 @@ function GroupList(props: {
             )}
           </div>
           {group === "new" && kind === "persons" && withSuggestion > 0 && (
-            <p className="text-sm alert-warning">
-              Für einige neue Personen gibt es ähnliche, von Hand angelegte Personen. Nur wenn du eine auswählst, wird die
-              Datei-Person ihr zugeordnet (ihre Angaben bleiben, Ereignisse und Namen aus der Datei kommen hinzu).
+            <p className="text-sm muted">
+              Für einige neue Personen gibt es ähnliche vorhandene Personen — wählen kannst du oben unter „Zusammenhang mit
+              vorhandenen Daten“. Ohne Wahl werden sie neu angelegt.
             </p>
           )}
           <ul className="divide-y divide-stone-100 text-sm dark:divide-stone-800">
@@ -807,24 +854,11 @@ function GroupList(props: {
                 {i.fields && i.fields.length > 0 && <p className="text-xs muted">Abweichend: {fieldLabels(i.fields)}</p>}
                 {i.reason && group !== "existing" && <p className="text-xs text-red-700 dark:text-red-300">{i.reason}</p>}
                 {i.suggestions && i.suggestions.length > 0 && (
-                  <div className="mt-1">
-                    <label className="text-xs muted" htmlFor={`sugg-${i.ref}`}>
-                      Ist das eine dieser Personen?
-                    </label>
-                    <select
-                      id={`sugg-${i.ref}`}
-                      className="field mt-0.5 w-full py-0.5 text-xs sm:w-auto"
-                      value={props.suggestions[i.ref] ?? ""}
-                      onChange={(e) => props.setSuggestions((o) => ({ ...o, [i.ref]: e.target.value }))}
-                    >
-                      <option value="">Nein — neu anlegen</option>
-                      {i.suggestions.map((sg) => (
-                        <option key={sg.personId} value={sg.personId}>
-                          Ja: {sg.label} ({Math.round(sg.score * 100)} %: {sg.reasons.join(", ")})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <p className="text-xs muted" data-testid="gedcom-item-suggestion">
+                    {props.suggestions[i.ref]
+                      ? `Wird mit „${i.suggestions.find((sg) => sg.personId === props.suggestions[i.ref])?.label ?? "einer vorhandenen Person"}“ verknüpft.`
+                      : `Ähnlich: ${i.suggestions[0].label} — wird neu angelegt, solange du oben nichts anderes wählst.`}
+                  </p>
                 )}
               </li>
             ))}
@@ -903,6 +937,7 @@ function ResultView({ result: r, onAgain }: { result: Result; onAgain: () => voi
           return (
             <li key={k}>
               {KIND_LABEL[k]}: {c.created ?? 0} neu, {c.updated ?? 0} aktualisiert, {c.unchanged ?? 0} unverändert
+              {c.linked ? `, ${c.linked} mit vorhandenen Personen verknüpft` : ""}
               {c.skippedEdited ? `, ${c.skippedEdited} App-Version behalten` : ""}
               {c.invalid ? `, ${c.invalid} ausgelassen` : ""}
             </li>

@@ -12,7 +12,6 @@ import { parseGedcom } from "@/lib/gedcom";
 import { convertEventDate, convertGedcomDate, convertLifeDates } from "@/lib/gedcom-import/dates";
 import { mapGedcomDocument, personKey, RAW_TYPES, recentWithoutDeath, sourceKind, UNKNOWN_GIVEN_NAME } from "@/lib/gedcom-import/mapping";
 import { parseGedcomDate } from "@/lib/gedcom";
-import { scorePair, suggestMatches } from "@/lib/gedcom-import/suggest";
 
 const NOW = new Date("2026-11-19T12:00:00Z");
 const fixture = (name: string) => readFileSync(path.join(__dirname, "fixtures", "gedcom", name));
@@ -311,28 +310,5 @@ describe("Schlüssel, Fremdkennungen, Fotos, Rohdaten", () => {
       const refs = m.events.map((e) => e.ref);
       expect(new Set(refs).size).toBe(refs.length);
     }
-  });
-});
-
-describe("Vorschläge", () => {
-  const base = { gender: "MALE", birthPlace: null, parentNames: [] as string[], birthName: null };
-  it("gleicher Name und Geburtsjahr, Eltern verstärken", () => {
-    const s = scorePair(
-      { ...base, id: "f", givenName: "Hans", familyName: "Probe", birthYear: 1850, parentNames: ["Karl"] },
-      { ...base, id: "a", givenName: "Hans", familyName: "Probe", birthYear: 1851, parentNames: ["Karl"] },
-    )!;
-    expect(s.score).toBeGreaterThanOrEqual(0.9);
-    expect(s.reasons).toContain("ein Elternteil gleich");
-  });
-  it("verschiedenes Geschlecht oder ferne Jahre: kein Vorschlag", () => {
-    expect(scorePair({ ...base, id: "f", givenName: "Hans", familyName: "Probe", birthYear: 1850 }, { ...base, id: "a", givenName: "Hans", familyName: "Probe", birthYear: 1850, gender: "FEMALE" })).toBeNull();
-    expect(scorePair({ ...base, id: "f", givenName: "Hans", familyName: "Probe", birthYear: 1850 }, { ...base, id: "a", givenName: "Hans", familyName: "Probe", birthYear: 1870 })).toBeNull();
-  });
-  it("Schwelle", () => {
-    const r = suggestMatches(
-      [{ ...base, id: "f", givenName: "Hans", familyName: "Probe", birthYear: null }],
-      [{ ...base, id: "a", givenName: "Hans", familyName: "Probe", birthYear: null }],
-    );
-    expect(r.get("f")?.[0].personId).toBe("a");
   });
 });

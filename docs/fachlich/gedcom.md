@@ -46,11 +46,36 @@ unberührt. Bibliothek dahinter: [lib/gedcom](../../lib/gedcom/README.md).
    | Schon vorhanden | gibt es in der App schon, aber nicht aus diesem Baum (z.B. dieselbe Beziehung von Hand angelegt) | bleibt unverändert |
    | Unverändert | Datei und App stimmen überein | nichts zu tun |
 
-4. **Vorschläge.** Sieht eine neue Person einer von Hand angelegten ähnlich
-   (Name, Geburtsjahr und -ort, Namen der Eltern), steht bei ihr „Ist das eine
-   dieser Personen?“. Nur wenn du eine auswählst, wird die Datei-Person ihr
-   zugeordnet: ihre Angaben in der App bleiben, Ereignisse und Namen aus der
-   Datei kommen hinzu. Zusammengeführt wird nie automatisch.
+4. **Vorschläge — Zusammenhang mit vorhandenen Daten.** Jede **neue** Person
+   der Datei wird gegen alle vorhandenen Personen abgeglichen, die der
+   Administrator sehen und bearbeiten darf — von Hand erfasste und solche
+   aus allen anderen Importen —, mit demselben Abgleich wie
+   [Importe verbinden](dubletten.md#importe-verbinden) (gleiche Klassen,
+   Brückenregel, Vorfahren/Nachkommen und „kein Duplikat“ ausgeschlossen).
+   Wiedererkennen desselben Baums hat Vorrang: wiedererkannte Personen sind
+   weder Kandidat noch bekommen sie Vorschläge. Oben in der Vorschau steht
+   „Dieser Import hängt über N Personen mit vorhandenen Daten zusammen“,
+   aufgeschlüsselt nach sicher / sehr wahrscheinlich / wahrscheinlich /
+   unklar; je Person bis zu drei Vorschläge mit Herkunft, Begründung
+   (Übereinstimmungen, Widersprüche, Abweichungen Datei ↔ vorhanden).
+   **Standard ist immer „Neu anlegen“**, auch bei „sicher“; „Alle sicheren
+   auswählen“ wählt nur die Klasse „sicher“, jede Wahl bleibt einzeln
+   abwählbar. Verknüpfen **reichert an** wie das Zusammenführen: Leeres wird
+   gefüllt, das genauere Datum gewinnt, sonst bleibt der App-Wert und der
+   Dateiwert wird Zweitangabe (Ereignis mit `isAlternative`) bzw.
+   Namensvariante; Ereignisse und Namen, die die vorhandene Person schon
+   gleich hat, werden ihr zugeordnet statt doppelt angelegt; ihre Familien
+   bleiben. Die Person trägt danach einen weiteren Herkunftsvermerk (mit
+   `mergedAt`, ein erneuter Import ohne Neues bleibt still) und im Paket des
+   Imports einen Eintrag „verknüpft“ mit vorher → nachher.
+   **Nachprüfung beim Ausführen:** Jede gewählte Verknüpfung muss in der
+   Vorschau angeboten worden sein, die Person der Datei noch neu sein, keine
+   vorhandene Person zweimal Ziel, das Ziel sichtbar und bearbeitbar, und ein
+   neuer Abgleich mit dem heutigen Stand muss das Paar mindestens so gut
+   einstufen wie die Vorschau. Sonst wird **nichts** importiert (auch nicht
+   still neu angelegt): Der Import meldet die Abweichungen (409,
+   `linkIssues`), die Oberfläche setzt genau diese Wahl zurück, und der
+   Administrator entscheidet neu. Ein KI-Werkzeug für den Import gibt es nicht.
 5. **Familienzuordnung der neuen Personen:** keiner Familie (Standard),
    vorhandenen Familien oder einer neuen Familie. In der Datei als privat
    bzw. lebend markierte Personen bleiben auf Wunsch (Standard) ohne
@@ -200,8 +225,20 @@ Ob MyHeritage, Ancestry, Gramps & Co. den Export vollständig übernehmen, ist
 - Eine abgelehnte Eltern-Kind-Verbindung schreibt der Export nicht zurück
   (siehe oben).
 - Doppelte Personen lassen sich nachträglich zusammenführen
-  ([Dubletten zusammenführen](dubletten.md)); Vorschläge beim
-  Import betreffen bisher nur von Hand angelegte Personen.
+  ([Dubletten zusammenführen](dubletten.md)). Vorschläge beim Import
+  betreffen nur neue Personen der Datei; ein Vorschlag zwischen zwei schon
+  vorhandenen Personen ist Sache von „Importe verbinden“.
+- Vorschläge kosten die Vorschau etwas Zeit: 2 000 neue gegen gut 12 000
+  vorhandene Personen knapp 2 s (Bestand laden gut 1 s, Abgleich 0,5–0,7 s;
+  erzeugte Testbäume). Über 100 000 Personen zusammen wird der Abgleich
+  ausgelassen und das in der Vorschau angezeigt.
+- Verknüpfen ergänzt die Person, nicht ihre Beziehungen: Gibt es eine
+  Beziehung zwischen zwei verknüpften Personen schon, bleibt sie, wie sie ist
+  (Heiratsdatum aus der Datei wird nicht ergänzt; ihre Ereignisse kommen
+  dazu bzw. werden gleichen zugeordnet). Hat die vorhandene Person schon zwei
+  leibliche Eltern und nennt die Datei andere, die neu angelegt werden, wird
+  diese Eltern-Kind-Verbindung „nicht übernehmbar“ (Original bleibt
+  erhalten) — die Eltern ebenfalls verknüpfen vermeidet das.
 
 Dienste: [lib/services/gedcom-import.ts](../../lib/services/gedcom-import.ts)
 (Vorschau; Ausführen im Hintergrund über

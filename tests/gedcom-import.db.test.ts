@@ -407,10 +407,13 @@ describe.skipIf(Boolean(skipReason))("GEDCOM-Import (Testdatenbank)", () => {
     expect(item.suggestions?.[0].personId).toBe(manual.id);
     const r = await applyGedcomImport(admin, plan.batchId, { suggestions: { [item.ref]: { personId: manual.id, mode: "link" } } });
     expect(r.counts.persons.created).toBe(3);
+    expect(r.counts.persons.linked).toBe(1);
     const link = await prisma.importLink.findFirst({ where: { personId: manual.id } });
     expect(link?.sourceTreeId).toBe(plan.sourceTreeId);
-    // App-Werte behalten (Geburtsort war leer, Datei hat einen)
-    expect((await prisma.person.findUnique({ where: { id: manual.id } }))!.birthPlace).toBeNull();
+    // Verknüpfen reichert an: Leeres wird gefüllt (Geburtsort war leer, Datei hat einen), App-Werte bleiben.
+    const after = (await prisma.person.findUnique({ where: { id: manual.id } }))!;
+    expect(after.birthPlace).toBe("Probstadt");
+    expect(after.givenName).toBe("Hans");
     expect(await prisma.event.count({ where: { personId: manual.id, type: "OCCUPATION" } })).toBe(1);
   });
 

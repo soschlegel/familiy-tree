@@ -866,10 +866,17 @@ Fehlercodes aus den Grundregeln.
   `sourceTreeId`): Vorschau mit anderer Wahl des Quell-Baums neu berechnen.
   **`DELETE`**: nicht ausgeführte Vorschau verwerfen.
 - **`GET /api/import/gedcom/[id]/items`**: Vorschau-Einträge seitenweise;
-  Suchparameter `kind`, `group`, `offset`, `limit` (Standard 50), `q`.
+  Suchparameter `kind`, `group`, `offset`, `limit` (Standard 50), `q`;
+  `suggest` (`high`, `veryLikely`, `medium`, `low`) liefert die neuen
+  Personen, deren bester Vorschlag in dieser Klasse liegt (Abschnitt
+  „Zusammenhang mit vorhandenen Daten“).
 - **`POST /api/import/gedcom/[id]/apply`** (Entscheidungen aus der
-  Vorschau): Import im Hintergrund starten, 202; doppeltes Absenden
-  startet keinen zweiten Lauf. **`GET`**: Stand des Laufs.
+  Vorschau, Verknüpfungen als `suggestions: { ref: { personId } }`): prüft
+  gewählte Verknüpfungen nach — bei einer Abweichung **409** mit
+  `linkIssues` (je Eintrag `ref`, `personId`, `file`, `existing`,
+  `reason`), nichts wird geschrieben; sonst Import im Hintergrund starten,
+  202; doppeltes Absenden startet keinen zweiten Lauf. **`GET`**: Stand des
+  Laufs (`error` ggf. mit `linkIssues`).
 - **`POST /api/import/gedcom/[id]/reread`**: ausgeführten Import aus dem
   aufbewahrten Original erneut einlesen (neuer Lauf mit Vorschau).
 - **`GET /api/import/batches`**: Importverlauf aller Formate, neueste

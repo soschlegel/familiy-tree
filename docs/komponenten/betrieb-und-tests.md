@@ -639,6 +639,10 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   Konto, nachträglich gesperrt).
 - **`import-linking.test.ts`** — Genauigkeit und Trefferquote von „Importe
   verbinden“ gegen erfundene Wahrheit („sicher“ muss fehlerfrei sein).
+- **`import-suggestions.test.ts`** — Vorschläge beim GEDCOM-Import: derselbe
+  Abgleich mit `focus` (letzter Import = Datei, übrige = Bestand), Treffer
+  je Klasse („sicher“ und „sehr wahrscheinlich“ fehlerfrei), `focus` nie
+  lockerer, Laufzeit 2 000 gegen gut 12 000, Abweichungen.
 - **`kinship.test.ts`** — Verwandtschaftsbegriffe und Wegbeschreibung.
 - **`layout.test.ts`** — Generationen- und Zeitstrahl-Layout, auch mit
   Hochzeiten.
@@ -700,6 +704,13 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   und Massenimport.
 - **`import-linking.db.test.ts`** — zwei Importe derselben Familie abgleichen,
   zusammenführen, Fortsetzen nach Unterbrechung.
+- **`import-suggestions.db.test.ts`** — Vorschläge beim GEDCOM-Import gegen
+  einen anderen Import, Standard „neu anlegen“, Verknüpfen (anreichern,
+  Zweitangabe, Herkunft, Änderungsgeschichte im Paket, gleiche Ereignisse
+  nicht doppelt, Rohdaten beider Importe gültig), erneuter Import still,
+  Nachprüfung (nicht vorgeschlagen, doppeltes Ziel, geändertes Ziel,
+  fehlendes Recht, unsichtbares Ziel), Rollback bei Fehler in der
+  Transaktion.
 - **`import-sources.db.test.ts`** — Einordnung importierter Quellen, Links,
   doppelte Belege, Korrektur beim erneuten Import.
 - **`map.db.test.ts`** — Datenschutz der Kartendaten, Linien, Admin-Rechte
@@ -877,6 +888,10 @@ zum nächsten Setup).
   Personenseite.
 - **`import-sources.spec.ts`** — Online-Stammbaum-Quellen mit Anbieter und
   Beleg-Link.
+- **`import-suggestions.spec.ts`** — Vorschläge beim GEDCOM-Import gegen
+  einen früheren Import: Zusammenhang je Klasse, Standard „Neu anlegen“,
+  „Alle sicheren auswählen“ und Abwahl, Nachprüfung mit 409 (nichts
+  importiert, Auswahl zurückgesetzt), danach verknüpft; 390 px, dunkel, axe.
 - **`import.spec.ts`** — Import geänderter Exporte (JSON, ZIP mit Bild) und
   des alten Formats, beschränkt auf eigene Datensätze.
 - **`media.spec.ts`** — Bild hochladen, Porträt, ZIP-Export, Löschen und
