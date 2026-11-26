@@ -9,6 +9,7 @@ import { PARTNER_SUBTYPE_LABEL } from "../partner-labels";
 import { forbiddenError, notFoundError, validationError } from "./errors";
 import { plural } from "../plural";
 import { VERDICT_LABEL, type DuplicateVerdict } from "../duplicate-verdicts";
+import { ensurePersonRedirectBackfill } from "./redirects";
 
 /**
  * Changelog lesen: Verlauf einer Person (für ihre Bearbeiter) und Übersicht
@@ -50,6 +51,11 @@ export type ChangeEntryDto = {
   fields: ChangeFieldDto[];
   /** Ergänzung, z.B. beim Import mit angelegten Ereignissen und Belegen. */
   note: string | null;
+  /**
+   * Nur im Personenverlauf: Eintrag einer Person, die (auch über mehrere
+   * Stufen) in dieser aufgegangen ist („aus zusammengeführtem Eintrag“).
+   */
+  fromMerged: boolean;
 };
 
 export type ChangePage<T> = { items: T[]; nextCursor: string | null };
@@ -243,6 +249,12 @@ type Ctx = {
   sources: Map<string, string>;
   relationships: Map<string, { type: string; subtype: string; fromPersonId: string; toPersonId: string }>;
   tokens: Map<string, TokenLabel>;
+  /**
+   * Nur für übernommene Einträge im Personenverlauf: alte Kennung einer
+   * aufgegangenen Person → heutige Person. Betrifft nur die Anzeige des
+   * Namens, nie das Leserecht (`subjectVisible` schaut allein auf `persons`).
+   */
+  aliases?: Map<string, string>;
 };
 
 type TokenLabel = { name: string | null; deleted: boolean };
@@ -297,8 +309,8 @@ function personRefsOf(row: Row): string[] {
   return [...out];
 }
 
-async function buildCtx(scope: Scope, rows: Row[]): Promise<Ctx> {
-  const personIds = new Set<string>();
+async function buildCtx(scope: Scope, rows: Row[], extraPersonIds: readonly string[] = []): Promise<Ctx> {
+  const personIds = new Set<string>(extraPersonIds);
   const familyIds = new Set<string>();
   const sourceIds = new Set<string>();
   const relIds = new Set<string>();
@@ -360,6 +372,8 @@ async function buildCtx(scope: Scope, rows: Row[]): Promise<Ctx> {
 function personName(ctx: Ctx, id: string | null | undefined): string {
   if (!id) return "unbekannte Person";
   const p = ctx.persons.get(id);
+  const alias = p ? undefined : ctx.aliases?.get(id);
+  if (alias && ctx.persons.has(alias)) return personName(ctx, alias);
   if (!p) return "gelöschte Person";
   return p.visible ? p.name : RESTRICTED;
 }
@@ -649,12 +663,24 @@ function subjectVisible(ctx: Ctx, row: Row): boolean {
   return ctx.scope.isAdmin;
 }
 
-function toEntry(ctx: Ctx, row: Row): ChangeEntryDto {
-  const { what, note } = describe(ctx, row);
+function toEntry(ctx: Ctx, row: Row, fromMerged = false): ChangeEntryDto {
   // Eintrag über eine Person, die der Betrachter nicht sehen darf (z.B.
   // Zusammenführen eines Verwandten aus fremder Familie, oder eine gelöschte
   // Person, deren Familien er nicht kannte): keine Feldwerte.
-  const hiddenPerson = row.entityType === "Person" && row.action !== "CONNECT" && !subjectVisible(ctx, row);
+  //
+  // Übernommene Einträge einer aufgegangenen Person (`fromMerged`): dieselbe
+  // Regel für jede Art von Eintrag — die Person des Eintrags gibt es nicht
+  // mehr, also zählen nur die im Eintrag gespeicherten Familien. Ereignisse,
+  // Namen, Belege usw. speichern keine (subjectFamiliesKnown = false) und
+  // bleiben damit Administratoren vorbehalten. Verborgen ist dann auch die
+  // Beschreibung (sie nennt Namen, Ereignis- oder Quellentitel): nur Art und
+  // Aktion.
+  const hidden = fromMerged
+    ? !subjectVisible(ctx, row)
+    : row.entityType === "Person" && row.action !== "CONNECT" && !subjectVisible(ctx, row);
+  const { what, note } = hidden && fromMerged
+    ? { what: `${ENTITY[row.entityType]?.[0] ?? row.entityType} ${ACTION[row.action] ?? row.action}`, note: null }
+    : describe(ctx, row);
   const ownToken = ctx.scope.isAdmin || (row.userId !== null && row.userId === ctx.scope.userId);
   return {
     id: row.id,
@@ -675,8 +701,9 @@ function toEntry(ctx: Ctx, row: Row): ChangeEntryDto {
               : neutralChangeSetTitle(row.changeSet.title, row.changeSet.kind),
         }
       : null,
-    fields: hiddenPerson ? [] : fieldsOf(ctx, row),
-    note: hiddenPerson ? null : note,
+    fields: hidden ? [] : fieldsOf(ctx, row),
+    note: hidden ? null : note,
+    fromMerged,
   };
 }
 
@@ -702,13 +729,23 @@ const ROW_INCLUDE = {
   changeSet: { select: { id: true, title: true, kind: true, userId: true } },
 } as const;
 
-async function loadEntries(scope: Scope, ids: string[]): Promise<ChangeEntryDto[]> {
+/**
+ * Einträge laden und aufbereiten. `merged` (nur Personenverlauf): Kennungen
+ * übernommener Einträge aufgegangener Personen und deren alte Kennungen →
+ * heutige Person (nur für die Anzeige des Namens).
+ */
+async function loadEntries(
+  scope: Scope,
+  ids: string[],
+  merged?: { entryIds: Set<string>; aliases: Map<string, string> },
+): Promise<ChangeEntryDto[]> {
   if (!ids.length) return [];
   const rows = await prisma.auditLog.findMany({ where: { id: { in: ids } }, include: ROW_INCLUDE });
   const order = new Map(ids.map((id, i) => [id, i]));
   rows.sort((a, b) => order.get(a.id)! - order.get(b.id)!);
-  const ctx = await buildCtx(scope, rows);
-  return rows.map((r) => toEntry(ctx, r));
+  const ctx = await buildCtx(scope, rows, merged ? [...new Set(merged.aliases.values())] : []);
+  const mergedCtx: Ctx | null = merged?.entryIds.size ? { ...ctx, aliases: merged.aliases } : null;
+  return rows.map((r) => (mergedCtx && merged!.entryIds.has(r.id) ? toEntry(mergedCtx, r, true) : toEntry(ctx, r)));
 }
 
 function pageSize(limit: number | undefined): number {
@@ -763,15 +800,48 @@ export async function listPersonChanges(
   const cursor = options.cursor
     ? Prisma.sql`AND ("createdAt", id) < (SELECT "createdAt", id FROM "AuditLog" WHERE id = ${options.cursor})`
     : Prisma.empty;
-  const rows = await prisma.$queryRaw<{ id: string }[]>`
-    SELECT id FROM "AuditLog"
-    WHERE ("personIds" @> ARRAY[${person.id}]::text[]
-           OR (cardinality("personIds") = 0 AND "entityType" = ANY(${LEGACY_TYPES}::text[]) AND "entityId" = ANY(${legacyIds}::text[])))
+  const own = Prisma.sql`("personIds" @> ARRAY[${person.id}]::text[]
+           OR (cardinality("personIds") = 0 AND "entityType" = ANY(${LEGACY_TYPES}::text[]) AND "entityId" = ANY(${legacyIds}::text[])))`;
+  // Einträge der Personen, die in dieser aufgegangen sind (auch mehrstufig):
+  // neuere über die Momentaufnahme, ältere ohne sie über die Kennung selbst.
+  const merged = await mergedPredecessors(person.id);
+  const inherited = merged.length
+    ? Prisma.sql`("personIds" && ${merged}::text[]
+           OR (cardinality("personIds") = 0 AND "entityType" = 'Person' AND "entityId" = ANY(${merged}::text[])))`
+    : null;
+  const rows = await prisma.$queryRaw<{ id: string; own: boolean }[]>`
+    SELECT id, ${own} AS own FROM "AuditLog"
+    WHERE (${inherited ? Prisma.sql`${own} OR ${inherited}` : own})
       ${cursor}
     ORDER BY "createdAt" DESC, id DESC
     LIMIT ${limit + 1}`;
-  const ids = rows.slice(0, limit).map((r) => r.id);
-  return { items: await loadEntries(scope, ids), nextCursor: rows.length > limit ? ids[ids.length - 1] : null };
+  const shown = rows.slice(0, limit);
+  const ids = shown.map((r) => r.id);
+  const entryIds = new Set(shown.filter((r) => !r.own).map((r) => r.id));
+  const aliases = new Map(merged.map((id) => [id, person.id]));
+  return {
+    items: await loadEntries(scope, ids, { entryIds, aliases }),
+    nextCursor: rows.length > limit ? ids[ids.length - 1] : null,
+  };
+}
+
+/**
+ * Kennungen der Personen, die in `personId` aufgegangen sind — über alle
+ * Stufen in einem Zugriff. Quelle sind die Umleitungen alter Kennungen
+ * (`PersonRedirect`, lib/services/redirects.ts): Sie entstehen in der
+ * Transaktion des Zusammenführens, werden dort flach gehalten (X in Y, Y in K
+ * ergibt X → K und Y → K; keine Ketten, also keine Kreise) und decken auch
+ * „Importe verbinden“ ab; frühere Zusammenführungen trägt die Rückfüllung aus
+ * dem Audit nach (hier einmal je Prozess angestoßen). Kennungen, zu denen es
+ * noch eine Person gibt, zählen nie (fehlerhafte Daten).
+ */
+async function mergedPredecessors(personId: string): Promise<string[]> {
+  await ensurePersonRedirectBackfill();
+  const rows = await prisma.$queryRaw<{ fromId: string }[]>`
+    SELECT r."fromId" FROM "PersonRedirect" r
+    WHERE r."toId" = ${personId} AND r."fromId" <> ${personId}
+      AND NOT EXISTS (SELECT 1 FROM "Person" p WHERE p.id = r."fromId")`;
+  return rows.map((r) => r.fromId);
 }
 
 // ---------------------------------------------------------------------------

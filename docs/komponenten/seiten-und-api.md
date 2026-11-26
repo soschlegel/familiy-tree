@@ -617,6 +617,8 @@ Fehlercodes aus den Grundregeln.
   Einträge über Personen, die es nicht mehr gibt, zeigen Feldwerte nach den
   im Eintrag gespeicherten Familien ([dienste.md](dienste.md),
   `lib/services/changes.ts`); dasselbe gilt für `GET /api/changes/[key]`.
+  Enthält auch die Einträge der Personen, die in dieser aufgegangen sind
+  (`fromMerged: true`, nach derselben Regel).
 - **`GET /api/persons/[id]/events`**: `listPersonEvents` (ohne die
   Ereignisse der Beziehungen); fehlt/unsichtbar → 404.
 - **`POST /api/persons/[id]/events`**: `createEvent` an dieser Person

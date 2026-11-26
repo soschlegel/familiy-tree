@@ -1256,7 +1256,8 @@ KI gemerkt hat, weiter zum richtigen Eintrag führen.
 einer unbekannten Kennung (404 bzw. „nicht gefunden“); eine Umleitung verriete
 sonst, dass es eine verborgene Person gibt.
 
-**Benutzt von:** `merge.ts`; `app/people/[id]/page.tsx`,
+**Benutzt von:** `merge.ts`; `changes.ts` (Vorgänger im Personenverlauf);
+`app/people/[id]/page.tsx`,
 `app/people/[id]/edit/page.tsx`, `app/tree/page.tsx`,
 `app/api/persons/[id]/route.ts`; `mcp/person-redirects.ts`, `mcp/tools.ts`.
 
@@ -1534,7 +1535,8 @@ Paket und Momentaufnahme der betroffenen Personen und Familien.
 **Wichtige Funktionen:**
 - `listPersonChanges(scope, personId, {cursor, limit})` — Einträge zu einer
   Person, neueste zuerst, seitenweise (Standard 20, höchstens 100; Cursor =
-  Kennung des letzten Eintrags).
+  Kennung des letzten Eintrags); dazu die Einträge der Personen, die in ihr
+  aufgegangen sind (siehe unten, „Einträge aufgegangener Personen“).
 - `listChangeSets(scope, filter, {page, limit})` — Pakete (bzw. ältere
   Einzeländerungen als `e:<Eintrag>`) mit Titel, Zeitraum, Zahl, Benutzer,
   Kanal, Schlüsselname und Zusammenfassung („2 Personen, 5 Belege angelegt ·
@@ -1579,7 +1581,8 @@ nicht mehr gibt“).
 
 **Tests:** `tests/changelog.db.test.ts` (Regeln der Pakete:
 `tests/changelog.test.ts`), `tests/changelog-subject.db.test.ts` (Personen,
-die es nicht mehr gibt); `e2e/write/changelog.spec.ts`.
+die es nicht mehr gibt), `tests/changelog-merged.db.test.ts` (Einträge
+aufgegangener Personen); `e2e/write/changelog.spec.ts`.
 
 **Gelöschte Schlüssel im Verlauf (seit 22.11.):** `tokenLabels(ids)` löst `apiTokenId` zu Namen auf. Fehlt der Schlüssel (endgültig gelöscht oder mit seinem Benutzer entfernt), kommt der Name aus dem letzten `CREATE`/`DELETE`-Protokolleintrag des Schlüssels, dazu `tokenDeleted: true`; ohne solchen Eintrag `tokenName: null`. Gilt für `listPersonChanges`/`listChangeSetEntries` und `listChangeSets`; Anzeige „KI über MCP · Schlüssel „Name“ (gelöscht)“ bzw. „· Schlüssel (gelöscht)“.
 
@@ -1622,6 +1625,40 @@ die der aufgehenden und kann später weitere bekommen — ihre heutigen
 Familien würden Bearbeitern Werte zeigen, die sie vorher nicht sahen.
 Tests: `tests/changelog-subject.db.test.ts`; `e2e/write/changelog.spec.ts`
 („gelöschte Person: Feldwerte nur, wenn …“).
+
+**Einträge aufgegangener Personen (seit 26.11.):** Der Verlauf der
+bleibenden Person K zeigt auch die Einträge aller Personen, die in ihr
+aufgegangen sind — über alle Stufen (X in Y, Y in K) —, zeitlich
+einsortiert und mit `fromMerged: true` (Anzeige „aus zusammengeführtem
+Eintrag“).
+- **Quelle der Vorgänger:** die Umleitungen alter Kennungen
+  (`PersonRedirect`, [redirects.ts](#libservicesredirectsts)), ein Zugriff
+  `toId = K` (`mergedPredecessors`). Gewählt statt der `MERGE`-Einträge des
+  Audits, weil die Umleitungen in der Transaktion des Zusammenführens
+  entstehen, flach gehalten werden (keine Ketten, also keine Kreise und
+  kein schrittweises Nachverfolgen), auch „Importe verbinden“ abdecken und
+  für die Zeit davor aus dem Audit rückgefüllt werden (die Rückfüllung wird
+  hier einmal je Prozess angestoßen). Kennungen, zu denen es noch eine
+  Person gibt, zählen nie.
+- **Abfrage:** dieselbe wie bisher, erweitert um `personIds && Vorgänger`
+  bzw. bei ganz alten Einträgen ohne Momentaufnahme `Person` mit der alten
+  Kennung; die Abfrage liefert je Eintrag, ob er K selbst betrifft. Ohne
+  Vorgänger bleibt sie unverändert. Cursor und Seitengröße wie bisher.
+  Einträge, die K und X betreffen (z.B. der Zusammenführen-Eintrag), gelten
+  als eigene Einträge von K.
+- **Leserecht:** für jeden übernommenen Eintrag `subjectVisible` — also die
+  im Eintrag gespeicherten Familien, nie die heutigen Familien von K.
+  Ereignisse, Namen, Belege, Bilder und Beziehungen speichern keine
+  (`subjectFamiliesKnown = false`) und zeigen ihre Einzelheiten deshalb nur
+  Administratoren. Verborgene übernommene Einträge zeigen auch keine
+  Beschreibung (sie nennt Namen, Ereignis- oder Quellentitel), nur Art und
+  Aktion („Ereignis angelegt“), keine Feldwerte und keine Ergänzung.
+- **Namen:** In übernommenen Einträgen steht für eine alte Kennung der Name
+  der heutigen Person K (statt „gelöschte Person“); das betrifft nur die
+  Anzeige (`Ctx.aliases`), nie das Leserecht.
+- Wer K nicht bearbeiten darf, sieht wie bisher gar nichts.
+Tests: `tests/changelog-merged.db.test.ts`; `e2e/write/changelog.spec.ts`
+(„bleibende Person zeigt die Einträge aufgegangener Personen …“).
 
 ### lib/services/ai-access.ts
 

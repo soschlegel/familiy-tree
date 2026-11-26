@@ -46,6 +46,7 @@ async function expectCode(p: Promise<unknown>, code: ServiceError["code"]) {
 
 describe.skipIf(Boolean(skipReason))("Changelog (Mock-Datenbank)", () => {
   const created: string[] = [];
+  const tokens: string[] = [];
   const startedAt = new Date();
   let inA = "";
   let inC = "";
@@ -68,6 +69,7 @@ describe.skipIf(Boolean(skipReason))("Changelog (Mock-Datenbank)", () => {
     await prisma.changeSet.deleteMany({
       where: { OR: [{ id: { in: sets.map((s) => s.changeSetId!) } }, { createdAt: { gte: startedAt }, userId: { in: ["mock-user-admin", "mock-user-editor"] } }] },
     });
+    await prisma.apiToken.deleteMany({ where: { id: { in: tokens } } });
     await prisma.$disconnect();
   });
 
@@ -164,7 +166,20 @@ describe.skipIf(Boolean(skipReason))("Changelog (Mock-Datenbank)", () => {
   });
 
   it("KI-Zugang: Bündeln je Schlüssel, begin_change_set, fremde Kennung abgelehnt", async () => {
-    const token = await prisma.apiToken.findFirstOrThrow({ where: { userId: "mock-user-editor", revokedAt: null } });
+    // Eigener Schlüssel nur für diesen Test: Ohne Kennung hängt der Server an
+    // das zuletzt benutzte Paket desselben Schlüssels der letzten 30 Minuten
+    // an — mit einem festen Mock-Schlüssel wäre das z.B. ein noch offenes
+    // Paket aus einem kurz vorher gelaufenen E2E-Test.
+    const token = await prisma.apiToken.create({
+      data: {
+        userId: "mock-user-editor",
+        name: "E2E Changelog Bündeln",
+        prefix: `ftk_${Date.now().toString(16).slice(-12).padStart(12, "0")}`,
+        secretHash: "nur-test",
+        level: "WRITE",
+      },
+    });
+    tokens.push(token.id);
     const base = await scopeForEmail("editor@example.test");
     const via = { channel: "MCP" as const, tokenId: token.id, level: "WRITE" as const };
     const call = async (id?: string) => {

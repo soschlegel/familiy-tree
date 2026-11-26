@@ -132,6 +132,51 @@ test.describe("als Bearbeiter", () => {
     await expectNoA11yViolations(page);
   });
 
+  test("bleibende Person zeigt die Einträge aufgegangener Personen — nur mit Werten, die der Bearbeiter sehen durfte", async ({ page }) => {
+    // K (Familie A) nimmt X (Familie A) und Y (Familie C, für den Bearbeiter
+    // unsichtbar) auf. Die älteren Einträge beider erscheinen bei K mit Hinweis;
+    // die Werte von Y bleiben verborgen, obwohl K jetzt auch in C ist.
+    const admin = await apiAs("admin");
+    const k = await createPerson(admin, { givenName: "E2E Kern", familyName: surname, familyIds: ["mock-family-a"] });
+    created.push(k.id);
+    for (const [family, place] of [["mock-family-a", "Vorstadt"], ["mock-family-c", "Fremdstadt"]] as const) {
+      const x = await createPerson(admin, { givenName: "E2E Vorgaenger", familyName: surname, familyIds: [family] });
+      created.push(x.id);
+      const res = await admin.patch(`/api/persons/${x.id}`, { data: { deathPlace: place } });
+      expect(res.status()).toBe(200);
+      if (family === "mock-family-c") {
+        // Wieder leeren: Der Wert soll nur in den Einträgen von Y stehen, nicht
+        // durch das Zusammenführen in K landen.
+        const back = await admin.patch(`/api/persons/${x.id}`, { data: { deathPlace: null } });
+        expect(back.status()).toBe(200);
+      }
+      const merged = await admin.post("/api/persons/merge", { data: { keepId: k.id, mergeId: x.id } });
+      expect(merged.status(), await merged.text()).toBe(200);
+    }
+    await admin.dispose();
+
+    await page.goto(`/people/${k.id}`);
+    const section = page.getByTestId("person-changes");
+    const toggle = section.getByRole("button", { name: /^Änderungen (anzeigen|ausblenden)$/ });
+    await expect(async () => {
+      if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+      await expect(section.getByTestId("change-entry").first()).toBeVisible({ timeout: 2_000 });
+    }).toPass();
+    const inherited = section.getByTestId("change-entry").filter({ has: page.getByTestId("change-entry-merged") });
+    // X: angelegt, geändert; Y: angelegt, zweimal geändert.
+    await expect(inherited).toHaveCount(5);
+    await expect(inherited.first()).toContainText("aus zusammengeführtem Eintrag");
+    const visible = inherited.filter({ hasText: "Vorstadt" });
+    await expect(visible).toHaveCount(1);
+    await expect(visible).toContainText("Sterbeort");
+    await expect(visible).toContainText("Person geändert: E2E Kern");
+    // Einträge von Y: nur Art und Aktion, keine Werte.
+    await expect(section).not.toContainText("Fremdstadt");
+    await expect(inherited.filter({ hasText: "Sterbeort" })).toHaveCount(1);
+    await expect(inherited.filter({ hasText: "Person geändert" })).toHaveCount(3);
+    await expectNoA11yViolations(page);
+  });
+
   test("Übersicht und API der Übersicht sind Administratoren vorbehalten", async ({ page, consoleGuard }) => {
     consoleGuard.allow(httpError(403));
     expect((await page.request.get("/api/changes")).status()).toBe(403);

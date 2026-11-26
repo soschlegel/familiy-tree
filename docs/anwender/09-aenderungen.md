@@ -14,6 +14,8 @@ Eine Änderung an einem Ereignis, einem Namen, einem Beleg, einem Bild oder eine
 
 Auf der Personenseite gibt es den Abschnitt **Änderungen** — für alle, die diese Person bearbeiten dürfen. **Änderungen anzeigen** lädt die letzten Einträge, neueste zuerst, je mit Datum, Benutzer, Kanal (App oder KI), Paket und den Feldern vorher → nachher. „Ältere Änderungen laden“ holt weitere.
 
+Wurden Personen mit dieser zusammengeführt, stehen hier auch deren frühere Änderungen — zeitlich einsortiert und mit dem Hinweis **aus zusammengeführtem Eintrag**. Das gilt auch, wenn mehrfach zusammengeführt wurde (erst A mit B, später B mit dieser Person). Die Einzelheiten siehst du nur, wenn du die frühere Person damals sehen durftest (siehe „Gut zu wissen“) — und bei Änderungen an ihren Ereignissen, Namen, Belegen, Bildern oder Beziehungen gar nicht, weil dafür nicht gespeichert ist, zu welcher Familie sie gehörte. Dann steht dort nur kurz, was geschah, z.B. „Ereignis angelegt“; die Einzelheiten sehen Administratoren.
+
 ## Übersicht für Administratoren
 
 Unter **Verwaltung → Änderungen** sieht der Administrator alle Pakete: je Paket eine Zeile mit Zusammenfassung („2 Personen, 5 Belege angelegt · 1 Person geändert“), aufklappbar bis zum einzelnen Feld. Filtern lässt sich nach Familie, Benutzer, Kanal (z.B. nur „KI über MCP“) und Zeitraum; ohne Angabe zeigt die Seite die letzten 30 Tage.
@@ -23,5 +25,4 @@ Unter **Verwaltung → Änderungen** sieht der Administrator alle Pakete: je Pak
 - Ein **Paket rückgängig machen** gibt es bewusst nicht. Die Geschichte zeigt aber genau, was vorher da stand.
 - Personen, die du nicht sehen darfst, erscheinen auch hier nur als „nicht freigegeben“.
 - Den **Namen eines KI-Schlüssels** siehst du nur bei deinen eigenen Schlüsseln. Den vollen **Paket-Namen** siehst du bei Paketen, die du selbst ausgelöst hast; bei fremden Paketen steht nur die Art, z.B. „Import“ oder „KI-Änderungen“. Administratoren sehen alles.
-- Bei einer Person, die es nicht mehr gibt (gelöscht oder in eine andere übergegangen), siehst du die Feldwerte, wenn du die Person damals sehen durftest — also wenn sie zu einer Familie gehörte, in der du heute noch bist. Bei älteren Einträgen ist das nicht gespeichert; dort sehen nur Administratoren die Feldwerte.
-- Ältere Einträge aus der Zeit, bevor es Pakete gab, zeigen nur den neuen Wert („vorheriger Wert nicht erfasst“).
+- Bei einer Person, die es nicht mehr gibt (gelöscht oder in eine andere übergegangen), siehst du die Feldwerte, wenn du die Person damals sehen durftest — also wenn sie zu einer Familie gehörte, in der du heute noch bist. Bei älteren Einträgen ist das nicht gespeichert; dort sehen nur Administratoren die Feldwerte.- Ältere Einträge aus der Zeit, bevor es Pakete gab, zeigen nur den neuen Wert („vorheriger Wert nicht erfasst“).
