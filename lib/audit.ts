@@ -41,11 +41,17 @@ export type AuditInput = {
   personIds?: string[];
   familyIds?: string[];
   /**
-   * Nur bei Einträgen über eine Person, die es beim Schreiben schon nicht mehr
-   * gibt (Person löschen): ihre Familien unmittelbar vor dem Löschen. Sonst
-   * ermittelt auditRefs sie selbst aus der Person.
+   * Nur bei Einträgen, deren Träger es beim Schreiben schon nicht mehr gibt
+   * (Person löschen; Bild löschen mit vorher ermittelten auditRefs): die
+   * Familien unmittelbar vor dem Löschen. Sonst ermittelt auditRefs sie selbst.
    */
   subjectFamilyIds?: string[];
+  /**
+   * `false` = ausdrücklich „nicht erfasst“ (z.B. vorher ermittelte auditRefs,
+   * die keine Familien liefern konnten). Ohne Angabe gilt: mit
+   * `subjectFamilyIds` erfasst, sonst ermittelt auditRefs selbst.
+   */
+  subjectFamiliesKnown?: boolean;
 };
 
 /**
@@ -231,25 +237,116 @@ function derivedFamilies(input: AuditInput): string[] {
   return [];
 }
 
+/** Beide Personen einer Beziehung aus Feldern (gelöschte Beziehung) — nur vollständig. */
+function bothFromFields(d: Record<string, unknown>): string[] | null {
+  const from = str(d.fromPersonId);
+  const to = str(d.toPersonId);
+  return from && to ? [from, to] : null;
+}
+
+/** Träger eines Ereignisses bzw. Belegs: die Person oder beide Seiten der Beziehung. */
+async function carrierPersons(db: Db, c: { personId?: unknown; relationshipId?: unknown }): Promise<string[] | null> {
+  const p = str(c.personId);
+  if (p) return [p];
+  const r = await relationshipPersons(db, str(c.relationshipId));
+  return r.length ? r : null;
+}
+
 /**
- * Familien der Person, um die es im Eintrag geht (entityType Person, außer
- * CONNECT — dort ist entityId ein Lauf). Gespeichert, damit die
+ * Personen, zu denen der Eintrag gehört — genau die, deren Sichtbarkeit heute
+ * über den Datensatz entscheidet (lib/scope.ts, lib/media-scope.ts,
+ * lib/services/events.ts, sources.ts): Person; Name → Person; Ereignis und
+ * Beleg → Träger (Person oder beide Seiten der Beziehung); Beziehung → beide
+ * Seiten; Bild → alle Träger (Personen, Beziehungen, Träger der Ereignisse und
+ * Belege). Bei mehreren Personen gilt heute „sichtbar, sobald eine davon
+ * sichtbar ist“ — das bildet die Vereinigung ihrer Familien mit canViewPerson
+ * genau ab. `null` = nicht eindeutig (Träger nicht mehr auffindbar, Bild an
+ * einer Quelle — dort entscheiden Ersteller und Belege, nicht Familien, oder
+ * Bild ohne Zuordnung): dann bleibt der Eintrag „nicht erfasst“.
+ */
+async function subjectPersons(db: Db, input: AuditInput): Promise<string[] | null> {
+  const d = input.diff && typeof input.diff === "object" ? (input.diff as Record<string, unknown>) : {};
+  const id = input.entityId;
+  switch (input.entityType) {
+    case "Person":
+      return input.action === "CONNECT" ? null : [id];
+    case "PersonName": {
+      const n = await db.personName.findUnique({ where: { id }, select: { personId: true } });
+      const p = n?.personId ?? str(d.personId);
+      return p ? [p] : null;
+    }
+    case "Relationship": {
+      const now = await relationshipPersons(db, id);
+      return now.length ? now : bothFromFields(d);
+    }
+    case "Event": {
+      const e = await db.event.findUnique({ where: { id }, select: { personId: true, relationshipId: true } });
+      return carrierPersons(db, e ?? d);
+    }
+    case "Citation": {
+      const c = await db.citation.findUnique({ where: { id }, select: { personId: true, relationshipId: true, eventId: true } });
+      const fields = c ?? d;
+      const direct = await carrierPersons(db, fields);
+      if (direct) return direct;
+      const ev = str(fields.eventId);
+      const e = ev ? await db.event.findUnique({ where: { id: ev }, select: { personId: true, relationshipId: true } }) : null;
+      return e ? carrierPersons(db, e) : null;
+    }
+    case "MediaAsset": {
+      const [sourceLinks, mainScans] = await Promise.all([
+        db.sourceMedia.count({ where: { mediaId: id } }),
+        db.source.count({ where: { mediaId: id } }),
+      ]);
+      if (sourceLinks + mainScans > 0) return null;
+      const carrier = { personId: true, relationship: { select: { fromPersonId: true, toPersonId: true } } } as const;
+      const [persons, rels, events, cites] = await Promise.all([
+        db.personMedia.findMany({ where: { mediaId: id }, select: { personId: true } }),
+        db.relationshipMedia.findMany({
+          where: { mediaId: id },
+          select: { relationship: { select: { fromPersonId: true, toPersonId: true } } },
+        }),
+        db.eventMedia.findMany({ where: { mediaId: id }, select: { event: { select: carrier } } }),
+        db.citationMedia.findMany({ where: { mediaId: id }, select: { citation: { select: carrier } } }),
+      ]);
+      const ofCarrier = (c: { personId: string | null; relationship: { fromPersonId: string; toPersonId: string } | null }) =>
+        c.personId ? [c.personId] : c.relationship ? [c.relationship.fromPersonId, c.relationship.toPersonId] : null;
+      const carriers = [...events.map((e) => ofCarrier(e.event)), ...cites.map((c) => ofCarrier(c.citation))];
+      if (carriers.some((c) => c === null)) return null;
+      const out = [
+        ...persons.map((p) => p.personId),
+        ...rels.flatMap((r) => [r.relationship.fromPersonId, r.relationship.toPersonId]),
+        ...(carriers.flat() as string[]),
+      ];
+      return out.length ? out : null;
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * Familien der Person(en), zu denen der Eintrag gehört (subjectPersons) —
+ * Person, Name, Ereignis, Beleg, Beziehung, Bild. Gespeichert, damit die
  * Änderungsgeschichte das Leserecht auch nach dem Löschen oder Zusammenführen
  * der Person prüfen kann (lib/services/changes.ts). Stand: zum Zeitpunkt des
  * Eintrags, also nach der Änderung; bei einer schon gelöschten Person die
- * ausdrücklich übergebenen Familien vor dem Löschen. Gibt es die Person nicht
- * und wurde nichts übergeben, bleibt es „nicht erfasst“ (known = false) — nie
- * raten.
+ * ausdrücklich übergebenen Familien vor dem Löschen. Fehlt auch nur eine der
+ * Personen oder ist die Zuordnung nicht eindeutig, bleibt es „nicht erfasst“
+ * (known = false) — nie raten.
  */
 async function subjectFamilies(db: Db, input: AuditInput): Promise<{ known: boolean; familyIds: string[] }> {
-  if (input.entityType !== "Person" || input.action === "CONNECT") return { known: false, familyIds: [] };
+  const unknown = { known: false, familyIds: [] };
+  if (input.subjectFamiliesKnown === false) return unknown;
   if (input.subjectFamilyIds) return { known: true, familyIds: [...new Set(input.subjectFamilyIds)] };
-  const person = await db.person.findUnique({
-    where: { id: input.entityId },
-    select: { families: { select: { familyId: true } } },
+  const ids = await subjectPersons(db, input);
+  if (!ids) return unknown;
+  const wanted = [...new Set(ids)];
+  const persons = await db.person.findMany({
+    where: { id: { in: wanted } },
+    select: { id: true, families: { select: { familyId: true } } },
   });
-  if (!person) return { known: false, familyIds: [] };
-  return { known: true, familyIds: person.families.map((f) => f.familyId) };
+  if (persons.length !== wanted.length) return unknown;
+  return { known: true, familyIds: [...new Set(persons.flatMap((p) => p.families.map((f) => f.familyId)))] };
 }
 
 /**

@@ -646,18 +646,21 @@ function userLabel(u: { name: string | null; email: string } | null): string | n
 }
 
 /**
- * Darf der Betrachter die Person sehen, um die es in einem Personeneintrag
- * geht? Gibt es sie noch, entscheiden ihre heutigen Familien (wie überall).
- * Gibt es sie nicht mehr (gelöscht oder aufgegangen), entscheiden die im
- * Eintrag gespeicherten Familien zum Zeitpunkt des Eintrags
- * (`subjectFamilyIds`, lib/audit.ts) — mit derselben Prüffunktion
- * `canViewPerson`, also auch „ohne Familie = nur Admins“. Ältere Einträge
- * ohne diese Angabe: nur Admins (im Zweifel verbergen). Eine später
- * gelöschte Familie gibt nichts frei: Ihre Mitgliedschaften verschwinden mit
- * ihr, die gespeicherte Kennung passt dann zu niemandem mehr.
+ * Darf der Betrachter die Person(en) sehen, zu denen ein Eintrag gehört?
+ * Personeneintrag über eine vorhandene Person: ihre heutigen Familien (wie
+ * überall). Sonst — die Person gibt es nicht mehr (gelöscht oder aufgegangen)
+ * bzw. Name, Ereignis, Beleg, Beziehung oder Bild einer aufgegangenen Person
+ * (nur `fromMerged`) — die im Eintrag gespeicherten Familien zum Zeitpunkt
+ * des Eintrags (`subjectFamilyIds`, lib/audit.ts; bei mehreren Personen die
+ * Vereinigung, entsprechend „sichtbar, sobald eine davon sichtbar ist“) — mit
+ * derselben Prüffunktion `canViewPerson`, also auch „ohne Familie = nur
+ * Admins“. Einträge ohne diese Angabe (Altbestand, nicht eindeutig): nur
+ * Admins (im Zweifel verbergen). Eine später gelöschte Familie gibt nichts
+ * frei: Ihre Mitgliedschaften verschwinden mit ihr, die gespeicherte Kennung
+ * passt dann zu niemandem mehr.
  */
 function subjectVisible(ctx: Ctx, row: Row): boolean {
-  const subject = ctx.persons.get(row.entityId);
+  const subject = row.entityType === "Person" ? ctx.persons.get(row.entityId) : undefined;
   if (subject) return subject.visible;
   if (row.subjectFamiliesKnown) return canViewPerson(ctx.scope, row.subjectFamilyIds);
   return ctx.scope.isAdmin;
@@ -670,9 +673,11 @@ function toEntry(ctx: Ctx, row: Row, fromMerged = false): ChangeEntryDto {
   //
   // Übernommene Einträge einer aufgegangenen Person (`fromMerged`): dieselbe
   // Regel für jede Art von Eintrag — die Person des Eintrags gibt es nicht
-  // mehr, also zählen nur die im Eintrag gespeicherten Familien. Ereignisse,
-  // Namen, Belege usw. speichern keine (subjectFamiliesKnown = false) und
-  // bleiben damit Administratoren vorbehalten. Verborgen ist dann auch die
+  // mehr, also zählen nur die im Eintrag gespeicherten Familien. Namen,
+  // Ereignisse, Belege, Beziehungen und Bilder speichern sie seit dem
+  // 26.11. ebenfalls; Altbestand und nicht eindeutige Einträge (z.B. Bild an
+  // einer Quelle, subjectFamiliesKnown = false) bleiben Administratoren
+  // vorbehalten. Verborgen ist dann auch die
   // Beschreibung (sie nennt Namen, Ereignis- oder Quellentitel): nur Art und
   // Aktion.
   const hidden = fromMerged
