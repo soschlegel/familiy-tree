@@ -98,6 +98,20 @@ describe("zusammenführen und ausblenden", () => {
     expect(all.find((e) => e.id === "c:x2")).toMatchObject({ to: null, kind: "sonstiges", description: null });
   });
 
+  it("ungeprüfte KI-Einträge zählen als Ergänzung, bestätigte und von Hand angelegte als wichtig", () => {
+    const base = { title: "Hochwasser", yearFrom: 1920, yearTo: null, kind: "not", description: null, region: null };
+    const all = mergeHistory([], [
+      { id: "k1", ...base, origin: "AI", confirmedAt: null },
+      { id: "k2", ...base, origin: "AI", confirmedAt: new Date("2026-01-01") },
+      { id: "k3", ...base, origin: "MANUAL", confirmedAt: null },
+    ], []);
+    const byId = Object.fromEntries(all.map((e) => [e.id, e]));
+    expect(byId["c:k1"]).toMatchObject({ rank: 3, aiUnconfirmed: true });
+    expect(byId["c:k2"].rank).toBe(CUSTOM_RANK);
+    expect(byId["c:k2"].aiUnconfirmed).toBeUndefined();
+    expect(byId["c:k3"].rank).toBe(CUSTOM_RANK);
+  });
+
   it("unbekannte ausgeblendete Kennung stört nicht", () => {
     expect(mergeHistory(B, [], ["gibt-es-nicht"])).toHaveLength(B.length);
   });

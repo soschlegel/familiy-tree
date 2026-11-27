@@ -79,4 +79,6 @@ So prüfst du sie:
 3. Passt alles, klicke beim Eintrag **Bestätigen**. Passt etwas nicht, korrigiere es mit **Ändern** — **Speichern** bestätigt ihn dann gleich mit. Ist der Eintrag falsch, **Löschen**.
 4. Mit **Alle sichtbaren bestätigen** bestätigst du nach einer Rückfrage alle gerade angezeigten unbestätigten Einträge auf einmal — am besten erst, nachdem du sie durchgesehen hast.
 
-Bestätigte Einträge zeigen „Bestätigt am …“ und erscheinen überall ohne Vermerk. Ändert die KI einen Eintrag später, ist er wieder ungeprüft. Die KI kann selbst nichts bestätigen.
+Bestätigte Einträge zeigen „Bestätigt am …“ und erscheinen überall ohne Vermerk. Ändert die KI einen Eintrag später, ist er wieder ungeprüft. Die KI kann selbst nichts bestätigen und nur eigene, noch ungeprüfte Einträge löschen.
+
+Solange ein Eintrag der KI ungeprüft ist, gilt er als Ergänzung: Unter dem Lebenslauf steht er hinter den großen Ereignissen, oft erst unter „weitere Ereignisse“. Nach dem Bestätigen rückt er wie deine eigenen Einträge nach vorn.

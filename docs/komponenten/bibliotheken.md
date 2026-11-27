@@ -2708,7 +2708,8 @@ plausible Spanne, keine leeren Texte, Stichproben der Jahreszahlen).
 - `mergeHistory(builtin, custom, hiddenIds)` — ausgeblendete mitgelieferte
   fallen heraus, eigene werden vereinheitlicht (Leerraum, „bis“ gleich „von“
   → Einzeljahr, unbekannte Art → Sonstiges) und bekommen den Rang
-  `CUSTOM_RANK` (1 — bewusst ergänzt, gilt als wichtig); nach der Zeit
+  `CUSTOM_RANK` (1 — bewusst ergänzt, gilt als wichtig; ungeprüfte
+  KI-Einträge bis zur Bestätigung `UNCONFIRMED_AI_RANK` = 3); nach der Zeit
   sortiert. Herkunft und Bestätigung der Zeile ergeben `aiUnconfirmed`.
 - `eventsInYear`, `eventsInSpan` — Auswahl: Ein Ereignis berührt ein Jahr,
   wenn es in [von, bis] liegt (Ränder eingeschlossen).

@@ -14,7 +14,7 @@ Dabei handelt die KI **als du**: Sie sieht nur, was du siehst, und ändert nur, 
 
 ### Zeitgeschichte ergänzen lassen
 
-Die KI kann die [Zeitgeschichte](12-einstellungen.md#zeitgeschichte) lesen — jeder Schlüssel darf das. Ist der Benutzer hinter dem Schlüssel **Administrator** und hat der Schlüssel die Stufe „lesen und schreiben“, kann sie die Liste auch pflegen: Ereignisse ergänzen, zum Beispiel ein Hochwasser oder eine Seuche in der Gegend, aus der deine Vorfahren stammen, Einträge ändern oder löschen und mitgelieferte ausblenden. Bitte sie etwa: „Ergänze die Zeitgeschichte um Ereignisse aus dem Beispieltal zwischen 1800 und 1900“.
+Die KI kann die [Zeitgeschichte](12-einstellungen.md#zeitgeschichte) lesen — jeder Schlüssel darf das. Ist der Benutzer hinter dem Schlüssel **Administrator** und hat der Schlüssel die Stufe „lesen und schreiben“, kann sie die Liste auch pflegen: Ereignisse ergänzen, zum Beispiel ein Hochwasser oder eine Seuche in der Gegend, aus der deine Vorfahren stammen, Einträge ändern und mitgelieferte ausblenden. Löschen kann sie nur Einträge, die von ihr selbst stammen und noch ungeprüft sind — von Hand angelegte und von dir bestätigte Einträge löschst nur du in der Verwaltung. Bitte sie etwa: „Ergänze die Zeitgeschichte um Ereignisse aus dem Beispieltal zwischen 1800 und 1900“.
 
 - Die KI soll nur gesicherte Ereignisse mit einer nachprüfbaren Jahreszahl eintragen und muss jedes Mal angeben, **woher** die Jahreszahl stammt. Im Zweifel trägt sie nichts ein. Namen von Personen aus dem Stammbaum gehören nie hinein.
 - Gibt es ein Ereignis mit sehr ähnlichem Titel in denselben Jahren schon, lehnt die App einen neuen Eintrag ab.

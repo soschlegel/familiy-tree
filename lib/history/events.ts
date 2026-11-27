@@ -34,6 +34,8 @@ export type HistoryRank = 1 | 2 | 3;
 
 /** Rang eigener Einträge: Der Administrator hat sie bewusst ergänzt — sie gelten als wichtig. */
 export const CUSTOM_RANK: HistoryRank = 1;
+/** Rang ungeprüfter KI-Einträge: Ergänzung, bis ein Administrator bestätigt. */
+export const UNCONFIRMED_AI_RANK: HistoryRank = 3;
 
 export type BuiltinHistoryEvent = {
   id: string;
@@ -142,8 +144,11 @@ export function mergeHistory(
       kind: isHistoryKind(c.kind) ? c.kind : "sonstiges",
       description: c.description?.trim() || null,
       region: c.region?.trim() || null,
-      rank: CUSTOM_RANK,
-      ...(c.origin && isUnconfirmedAi({ origin: c.origin, confirmedAt: c.confirmedAt ?? null }) ? { aiUnconfirmed: true as const } : {}),
+      // Ungeprüfte Einträge der KI zählen als Ergänzung (Rang 3) und rücken erst
+      // nach der Bestätigung durch einen Administrator nach vorn.
+      ...(c.origin && isUnconfirmedAi({ origin: c.origin, confirmedAt: c.confirmedAt ?? null })
+        ? { rank: UNCONFIRMED_AI_RANK, aiUnconfirmed: true as const }
+        : { rank: CUSTOM_RANK }),
     });
   }
   return out.sort(byTime);

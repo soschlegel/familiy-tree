@@ -512,7 +512,13 @@ export async function aiUpdateHistoryEvent(
   return { event: customDto(row), changed };
 }
 
-/** Eigenes Ereignis durch die KI löschen (delete_history_event) — mit Begründung im Protokoll. */
+/**
+ * Ereignis durch die KI löschen (delete_history_event) — mit Begründung im
+ * Protokoll. Entscheidung des Eigentümers: Die KI löscht nur, was von der KI
+ * stammt (Herkunft AI) und noch nicht bestätigt ist; von Hand angelegte
+ * (auch von der KI geänderte) und bestätigte Einträge bleiben den
+ * Administratoren in der App vorbehalten.
+ */
 export async function aiDeleteHistoryEvent(scope: Scope, id: string, reason: unknown): Promise<{ title: string }> {
   assertAdminForAi(scope);
   if (BUILTIN_HISTORY.some((b) => b.id === id)) {
@@ -525,8 +531,13 @@ export async function aiDeleteHistoryEvent(scope: Scope, id: string, reason: unk
     throw validationError([{ path: "reason", message: `Bitte kurz begründen (${AI_REASON_LIMITS.min} bis ${AI_REASON_LIMITS.max} Zeichen).` }]);
   }
   const dbId = customHistoryId(id);
-  const before = await prisma.historyEvent.findUnique({ where: { id: dbId }, select: { title: true } });
+  const before = await prisma.historyEvent.findUnique({ where: { id: dbId }, select: { title: true, origin: true, confirmedAt: true } });
   if (!before) throw notFoundError("Ereignis");
+  if (before.origin !== "AI" || before.confirmedAt) {
+    throw forbiddenError(
+      "Zeitgeschichte löschen: Die KI löscht nur eigene, noch unbestätigte Einträge — von Hand angelegte und bestätigte löscht ein Administrator in der App",
+    );
+  }
   nameChangeSet(scope, `Zeitgeschichte gelöscht (KI): „${before.title.slice(0, 80)}“`);
   await deleteHistoryEvent(scope, dbId, text);
   return { title: before.title };

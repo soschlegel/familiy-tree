@@ -262,6 +262,18 @@ describe.skipIf(Boolean(skipReason))("Zeitgeschichte über MCP (Mock-Datenbank)"
     expect(del.data).toMatchObject({ deleted: true, title: FLOOD.title });
     expect(await prisma.historyEvent.count()).toBe(0);
     const gone = await prisma.auditLog.findFirstOrThrow({ where: { entityType: "HistoryEvent", entityId: id.slice(2), action: "DELETE" } });
+    // Von Hand angelegte und bestätigte Einträge löscht die KI nicht.
+    const manual = await prisma.historyEvent.create({ data: { title: "Markttag in Beispielstadt", yearFrom: 1850, kind: "sonstiges" } });
+    const confirmed = await prisma.historyEvent.create({
+      data: { title: "Stadtbrand in Beispielstadt", yearFrom: 1917, kind: "not", origin: "AI", aiReason: "Erfundenes Beispiel für den Test.", confirmedAt: new Date() },
+    });
+    for (const row of [manual, confirmed]) {
+      const no = await s.call("delete_history_event", { event_id: `c:${row.id}`, reason: "Soll nicht gelöscht werden können.", change_set_id: cs });
+      expect(no.isError, no.text).toBe(true);
+      expect(no.text).toMatch(/unbestätigte/);
+    }
+    expect(await prisma.historyEvent.count()).toBe(2);
+    await prisma.historyEvent.deleteMany({ where: { id: { in: [manual.id, confirmed.id] } } });
     expect(gone).toMatchObject({ channel: "MCP", changeSetId: cs });
     expect(gone.diff).toMatchObject({ title: FLOOD.title, origin: "AI", reason: "Doppelt erfasst, siehe Ortschronik." });
 

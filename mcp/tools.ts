@@ -2695,8 +2695,9 @@ function registerHistoryWriteTools(server: McpServer, ctx: ToolContext): void {
     {
       title: "Zeitgeschichte löschen",
       description:
-        "Delete an OWN Zeitgeschichte entry (id 'c:…') that is wrong or a duplicate; prefer update_history_event for " +
-        "corrections. Bundled entries cannot be deleted — hide them with set_builtin_history_event_hidden. `reason` " +
+        "Delete a Zeitgeschichte entry (id 'c:…') that was added via this server and is still unconfirmed ('von KI, ungeprüft'), " +
+        "when it is wrong or a duplicate; prefer update_history_event for corrections. Entries created by hand or already " +
+        "confirmed by an administrator cannot be deleted here — tell the user to delete them in the app. Bundled entries cannot be deleted — hide them with set_builtin_history_event_hidden. `reason` " +
         "(required, German) is kept in the change history together with the deleted values. " +
         adminNote +
         WRITE_NOTE,
