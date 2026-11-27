@@ -150,7 +150,14 @@
   }
 }
 
-/* Auch <html> in Papierfarbe: Was der Browser beim Überziehen des
+/* Seite „Wie sind wir verwandt?“ (components/KinshipDiagram.tsx): Karte
+   „Nicht freigegeben“ schraffiert wie in den Ringen; der Text steht auf
+   eigener Fläche, damit er auf der Schraffur lesbar bleibt. */
+.kinship-restricted {
+  background: repeating-linear-gradient(135deg, var(--rings-restricted) 0 6px, transparent 6px 12px);
+}
+
+/* Auch <html> in Papierfarbe:Was der Browser beim Überziehen des
    Bildlaufs oder beim Ein- und Ausblenden der Adressleiste außerhalb von
    <body> zeigt, ist dann kein schwarzer oder weißer Streifen. */
 html {

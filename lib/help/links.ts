@@ -20,6 +20,8 @@ export const HELP_LINKS = {
   kiZugang: "/hilfe/ki-zugang",
   einstellungen: "/hilfe/einstellungen",
   statistik: "/hilfe/statistik",
+  verwandtschaft: "/hilfe/verwandtschaft",
+  verwandtschaftFreigabe: "/hilfe/verwandtschaft#nicht-freigegebene-personen",
   importVorschlaege: "/hilfe/import-und-export#vorschlaege-personen-die-es-schon-gibt",
 } as const;
 

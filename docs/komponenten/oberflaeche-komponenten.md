@@ -18,8 +18,8 @@ Abschnitt 1). Seiten und API-Routen selbst stehen in
 
 - [Stammbaum und Karte](#stammbaum-und-karte) — `FamilyTree`, `AncestorRings`, `TreeViewSwitch`, `tree-url`, `useTreeFullscreen`, `PersonNode`,
   `OriginChips`, `MarriageNode`, `MarriageEdge`, `ParentEdge`, `ReferenceLines`,
-  `ReferenceChip`, `ReferencePanel`, `MapExplorer`, `MapPersonChooser`, `Avatar`,
-  `gender-style`
+  `ReferenceChip`, `ReferencePanel`, `KinshipPersonField`, `KinshipDiagram`,
+  `kinship-url`, `MapExplorer`, `MapPersonChooser`, `Avatar`, `gender-style`
 - [Gestaltungssystem: app/globals.css](#gestaltungssystem-appglobalscss)
 - [Personen, Ereignisse, Quellen und Medien](#personen-ereignisse-quellen-und-medien)
   — `PersonForm`, `DateInput`, `EventSection`, `CitationSection`,
@@ -323,13 +323,58 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 **Props/Daten:** Berechtigungsbereich des Benutzers, ID und Name der Person, roher Wert von `?bezug=`.
 
-**Verhalten:** Liest das Bezugsperson-Cookie, berechnet über `loadReferenceFor` (nur über sichtbare Personen) die Sicht. Drei Fälle: Person ist selbst Bezugsperson („… ist die Bezugsperson — das bist du.“), Verwandtschaftsbegriff (oder „keine Verwandtschaft über freigegebene Personen bekannt“), keine Bezugsperson (Hinweis auf „Das bin ich“). Bindet `ReferenceChip` (nur bei nicht-eigener Bezugsperson mit Namen) und `SelfPersonButton` ein; „Baum aus dieser Sicht“ führt zu `/tree?focus=<id>&bezug=<id>` und fehlt, wenn die Person schon Bezugsperson ist. Daneben ein „?“ (`HelpLink`) zu `/hilfe/stammbaum#bezugsperson`.
+**Verhalten:** Liest das Bezugsperson-Cookie, berechnet über `loadReferenceFor` (nur über sichtbare Personen) die Sicht. Drei Fälle: Person ist selbst Bezugsperson („… ist die Bezugsperson — das bist du.“), Verwandtschaftsbegriff (oder „keine Verwandtschaft über freigegebene Personen bekannt“), keine Bezugsperson (Hinweis auf „Das bin ich“). Bindet `ReferenceChip` (nur bei nicht-eigener Bezugsperson mit Namen) und `SelfPersonButton` ein; „Baum aus dieser Sicht“ führt zu `/tree?focus=<id>&bezug=<id>` und fehlt, wenn die Person schon Bezugsperson ist. „Wie sind wir verwandt?“ (`person-kinship-link`) führt immer zu `/kinship?a=<diese Person>&b=<Bezugsperson>` — ohne `b`, wenn es keine Bezugsperson gibt oder die Person selbst sie ist. Daneben ein „?“ (`HelpLink`) zu `/hilfe/stammbaum#bezugsperson`.
 
 **Server oder Client:** Server-Komponente (async, kein `"use client"`).
 
 **Ruft auf:** keine API per fetch; Server-Dienst `loadReferenceFor` direkt. Die Schreibaktion „Das bin ich“ liegt in `SelfPersonButton` (nicht Teil dieses Abschnitts).
 
 **Tests:** `e2e/read/reference.spec.ts` (`person-reference-term`, `-kinship`, `-self`, `-view`), `e2e/write/reference.spec.ts`; Dienstlogik `tests/reference.db.test.ts`.
+
+### components/KinshipPersonField.tsx
+
+**Zweck:** Auswahlfeld „Erste Person“ bzw. „Zweite Person“ auf „Wie sind wir verwandt?“.
+
+**Wo eingesetzt:** `app/kinship/page.tsx` (zweimal).
+
+**Props/Daten:** `slot` (`a`/`b`), Beschriftung, gewählte Person (Kennung, Name, Lebensjahre) oder keine, `notFound`, die Kennung der anderen gewählten Person, die eigene Person (`self`).
+
+**Verhalten:** Gewählt: Name und Lebensjahre mit „ändern“; sonst Suchfeld (`.field`, 16 px/44 px) — ab zwei Zeichen verzögert gesucht (max. 8 Treffer, Name und Lebensjahre), „Niemand gefunden.“; die Treffer stehen als Knopfliste unter dem Feld (kein schwebendes Fenster, auf dem Telefon 44 px). Auswahl schreibt die Person per Router in die Adresse (`kinshipHref`), die andere bleibt erhalten. „mich wählen (Name)“, wenn eine eigene Person gesetzt ist und noch nicht gewählt; „abbrechen“ bzw. Escape beim Ändern. Hinweis „Diese Person wurde nicht gefunden“ (`alert-warning`) für eine nicht sichtbare oder unbekannte Kennung aus der Adresse. Wie `MapPersonChooser` ohne Listbox-Rollen.
+
+**Server oder Client:** Client.
+
+**Ruft auf:** `GET /api/persons?q=…&limit=8` (nur sichtbare Personen).
+
+**Tests:** `e2e/read/kinship.spec.ts`.
+
+### components/KinshipDiagram.tsx
+
+**Zweck:** Zeichnung der Verbindung auf „Wie sind wir verwandt?“: `KinshipBloodDiagram` (Blutsverwandte), `KinshipPathDiagram` (Weg über Partnerschaften u.ä.), `KinshipLegend` (Zeichenerklärung).
+
+**Wo eingesetzt:** `app/kinship/page.tsx` (Hauptzeichnung und je weitere Verbindung in einem aufklappbaren Bereich).
+
+**Props/Daten:** eine Verbindung bzw. der Weg aus `lib/services/kinship-view.ts`, die Rollennamen („Erste Person“, „Zweite Person“).
+
+**Verhalten:**
+
+- *Blutsverwandte, breit (ab `sm`):* oben die gemeinsamen Vorfahren (eine Karte oder ein Paar, dazwischen ⚭ bei Ehe, sonst „und“), darunter eine Gabel aus Linien und zwei Spalten: links die Linie hinab zur ersten, rechts zur zweiten Person. Ist eine Person selbst der Vorfahr, eine Spalte.
+- *Blutsverwandte, schmal:* dieselbe Kette als eine Spalte von der ersten Person hinauf zu den Vorfahren und hinab zur zweiten (Vorfahrenpaar untereinander). Die jeweils andere Fassung ist mit `display: none` ausgeblendet (also auch für Screenreader).
+- *Weg:* eine Spalte in Wegreihenfolge.
+- *Karten:* sichtbare Personen als Link zur Personenseite (Name, Lebensjahre, die beiden gewählten Personen mit Messingrahmen und Rollenname), gesperrte als schraffierte Karte „Nicht freigegeben“ ohne Link (`.kinship-restricted`).
+- *Verbindungen:* jede mit ihrer Bezeichnung als Text („Tochter“, „Vater“, „Ehefrau“; Partnerschaften zusätzlich ⚭); die Linienart ist nur Zusatz: durchgezogen leiblich, gestrichelt Adoptiv/Stief/Pflege, doppelt (Akzentfarbe) Partnerschaft.
+- *Screenreader:* zusätzlich die Kette als versteckte Textliste („Die Verbindung als Liste“) ohne Links; die Zeichnung ist eine Gruppe „Zeichnung der Verbindung“.
+
+**Server oder Client:** ohne `"use client"`, ohne Hooks und Skript — als Server-Komponente gerendert.
+
+**Ruft auf:** nichts.
+
+**Tests:** `e2e/read/kinship.spec.ts` (Karten, Links, Platzhalter, Telefon-Spalte, axe hell/dunkel bei 390 und 1280 px).
+
+### components/kinship-url.ts
+
+**Zweck:** `kinshipHref(a, b)` — Adresse `/kinship?a=…&b=…` (fehlende Teile weggelassen), für Server- und Client-Komponenten (deshalb nicht in der Client-Datei).
+
+**Wo eingesetzt:** `app/kinship/page.tsx` (Tauschen), `KinshipPersonField`, `ReferencePanel`.
 
 ### components/MapExplorer.tsx
 
@@ -438,6 +483,7 @@ Globale Styles plus wenige gemeinsame Bausteinklassen statt einer Komponentenbib
 - `--line-ff` (Blau, Großvater väterlicherseits), `--line-fm` (Grün), `--line-mf` (Rot), `--line-mm` (Gelb), angelehnt an die farbfehlsichtigen-freundliche Okabe-Ito-Palette; je `--line-*-fg` als Schriftfarbe auf der Linienfarbe. Nie allein verwendet — Kurzzeichen (und auf der Karte Muster) kommen immer hinzu.
 - Karte: `--map-sea`, `--map-land`, `--map-border`, `--map-neutral` (Personen ohne Ahnenlinie), `--map-ring` (gewählter Kreis).
 - Diagramme (`DonutChart`): `--chart-1` … `--chart-8` (unterscheidbare Kategorienfarben, die ersten drei wie die Ahnenlinien, hell mit mindestens 3:1 Kontrast zur Kartenfläche) und Grautöne `--chart-other` („Sonstige“), `--chart-unassigned`, `--chart-unknown`, `--chart-restricted`; im dunklen Schema hellere Töne. Nie allein — Legende mit Bezeichnung und Prozent.
+- „Wie sind wir verwandt?“: `.kinship-restricted` schraffiert die Karte „Nicht freigegeben“ mit `--rings-restricted` (hell und dunkel wie in den Ringen); der Text steht auf eigener Fläche.
 - Ringe (`AncestorRings`): `--rings-strength` (Dämpfung der Flächenfarben, im Dunklen 0,82), `--rings-ink` (Schrift auf den Flächen), `--rings-restricted` und `--rings-hatch` (Schraffur „nicht freigegeben“), `--rings-gap` (leere Plätze); je hell und dunkel.
 
 **Dunkles Schema**

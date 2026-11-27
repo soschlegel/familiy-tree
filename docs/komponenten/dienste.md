@@ -104,6 +104,7 @@ beide). Ereignisse, Belege, Namen und Rohdaten folgen ihrem Träger.
 | `families.ts` | Familienliste des Benutzers |
 | `research.ts` | Vorfahren, Nachfahren, Verbindungsweg, Statistik, Datenlücken |
 | `kinship.ts` | Verwandtschaftsbezeichnung zweier Personen |
+| `kinship-view.ts` | Seite „Wie sind wir verwandt?“: Bezeichnung in beide Richtungen, Verbindungen als Ketten, Maskierung |
 | `timeline.ts` | Zeitleiste einer Person bzw. Familie |
 | `consistency.ts` | Plausibilitätsprüfung über sichtbare Daten |
 | `duplicates.ts` | Mögliche Dubletten (Liste, je Person), „kein Duplikat“ |
@@ -147,7 +148,7 @@ Grundsätze der Schicht (reine async-Funktionen, Scope, kein `next/*`,
 
 **Wichtige Funktionen:** keine eigenen; reicht `errors`, `dto`, `context`,
 `tree`, `persons`, `relationships`, `research`, `duplicates`, `merge`,
-`merge-bulk`, `families`, `kinship`, `reference`, `timeline`, `consistency`,
+`merge-bulk`, `families`, `kinship`, `kinship-view`, `reference`, `timeline`, `consistency`,
 `sources`, `ai-access`, `events`, `names`, `imports`, `import-apply`,
 `changes`, `media-links`, `attached-media`, `release-notes`, `origin` weiter, aus `graph-data` nur
 `loadGraph` und die Graph-Typen.
@@ -842,12 +843,74 @@ Elternteils.
 
 **Protokoll:** —
 
-**Benutzt von:** MCP `get_kinship`; `lib/reference.ts` (Abgleich im
+**Benutzt von:** MCP `get_kinship`; `lib/services/kinship-view.ts` (Seite
+„Wie sind wir verwandt?“); `lib/reference.ts` (Abgleich im
 Kommentar: die Bezugsperson-Berechnung stimmt mit `kinshipInGraph` überein).
 
 **Tests:** `tests/reference.test.ts` (Vergleich mit `lib/reference.ts` für
 jedes Paar), `tests/research.db.test.ts`, `tests/import-linking.db.test.ts`,
 MCP-Tests.
+
+### lib/services/kinship-view.ts
+
+**Zweck:** Daten der Seite „Wie sind wir verwandt?“ (`/kinship`): beide
+Auswahlfelder, die eigene Person, die Bezeichnung aus beiden Blickrichtungen
+und die Verbindungen als Personenketten für die Zeichnung.
+
+**Wichtige Funktionen:**
+- `loadKinshipPage(scope, aRaw, bRaw)` — lädt den Graphen **einmal**
+  (`loadGraph`) und die gespeicherte eigene Person (`storedSelfPersonId`),
+  bildet je Feld den Zustand `empty`/`notFound`/`ok` und das Ergebnis.
+- `kinshipViewInGraph(graph, aId, bId)` — Ergebnis auf einem geladenen
+  Graphen: `same` (dieselbe Person), `none` (kein Weg über Eltern- und
+  Partnerkanten) oder `found` mit `aForB`/`bForA` (die Kurzbezeichnungen
+  von `kinshipInGraph` in beide Richtungen, null ohne gängigen Begriff),
+  den Schrittketten beider Richtungen, der Art (`blood`, `inLaw` = Weg über
+  eine Partnerschaft, `other` = nur über Stief-/Pflegeeltern), bis zu
+  `MAX_CONNECTIONS` (4) Blutsverwandtschaften aus `bloodConnections`
+  (`lib/kinship-chain.ts`) samt Bezeichnungen je Verbindung und
+  Beschriftungen je Linienschritt, dem kürzesten Weg (`path`) und
+  `pathTerm`, wenn der kürzeste Weg neben einer Blutsverwandtschaft etwas
+  anderes sagt (Ehe unter Verwandten).
+- `parsePersonParam` — Kennung aus der Adresse wie `focus` im Baum
+  (`[A-Za-z0-9_-]`, höchstens 64 Zeichen), sonst „nicht gefunden“.
+
+**Regeln und Entscheidungen:** Die Überschrift nimmt die Begriffe von
+`kinshipInGraph` (gleich `get_kinship` und — ohne gesperrte Personen auf dem
+Weg — der Angabe an den Baumkarten). Die Zeichnung zeigt bei
+Blutsverwandten die nächste Verbindung aus `bloodConnections`, sonst den
+kürzesten Weg. Eine Kennung einer aufgegangenen Person wird nicht
+umgeleitet (gilt als nicht gefunden).
+
+**Rechte/Datenschutz:** Beide gewählten Personen müssen sichtbar sein, sonst
+gilt das Feld als „nicht gefunden“ (unbekannt und gesperrt sehen gleich aus).
+Der Weg darf wie bei `get_kinship` über gesperrte Personen führen — die
+Struktur zeigt auch der Baum mit Platzhaltern, und die Antwort soll dieselbe
+sein, die der Benutzer über seinen KI-Zugang bekäme. Strenger als dort
+erscheinen gesperrte Personen nur als `{ restricted: true }`: ohne Kennung,
+Namen, Lebensdaten und Geschlecht; ihr Geschlecht fließt in keinen Begriff
+(„Elternteil“ statt „Vater“, keine Seite), und die Art einer Elternschaft
+bzw. Partnerschaft zwischen zwei gesperrten Personen wird neutralisiert
+(leiblich bzw. unverheiratet). Kennungen von Beziehungen gibt die Sicht gar
+nicht heraus. Die Baumkarten rechnen dagegen nur über sichtbare Personen
+(`visibleIndex`); deshalb kann die Personenseite „keine Verwandtschaft über
+freigegebene Personen bekannt“ sagen, während diese Seite eine Verbindung
+über gesperrte Personen zeigt.
+
+**Leistung:** ein Ladevorgang; gerechnet werden zwei `kinshipInGraph` und
+ein `bloodConnections` — für 12 000 erzeugte Personen mit 30 000 Kanten
+unter 100 ms (`tests/kinship-chain.test.ts`); die Ladezeit des Graphen
+kommt hinzu.
+
+**Protokoll:** —
+
+**Benutzt von:** `app/kinship/page.tsx`. Kein MCP-Werkzeug.
+
+**Tests:** `tests/kinship-chain.test.ts` (Sicht auf erzeugten Graphen:
+beide Blickrichtungen, angeheiratet, Ehe unter Verwandten, keine
+Verbindung, gesperrte Zwischenpersonen ohne Angaben, Abgleich mit
+`findBloodRelation` über die Mock-Daten, Leistung),
+`tests/kinship-view.db.test.ts`, `e2e/read/kinship.spec.ts`.
 
 ### lib/services/timeline.ts
 

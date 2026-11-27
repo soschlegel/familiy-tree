@@ -20,7 +20,7 @@ Test-Briefkasten).
 | Anmeldung, Rechte, Anfrage-Rahmen | `auth`, `dev-login`, `email-login`, `email-login-mail`, `authz`, `session`, `api`, `request-guard`, `csp`, `rate-limit`, `health-cache`, `scope`, `ai-tokens`, `prisma` |
 | Protokoll | `audit`, `change-sets`, `change-time` |
 | Daten und Regeln | `dates`, `date-fields`, `events`, `event-labels`, `validation`, `consistency`, `partner-labels`, `source-labels`, `source-classify` |
-| Graph und Verwandtschaft | `graph`, `kinship`, `reference`, `roots` |
+| Graph und Verwandtschaft | `graph`, `kinship`, `kinship-chain`, `reference`, `roots` |
 | Auswertungen | `statistics`, `chart-slices`, `today` |
 | Baumdarstellung | `tree-layout`, `layout-generations`, `focus-tree`, `ancestor-rings` |
 | Dubletten und Zusammenführen | `name-keys`, `duplicates`, `merge-rules`, `import-linking` |
@@ -824,10 +824,52 @@ Ausgangsperson („B ist der Onkel von A“).
   nichts, bleibt `term` leer und nur die Kette („Mutter → Bruder →
   Ehefrau“).
 
-**Benutzt von:** `reference`, Dienste `kinship`, `map`, `index`.
+**Benutzt von:** `reference`, `kinship-chain`, Dienste `kinship`,
+`kinship-view`, `map`, `index`.
 
 **Tests:** `tests/kinship.test.ts`, `tests/genealogy.test.ts`,
 `tests/reference.test.ts`.
+
+**Bekannte Eigenheit:** Bei Adoption und Seite zugleich steht die Seite
+hinter dem Zusatz („Cousine 2. Grades (über Adoption) väterlicherseits“).
+
+### lib/kinship-chain.ts
+**Zweck:** Verbindungen zweier Personen als Personenketten für die Seite
+„Wie sind wir verwandt?“ — rein, ohne Datenbank und ohne Rechte (maskiert
+wird in `lib/services/kinship-view.ts`).
+
+**Wichtige Funktionen/Typen:** `bloodConnections`, `lineUp`,
+`connectionTerms`, `parentChildLabels`, Typen `BloodConnection`, `LineStep`.
+
+**Regeln und Algorithmen:**
+- Blutsverwandtschaft wie in `lib/kinship.ts` (leiblich und adoptiv,
+  `ancestorDistances`). `bloodConnections` sucht **alle eigenständigen**
+  gemeinsamen Vorfahren: Ein gemeinsamer Vorfahr fällt weg, wenn eines
+  seiner Kinder ebenfalls gemeinsamer Vorfahr ist und auf beiden Seiten
+  genau eine Generation näher liegt (die Eltern gemeinsamer Großeltern sind
+  keine eigene Verbindung). Die nächste Verbindung ist damit immer dabei
+  und hat dieselben Generationen wie `findBloodRelation`.
+- Bündelung zu Verbindungen: gleiche Abstände und Paar (Partnerkante oder
+  gemeinsames Kind) — so sind Großvater und Großmutter eine Verbindung, die
+  beiden Großelternpaare doppelter Cousins zwei. Reihenfolge: Summe der
+  Generationen, dann weniger Generationen auf Seiten von A, dann Kennung.
+- Je Verbindung die beiden Linien von oben nach unten (`lineUp`:
+  Breitensuche hinauf nur über leibliche/Adoptiv-Eltern, leiblich zuerst);
+  der erste Vorfahr ist der, bei dem die Linie von A ankommt. Halb und
+  Adoptiv wie in `findBloodRelation`, je Verbindung.
+- `connectionTerms`: Bezeichnung in beide Richtungen, Seite aus dem
+  Elternteil direkt über A bzw. B (nur bekanntes Geschlecht).
+- **Grenze:** Eine zweite Verbindung, die über einen schon gefundenen
+  gemeinsamen Vorfahren hinaus weiter hinaufführt, erscheint nicht eigens;
+  Halbverwandtschaft wird wie in `findBloodRelation` nur erkannt, wenn
+  unter dem einzigen Vorfahren auf beiden Seiten zwei Eltern erfasst sind.
+
+**Benutzt von:** `lib/services/kinship-view.ts`.
+
+**Tests:** `tests/kinship-chain.test.ts` (Cousins mit Großelternpaar,
+Vorfahr/Nachfahr, doppelte Cousins, Ahnenschwund, Halbgeschwister,
+Adoption, Abgleich mit `findBloodRelation` über die Mock-Daten, 12 000
+Personen).
 
 ### lib/origin.ts
 **Zweck:** Reine Regeln der **Herkunft** (Paket „Herkunft sichtbar
@@ -2106,7 +2148,8 @@ Entwicklung bei jedem Aufruf. Ins Standalone-Image kommen die Dateien über
 ### lib/help/links.ts
 **Zweck:** Ziele der Kontexthilfe (`HELP_LINKS`: Karte, Wurzeln, Orte zuordnen,
 Linien, Ringe, Bezugsperson, Dubletten, Dubletten-Klassen, KI-Vorprüfung der
-Dubletten, KI-Zugang, Einstellungen, Statistik) an einer
+Dubletten, KI-Zugang, Einstellungen, Statistik, Verwandtschaft und deren
+Abschnitt „Nicht freigegebene Personen“) an einer
 Stelle, damit der Test prüfen kann, dass Thema und Anker existieren.
 
 **Benutzt von:** `components/HelpLink.tsx`, `components/DuplicateBanner.tsx`.
