@@ -17,6 +17,20 @@ Regeln für neue Einträge (AGENTS.md, Abschnitt 3 „Ausrollen“):
 - Geprüft von tests/release-notes.test.ts (lib/release-notes.ts).
 -->
 
+## 2026-11-27.5 — Geburtstage zuerst, Zeitgeschichte passend zur Gegend
+
+- Startseite: Ganz oben stehen jetzt die Geburtstage der Lebenden — heute
+  und in den nächsten 14 Tagen. Darunter folgen die Jahrestage des Tages
+  und unter „Demnächst“ die weiteren Geburtstage.
+- Zeitgeschichte passend zur Gegend: Jedes Ereignis hat einen
+  Geltungsbereich. Unter dem Lebenslauf und in der Zeitreise der Karte
+  stehen Ereignisse aus der Gegend vorn, in der jemand zu der Zeit lebte —
+  der Bau der Berliner Mauer etwa bei Personen in Ostdeutschland. Anderes
+  findest du unter „weitere Ereignisse“ bzw. „Andere Gegenden“.
+- Administratoren legen den Geltungsbereich eigener Ereignisse unter
+  „Verwaltung“ → „Zeitgeschichte“ fest: Länder, Regionen oder eine
+  Schnellwahl wie „Ostdeutschland“. Auch der KI-Assistent gibt ihn an.
+
 ## 2026-11-27.4 — Zeitgeschichte mit dem KI-Assistenten ergänzen
 
 - Dein KI-Assistent kann die Zeitgeschichte jetzt lesen und — mit einem

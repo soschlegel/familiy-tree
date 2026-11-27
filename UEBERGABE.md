@@ -13,9 +13,10 @@ aktuell halten — Erledigtes streichen, keine Paketgeschichte sammeln.
   Portainer aktualisiert den Stack von dort. **Ein Merge ist ein
   Produktiv-Deployment auf echte Daten.**
 - `optimierung` = Arbeitsbranch, zum Zeitpunkt der Übergabe gleich `main`.
-- Letztes Release: **2026-11-27.4** (Zeitgeschichte über MCP lesen und
-  pflegen, Vermerk „von KI, ungeprüft“ bis zur Bestätigung). Davor am
-  selben Tag **.3** (Startseite „Heute in der Familie“,
+- Letztes Release: **2026-11-27.5** (Startseite: Geburtstage Lebender
+  zuerst; Zeitgeschichte mit Geltungsbereich und regionaler Reihenfolge).
+  Davor am selben Tag .4 (Zeitgeschichte über MCP lesen und pflegen,
+  Vermerk „von KI, ungeprüft“ bis zur Bestätigung) und **.3** (Startseite „Heute in der Familie“,
   `/kinship` „Wie sind wir verwandt?“, Lebenslauf-Text, Karte: Lebensweg
   und Zeitreise, Ringe: Nachfahren und Druckseite, Seiten „Rekorde“ und
   „Forschungs-Fortschritt“, Zeitgeschichte), .2
@@ -26,13 +27,13 @@ aktuell halten — Erledigtes streichen, keine Paketgeschichte sammeln.
   Beziehungseinträgen der Änderungsgeschichte, Content-Security-Policy mit
   Not-Schalter `CSP_MODE`), am selben Tag .2 (Verlauf aufgegangener
   Personen, verschlankte Doku) und .1 (Seite „Einstellungen“). Neueste
-  Migration: `20261127000200_zeitgeschichte_herkunft` (Liste aller
+  Migration: `20261127000300_zeitgeschichte_gebiete` (Liste aller
   Migrationen:
   [datenmodell.md](docs/komponenten/datenmodell.md#migrationen-prismamigrations)).
 - Prüfstand dieses Releases: Migrationen ↔ Schema ohne Abweichung, eine
-  neue, rein ergänzende Migration, Typecheck, Lint, Vitest 1366/1366;
+  neue, rein ergänzende Migration, Typecheck, Lint, Vitest 1407/1407;
   `npm run test:e2e` (Produktions-Build, strenger Hydration-Wächter,
-  CSP-Wächter): 469
+  CSP-Wächter): 478
   bestanden, 1 übersprungen.
 - Git-Verlauf am 23.11. umgeschrieben (alle Zweige neu hochgeladen). Ältere
   Klone und Worktrees passen nicht mehr dazu — neu klonen statt
@@ -165,6 +166,16 @@ Anleitungen: [docs/entwicklung/tests.md](docs/entwicklung/tests.md),
   mitgelieferten Liste nicht gegen eine Quelle geprüft; kein Abgleich mit
   Wohnorten. Forschungs-Fortschritt: nähere Generationen stehen vor
   fehlenden Eltern entfernterer — bei Bedarf Reihenfolge ändern.
+- **Zeitgeschichte regional:** Gebiete nach heutigen Grenzen (bewusste
+  Vereinfachung); Geltungsbereiche der mitgelieferten Liste und die
+  benannten Gruppen (Preußen, Habsburgermonarchie …) sind eine Einschätzung
+  und nicht gegen eine Quelle geprüft. Zwischen zwei Stationen kennt die
+  App den Aufenthaltsort nicht; mit nur einem Geburtsort gilt dieser für das
+  ganze Leben. Zeitstrahl mit blassen Marken („andere Gegend“) nur im
+  Dienst-Test geprüft, kein Bildschirmfoto. Anwerbung: ganz Berlin passt.
+- **Mock/Tests:** Ein E2E-Schreiblauf hinterlässt für 30 Minuten ein
+  bündelbares KI-Änderungspaket; `tests/places-ai.db.test.ts` kann danach
+  einmal scheitern — vorher `npm run mock:setup`.
 - **Zeitgeschichte über MCP:** nur gegen Mock und SDK-Client getestet, nicht
   mit einem echten Claude-Client. Personennamen in Einträgen werden nicht
   technisch erkannt (nur Werkzeugbeschreibung und Server-Hinweis verbieten
