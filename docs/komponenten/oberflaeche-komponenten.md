@@ -150,7 +150,7 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 **Verhalten:**
 
 - Bänder und Punkte sind Schmuck (`aria-hidden`); bedienbar ist je Gruppe zeitlich überschneidender Ereignisse eine Schaltfläche über die ganze Achsenbreite, mindestens 44 px hoch, mit `aria-label` „Zeitgeschichte 1914–1920: Erster Weltkrieg, …“. Liegen Schaltflächen bei kleinem Zoom übereinander, werden ihre Gruppen zusammengefasst.
-- Überfahren und Fokus zeigen daneben eine Anzeige (`role="tooltip"`): Titel, Jahre, Art, „gilt für …“ und Beschreibung je Ereignis; Antippen bzw. Klicken hält sie fest, Escape oder ein Klick daneben schließt. In der unteren Hälfte klappt sie nach oben auf; Breite auf den Bildschirm begrenzt.
+- Überfahren und Fokus zeigen daneben eine Anzeige (`role="tooltip"`): Titel, Jahre, Art, „gilt für …“ und Beschreibung je Ereignis; Antippen bzw. Klicken hält sie fest, Escape oder ein Klick daneben schließt. In der unteren Hälfte klappt sie nach oben auf; Breite auf den Bildschirm begrenzt. Die Liste rollt ab einer Höchsthöhe (bei kleinem Zoom fließen viele Ereignisse zusammen) und ist deshalb selbst per Tab erreichbar (`tabIndex`, Name „Ereignisse“, sichtbarer Fokusrahmen).
 - Leistung: liest nur Verschiebung, Zoom und Höhe aus dem React-Flow-Speicher (wie `TimelineAxis`); Weltkoordinaten einmal je Ereignisliste und Achse; der Baum selbst rendert dadurch nicht neu. Unsichtbare Gruppen werden nicht gezeichnet.
 - Hell/dunkel: Bernsteintöne mit halber Deckkraft, hervorgehoben bei geöffneter Anzeige.
 - Unbestätigte Einträge der KI: in der Anzeige der Vermerk „von KI, ungeprüft“ hinter den Jahren (`HistoryAiNote`), im `aria-label` als „Titel (von KI, ungeprüft)“. Die Marken selbst bleiben gleich.
