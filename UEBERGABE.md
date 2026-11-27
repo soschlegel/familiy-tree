@@ -1,4 +1,4 @@
-# Übergabe (Stand 26.11.2026)
+# Übergabe (Stand 27.11.2026)
 
 Kurze Arbeitsnotiz für die nächste Sitzung: Stand, Arbeitsumgebung, Fallen,
 offene Punkte. Was gebaut ist, beschreibt
@@ -13,18 +13,19 @@ aktuell halten — Erledigtes streichen, keine Paketgeschichte sammeln.
   Portainer aktualisiert den Stack von dort. **Ein Merge ist ein
   Produktiv-Deployment auf echte Daten.**
 - `optimierung` = Arbeitsbranch, zum Zeitpunkt der Übergabe gleich `main`.
-- Letztes Release: **2026-11-26.3** (Anmeldung per E-Mail-Link über SMTP,
+- Letztes Release: **2026-11-27.1** (Abschnitt „Wurzeln“ auf der
+  Personenseite, Seite „Statistik“). Davor **2026-11-26.3** (Anmeldung per E-Mail-Link über SMTP,
   Vollbild im Stammbaum, Vorschläge schon beim GEDCOM-Import gegen alle
   vorhandenen Personen, Familien auch an Ereignis-/Namens-/Beleg-/Bild- und
   Beziehungseinträgen der Änderungsgeschichte, Content-Security-Policy mit
-  Not-Schalter `CSP_MODE`). Davor am selben Tag .2 (Verlauf aufgegangener
+  Not-Schalter `CSP_MODE`), am selben Tag .2 (Verlauf aufgegangener
   Personen, verschlankte Doku) und .1 (Seite „Einstellungen“). Neueste
   Migration: `20261126000100_audit_personenfamilien` (Liste aller
   Migrationen:
   [datenmodell.md](docs/komponenten/datenmodell.md#migrationen-prismamigrations)).
 - Prüfstand dieses Releases: Migrationen ↔ Schema ohne Abweichung, keine
-  neue Migration, Typecheck, Lint, Vitest 1041/1041; `npm run test:e2e`
-  (Produktions-Build, strenger Hydration-Wächter, CSP-Wächter): 362
+  neue Migration, Typecheck, Lint, Vitest 1090/1090; `npm run test:e2e`
+  (Produktions-Build, strenger Hydration-Wächter, CSP-Wächter): 376
   bestanden, 1 übersprungen.
 - Git-Verlauf am 23.11. umgeschrieben (alle Zweige neu hochgeladen). Ältere
   Klone und Worktrees passen nicht mehr dazu — neu klonen statt
@@ -140,6 +141,14 @@ Anleitungen: [docs/entwicklung/tests.md](docs/entwicklung/tests.md),
   Vorschau, Liste „unklar“ bei Tausenden Einträgen, erneuter Import mit
   verknüpften Personen). Beziehungsfelder (z. B. Heiratsdatum) werden beim
   Verknüpfen nicht ergänzt.
+- **Wurzeln und Statistik:** mit echten Datenmengen nicht gemessen; die
+  Mock-Daten kennen nur ein Land (mehrere Länder, „Sonstige“ nur in Vitest).
+  Orte, die nur auf ein Land oder eine historische Landschaft zugeordnet
+  sind, erscheinen „nach Region“ als „Land (ohne Region)“.
+- **Ladeanzeige `/research`** (`loading.tsx`): Ein Wechsel auf dieselbe
+  Seite nur mit anderen Suchparametern bleibt damit hängen; heute ohne
+  Folge, weil dort kein Link nur Suchparameter ändert. `/statistics` hat
+  deshalb bewusst keine Ladeanzeige.
 - **Herkunfts-Übersicht** bei 390 px: Beim seitlichen Kreis überdeckt die
   Zahl an der Linie den Namensanfang.
 

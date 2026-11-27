@@ -17,6 +17,18 @@ Regeln für neue Einträge (AGENTS.md, Abschnitt 3 „Ausrollen“):
 - Geprüft von tests/release-notes.test.ts (lib/release-notes.ts).
 -->
 
+## 2026-11-27.1 — Wurzeln und Statistik
+
+- Neuer Abschnitt „Wurzeln“ auf der Personenseite: Ein Ring zeigt, aus
+  welchen Ländern oder Regionen die Vorfahren stammen — gerechnet aus den
+  Geburtsorten im Stammbaum. Du wählst, bis zu welcher Generation gerechnet
+  wird, und schaltest zwischen „nach Land“ und „nach Region“ um.
+- Neue Seite „Statistik“ im Menü: Geburtsorte, Geschlecht, häufigste Nach-
+  und Vornamen, Geburten je Jahrzehnt, erreichtes Lebensalter, Kinderzahl,
+  Heiratsalter und Geburtsmonate — auf Wunsch für eine einzelne Familie.
+  Gezählt werden nur Personen, die für dich freigegeben sind; einzelne
+  Personen nennt die Seite nicht.
+
 ## 2026-11-26.3 — Anmelden per E-Mail-Link, Vollbild, Vorschläge beim Import
 
 - Du hast kein Google- oder GitHub-Konto? Ist der E-Mail-Versand
