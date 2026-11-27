@@ -25,6 +25,7 @@ export const HELP_LINKS = {
   einstellungen: "/hilfe/einstellungen",
   zeitgeschichteVerwalten: "/hilfe/einstellungen#zeitgeschichte",
   zeitgeschichteKi: "/hilfe/einstellungen#eintraege-der-ki",
+  zeitgeschichteGebiete: "/hilfe/einstellungen#geltungsbereich",
   zeitgeschichteBaum: "/hilfe/stammbaum#zeitgeschichte-im-zeitstrahl",
   zeitgeschichteKarte: "/hilfe/karte#zeitgeschichte-in-der-zeitreise",
   zeitgeschichteLebenslauf: "/hilfe/personen#zeitgeschichte-im-lebenslauf",

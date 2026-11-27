@@ -718,7 +718,11 @@ einschließlich, nie vor `yearFrom`; gleich `yearFrom` wird als leer
 gespeichert), `kind` (Text: `krieg`, `politik`, `not`, `wanderung`,
 `sonstiges` — geprüft im Dienst, kein Enum), `description` (optional, ein
 Satz), `region` („gilt für Region/Ort“, freier Text, nur Zusatz in der
-Anzeige — kein Abgleich mit Wohnorten), `createdAt`, `updatedAt`.
+Anzeige — kein Abgleich mit Wohnorten), `areas` (Geltungsbereich: Liste von
+Schlüsseln wie `lib/places/area.ts` — Land „DE“ bzw. Region erster Ebene
+„DE.13“ —, aufgelöst und sortiert; Standard leer = überall, gilt für alle
+älteren Zeilen; bestimmt die Reihenfolge an den Anzeigestellen,
+`lib/history/areas.ts`), `createdAt`, `updatedAt`.
 Herkunft und Bestätigung (`lib/history/origin.ts`): `origin` (Enum
 `HistoryOrigin`: `MANUAL` von Hand — Standard, gilt für alle älteren Zeilen;
 `AI` über MCP von der KI angelegt; `AI_EDITED` von Hand angelegt, von der KI
@@ -764,6 +768,7 @@ beiden Tabellen stehen im `AuditLog` (`HistoryEvent`).
 | `20261126000100_audit_personenfamilien` | Im `AuditLog` `subjectFamilyIds` (Liste, Standard leer) und `subjectFamiliesKnown` (Standard `false`) — rein ergänzend, **ohne Rückfüllung**: Ältere Einträge bleiben „nicht erfasst“ (Begründung bei `lib/services/changes.ts` in [dienste.md](dienste.md)). |
 | `20261127000100_zeitgeschichte` | Tabellen `HistoryEvent` (eigene Ereignisse der Zeitgeschichte, Index auf `yearFrom`) und `HistoryHiddenBuiltin` (ausgeblendete mitgelieferte Einträge) — nur `CREATE TABLE`/`CREATE INDEX`, keine Daten; ohne Zeilen gilt die mitgelieferte Liste. |
 | `20261127000200_zeitgeschichte_herkunft` | Enum `HistoryOrigin` (`MANUAL`, `AI`, `AI_EDITED`); an `HistoryEvent` `origin` (Standard `MANUAL`), `aiReason`, `aiSourceUrl`, `confirmedAt`, `confirmedById` (optional) mit Fremdschlüssel auf `User` (SetNull) — nur `CREATE TYPE`, `ADD COLUMN`, `ADD CONSTRAINT`, keine Daten. |
+| `20261127000300_zeitgeschichte_gebiete` | An `HistoryEvent` `areas` (`TEXT[]`, Standard leer = überall) — Geltungsbereich; nur `ADD COLUMN`, keine Daten. |
 
 `migration_lock.toml` legt den Anbieter (PostgreSQL) fest.
 

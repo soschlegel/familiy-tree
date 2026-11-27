@@ -848,12 +848,14 @@ Titel „Wie sind wir verwandt?“. Bedienung: Anwender-Hilfe
 - **Rechte:** `history:manage` (Admin), sonst `/tree?denied=1`; Menüpunkt
   „Zeitgeschichte“ im Untermenü „Verwaltung“ nur mit diesem Recht.
 - **Daten:** `historyAdminState` — mitgelieferte Einträge mit `hidden`,
-  alle eigenen samt Herkunft, Begründung/Quelle der KI und Bestätigung.
+  alle eigenen samt Herkunft, Begründung/Quelle der KI und Bestätigung,
+  dazu der Katalog für den Geltungsbereich (Länder, Namen der Schlüssel).
 - **Anzeige:** `HistoryAdmin` (nutzt `/api/history-events…`), Link zur
   Anwender-Hilfe (`HelpLink`, Ziel `zeitgeschichteVerwalten`). Einträge der
   KI („von KI“, „ungeprüft“, Begründung, Quelle) lassen sich filtern („Nur
   unbestätigte“) und bestätigen — einzeln oder „Alle sichtbaren bestätigen“
-  mit Rückfrage.
+  mit Rückfrage. Jedes Ereignis zeigt seinen Geltungsbereich; im Formular
+  wird er mit `HistoryAreaPicker` gewählt (Land, Region, Schnellwahl).
 
 ### `/hilfe` und `/hilfe/[thema]` — `app/hilfe/page.tsx`, `app/hilfe/[thema]/page.tsx`
 
@@ -1249,12 +1251,17 @@ im Dienst (dienste.md, „Zeitgeschichte“). Die Anzeige der Ereignisse
 braucht keine Route — die Seiten laden sie serverseitig.
 
 - **`GET /api/history-events`**: `historyAdminState` — mitgelieferte
-  Einträge mit `hidden`, eigene Ereignisse.
+  Einträge mit `hidden`, eigene Ereignisse, Katalog des Geltungsbereichs.
 - **`POST /api/history-events`** (`title`, `yearFrom`, `yearTo`, `kind`,
-  `description`, `region`; Jahre als Zahl oder Text): eigenes Ereignis
-  anlegen → 201; ungültig 400 (`issues` mit Pfad je Feld).
-- **`PATCH /api/history-events/[id]`** (dieselben Felder): ändern;
-  unbekannt 404, ungültig 400. **`DELETE`**: löschen → `{ ok: true }`;
+  `description`, `region`, `areas` — Schlüssel bzw. `group:…`, leer =
+  überall; Jahre als Zahl oder Text): eigenes Ereignis anlegen → 201;
+  ungültig 400 (`issues` mit Pfad je Feld, unbekanntes Gebiet am Feld
+  `areas`).
+- **`PATCH /api/history-events/[id]`** (dieselben Felder; ohne `areas`
+  bleibt der Bereich): ändern; unbekannt 404, ungültig 400.
+- **`GET /api/history-events/areas`** (`?country=DE` optional):
+  `historyAreaLegend` — benannte Gruppen und die Regionen eines Landes mit
+  Schlüsseln, für die Auswahl in der Verwaltung; unbekanntes Land 400. **`DELETE`**: löschen → `{ ok: true }`;
   unbekannt 404.
 - **`PATCH /api/history-events/builtin/[id]`** (`hidden`: boolean):
   mitgelieferten Eintrag aus- bzw. einblenden; unbekannte Kennung 404.
@@ -1271,8 +1278,9 @@ Die Routen haben überwiegend keine eigenen Unit-Tests; geprüft werden die
 Dienste (`tests/*.db.test.ts`) und das Zusammenspiel im Browser
 (Playwright unter `e2e/`). Direkt auf Routen zielen `tests/health.test.ts`,
 `tests/mcp-http.db.test.ts`, `tests/settings.db.test.ts`,
-`tests/history.db.test.ts` und `tests/history-ai.db.test.ts` (Route
-`confirm`).
+`tests/history.db.test.ts`, `tests/history-ai.db.test.ts` (Route
+`confirm`) und `tests/history-areas.db.test.ts` (Anlegen mit Bereich,
+Route `areas`).
 
 | Bereich | E2E-Tests |
 |---|---|

@@ -86,6 +86,7 @@ test.describe("MCP-Endpunkt /api/mcp", () => {
     expect(read).not.toContain("create_person");
     // Zeitgeschichte: lesen mit jedem Schlüssel, pflegen nur mit Schreibstufe.
     expect(read).toContain("list_history_events");
+    expect(read).toContain("list_history_areas");
     expect(read).not.toContain("add_history_event");
     // Schlüssel WRITE, Benutzer nur READ: wirksam ist READ.
     expect(await toolNames(request, "viewer-write")).toEqual(read);

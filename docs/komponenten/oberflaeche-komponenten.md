@@ -37,7 +37,7 @@ Abschnitt 1). Seiten und API-Routen selbst stehen in
   `MergeDialog`, `FollowUpDuplicates`, `ChangeSetList`, `ChangeEntryList`
 - [Verwaltung und KI-Zugang](#verwaltung-und-ki-zugang) — `UserAdmin`,
   `FamilyAdmin`, `PlaceAdmin` (exportiert `PlaceAutoAssign` und `PlaceTable`),
-  `SettingsAdmin`, `HistoryAdmin`, `AiAccessManager`, `AiConnectGuide`, `ApiTokenList`
+  `SettingsAdmin`, `HistoryAdmin` (mit `HistoryAreaPicker`), `AiAccessManager`, `AiConnectGuide`, `ApiTokenList`
 
 ## Stammbaum und Karte
 
@@ -61,7 +61,7 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 - Der Server lädt einmal den Graphen der sichtbaren Personen (`loadGraph` aus `lib/services`) und bestimmt die Bezugsperson (`resolveReference`, Vorrang Adresse vor Cookie vor eigener Person).
 - **Fokus-Ansicht:** `loadFocusTree` liefert nur den Ausschnitt um die Fokusperson (Personen, Beziehungen und je Person Generation, Rolle sowie Anzahl verborgener Eltern/Kinder jenseits des Ausschnitts). Ohne `focus` gilt: angefragte Person → `bezug` → gemerkte Person aus dem Cookie → Bezugsperson; ein nicht vorhandener oder gesperrter `focus` ergibt den Hinweis „Person nicht gefunden“ statt eines Baums.
-- **Generationen/Zeitstrahl:** `loadTree` liefert den ganzen (maskierten) Bestand; gesperrte Personen sind Platzhalter mit `restricted`. Dazu die Zeitgeschichte (`listHistoryEvents`, wenige Dutzend Einträge) für die Marken am Zeitstrahl. Zwischen Generationen und Zeitstrahl wechselt der Browser ohne neues Laden (nur die Adresse wird per `replaceState` nachgeführt); der Wechsel zwischen Fokus und ganzem Baum ist eine Navigation, weil sich die Daten ändern.
+- **Generationen/Zeitstrahl:** `loadTree` liefert den ganzen (maskierten) Bestand; gesperrte Personen sind Platzhalter mit `restricted`. Dazu die Zeitgeschichte (`listHistoryEventsForTree`, wenige Dutzend Einträge; Ereignisse ohne Bezug zu den Orten der sichtbaren Personen mit `foreign`) für die Marken am Zeitstrahl. Zwischen Generationen und Zeitstrahl wechselt der Browser ohne neues Laden (nur die Adresse wird per `replaceState` nachgeführt); der Wechsel zwischen Fokus und ganzem Baum ist eine Navigation, weil sich die Daten ändern.
 - Zur Bezugsperson berechnet der Server `referenceView` (Verwandtschaftsbegriffe je sichtbarer Person, vier Großeltern, Ahnenlinien je Person) — in der Fokus-Ansicht beschränkt auf die Personen des Ausschnitts.
 - **Ringe:** kein `loadGraph`, kein `referenceView`, keine Familienliste und keine Zählzeile über dem Baum. `loadAncestorRings` (`lib/services/ancestor-rings.ts`) lädt nur die Vorfahren der Mitte, Generation für Generation. Mitte wie in der Fokus-Ansicht: angefragte Person → `bezug` → gemerkte Person → Bezugsperson → `defaultRingsRootId` (jüngste sichtbare Person mit leiblichen Eltern); eine angefragte, aber fehlende oder gesperrte Person ergibt „Person nicht gefunden“ (mit Link „Ringe öffnen“). Die Bezugsperson wird dafür ohne Graph geprüft (`resolveReference` mit Datenbankabfrage je Kandidat).
 
@@ -154,10 +154,11 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 - Leistung: liest nur Verschiebung, Zoom und Höhe aus dem React-Flow-Speicher (wie `TimelineAxis`); Weltkoordinaten einmal je Ereignisliste und Achse; der Baum selbst rendert dadurch nicht neu. Unsichtbare Gruppen werden nicht gezeichnet.
 - Hell/dunkel: Bernsteintöne mit halber Deckkraft, hervorgehoben bei geöffneter Anzeige.
 - Unbestätigte Einträge der KI: in der Anzeige der Vermerk „von KI, ungeprüft“ hinter den Jahren (`HistoryAiNote`), im `aria-label` als „Titel (von KI, ungeprüft)“. Die Marken selbst bleiben gleich.
+- Andere Gegenden (`foreign`, vom Server gesetzt — der Geltungsbereich passt zu keinem zugeordneten Ort der sichtbaren Personen): Marke deutlich blasser (`data-foreign`), in der Anzeige hinten mit „· andere Gegend“, im `aria-label` als „Titel (andere Gegend)“. Kostet im Browser nichts zusätzlich; der Server braucht eine Abfrage der Ortszuordnung.
 
 **Server oder Client:** Client.
 
-**Tests:** `e2e/read/history.spec.ts` (Marken, Anzeige bei Überfahren und Antippen, Escape, Schalter samt Cookie, Legende, 390 px mit Tippflächen, axe), `e2e/write/history.spec.ts` (Block „Einträge der KI“: Vermerk vor und nach dem Bestätigen).
+**Tests:** `e2e/read/history.spec.ts` (Marken, Anzeige bei Überfahren und Antippen, Escape, Schalter samt Cookie, Legende, 390 px mit Tippflächen, axe), `e2e/write/history.spec.ts` (Block „Einträge der KI“: Vermerk vor und nach dem Bestätigen); `foreign` nur aus sichtbaren Orten: `tests/history-areas.db.test.ts`.
 
 ### components/HistoryAiNote.tsx
 
@@ -456,7 +457,7 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 **Verhalten:**
 
-- *Zeitgeschichte:* Zeile „Zeitgeschichte <Jahr>: …“ unter der Zählzeile mit den Ereignissen, die das (nachlaufende) Jahr berühren (`eventsInYear` aus `lib/history/events.ts`), Titel mit Jahren, Art/Region/Beschreibung als Tooltip, bei unbestätigten KI-Einträgen der Vermerk „von KI, ungeprüft“ (`HistoryAiNote`, auch im Tooltip der Marke), sonst „kein Ereignis aus der Liste“, Kontexthilfe `zeitgeschichteKarte`; unter dem Balkenband feine Marken je Ereignis (Bahnen wie im Baum, nur Schmuck). Kästchen „Zeitgeschichte“ (`HistoryToggle`) in der ersten Zeile der Zeitreise; aus = weder Zeile noch Marken.
+- *Zeitgeschichte:* Zeile „Zeitgeschichte <Jahr>: …“ unter der Zählzeile mit den Ereignissen, die das (nachlaufende) Jahr berühren (`eventsInYear` aus `lib/history/events.ts`) — geordnet nach Geltungsbereich (`partitionByArea`): zuerst die zu den Orten passenden, an denen im Jahr Personen der Auswahl lebten (Gebiet je Ort `MapPlace.ar`, einmal mitgeliefert; nur Orte auf der Karte), Ort vor Land, dann „überall“; Ereignisse anderer Gegenden eingeklappt darunter („N Ereignisse anderer Gegenden“, `map-history-foreign`). Ohne Ort mit Gebiet bleibt die Reihenfolge nach der Zeit. Titel mit Jahren, Art/Region/Beschreibung als Tooltip, bei unbestätigten KI-Einträgen der Vermerk „von KI, ungeprüft“ (`HistoryAiNote`, auch im Tooltip der Marke), sonst „kein Ereignis aus der Liste“ (bzw. „kein Ereignis aus der Gegend der Personen“, wenn nur andere Gegenden betroffen sind), Kontexthilfe `zeitgeschichteKarte`; unter dem Balkenband feine Marken je Ereignis (Bahnen wie im Baum, nur Schmuck). Kästchen „Zeitgeschichte“ (`HistoryToggle`) in der ersten Zeile der Zeitreise; aus = weder Zeile noch Marken.
 
 - *Zeitstrahl (Jahr):* über dem Regler ein Balkenband „Lebende je Jahr“ (`aliveByYear`, nur Schmuck, das aktuelle Jahr markiert); Schiebefeld über die ganze Spanne `yearMin`…`yearMax` (44 px hoch; Pfeile ±1, Bild-auf/-ab ±10, Pos1/Ende; `aria-valuetext` mit Jahr und Zahl der Lebenden); Knöpfe −10/−1/+1/+10 (mindestens 44 × 44 px, am Rand gesperrt); Feld „Gehe zu“ (Eingabetaste oder Verlassen übernimmt, `clampYear` begrenzt auf die Spanne, Unsinn stellt das alte Jahr wieder her). Jede Wahl von Hand hält das Abspielen an. Das Jahr wird ohne Neuladen in `?jahr=` geschrieben (nicht während des Abspielens).
 - *Abspielen:* „Abspielen“ → „Pause“ → „Weiter“ (ein Jahr je Takt, Tempo langsam 400 ms/normal 160 ms/schnell 60 ms, hält am Ende; startet am Ende wieder vorn). Bei `prefers-reduced-motion: reduce` gibt es weder Knopf noch Tempo, nur einen Hinweis — die Schritt-Knöpfe bleiben.
@@ -475,7 +476,7 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 **Ruft auf:** `fetch("/geo/countries.json")` über `loadCountries` aus `lib/map/countries.ts` (statische Datei, keine API-Route; gemeinsamer Zwischenspeicher mit `LifePathMap`). Die Kartendaten liefert die Seite serverseitig (`loadMapView`); keine API-Route aus der Komponente.
 
-**Tests:** `e2e/read/map.spec.ts` (Kreise, Grenzen, Legende, Regler per Tastatur ohne Neuladen, Bild-ab, Schritt-Knöpfe, Jahreseingabe mit Begrenzung, Jahr in der Adresse, „Wer lebte“ mit Zahl gleich Zählzeile, Sortieren nach Alter, Kreis filtert die Liste, „In diesem Jahr“ aufklappen, Abspielen/Pause/Weiter, „Bewegung reduzieren“, Kreis-Auswahl, Ortsliste und Fokus, Ausschnitte/Zoom, axe, Telefon: Tippflächen ≥ 44 px, kein Querscrollen). Rechenlogik: `tests/map.test.ts` (`snapshot`, Zeitreise-Helfer, Projektion, `zoomAt`, `fitViewBox`, Laufzeit), `tests/map.db.test.ts`. Pfeiltasten auf der Karte, Tempo und „ohne bekannten Ort“-Auswahl sind nicht gezielt getestet. Zeitgeschichte: `e2e/read/history.spec.ts`, `e2e/write/history.spec.ts`.
+**Tests:** `e2e/read/map.spec.ts` (Kreise, Grenzen, Legende, Regler per Tastatur ohne Neuladen, Bild-ab, Schritt-Knöpfe, Jahreseingabe mit Begrenzung, Jahr in der Adresse, „Wer lebte“ mit Zahl gleich Zählzeile, Sortieren nach Alter, Kreis filtert die Liste, „In diesem Jahr“ aufklappen, Abspielen/Pause/Weiter, „Bewegung reduzieren“, Kreis-Auswahl, Ortsliste und Fokus, Ausschnitte/Zoom, axe, Telefon: Tippflächen ≥ 44 px, kein Querscrollen). Rechenlogik: `tests/map.test.ts` (`snapshot`, Zeitreise-Helfer, Projektion, `zoomAt`, `fitViewBox`, Laufzeit), `tests/map.db.test.ts`. Pfeiltasten auf der Karte, Tempo und „ohne bekannten Ort“-Auswahl sind nicht gezielt getestet. Zeitgeschichte: `e2e/read/history.spec.ts`, `e2e/write/history.spec.ts` (auch Block „Geltungsbereich“: passendes vorn, anderes eingeklappt); Rechenzeit der Ordnung je Jahr im Leistungstest von `tests/map.test.ts`.
 
 ### components/MapPersonChooser.tsx
 
@@ -1055,8 +1056,14 @@ des Texts oder von „Text kopieren“), die Zeile „In diese Lebenszeit
 fielen: …“ — die wichtigsten Ereignisse (höchstens vier) mit Jahren, Art,
 Region und Beschreibung als Tooltip; der Rest in „… weitere Ereignisse“
 (`details`); darunter „Allgemeine Zeitgeschichte <von>–<bis bzw. heute>,
-keine Angabe über die Person.“ mit Kontexthilfe
-`zeitgeschichteLebenslauf`. Kein Satz behauptet, die Person sei betroffen
+keine Angabe über die Person“ — mit regionalem Bezug ergänzt um „— Ereignisse
+aus der Gegend der erfassten Orte zuerst.“ — und Kontexthilfe
+`zeitgeschichteLebenslauf`. Regionaler Bezug (`lib/history/lifetime.ts`):
+Ereignisse, die die Region der Person treffen, tragen in der Klammer dezent
+die Region („1989 · Sachsen“, `biography-history-near`); Ereignisse anderer Gegenden
+stehen nur aufgeklappt unter „Andere Gegenden: …“
+(`biography-history-other`); passt nichts, heißt die Zeile „In diese
+Lebenszeit fielen keine Ereignisse aus der Gegend der erfassten Orte.“ Kein Satz behauptet, die Person sei betroffen
 gewesen. Unbestätigte Einträge der KI tragen hinter den Jahren den Vermerk
 „von KI, ungeprüft“ (`HistoryAiNote`). Das Kästchen „Zeitgeschichte“ (`HistoryToggle`) steht in der
 Hinweiszeile, nur wenn es eine solche Zeile gibt.
@@ -1069,7 +1076,10 @@ Hinweiszeile, nur wenn es eine solche Zeile gibt.
 eingeschränkter Benutzer, 390 px, axe), `e2e/read/history.spec.ts`
 (Zeitgeschichte: Inhalt, nicht im Text und nicht kopiert, Schalter, 390 px,
 dunkel). Text und Rechte: `tests/biography.test.ts`,
-`tests/biography.db.test.ts`; Lebenszeit: `tests/history.test.ts`.
+`tests/biography.db.test.ts`; Lebenszeit: `tests/history.test.ts`;
+regionaler Bezug: `tests/history-areas.test.ts`,
+`tests/history-areas.db.test.ts`, `e2e/read/history.spec.ts` (zwei
+Personen aus verschiedenen Gegenden), `e2e/write/history.spec.ts` (Block „Geltungsbereich“).
 
 ### components/DonutChart.tsx
 
@@ -1923,16 +1933,30 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 - **Wo eingesetzt:** `app/admin/history/page.tsx` (Recht `history:manage`).
 - **Exporte / Props:** `HistoryAdmin({ state })` mit `HistoryAdminState` aus `historyAdminState`.
 - **Verhalten:**
-  - Abschnitt „Eigene Ereignisse“: je Ereignis eine Karte (`history-custom`) mit Jahren, Titel, Art, Beschreibung und „Gilt für: …“; „Ändern“ öffnet dasselbe Formular an Ort und Stelle (Speichern/Abbrechen), „Löschen“ fragt nach. Ohne Einträge ein Hinweis mit erfundenen Beispielen.
+  - Abschnitt „Eigene Ereignisse“: je Ereignis eine Karte (`history-custom`) mit Jahren, Titel, Art, Beschreibung, „Geltungsbereich: …“ (Gruppen zusammengefasst, sonst Namen der Länder/Regionen, leer „überall“) und „Gilt für: …“ (freier Zusatz); „Ändern“ öffnet dasselbe Formular an Ort und Stelle (Speichern/Abbrechen), „Löschen“ fragt nach. Ohne Einträge ein Hinweis mit erfundenen Beispielen.
   - Einträge der KI (`lib/history/origin.ts`): Plakette „von KI“ bzw. „von KI geändert“, bei unbestätigten zusätzlich „ungeprüft“ (gestrichelt); darunter „Begründung der KI: …“ und „Quelle: …“ (Adresse nur `http(s)`, neues Fenster ohne Verweis zurück); bestätigte mit „Bestätigt am … von …“. Unbestätigte haben den Knopf „Bestätigen“ (`POST /api/history-events/confirm`). Beim Ändern eines unbestätigten steht über dem Formular, dass Speichern ihn bestätigt.
   - Neben der Überschrift „davon N von KI, ungeprüft“; das Kästchen „Nur unbestätigte“ (erscheint, sobald es unbestätigte gibt) filtert die Liste im Browser, „Alle sichtbaren bestätigen (N)“ bestätigt nach Rückfrage alle angezeigten unbestätigten auf einmal. Bleibt nach dem Filtern nichts, steht „Keine unbestätigten Einträge der KI.“
-  - Abschnitt „Ereignis hinzufügen“: Felder „Titel“, „Jahr von“, „Jahr bis (optional)“, „Art“ (Auswahl), „Beschreibung (optional, ein Satz)“, „Gilt für Region/Ort (optional)“; darüber der Hinweis „keine Namen aus dem Stammbaum“. Nach dem Anlegen ist das Formular wieder leer.
-  - Abschnitt „Mitgelieferte Ereignisse“: Liste mit Jahren, Titel, Art und Beschreibung, Zahl der ausgeblendeten; je Eintrag „Ausblenden“ bzw. „Einblenden“ (zugänglicher Name mit Titel), ausgeblendete blass mit Plakette „ausgeblendet“.
+  - Abschnitt „Ereignis hinzufügen“: Felder „Titel“, „Jahr von“, „Jahr bis (optional)“, „Art“ (Auswahl), „Beschreibung (optional, ein Satz)“, „Gilt für Region/Ort (optional, angezeigter Zusatz …)“ und der Geltungsbereich (`HistoryAreaPicker`); darüber der Hinweis „keine Namen aus dem Stammbaum“. Nach dem Anlegen ist das Formular wieder leer (auch der Bereich: „Überall“).
+  - Abschnitt „Mitgelieferte Ereignisse“: Liste mit Jahren, Titel, Art, Beschreibung und „Gilt für: …“ (Geltungsbereich), Zahl der ausgeblendeten; je Eintrag „Ausblenden“ bzw. „Einblenden“ (zugänglicher Name mit Titel), ausgeblendete blass mit Plakette „ausgeblendet“.
   - Geprüft wird nur auf dem Server; Meldungen je Feld erscheinen am Feld (`aria-invalid`, `field-error`), andere oben im `aria-live`-Bereich. Nach Erfolg Meldung und `router.refresh()`.
   - Knöpfe und Felder über `btn-*`/`field` — auf dem Telefon 44 px hoch.
 - **Server oder Client:** Client.
 - **Ruft auf:** `POST /api/history-events`, `PATCH`/`DELETE /api/history-events/[id]`, `PATCH /api/history-events/builtin/[id]` (über `apiFetch`/`jsonBody`).
-- **Tests:** `e2e/write/history.spec.ts` (Menü, Ausgangszustand, axe hell/dunkel, anlegen mit Prüfung am Feld, Wirkung auf die Karte, ändern, aus-/einblenden, Änderungsübersicht, 390 px, löschen, Nicht-Admins); `e2e/read/quality.spec.ts`.
+- **Tests:** `e2e/write/history.spec.ts` (Menü, Ausgangszustand, axe hell/dunkel, anlegen mit Prüfung am Feld, Wirkung auf die Karte, ändern, aus-/einblenden, Änderungsübersicht, 390 px, löschen, Nicht-Admins; Block „Geltungsbereich“); `e2e/read/quality.spec.ts`.
+
+### components/HistoryAreaPicker.tsx
+
+- **Zweck:** Auswahl des Geltungsbereichs eines eigenen Ereignisses der Zeitgeschichte — bedienbar ohne Kenntnis von Schlüsseln.
+- **Wo eingesetzt:** Formular von `HistoryAdmin` (anlegen und ändern).
+- **Exporte / Props:** `HistoryAreaPicker({ value, onChange, catalog, disabled, error })` — `value` die aufgelösten Schlüssel, `catalog` aus `historyAdminState` (`areaCatalog`: Länder, Namen bekannter Schlüssel); Typ `AreaCatalog`.
+- **Verhalten:**
+  - Gruppe „Geltungsbereich“ (`fieldset`) mit kurzer Erklärung (heutige Grenzen als Vereinfachung) und Kontexthilfe `zeitgeschichteGebiete`; Auswahlpunkte „Überall (kein regionaler Bezug)“ und „Bestimmte Gebiete“ (Überall leert die Liste).
+  - Bei „Bestimmte Gebiete“: gewählte Gebiete als Felder mit „×“ (zugänglicher Name „… entfernen“; vollständige Gruppen zusammengefasst, `compactAreas` — eine Gruppe entfernt alle ihre Schlüssel); Auswahl „Land“ (häufige Länder oben, dann alle) und „Region (optional)“ — die Regionen lädt `GET /api/history-events/areas?country=…` beim Wählen des Lands —, „Hinzufügen“ übernimmt Region oder ganzes Land; „Schnellwahl (historische Gebiete)“ mit je einem Knopf je benannter Gruppe (Erläuterung als `title`).
+  - Ohne gewähltes Gebiet gilt das Ereignis überall (Hinweis im Feld). Fehler des Servers am Feld `areas` erscheinen unter der Gruppe.
+  - Auf dem Telefon: Knöpfe, Auswahlfelder und „×“ mindestens 44 px; lange Namen umbrechen.
+- **Server oder Client:** Client.
+- **Ruft auf:** `GET /api/history-events/areas` (über `apiFetch`).
+- **Tests:** `e2e/write/history.spec.ts`, Block „Geltungsbereich“ (Land und Region wählen, Schnellwahl, entfernen, Anzeige „Geltungsbereich: …“, zurück auf „Überall“, 390 px dunkel mit Tippflächen und axe).
 
 ### components/PlaceAdmin.tsx
 

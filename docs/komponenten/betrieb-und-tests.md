@@ -711,6 +711,15 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   Stichproben), Zusammenführen und Ausblenden, Auswahl je Jahr/Spanne mit
   Rändern, Rangfolge, Bahnen, Lebenszeit (ungenaue und fehlende Daten,
   Lebende, Tod ohne Datum), Eingabeprüfung, Cookie.
+- **`history-areas.test.ts`** — Zeitgeschichte mit Geltungsbereich (reine
+  Logik, `lib/history/areas.ts`): Schlüssel, Gruppen auflösen und
+  zusammenfassen, Passung Ort/Land/überall/passt nicht (auch Kern- und
+  weiterer Bereich, nur Land bekannt), Ort zur Zeit des Ereignisses
+  (Station davor, Zeitraum mit Umzug, keine Station vorher, ohne
+  Stationen), Reihenfolge im Lebenslauf (passendes vorn, unpassendes unter
+  „weitere“, ungeprüfte KI-Einträge, ohne Ort wie bisher), Zeitreise, Eingabe;
+  dazu die mitgelieferte Liste gegen das Ortsverzeichnis (jeder Schlüssel
+  bekannt).
 - **`history-origin.test.ts`** — Zeitgeschichte „von KI“ (reine Logik,
   `lib/history/origin.ts`): unbestätigt, Herkunft nach einer Änderung der
   KI, Bestätigen beim Speichern von Hand, Vermerk in der Anzeigeliste,
@@ -858,8 +867,15 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   Nicht-Administrator abgelehnt, Anlegen mit Pflicht-Begründung (Herkunft,
   Protokoll mit Kanal, Schlüssel und Paket), Dubletten, Ändern (wieder
   unbestätigt, „von KI geändert“), kein Werkzeug zum Bestätigen, Löschen,
-  Ausblenden; Bestätigen über Dienst und Route `confirm`. Räumt beide
-  Tabellen, ihr Protokoll und die eigenen Pakete ab.
+  Ausblenden; Bestätigen über Dienst und Route `confirm`; Geltungsbereich
+  (`list_history_areas`, `areas` anlegen/ändern, ungültige Schlüssel). Räumt
+  beide Tabellen, ihr Protokoll und die eigenen Pakete ab.
+- **`history-areas.db.test.ts`** — Zeitgeschichte mit Geltungsbereich:
+  Ortstexte → Gebiet, Lebenslauf für Administrator und eingeschränkten
+  Benutzer (Heiratsort mit gesperrter Partnerin zählt nicht), Zeitstrahl
+  „andere Gegend“ nur aus sichtbaren Orten, Bereich anlegen/ändern über
+  Dienst und Route, Route `areas` nur für Administratoren. Legt erfundene
+  Personen, Ortstexte und Zuordnungen an und räumt sie ab.
 - **`settings.db.test.ts`** — Einstellungen: Vorrang App vor Umgebung,
   Rückfall nach dem Entfernen, ungültige gespeicherte Werte, Prüfung, nur
   Administratoren, Protokoll vorher → nachher samt Anzeige in der
@@ -957,7 +973,9 @@ Benutzer bekommt keinen gespeicherten Zustand.
   Marken am Zeitstrahl (Anzeige bei Überfahren und Antippen, Escape,
   Legende, nur im Zeitstrahl), Zeile der Zeitreise (Jahr mit Zeitraum am
   Rand, Jahr ohne Ereignis, Marken), Zeile im Lebenslauf (Inhalt aus der
-  mitgelieferten Liste nachgerechnet, nicht im Text, nicht kopiert);
+  mitgelieferten Liste nachgerechnet, nicht im Text, nicht kopiert),
+  regionaler Bezug an zwei Personen aus verschiedenen Gegenden (Ost: Mauerfall
+  vorn mit Region, Anwerbung unter „Andere Gegenden“; Bayern: umgekehrt);
   Schalter samt Cookie über alle drei Stellen; 390 px mit Tippflächen,
   axe hell und dunkel. Erwartet die mitgelieferte Liste ohne eigene oder
   ausgeblendete Einträge.
@@ -1121,6 +1139,13 @@ zum nächsten Setup).
   eine leere Liste erwartet. Eigene Titel „KI-Test …“ ohne „E2E“ (die
   Karten oben werden per `hasText: "E2E "` gezählt, und Playwright ignoriert
   dabei das Leerzeichen am Rand); räumt vor und nach dem Block auf.
+- **`history.spec.ts`, Block „Geltungsbereich“** (am Ende derselben seriellen Datei, weil die Änderungsübersicht nach Position prüft) — in der Verwaltung Land und
+  Region wählen, Schnellwahl, entfernen, „Gilt für“ der mitgelieferten;
+  Zeitreise (passendes vorn, anderes eingeklappt) und Lebenslauf (passendes
+  vorn mit Region, anderes unter „Andere Gegenden“); zurück auf „Überall“;
+  390 px dunkel mit Tippflächen und axe. Eigene Einträge „Gebietstest …“
+  (ohne „E2E“, weil die Karten oben per Text „E2E“ gezählt werden), vor und
+  nach dem Block gelöscht.
 - **`reference.spec.ts`** — „Das bin ich“ setzen und aufheben, selbst und
   durch den Admin.
 - **`sources.spec.ts`** — Quelle anlegen, zitieren, Beleg ändern/entfernen,

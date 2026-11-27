@@ -18,6 +18,7 @@ Die KI kann die [Zeitgeschichte](12-einstellungen.md#zeitgeschichte) lesen — j
 
 - Die KI soll nur gesicherte Ereignisse mit einer nachprüfbaren Jahreszahl eintragen und muss jedes Mal angeben, **woher** die Jahreszahl stammt. Im Zweifel trägt sie nichts ein. Namen von Personen aus dem Stammbaum gehören nie hinein.
 - Gibt es ein Ereignis mit sehr ähnlichem Titel in denselben Jahren schon, lehnt die App einen neuen Eintrag ab.
+- Regionale Ereignisse trägt die KI mit ihrem [Geltungsbereich](12-einstellungen.md#geltungsbereich) ein — Land, Region oder ein historisches Gebiet wie „Ostdeutschland (Gebiet der DDR)“. Vorher soll sie nachsehen, wo und wann deine Vorfahren lebten, und nichts für Gegenden eintragen, in denen niemand aus dem Stammbaum lebte.
 - Was die KI einträgt, sehen alle sofort — aber mit dem Vermerk **von KI, ungeprüft**, bis ein Administrator es bestätigt. Wie das geht, steht unter [Einträge der KI](12-einstellungen.md#eintraege-der-ki). Die KI selbst kann nichts bestätigen; ändert sie einen Eintrag, ist er wieder ungeprüft.
 
 ## Wer darf was

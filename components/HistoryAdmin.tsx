@@ -13,14 +13,16 @@ import {
   isHistoryKind,
 } from "@/lib/history/events";
 import { HISTORY_ORIGIN_LABEL } from "@/lib/history/origin";
+import { compactAreas, GROUP_PREFIX, historyAreaGroup } from "@/lib/history/areas";
+import { HistoryAreaPicker, type AreaCatalog } from "./HistoryAreaPicker";
 import { safeHttpUrl } from "@/lib/source-classify";
 import type { HistoryAdminBuiltinDto, HistoryAdminCustomDto, HistoryAdminState } from "@/lib/services/history";
 
 type Send = (url: string, init: RequestInit, success: string) => Promise<{ ok: boolean; fields?: Record<string, string> }>;
 
-type Draft = { title: string; yearFrom: string; yearTo: string; kind: string; description: string; region: string };
+type Draft = { title: string; yearFrom: string; yearTo: string; kind: string; description: string; region: string; areas: string[] };
 
-const EMPTY: Draft = { title: "", yearFrom: "", yearTo: "", kind: "sonstiges", description: "", region: "" };
+const EMPTY: Draft = { title: "", yearFrom: "", yearTo: "", kind: "sonstiges", description: "", region: "", areas: [] };
 
 const draftOf = (c: HistoryAdminCustomDto): Draft => ({
   title: c.title,
@@ -29,6 +31,7 @@ const draftOf = (c: HistoryAdminCustomDto): Draft => ({
   kind: isHistoryKind(c.kind) ? c.kind : "sonstiges",
   description: c.description ?? "",
   region: c.region ?? "",
+  areas: [...c.areas],
 });
 
 const bodyOf = (d: Draft) => ({
@@ -38,7 +41,16 @@ const bodyOf = (d: Draft) => ({
   kind: d.kind,
   description: d.description,
   region: d.region,
+  areas: d.areas,
 });
+
+/** Geltungsbereich lesbar: „Ostdeutschland (Gebiet der DDR), Deutschland“; leer = „überall“. */
+function areasText(keys: readonly string[], catalog: AreaCatalog): string {
+  if (keys.length === 0) return "überall";
+  return compactAreas(keys)
+    .map((k) => (k.startsWith(GROUP_PREFIX) ? (historyAreaGroup(k)?.label ?? k) : (catalog.labels[k] ?? k)))
+    .join(", ");
+}
 
 const kindLabel = (k: string) => (isHistoryKind(k) ? HISTORY_KIND_LABEL[k] : k);
 
@@ -49,7 +61,8 @@ const isoToGerman = (iso: string) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${i
  * Verwaltung der Zeitgeschichte (/admin/history): eigene Ereignisse anlegen,
  * ändern, löschen; mitgelieferte Einträge einzeln aus- und wieder
  * einblenden. Geprüft wird auf dem Server (checkHistoryInput); Meldungen
- * erscheinen am Feld.
+ * erscheinen am Feld. Jedes Ereignis hat einen Geltungsbereich (überall oder
+ * Gebiete, components/HistoryAreaPicker.tsx).
  */
 export function HistoryAdmin({ state }: { state: HistoryAdminState }) {
   const router = useRouter();
@@ -150,7 +163,7 @@ export function HistoryAdmin({ state }: { state: HistoryAdminState }) {
         ) : (
           <ul className="space-y-3">
             {shown.map((c) => (
-              <CustomCard key={c.id} event={c} busy={busy} send={send} />
+              <CustomCard key={c.id} event={c} busy={busy} send={send} catalog={state.areaCatalog} />
             ))}
           </ul>
         )}
@@ -162,6 +175,7 @@ export function HistoryAdmin({ state }: { state: HistoryAdminState }) {
         </h2>
         <HistoryForm
           initial={EMPTY}
+          catalog={state.areaCatalog}
           busy={busy}
           submitLabel="Anlegen"
           ariaLabel="Ereignis hinzufügen"
@@ -189,7 +203,7 @@ export function HistoryAdmin({ state }: { state: HistoryAdminState }) {
         </p>
         <ul className="divide-y divide-stone-200 rounded-xl border border-stone-200 bg-surface dark:divide-stone-800 dark:border-stone-800">
           {state.builtin.map((b) => (
-            <BuiltinRow key={b.id} event={b} busy={busy} send={send} />
+            <BuiltinRow key={b.id} event={b} busy={busy} send={send} catalog={state.areaCatalog} />
           ))}
         </ul>
       </section>
@@ -197,7 +211,7 @@ export function HistoryAdmin({ state }: { state: HistoryAdminState }) {
   );
 }
 
-function BuiltinRow({ event: b, busy, send }: { event: HistoryAdminBuiltinDto; busy: boolean; send: Send }) {
+function BuiltinRow({ event: b, busy, send, catalog }: { event: HistoryAdminBuiltinDto; busy: boolean; send: Send; catalog: AreaCatalog }) {
   const url = `/api/history-events/builtin/${encodeURIComponent(b.id)}`;
   return (
     <li className="flex flex-wrap items-start gap-x-3 gap-y-2 p-3 sm:flex-nowrap" data-testid={`history-builtin-${b.id}`} data-hidden={b.hidden || undefined}>
@@ -213,6 +227,9 @@ function BuiltinRow({ event: b, busy, send }: { event: HistoryAdminBuiltinDto; b
         </p>
         <p className="text-sm muted">
           {HISTORY_KIND_LABEL[b.kind]} · {b.description}
+        </p>
+        <p className="text-sm muted" data-testid="history-builtin-areas">
+          Gilt für: {areasText(b.areas, catalog)}
         </p>
       </div>
       <button
@@ -230,7 +247,7 @@ function BuiltinRow({ event: b, busy, send }: { event: HistoryAdminBuiltinDto; b
   );
 }
 
-function CustomCard({ event: c, busy, send }: { event: HistoryAdminCustomDto; busy: boolean; send: Send }) {
+function CustomCard({ event: c, busy, send, catalog }: { event: HistoryAdminCustomDto; busy: boolean; send: Send; catalog: AreaCatalog }) {
   const [editing, setEditing] = useState(false);
   const url = `/api/history-events/${encodeURIComponent(c.id)}`;
 
@@ -249,6 +266,7 @@ function CustomCard({ event: c, busy, send }: { event: HistoryAdminCustomDto; bu
       {editing ? (
         <HistoryForm
           initial={draftOf(c)}
+          catalog={catalog}
           busy={busy}
           submitLabel="Speichern"
           ariaLabel={`${c.title} ändern`}
@@ -281,6 +299,9 @@ function CustomCard({ event: c, busy, send }: { event: HistoryAdminCustomDto; bu
             )}
           </div>
           {c.description && <p className="max-w-3xl text-sm">{c.description}</p>}
+          <p className="text-sm muted" data-testid="history-custom-areas">
+            Geltungsbereich: {areasText(c.areas, catalog)}
+          </p>
           {c.region && (
             <p className="text-sm muted" data-testid="history-custom-region">
               Gilt für: {c.region}
@@ -342,6 +363,7 @@ function CustomCard({ event: c, busy, send }: { event: HistoryAdminCustomDto; bu
 
 function HistoryForm({
   initial,
+  catalog,
   busy,
   submitLabel,
   ariaLabel,
@@ -350,6 +372,7 @@ function HistoryForm({
   resetOnSuccess = false,
 }: {
   initial: Draft;
+  catalog: AreaCatalog;
   busy: boolean;
   submitLabel: string;
   ariaLabel: string;
@@ -360,7 +383,8 @@ function HistoryForm({
   const ids = useId();
   const [d, setD] = useState<Draft>(initial);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const set = (k: keyof Draft) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+  const [pickerKey, setPickerKey] = useState(0);
+  const set = (k: Exclude<keyof Draft, "areas">) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setD((prev) => ({ ...prev, [k]: e.target.value }));
     setErrors((prev) => {
       if (!prev[k]) return prev;
@@ -375,10 +399,13 @@ function HistoryForm({
     setErrors({});
     const r = await onSubmit(d);
     if (r.fields) setErrors(r.fields);
-    if (r.ok && resetOnSuccess) setD(EMPTY);
+    if (r.ok && resetOnSuccess) {
+      setD(EMPTY);
+      setPickerKey((n) => n + 1);
+    }
   }
 
-  const field = (k: keyof Draft) => ({
+  const field = (k: Exclude<keyof Draft, "areas">) => ({
     id: `${ids}-${k}`,
     value: d[k],
     onChange: set(k),
@@ -445,11 +472,27 @@ function HistoryForm({
       </div>
       <div>
         <label htmlFor={`${ids}-region`} className="field-label">
-          Gilt für Region/Ort <span className="font-normal muted">(optional)</span>
+          Gilt für Region/Ort <span className="font-normal muted">(optional, angezeigter Zusatz, z.B. ein Tal oder Dorf)</span>
         </label>
         <input {...field("region")} type="text" className={`field w-full sm:w-96 ${invalid("region")}`} autoComplete="off" />
         {errorOf("region")}
       </div>
+      <HistoryAreaPicker
+        key={pickerKey}
+        value={d.areas}
+        onChange={(areas) => {
+          setD((prev) => ({ ...prev, areas }));
+          setErrors((prev) => {
+            if (!prev.areas) return prev;
+            const next = { ...prev };
+            delete next.areas;
+            return next;
+          });
+        }}
+        catalog={catalog}
+        disabled={busy}
+        error={errors.areas}
+      />
       <div className="flex flex-wrap gap-2">
         <button className="btn-primary" disabled={busy || !d.title.trim() || !d.yearFrom.trim()}>
           {submitLabel}

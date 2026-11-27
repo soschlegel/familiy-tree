@@ -13,6 +13,8 @@ export const historyRequestInput = z.object({
   kind: z.string().max(40),
   description: z.string().max(5000).nullable().optional(),
   region: z.string().max(1000).nullable().optional(),
+  /** Geltungsbereich: Schlüssel („DE“, „DE.13“) bzw. Gruppen („group:…“); leer = überall. */
+  areas: z.array(z.string().max(60)).max(300).optional(),
 });
 
 /** KI-Einträge bestätigen (POST /api/history-events/confirm): eine oder mehrere Kennungen. */

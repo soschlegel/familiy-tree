@@ -47,7 +47,12 @@ Klick auf einen Kreis listet die Personen mit Link zur Personenseite.
   Beginn in J, beide Partner sichtbar), Todesfälle (Todes- bzw.
   Beerdigungsjahr = J; ein geschätztes Ende zählt nicht), je Zahl und
   aufklappbare Namen. Alles rechnet der Browser aus denselben Daten
-  (`lib/map/year.ts`), kein Abruf je Jahr.
+  (`lib/map/year.ts`), kein Abruf je Jahr. Zeile **„Zeitgeschichte J“**:
+  Ereignisse, deren Geltungsbereich zu den Orten passt, an denen in J
+  Personen der Auswahl lebten, stehen vorn (Region vor Land), dann die
+  überall geltenden; Ereignisse anderer Gegenden eingeklappt. Dafür trägt
+  jeder Ort der Karte sein Gebiet (Region erster Ebene bzw. Land, dieselben
+  Schlüssel wie „Wurzeln“) — siehe Abschnitt „Zeitgeschichte und Orte“.
 - **Bedienung** — Ziehen verschiebt (auch mit dem Finger), Mausrad bzw. zwei
   Finger zoomen, Knöpfe „+“/„−“ und die Ausschnitte „Orte“ (alle Orte der
   Auswahl, Standard), „Europa“, „Welt“; auf der fokussierten Karte
@@ -71,7 +76,9 @@ Klick auf einen Kreis listet die Personen mit Link zur Personenseite.
   (`tests/map.test.ts`). Die Zeitreise ergänzt nur, wo nötig (Geburtsjahr
   fürs Alter bei ungenauer Geburt oder nur Taufe, Hochzeiten als flache
   Zahlenliste): im selben Test mit 6 000 Ehen rund 90 KB mehr; Liste und
-  „In diesem Jahr“ unter 1 ms je Jahr.
+  „In diesem Jahr“ unter 1 ms je Jahr. Das Gebiet je Ort für die
+  Zeitgeschichte kostet bei rund 800 Orten rund 10 KB (1,56 MB statt
+  1,55 MB), das Ordnen der Zeitgeschichte rund 0,2 ms je Jahr.
 
 **Lebensweg** (`/map?mode=lebensweg&person=<id>&art=person|vaterlinie|mutterlinie`,
 eigene Betriebsart der Karte, Einstieg auch von der Personenseite): die Orte
@@ -231,3 +238,33 @@ Lizenz [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) — ausgewählt
 und umgeformt; Quellenangabe auf der Karte und hier. Ländergrenzen und
 Ländermittelpunkte aus [Natural Earth](https://www.naturalearthdata.com/),
 gemeinfrei.
+
+## Zeitgeschichte und Orte
+
+Die Zeitgeschichte (allgemeine Ereignisse als Hintergrund, Verwaltung unter
+`/admin/history`) hat je Ereignis einen **Geltungsbereich**: überall oder
+eine Liste von Gebieten — Länder bzw. Regionen erster Ebene mit denselben
+Schlüsseln wie „Wurzeln“ (`lib/places/area.ts`). Frühere Staaten (DDR,
+Preußen, Habsburgermonarchie) sind benannte Gruppen heutiger Gebiete;
+heutige Grenzen sind eine bewusste Vereinfachung. Regeln:
+[`lib/history/areas.ts`](../../lib/history/areas.ts).
+
+- **Passung:** trifft die Region der Person („Ort“), ihr Land als Ganzes
+  („Land“), gilt überall, oder passt nicht. Eine andere Region desselben
+  Landes zählt nicht; ist von der Person nur das Land bekannt und nennt der
+  Bereich nur Regionen dieses Landes, gilt es als neutral.
+- **Ort zur Zeit des Ereignisses:** im Lebenslauf die letzte Station mit
+  zugeordnetem Ort bis zum Beginn des Ereignisses und jede Station im
+  Zeitraum; ohne frühere Station die früheste. Stationen wie beim
+  Lebensweg (Geburt, Ereignisse mit Ort und Datum, Heirat und Scheidung,
+  Tod; Partnerschaften nur mit sichtbarem Partner). In der Zeitreise die
+  Orte der Lebenden im gewählten Jahr (Ort im Jahr J wie oben), im
+  Zeitstrahl des Baums alle zugeordneten Geburts-, Sterbe-, Heirats- und
+  Scheidungsorte der sichtbaren Personen.
+- **Wirkung:** Passendes vorn, Unpassendes nach hinten (Lebenslauf: unter
+  „weitere Ereignisse“, „Andere Gegenden“; Zeitreise: eingeklappt;
+  Zeitstrahl: blasser) — ausgeblendet wird nichts, damit eine Lücke in den
+  erfassten Orten nichts ganz versteckt. Ohne zugeordneten Ort bleibt die
+  bisherige Reihenfolge.
+- **Datenschutz:** Es zählen nur Orte von Personen und Beziehungen, die der
+  Benutzer sehen darf; die Ereignisse selbst sind für alle gleich.

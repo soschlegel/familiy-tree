@@ -9,6 +9,7 @@ import {
   canSeeOrigin,
   listFamilies,
   listHistoryEvents,
+  listHistoryEventsForTree,
   loadFocusTree,
   loadGraph,
   loadTree,
@@ -206,8 +207,9 @@ async function TreeContent({
     if (visible > 0) {
       reference = graph ? referenceView(graph, choice) : null;
       const origin = originOn && graph ? await loadTreeOrigin(scope, graph) : null;
-      // Zeitgeschichte für den Zeitstrahl (Wechsel Generationen ↔ Zeitstrahl ohne Neuladen).
-      const history = await listHistoryEvents();
+      // Zeitgeschichte für den Zeitstrahl (Wechsel Generationen ↔ Zeitstrahl ohne Neuladen);
+      // Ereignisse ohne Bezug zu den Orten der sichtbaren Personen werden blasser.
+      const history = graph ? await listHistoryEventsForTree(graph) : await listHistoryEvents();
       content = (
         <FamilyTree
           history={history}

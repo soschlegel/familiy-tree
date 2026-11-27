@@ -22,11 +22,16 @@ import {
   isUnconfirmedAi,
   type HistoryOrigin,
 } from "../history/origin";
-import { lifetimeHistory, type LifetimeHistory } from "../history/lifetime";
-import { isDeceased } from "../biography";
+import { lifetimeHistory, timedAreas, type AreaStationInput, type LifetimeHistory } from "../history/lifetime";
+import { bestMatch, compactAreas, type AreaOfPlace } from "../history/areas";
+import { isDeceased, type BioEvent } from "../biography";
 import { biographyInputOf } from "../biography-input";
+import { POSTHUMOUS_EVENT_TYPES } from "../events";
+import { placeKey } from "../places/normalize";
 import { calendarDayIn } from "../today";
+import { historyAreaAdminCatalog, knownAreaCheck, placeAreasOf } from "./history-areas";
 import type { PersonDetail } from "./persons";
+import type { LoadedGraph } from "./graph-data";
 import { conflictError, forbiddenError, notFoundError, validationError } from "./errors";
 
 /**
@@ -43,6 +48,11 @@ import { conflictError, forbiddenError, notFoundError, validationError } from ".
  *   `scope.isAdmin`). Die KI pflegt über eigene Funktionen (`ai…`), die
  *   zusätzlich Herkunft „von KI“, Pflicht-Begründung und Dublettenschutz
  *   durchsetzen (lib/history/origin.ts); nur mit Schreibstufe (mcp/tools.ts).
+ * - Geltungsbereich (`areas`, lib/history/areas.ts): Schlüssel werden gegen
+ *   das Ortsverzeichnis geprüft (lib/services/history-areas.ts). Für die
+ *   Reihenfolge zählen nur Orte, die der Benutzer sehen darf: im Lebenslauf
+ *   die Stationen der (sichtbaren) Person samt Partnerschaften mit
+ *   sichtbarem Partner, im Zeitstrahl die Orte der sichtbaren Personen.
  * - Jede Änderung kommt ins Protokoll (Audit „HistoryEvent“): eigene
  *   Einträge mit `c:`-freier Datenbank-Kennung, mitgelieferte mit ihrer
  *   Kennung aus builtin.ts (`diff.builtin = true`); über MCP mit Kanal und
@@ -57,6 +67,8 @@ export type HistoryAdminCustomDto = {
   kind: string;
   description: string | null;
   region: string | null;
+  /** Geltungsbereich (aufgelöste Schlüssel); leer = überall. */
+  areas: string[];
   updatedAt: string;
   /** Herkunft: von Hand, von KI, von KI geändert. */
   origin: HistoryOrigin;
@@ -74,6 +86,8 @@ export type HistoryAdminBuiltinDto = BuiltinHistoryEvent & { hidden: boolean };
 export type HistoryAdminState = {
   builtin: HistoryAdminBuiltinDto[];
   custom: HistoryAdminCustomDto[];
+  /** Auswahl des Geltungsbereichs: alle Länder und die Namen bekannter Schlüssel. */
+  areaCatalog: { countries: { key: string; name: string }[]; labels: Record<string, string> };
 };
 
 function assertAdmin(scope: Scope) {
@@ -102,6 +116,7 @@ function customDto(c: RowWithConfirmer): HistoryAdminCustomDto {
     kind: c.kind,
     description: c.description,
     region: c.region,
+    areas: c.areas,
     updatedAt: c.updatedAt.toISOString(),
     origin: c.origin,
     aiReason: c.aiReason,
@@ -136,7 +151,64 @@ export async function getLifetimeHistory(
   const input = biographyInputOf(detail, [], today);
   const p = { birth: input.person.birth, death: input.person.death, deceased: isDeceased(input) };
   if (!p.birth) return null;
-  return lifetimeHistory(events ?? (await listHistoryEvents()), p, today.year);
+  // Stationen wie der Lebensweg: Geburt, Tod, Ereignisse mit Ort, Heirat und
+  // Scheidung — Partnerschaften nur mit sichtbarem Partner (biographyInputOf
+  // verwirft die anderen samt ihren Ereignissen). Eine Abfrage der Ortszuordnung.
+  type Raw = { date: AreaStationInput["date"]; role: AreaStationInput["role"]; place: string | null };
+  const raw: Raw[] = [
+    { date: input.person.birth, role: "start", place: input.person.birthPlace },
+    { date: input.person.death, role: "end", place: input.person.deathPlace },
+  ];
+  const eventStation = (e: BioEvent): Raw => ({
+    date: e.date,
+    role: POSTHUMOUS_EVENT_TYPES.includes(e.type) ? "end" : "middle",
+    place: e.place,
+  });
+  raw.push(...input.events.map(eventStation));
+  for (const r of input.partnerships) {
+    raw.push({ date: r.start, role: "middle", place: r.startPlace }, { date: r.end, role: "middle", place: r.endPlace });
+    raw.push(...r.events.map(eventStation));
+  }
+  const withPlace = raw.filter((s) => s.place?.trim());
+  const areas = withPlace.length ? await placeAreasOf(withPlace.map((s) => s.place)) : new Map<string, AreaOfPlace>();
+  const stations = timedAreas(withPlace.map((s) => ({ date: s.date, role: s.role, area: areas.get(placeKey(s.place!)) ?? null })));
+  return lifetimeHistory(events ?? (await listHistoryEvents()), p, today.year, undefined, stations);
+}
+
+/**
+ * Zeitstrahl im Baum: Ereignisse, deren Geltungsbereich zu keinem
+ * zugeordneten Ort der gezeigten Personen passt, bekommen `foreign: true`
+ * (blasser, nachrangig). Der Aufrufer reicht nur Ortstexte SICHTBARER
+ * Personen — so verrät die Darstellung nichts über gesperrte. Ohne
+ * zugeordneten Ort bleibt alles unverändert.
+ */
+export async function markHistoryForPlaces(
+  events: HistoryEvent[],
+  placeTexts: Iterable<string | null | undefined>,
+): Promise<HistoryEvent[]> {
+  const areas = [...(await placeAreasOf(placeTexts)).values()];
+  if (areas.length === 0) return events;
+  // Gleiche Gebiete nur einmal prüfen.
+  const unique = [...new Map(areas.map((a) => [`${a.country}|${a.region ?? ""}`, a])).values()];
+  return events.map((e) => (bestMatch(e.areas, unique).match === "foreign" ? { ...e, foreign: true as const } : e));
+}
+
+/**
+ * Zeitgeschichte für den Zeitstrahl des ganzen Baums: Orte nur der
+ * sichtbaren Personen (Geburt, Tod) und ihrer Partnerschaften, wenn beide
+ * Partner sichtbar sind — eine Abfrage der Ortszuordnung.
+ */
+export async function listHistoryEventsForTree(graph: LoadedGraph): Promise<HistoryEvent[]> {
+  const texts: (string | null)[] = [];
+  for (const p of graph.persons.values()) {
+    if (!p.visible) continue;
+    texts.push(p.birthPlace, p.deathPlace);
+  }
+  for (const r of graph.relationships) {
+    if (r.type !== "PARTNER_OF" || !graph.persons.get(r.from)?.visible || !graph.persons.get(r.to)?.visible) continue;
+    texts.push(r.startPlace, r.endPlace);
+  }
+  return markHistoryForPlaces(await listHistoryEvents(), texts);
 }
 
 /** Zustand für die Verwaltungsseite — nur Administratoren. */
@@ -147,14 +219,16 @@ export async function historyAdminState(scope: Scope): Promise<HistoryAdminState
     prisma.historyHiddenBuiltin.findMany({ select: { builtinId: true } }),
   ]);
   const hiddenIds = new Set(hidden.map((h) => h.builtinId));
+  const used = [...BUILTIN_HISTORY.flatMap((b) => b.areas), ...custom.flatMap((c) => c.areas)];
   return {
     builtin: BUILTIN_HISTORY.map((b) => ({ ...b, hidden: hiddenIds.has(b.id) })),
     custom: custom.map(customDto),
+    areaCatalog: await historyAreaAdminCatalog(used),
   };
 }
 
-function checked(input: Record<string, unknown>, now: Date): HistoryInput {
-  const check = checkHistoryInput(input, calendarDayIn(now).year);
+async function checked(input: Record<string, unknown>, now: Date): Promise<HistoryInput> {
+  const check = checkHistoryInput(input, calendarDayIn(now).year, await knownAreaCheck());
   if (!check.ok) throw validationError(check.issues);
   return check.value;
 }
@@ -166,7 +240,7 @@ export async function createHistoryEvent(
   now: Date = new Date(),
 ): Promise<HistoryAdminCustomDto> {
   assertAdmin(scope);
-  const v = checked(input, now);
+  const v = await checked(input, now);
   const row = await prisma.historyEvent.create({ data: v });
   await audit({
     ...auditActor(scope),
@@ -192,7 +266,8 @@ export async function updateHistoryEvent(
   assertAdmin(scope);
   const before = await prisma.historyEvent.findUnique({ where: { id } });
   if (!before) throw notFoundError("Ereignis");
-  const v = checked(input, now);
+  // Ohne Angabe bleibt der Geltungsbereich (ältere Aufrufer kennen ihn nicht).
+  const v = await checked(input.areas === undefined ? { ...input, areas: before.areas } : input, now);
   const changes: Record<string, { from: unknown; to: unknown }> = fieldChanges(before, v);
   const confirm = confirmsOnManualSave(before);
   if (Object.keys(changes).length === 0 && !confirm) return customDto(before);
@@ -261,6 +336,7 @@ export async function deleteHistoryEvent(scope: Scope, id: string, reason?: stri
       kind: before.kind,
       description: before.description,
       region: before.region,
+      areas: before.areas,
       origin: before.origin,
       ...(reason ? { reason } : {}),
     },
@@ -321,6 +397,8 @@ export type AiHistoryEventDto = {
   kindLabel: string;
   description: string | null;
   region: string | null;
+  /** Geltungsbereich kurz: Gruppen als `group:…`, sonst Schlüssel; leer = überall. */
+  areas: string[];
   hidden?: true;
   origin?: HistoryOrigin;
   unconfirmed?: true;
@@ -359,6 +437,7 @@ export async function listHistoryEventsForAi(
         kindLabel: HISTORY_KIND_LABEL[b.kind],
         description: b.description,
         region: null,
+        areas: compactAreas(b.areas),
         ...(isHidden ? { hidden: true as const } : {}),
       });
     }
@@ -380,6 +459,7 @@ export async function listHistoryEventsForAi(
         kindLabel: HISTORY_KIND_LABEL[kind],
         description: c.description,
         region: c.region,
+        areas: compactAreas(c.areas),
         origin: c.origin,
         ...(unconfirmed ? { unconfirmed: true as const } : {}),
         ...(c.confirmedAt ? { confirmedAt: c.confirmedAt.toISOString() } : {}),
@@ -427,7 +507,7 @@ export async function aiCreateHistoryEvent(
 ): Promise<HistoryAdminCustomDto> {
   assertAdminForAi(scope);
   const { reason, sourceUrl, ...fields } = input;
-  const v = checked(fields, now);
+  const v = await checked(fields, now);
   const why = aiReasonOrThrow(reason, sourceUrl);
   const dup = findHistoryDuplicate({ title: v.title, from: v.yearFrom, to: v.yearTo, region: v.region }, await duplicateCandidates());
   if (dup) {
@@ -452,6 +532,8 @@ export type AiHistoryPatch = {
   kind?: string;
   description?: string | null;
   region?: string | null;
+  /** Geltungsbereich (Schlüssel bzw. `group:…`); `null` bzw. leer = überall. */
+  areas?: string[] | null;
 };
 
 /**
@@ -478,7 +560,7 @@ export async function aiUpdateHistoryEvent(
   const before = await prisma.historyEvent.findUnique({ where: { id: dbId } });
   if (!before) throw notFoundError("Ereignis");
   const pick = <K extends keyof AiHistoryPatch>(k: K, current: unknown) => (patch[k] === undefined ? current : patch[k]);
-  const v = checked(
+  const v = await checked(
     {
       title: pick("title", before.title),
       yearFrom: pick("yearFrom", before.yearFrom),
@@ -486,6 +568,7 @@ export async function aiUpdateHistoryEvent(
       kind: pick("kind", before.kind),
       description: pick("description", before.description),
       region: pick("region", before.region),
+      areas: pick("areas", before.areas),
     },
     now,
   );

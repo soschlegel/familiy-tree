@@ -34,8 +34,10 @@ import {
   HISTORY_KIND_LABEL,
   historyLanes,
   lastYear,
+  partitionByArea,
   type HistoryEvent,
 } from "@/lib/history/events";
+import { areaOfKey, bestMatch, type AreaOfPlace } from "@/lib/history/areas";
 
 /**
  * Karte „Wurzeln nach Jahr“ (docs/fachlich/karte-und-orte.md): eigene SVG-Karte
@@ -221,7 +223,20 @@ export function MapExplorer({
   const yearEvents = useMemo(() => eventsInYear(payload, listYear), [payload, listYear]);
   // Zeitgeschichte: Zeile zum Jahr und feine Marken am Zeitstrahl (Schalter im Cookie).
   const [historyOn, setHistoryOn] = useHistoryToggle(initialHistory);
-  const historyYear = useMemo(() => historyInYear(history, listYear), [history, listYear]);
+  // Reihenfolge nach Geltungsbereich: zuerst, was zu den Orten passt, an denen
+  // im Jahr Personen der Auswahl lebten (nur sichtbare, wie die ganze Karte);
+  // Ereignisse anderer Gegenden eingeklappt dahinter.
+  const historyYear = useMemo(() => {
+    const inYear = historyInYear(history, listYear);
+    const areas = new Map<string, AreaOfPlace>();
+    for (const r of lived) {
+      const ar = r.at !== null && r.at >= 0 ? payload.places[r.at]?.ar : undefined;
+      if (ar && !areas.has(ar)) areas.set(ar, areaOfKey(ar));
+    }
+    const ats = [...areas.values()];
+    if (ats.length === 0) return { shown: inYear, foreign: [] as HistoryEvent[] };
+    return partitionByArea(inYear, (e) => bestMatch(e.areas, ats).match);
+  }, [history, listYear, lived, payload.places]);
 
   const togglePlay = () => {
     if (reducedMotion) return;
@@ -564,7 +579,7 @@ export function MapExplorer({
         {payload.undated > 0 && <span className="muted"> · {payload.undated} ohne Lebensdaten (nicht auf der Karte)</span>}
       </p>
 
-      {historyOn && history.length > 0 && <HistoryYearLine year={listYear} events={historyYear} />}
+      {historyOn && history.length > 0 && <HistoryYearLine year={listYear} events={historyYear.shown} foreign={historyYear.foreign} />}
 
       <YearEventsLine year={listYear} events={yearEvents} persons={payload.persons} />
 
@@ -929,26 +944,47 @@ function HistoryMarks({ events, yearMin, yearMax }: { events: HistoryEvent[]; ye
   );
 }
 
-/** Zeile „Zeitgeschichte <Jahr>: …“ — Ereignisse, die das gewählte Jahr berühren. Hintergrund, keine Aussage über Personen. */
-function HistoryYearLine({ year, events }: { year: number; events: HistoryEvent[] }) {
+function HistoryYearItems({ events }: { events: HistoryEvent[] }) {
+  return events.map((e, i) => (
+    <span key={e.id} data-testid="map-history-item" title={[HISTORY_KIND_LABEL[e.kind], e.region ? `gilt für ${e.region}` : null, e.description].filter(Boolean).join(" · ")}>
+      {e.title} <span className="whitespace-nowrap tabular-nums muted">({formatHistoryYears(e)})</span>
+      {e.aiUnconfirmed && <HistoryAiNote testId="map-history-ai" className="ml-1" />}
+      {i < events.length - 1 && <span aria-hidden className="muted"> ·</span>}
+    </span>
+  ));
+}
+
+/**
+ * Zeile „Zeitgeschichte <Jahr>: …“ — Ereignisse, die das gewählte Jahr
+ * berühren: zuerst die zu den Orten der Lebenden passenden, dann die
+ * „überall“ geltenden; Ereignisse anderer Gegenden eingeklappt. Hintergrund,
+ * keine Aussage über Personen.
+ */
+function HistoryYearLine({ year, events, foreign }: { year: number; events: HistoryEvent[]; foreign: HistoryEvent[] }) {
   return (
-    <p className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 text-sm" data-testid="map-history">
-      <span className="font-medium text-amber-800 dark:text-amber-300">Zeitgeschichte {year}:</span>
-      {events.length === 0 ? (
-        <span className="muted" data-testid="map-history-none">
-          kein Ereignis aus der Liste
-        </span>
-      ) : (
-        events.map((e, i) => (
-          <span key={e.id} data-testid="map-history-item" title={[HISTORY_KIND_LABEL[e.kind], e.region ? `gilt für ${e.region}` : null, e.description].filter(Boolean).join(" · ")}>
-            {e.title} <span className="whitespace-nowrap tabular-nums muted">({formatHistoryYears(e)})</span>
-            {e.aiUnconfirmed && <HistoryAiNote testId="map-history-ai" className="ml-1" />}
-            {i < events.length - 1 && <span aria-hidden className="muted"> ·</span>}
+    <div className="space-y-1 text-sm" data-testid="map-history">
+      <p className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
+        <span className="font-medium text-amber-800 dark:text-amber-300">Zeitgeschichte {year}:</span>
+        {events.length === 0 ? (
+          <span className="muted" data-testid="map-history-none">
+            {foreign.length === 0 ? "kein Ereignis aus der Liste" : "kein Ereignis aus der Gegend der Personen"}
           </span>
-        ))
+        ) : (
+          <HistoryYearItems events={events} />
+        )}
+        <HelpLink to="zeitgeschichteKarte" compact label="Was zeigt die Zeitgeschichte?" className="ml-1 self-center" />
+      </p>
+      {foreign.length > 0 && (
+        <details data-testid="map-history-foreign">
+          <summary className="cursor-pointer text-accent-700 max-md:py-2.5 dark:text-accent-300">
+            {foreign.length === 1 ? "1 Ereignis anderer Gegenden" : `${foreign.length} Ereignisse anderer Gegenden`}
+          </summary>
+          <p className="mt-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
+            <HistoryYearItems events={foreign} />
+          </p>
+        </details>
       )}
-      <HelpLink to="zeitgeschichteKarte" compact label="Was zeigt die Zeitgeschichte?" className="ml-1 self-center" />
-    </p>
+    </div>
   );
 }
 

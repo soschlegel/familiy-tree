@@ -12,9 +12,14 @@
  * - Jahreszahlen sind ganze Jahre: `from`, bei Zeiträumen zusätzlich `to`
  *   (einschließlich). Ein Ereignis „berührt“ ein Jahr, wenn das Jahr in
  *   [from, to ?? from] liegt.
+ * - Geltungsbereich (`areas`, lib/history/areas.ts): Liste von Gebieten
+ *   (Land bzw. Region erster Ebene); leer = „überall“. Passende Ereignisse
+ *   stehen vorn, unpassende hinten — ausgeblendet wird nichts.
  * - Das Modul wird auch im Browser benutzt (Zeitstrahl, Karte) — deshalb
- *   ohne Abhängigkeiten außer Typen und lib/history/origin.ts.
+ *   ohne Abhängigkeiten außer Typen, lib/history/areas.ts und
+ *   lib/history/origin.ts.
  */
+import { AREA_MATCH_ORDER, expandAreaInput, MAX_AREA_KEYS, type AreaMatch } from "./areas";
 import { isUnconfirmedAi } from "./origin";
 
 /** Art eines Ereignisses — die Kennung steht so in der Datenbank. */
@@ -45,6 +50,8 @@ export type BuiltinHistoryEvent = {
   kind: HistoryKind;
   rank: HistoryRank;
   description: string;
+  /** Geltungsbereich (Schlüssel, aufgelöst); leer = überall. */
+  areas: readonly string[];
 };
 
 /** Eigener Eintrag, wie er aus der Datenbank kommt (Tabelle HistoryEvent). */
@@ -56,6 +63,8 @@ export type CustomHistoryEvent = {
   kind: string;
   description: string | null;
   region: string | null;
+  /** Geltungsbereich; fehlt bzw. leer = überall (Einträge vor der Spalte). */
+  areas?: string[] | null;
   /** Herkunft (lib/history/origin.ts); fehlt = von Hand. */
   origin?: string;
   /** Bestätigung durch einen Administrator; leer bei KI-Herkunft = ungeprüft. */
@@ -74,12 +83,24 @@ export type HistoryEvent = {
   description: string | null;
   /** Nur eigene Einträge: „gilt für Region/Ort“ (freier Text, nur Zusatz). */
   region: string | null;
+  /** Geltungsbereich (lib/history/areas.ts); leer = überall. */
+  areas: readonly string[];
   rank: HistoryRank;
   /**
    * Eigener Eintrag der KI, noch nicht von einem Administrator bestätigt —
    * die Anzeigestellen tragen dann den Vermerk „von KI, ungeprüft“.
    */
   aiUnconfirmed?: true;
+  /**
+   * Zeitstrahl im Baum: Der Bereich passt zu keinem zugeordneten Ort der
+   * sichtbaren Personen — blasser und nachrangig (lib/services/history.ts).
+   */
+  foreign?: true;
+  /**
+   * Lebenslauf: Bereich trifft die Region der Person zur Zeit des
+   * Ereignisses — ihr Name für den dezenten Bezug („Sachsen“).
+   */
+  near?: string;
 };
 
 /** Cookie für den Schalter „Zeitgeschichte“ (je Browser): "0" = aus, sonst an. */
@@ -132,7 +153,18 @@ export function mergeHistory(
   const out: HistoryEvent[] = [];
   for (const b of builtin) {
     if (hidden.has(b.id)) continue;
-    out.push({ id: b.id, source: "builtin", title: b.title, from: b.from, to: b.to, kind: b.kind, description: b.description, region: null, rank: b.rank });
+    out.push({
+      id: b.id,
+      source: "builtin",
+      title: b.title,
+      from: b.from,
+      to: b.to,
+      kind: b.kind,
+      description: b.description,
+      region: null,
+      areas: b.areas,
+      rank: b.rank,
+    });
   }
   for (const c of custom) {
     out.push({
@@ -144,6 +176,7 @@ export function mergeHistory(
       kind: isHistoryKind(c.kind) ? c.kind : "sonstiges",
       description: c.description?.trim() || null,
       region: c.region?.trim() || null,
+      areas: c.areas ?? [],
       // Ungeprüfte Einträge der KI zählen als Ergänzung (Rang 3) und rücken erst
       // nach der Bestätigung durch einen Administrator nach vorn.
       ...(c.origin && isUnconfirmedAi({ origin: c.origin, confirmedAt: c.confirmedAt ?? null })
@@ -172,6 +205,37 @@ export function eventsInYear(events: readonly HistoryEvent[], year: number): His
 export function splitByRank(events: readonly HistoryEvent[], limit: number): { top: HistoryEvent[]; rest: HistoryEvent[] } {
   const ranked = [...events].sort(byRank);
   return { top: ranked.slice(0, Math.max(0, limit)).sort(byTime), rest: ranked.slice(Math.max(0, limit)).sort(byTime) };
+}
+
+/**
+ * Reihenfolge mit Geltungsbereich: zuerst nach Passung (Ort vor Land vor
+ * überall vor passt nicht), darin nach Rang, dann nach der Zeit.
+ */
+export function byAreaThenRank(matchOf: (e: HistoryEvent) => AreaMatch) {
+  return (a: HistoryEvent, b: HistoryEvent) => AREA_MATCH_ORDER[matchOf(a)] - AREA_MATCH_ORDER[matchOf(b)] || byRank(a, b);
+}
+
+/**
+ * Ereignisse nach Passung gruppieren (Zeitreise der Karte): passende vorn
+ * (Ort vor Land), dann „überall“ — jeweils nach der Zeit; unpassende getrennt.
+ */
+export function partitionByArea(
+  events: readonly HistoryEvent[],
+  matchOf: (e: HistoryEvent) => AreaMatch,
+): { shown: HistoryEvent[]; foreign: HistoryEvent[] } {
+  const shown: HistoryEvent[] = [];
+  const foreign: HistoryEvent[] = [];
+  const order = new Map<HistoryEvent, number>();
+  for (const e of events) {
+    const m = matchOf(e);
+    if (m === "foreign") foreign.push(e);
+    else {
+      shown.push(e);
+      order.set(e, AREA_MATCH_ORDER[m]);
+    }
+  }
+  shown.sort((a, b) => order.get(a)! - order.get(b)! || byTime(a, b));
+  return { shown, foreign: foreign.sort(byTime) };
 }
 
 /**
@@ -212,6 +276,8 @@ export type HistoryInput = {
   kind: HistoryKind;
   description: string | null;
   region: string | null;
+  /** Geltungsbereich, aufgelöst und sortiert; leer = überall. */
+  areas: string[];
 };
 
 export type HistoryCheck = { ok: true; value: HistoryInput } | { ok: false; issues: { path: string; message: string }[] };
@@ -228,9 +294,16 @@ const text = (v: unknown): string => (typeof v === "string" ? v.replace(/\s+/g, 
  * Eingabe eines eigenen Eintrags prüfen und vereinheitlichen: Titel Pflicht,
  * Jahr „von“ Pflicht (ganzes Jahr ab 1000, nicht in der Zukunft), „bis“
  * optional und nicht vor „von“ (gleich „von“ → Einzeljahr), Art aus der
- * Liste, Beschreibung und Region optional mit Höchstlänge.
+ * Liste, Beschreibung und Region optional mit Höchstlänge. Geltungsbereich
+ * optional (fehlt/leer = überall): Schlüssel von Ländern bzw. Regionen oder
+ * Gruppen (`group:…`); `isKnownArea` prüft die Schlüssel gegen das
+ * Ortsverzeichnis (nur auf dem Server vorhanden).
  */
-export function checkHistoryInput(input: Record<string, unknown>, currentYear: number): HistoryCheck {
+export function checkHistoryInput(
+  input: Record<string, unknown>,
+  currentYear: number,
+  isKnownArea?: (key: string) => boolean,
+): HistoryCheck {
   const issues: { path: string; message: string }[] = [];
   const title = text(input.title);
   if (!title) issues.push({ path: "title", message: "Bitte einen Titel angeben." });
@@ -259,11 +332,27 @@ export function checkHistoryInput(input: Record<string, unknown>, currentYear: n
   const region = text(input.region);
   if (region.length > HISTORY_LIMITS.region) issues.push({ path: "region", message: `Höchstens ${HISTORY_LIMITS.region} Zeichen.` });
 
+  let areas: string[] = [];
+  if (input.areas !== undefined && input.areas !== null) {
+    if (!Array.isArray(input.areas)) {
+      issues.push({ path: "areas", message: "Bitte eine Liste von Gebieten angeben." });
+    } else {
+      const expanded = expandAreaInput(input.areas);
+      const unknown = [...expanded.invalid, ...(isKnownArea ? expanded.keys.filter((k) => !isKnownArea(k)) : [])];
+      if (unknown.length > 0) {
+        issues.push({ path: "areas", message: `Unbekanntes Gebiet: ${unknown.slice(0, 5).join(", ")}${unknown.length > 5 ? " …" : ""}.` });
+      } else if (expanded.keys.length > MAX_AREA_KEYS) {
+        issues.push({ path: "areas", message: `Höchstens ${MAX_AREA_KEYS} Gebiete.` });
+      }
+      areas = expanded.keys;
+    }
+  }
+
   if (issues.length > 0) return { ok: false, issues };
   const yearFrom = from as number;
   const yearTo = typeof to === "number" && to !== yearFrom ? to : null;
   return {
     ok: true,
-    value: { title, yearFrom, yearTo, kind: kind as HistoryKind, description: description || null, region: region || null },
+    value: { title, yearFrom, yearTo, kind: kind as HistoryKind, description: description || null, region: region || null, areas },
   };
 }
