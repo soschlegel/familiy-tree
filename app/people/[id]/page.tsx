@@ -50,6 +50,7 @@ import { PersonChanges } from "@/components/PersonChanges";
 import { PersonOrigin } from "@/components/PersonOrigin";
 import { getPersonOrigin } from "@/lib/services/origin";
 import { getPersonRoots } from "@/lib/services/roots";
+import { lifePathEntry } from "@/lib/services/life-path";
 import { PersonRoots } from "@/components/PersonRoots";
 import {
   RelationshipEditor,
@@ -338,9 +339,12 @@ export default async function PersonPage({
   // Bearbeiter; der Dienst prüft das Recht selbst noch einmal.
   // Wurzeln (Standard: 4. Generation, nach Land) gleich mitliefern; ohne
   // leibliche Eltern entfällt der Abschnitt (components/PersonRoots.tsx).
-  const [origin, roots] = await Promise.all([
+  // Einstieg „Lebensweg auf der Karte“ nur, wenn der Weg mindestens zwei
+  // Punkte hat (eigene Stationen, sonst Vater- bzw. Mutterlinie).
+  const [origin, roots, lifePath] = await Promise.all([
     canEdit ? getPersonOrigin(scope, id) : null,
     getPersonRoots(scope, id),
+    lifePathEntry(scope, id),
   ]);
 
   // Lebensereignisse: die der Person und die ihrer Beziehungen in einer
@@ -582,6 +586,15 @@ export default async function PersonPage({
             <Link href={`/tree?focus=${person.id}`} className="btn-secondary">
               Im Stammbaum zeigen
             </Link>
+            {lifePath && (
+              <Link
+                href={`/map?person=${person.id}&mode=lebensweg${lifePath === "person" ? "" : `&art=${lifePath === "father" ? "vaterlinie" : "mutterlinie"}`}`}
+                className="btn-secondary"
+                data-testid="person-lifepath-link"
+              >
+                Lebensweg auf der Karte
+              </Link>
+            )}
             {canEdit && <MergeDialog personId={person.id} personName={name(person)} people={allPersons} />}
           </div>
         </div>

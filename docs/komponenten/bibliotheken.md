@@ -565,7 +565,7 @@ Rein und ohne Abhängigkeiten (Browser, Dienste, MCP, Tests).
 **Benutzt von:** sehr breit — Formulare (`DateInput`, `PersonForm`,
 `EventSection`, `RelationshipEditor`), Bearbeitungsseiten, `audit`,
 `consistency`, `duplicates`, `merge-rules`, `import-linking`,
-`partner-labels`, `tree-layout`, `validation`, `map/build`,
+`partner-labels`, `tree-layout`, `validation`, `map/build`, `map/life-path`,
 `gedcom-import/*`, die meisten Dienste, `mcp/format.ts`, `mcp/tools.ts`.
 
 **Tests:** `tests/dates.test.ts`; indirekt `duplicates`, `merge-rules`,
@@ -2031,9 +2031,59 @@ Breite auf ±84° begrenzt.
 `VIEWS` (Europa, Welt), `fitViewBox` (auf Seitenverhältnis bringen ohne
 abzuschneiden), `zoomAt` (Zoom um einen Punkt mit Grenzen).
 
-**Benutzt von:** `components/MapExplorer.tsx`.
+**Benutzt von:** `components/MapExplorer.tsx`, `components/LifePathMap.tsx`.
 
 **Tests:** `tests/map.test.ts`.
+
+### lib/map/countries.ts
+**Zweck:** Ländergrenzen für die Karten im Browser laden
+(`public/geo/countries.json`), einmal je Seite, im Modul zwischengespeichert;
+nach einem Fehler beim nächsten Aufruf neu versucht.
+
+**Wichtige Funktionen/Typen:** `loadCountries`, `Country`.
+
+**Benutzt von:** `components/MapExplorer.tsx`, `components/LifePathMap.tsx`.
+
+**Tests:** indirekt `e2e/read/map.spec.ts`, `e2e/read/lifepath.spec.ts`.
+
+### lib/map/life-path.ts
+**Zweck:** Reine Logik des „Lebenswegs“ auf der Karte: Stationen ordnen,
+nummerieren, Orte auflösen, gleiche Orte zusammenfassen, Teilstücke
+bilden; dazu die Wahl des nächsten Vorfahren einer Vater- bzw. Mutterlinie.
+
+**Wichtige Funktionen/Typen:** `orderStations`, `buildLifePath`,
+`pointNumbers` („3“, „1–3“, „2, 4“), `isApproximate`, `nextInLine`,
+`walkLines`, `LINE_MAX_GENERATIONS` (12); `StationInput`, `PathStation`,
+`PathPoint`, `PathSegment`, `LifePath`, `PlaceLookup`, `LineParent`,
+`LineEnd` (`none`, `restricted`, `ambiguous`, `limit`).
+
+**Regeln:**
+- **Reihenfolge:** Rolle „start“ (Geburt) vorn, „end“ (Tod Rang 0, danach
+  Rang 1) hinten — auch ohne Datum; „middle“ mit Datum dazwischen nach dem
+  Anker (`date`), bei gleichem Anker genauere Angabe zuerst (Tag < Monat <
+  Jahr, ohne Zusatz vor mit Zusatz), sonst Eingabereihenfolge. „middle“ ohne
+  Datum → „ohne Datum“ (ohne Nummer, nicht auf dem Weg). Linien (`fixed`)
+  behalten die gegebene Reihenfolge.
+- **Ungenau** (`approx`): nicht tagesgenau oder mit Zusatz.
+- **Karte:** nur Orte mit Koordinaten (`PlaceLookup` liefert Koordinaten,
+  „unresolvable“ oder nichts → Status `map`, `unresolvable`, `unassigned`;
+  ohne Ortstext `none`). Folgt eine Station auf der Karte mit gleichen
+  Koordinaten (±0,0001°) auf den vorigen Punkt — auch über Stationen ohne
+  Karte hinweg —, gehört sie zu diesem Punkt. Ein Teilstück ist
+  `skipped`, wenn zwischen seinen Punkten eine Station ohne Ort auf der
+  Karte liegt.
+- **Linie:** `nextInLine` wählt unter den leiblichen Eltern den sichtbaren
+  mit Geschlecht MALE (Vater) bzw. FEMALE (Mutter); mehrere → `ambiguous`;
+  keiner, aber ein nicht sichtbarer Elternteil → `restricted`; keiner, aber
+  ein sichtbarer mit anderem Geschlecht als dem des anderen Elternteils →
+  `ambiguous`; sonst `none`. `walkLines` läuft beide Linien zugleich mit
+  einem Ladeaufruf je Generation, Zyklen enden als `ambiguous`, nach
+  `max` Generationen `limit` (eine Generation mehr wird nur gefragt, um
+  `none` zu erkennen).
+
+**Benutzt von:** `lib/services/life-path.ts`, `components/LifePathMap.tsx`.
+
+**Tests:** `tests/life-path.test.ts`, `tests/life-path.db.test.ts`.
 
 ### lib/places/normalize.ts
 **Zweck:** Ortstexte normalisieren und zerlegen; rein, auch im Browser.
@@ -2053,7 +2103,7 @@ entfernt, Klammerzusatz erst mit, dann ohne; als Rückfall der erste Teil
 vor „/“ und beide Hälften eines Bindestrich-Namens (hintere zuerst).
 Teile mit Ziffern gelten als Anschrift (werden nicht als Ort gesucht).
 
-**Benutzt von:** `map/build`, `places/gazetteer`, `places/match`,
+**Benutzt von:** `map/build`, `map/life-path`, `places/gazetteer`, `places/match`,
 `lib/services/places.ts`, `prisma/seed-mock.ts`.
 
 **Tests:** `tests/places.test.ts`, `tests/map.test.ts`,

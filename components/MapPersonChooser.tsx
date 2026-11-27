@@ -11,10 +11,10 @@ const year = (iso: string | null) => (iso ? iso.slice(0, 4) : "");
 
 /**
  * Ausgangsperson der Karte wählen: Suchfeld über die sichtbaren Personen
- * (/api/persons?q=), Auswahl führt zu /map?person=<id>. Ändert die
- * Bezugsperson des Baums nicht.
+ * (/api/persons?q=), Auswahl führt zu /map?person=<id>&mode=…(&art=… beim
+ * Lebensweg). Ändert die Bezugsperson des Baums nicht.
  */
-export function MapPersonChooser({ mode }: { mode: "vorfahren" | "alle" }) {
+export function MapPersonChooser({ mode, art }: { mode: "vorfahren" | "alle" | "lebensweg"; art?: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -93,7 +93,7 @@ export function MapPersonChooser({ mode }: { mode: "vorfahren" | "alle" }) {
                   className="w-full rounded-lg px-2 py-2 text-left text-sm hover:bg-stone-900/5 dark:hover:bg-white/10"
                   onClick={() => {
                     setOpen(false);
-                    router.push(`/map?person=${encodeURIComponent(h.id)}&mode=${mode}`);
+                    router.push(`/map?person=${encodeURIComponent(h.id)}&mode=${mode}${art ? `&art=${encodeURIComponent(art)}` : ""}`);
                   }}
                 >
                   <span className="font-medium">{[h.givenName, h.familyName].filter(Boolean).join(" ")}</span>

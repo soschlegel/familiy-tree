@@ -19,7 +19,7 @@ Abschnitt 1). Seiten und API-Routen selbst stehen in
 - [Stammbaum und Karte](#stammbaum-und-karte) — `FamilyTree`, `AncestorRings`, `TreeViewSwitch`, `tree-url`, `useTreeFullscreen`, `PersonNode`,
   `OriginChips`, `MarriageNode`, `MarriageEdge`, `ParentEdge`, `ReferenceLines`,
   `ReferenceChip`, `ReferencePanel`, `KinshipPersonField`, `KinshipDiagram`,
-  `kinship-url`, `MapExplorer`, `MapPersonChooser`, `Avatar`, `gender-style`
+  `kinship-url`, `MapExplorer`, `MapPersonChooser`, `LifePathMap`, `Avatar`, `gender-style`
 - [Gestaltungssystem: app/globals.css](#gestaltungssystem-appglobalscss)
 - [Personen, Ereignisse, Quellen und Medien](#personen-ereignisse-quellen-und-medien)
   — `PersonForm`, `DateInput`, `EventSection`, `CitationSection`,
@@ -398,7 +398,7 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 **Server oder Client:** Client.
 
-**Ruft auf:** `fetch("/geo/countries.json")` (statische Datei, keine API-Route). Die Kartendaten liefert die Seite serverseitig (`loadMapView`); keine API-Route aus der Komponente.
+**Ruft auf:** `fetch("/geo/countries.json")` über `loadCountries` aus `lib/map/countries.ts` (statische Datei, keine API-Route; gemeinsamer Zwischenspeicher mit `LifePathMap`). Die Kartendaten liefert die Seite serverseitig (`loadMapView`); keine API-Route aus der Komponente.
 
 **Tests:** `e2e/read/map.spec.ts` (Kreise, Grenzen, Legende, Regler per Tastatur ohne Neuladen, Abspielen, Kreis-Auswahl, Ortsliste und Fokus, Ausschnitte/Zoom, axe, Telefon antippen ohne Querscrollen). Rechenlogik: `tests/map.test.ts` (`snapshot`, Projektion, `zoomAt`, `fitViewBox`), `tests/map.db.test.ts`. Pfeiltasten auf der Karte, Tempo und „ohne bekannten Ort“-Auswahl sind nicht gezielt getestet.
 
@@ -408,15 +408,39 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 **Wo eingesetzt:** `app/map/page.tsx`.
 
-**Props/Daten:** die aktuelle Auswahl (`vorfahren` oder `alle`), die bei der Navigation erhalten bleibt.
+**Props/Daten:** die aktuelle Auswahl (`vorfahren`, `alle` oder `lebensweg`) und beim Lebensweg die Art (`art`: `person`, `vaterlinie`, `mutterlinie`), die bei der Navigation erhalten bleiben.
 
-**Verhalten:** Öffnen setzt den Fokus ins Suchfeld; ab zwei Zeichen verzögert gesucht (max. 8 Treffer, Name und Lebensjahre), „Niemand gefunden.“ bei leerem Ergebnis. Auswahl führt zu `/map?person=<id>&mode=…`. Schließen bei Klick daneben, Escape oder Fokusverlust (`useDismiss`). Telefon: Box höchstens Bildschirmbreite minus Rand; Feld nutzt `.field` (16 px, 44 px). Liste mit `aria-busy`; die Trefferliste ist eine einfache Knopfliste ohne Listbox-Rolle.
+**Verhalten:** Öffnen setzt den Fokus ins Suchfeld; ab zwei Zeichen verzögert gesucht (max. 8 Treffer, Name und Lebensjahre), „Niemand gefunden.“ bei leerem Ergebnis. Auswahl führt zu `/map?person=<id>&mode=…` (beim Lebensweg mit `&art=…`). Schließen bei Klick daneben, Escape oder Fokusverlust (`useDismiss`). Telefon: Box höchstens Bildschirmbreite minus Rand; Feld nutzt `.field` (16 px, 44 px). Liste mit `aria-busy`; die Trefferliste ist eine einfache Knopfliste ohne Listbox-Rolle.
 
 **Server oder Client:** Client.
 
 **Ruft auf:** `GET /api/persons?q=…&limit=8`.
 
-**Tests:** `e2e/read/map.spec.ts` („andere Ausgangsperson wählen“).
+**Tests:** `e2e/read/map.spec.ts` („andere Ausgangsperson wählen“); `e2e/read/lifepath.spec.ts` (Art bleibt beim Wechsel der Person erhalten).
+
+### components/LifePathMap.tsx
+
+**Zweck:** Betriebsart „Lebensweg“ der Karte: die Orte eines Lebens bzw. die Geburtsorte einer Vater- oder Mutterlinie als Weg mit nummerierten Punkten und Pfeilen, daneben die Liste der Stationen. Regeln und Datenschutz: [dienste.md](dienste.md#libserviceslife-pathts), Logik `lib/map/life-path.ts`.
+
+**Wo eingesetzt:** `app/map/page.tsx` (`?mode=lebensweg`, nur mit sichtbarer Person).
+
+**Props/Daten:** fertiger Weg vom Server (`LifePath`: Stationen mit Nummer, Titel, Zusatz, Datumstext, Kurzjahr, „ungenau“, Ortstext, Ortsstatus, Punkt; Punkte mit Koordinaten, Bezeichnung, Genauigkeit und ihren Stationen; Teilstücke mit „übersprungen“), Art (`person`, `father`, `mother`) und bei Linien der Grund des Endes.
+
+**Verhalten:**
+
+- *Karte:* dieselbe Technik wie `MapExplorer` (Grenzen über `loadCountries`, Projektion `lib/map/projection.ts`, Verschieben/Zoomen mit Maus, Finger, Rad, Knöpfen +/− und Pfeiltasten — eigener, schlanker Code, `MapExplorer` bleibt unverändert). Ausschnitt „Ganzer Weg“ passt sich dem Weg an (Standard; rechts bleibt geschätzt Platz für die Beschriftungen, höchstens 45 % der Breite; ein einzelner Punkt mit etwas Umgebung, ohne Punkte Europa); bis zum ersten Verschieben bleibt der Weg bei Größenänderungen eingepasst.
+- *Weg:* Teilstücke als Linie mit heller/dunkler Kontur und Pfeil in der Mitte (nur bei genug Länge), gestrichelt, wenn dazwischen Stationen ohne Ort auf der Karte liegen. Hin und zurück zwischen denselben Orten: beide Teilstücke leicht nach rechts (in Wegrichtung) versetzt, damit Linien und Pfeile sich nicht decken. Punkte als Pillen mit den Nummern („3“, „1–2“, „2, 4“), daneben die Beschriftung (Person: Jahr bzw. Jahresspanne; Linie: Name und Jahr). Punkte mit gleichen Koordinaten (Rückkehr an einen früheren Ort) zeichnet die Komponente als eine Marke mit allen Nummern („1–2, 5–6“) und allen Beschriftungen; Antippen geht deren Stationen reihum durch. Unsichtbare Tippfläche 44 px. Gezeichnet erst nach dem Einhängen (Gleitkomma).
+- *Auswahl:* Station in der Liste antippen hebt sie und ihren Punkt hervor (`aria-pressed`, Ring), erneut antippen hebt auf; Punkt antippen wählt seine erste Station (bei zusammengefassten Punkten reihum) und scrollt sie ohne Animation in Sicht. Ein Klick nach echtem Ziehen wählt nichts.
+- *Liste:* „Stationen“ bzw. „Generationen“ als nummerierte Liste (Knöpfe mindestens 44 px); Nummernkreis gestrichelt, wenn die Station nicht auf der Karte ist; Hinweise „(ungenau)“ hinter ungenauen Daten (Tooltip „ungenaues Datum — ungefähr eingeordnet“), „Ort nicht zugeordnet“, „Ort nicht zuordenbar“, „nur die Region/das Land bekannt“; bei Linien daneben der Link „Personenseite“ und oben der Grund des Endes („Weiter hinauf nicht freigegeben.“ …). Darunter „ohne Datum“ (ohne Nummer, nicht Teil des Wegs).
+- *Barrierefreiheit:* nichts nur über Farbe (Nummern, Liste, Legendensatz zu Pfeilen und Strichelung); SVG mit `role="img"` und `aria-label`; Liste als gleichwertige Alternative.
+- *Telefonbreite:* Karte oben, Liste darunter (zweispaltig ab `lg`).
+- Farben über `--path-*` (hell/dunkel, `app/globals.css`) und `--map-*`. Kein „Abspielen“.
+
+**Server oder Client:** Client.
+
+**Ruft auf:** nur `loadCountries` (statische Datei); den Weg liefert die Seite serverseitig.
+
+**Tests:** `e2e/read/lifepath.spec.ts`; Logik `tests/life-path.test.ts`, Dienst `tests/life-path.db.test.ts`.
 
 ### components/Avatar.tsx
 
@@ -482,13 +506,14 @@ Globale Styles plus wenige gemeinsame Bausteinklassen statt einer Komponentenbib
 
 - `--line-ff` (Blau, Großvater väterlicherseits), `--line-fm` (Grün), `--line-mf` (Rot), `--line-mm` (Gelb), angelehnt an die farbfehlsichtigen-freundliche Okabe-Ito-Palette; je `--line-*-fg` als Schriftfarbe auf der Linienfarbe. Nie allein verwendet — Kurzzeichen (und auf der Karte Muster) kommen immer hinzu.
 - Karte: `--map-sea`, `--map-land`, `--map-border`, `--map-neutral` (Personen ohne Ahnenlinie), `--map-ring` (gewählter Kreis).
+- Lebensweg (`LifePathMap`): `--path-stroke` (Weg, Pfeile, Punkte), `--path-casing` (Kontur und Schrifthof), `--path-fg` (Nummern auf den Punkten), `--path-label` (Beschriftung); je hell und dunkel. Nie allein — Nummern und Liste.
 - Diagramme (`DonutChart`): `--chart-1` … `--chart-8` (unterscheidbare Kategorienfarben, die ersten drei wie die Ahnenlinien, hell mit mindestens 3:1 Kontrast zur Kartenfläche) und Grautöne `--chart-other` („Sonstige“), `--chart-unassigned`, `--chart-unknown`, `--chart-restricted`; im dunklen Schema hellere Töne. Nie allein — Legende mit Bezeichnung und Prozent.
 - „Wie sind wir verwandt?“: `.kinship-restricted` schraffiert die Karte „Nicht freigegeben“ mit `--rings-restricted` (hell und dunkel wie in den Ringen); der Text steht auf eigener Fläche.
 - Ringe (`AncestorRings`): `--rings-strength` (Dämpfung der Flächenfarben, im Dunklen 0,82), `--rings-ink` (Schrift auf den Flächen), `--rings-restricted` und `--rings-hatch` (Schraffur „nicht freigegeben“), `--rings-gap` (leere Plätze); je hell und dunkel.
 
 **Dunkles Schema**
 
-- Ausschließlich über `prefers-color-scheme: dark` (kein Umschalter): dunkle Werte für `--paper`, `--surface`, alle `--line-*` (hellere Töne, dunkle Schrift darauf), `--map-*`, `--chart-*` und `--rings-*`; Fließtext hell. Die `accent`- und `brass`-Skalen haben keine dunklen Werte; Komponenten wählen im Dunklen über `dark:`-Klassen andere Stufen.
+- Ausschließlich über `prefers-color-scheme: dark` (kein Umschalter): dunkle Werte für `--paper`, `--surface`, alle `--line-*` (hellere Töne, dunkle Schrift darauf), `--map-*`, `--path-*`, `--chart-*` und `--rings-*`; Fließtext hell. Die `accent`- und `brass`-Skalen haben keine dunklen Werte; Komponenten wählen im Dunklen über `dark:`-Klassen andere Stufen.
 - `color-scheme: light dark` auf `:root`, damit Browser-Bedienelemente mitziehen.
 
 **Tests:** `e2e/read/mobile.spec.ts` (Tippziele, 16-px-Feld, `dvh`-Mindesthöhe, kein Querscrollen), `e2e/read/quality.spec.ts` (axe auf Desktop- und Telefonbreite). Das dunkle Schema ist nicht gezielt getestet (unklar, ob axe im dunklen Modus läuft).
@@ -1389,7 +1414,7 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 ### components/HelpLink.tsx
 
 - **Zweck:** Kontexthilfe — kleiner Link zur passenden Seite der Anwender-Hilfe (`/hilfe/…`), und `FooterHelpLink`, der Link „Hilfe“ in der Fußzeile.
-- **Wo eingesetzt:** `HelpLink` auf `/map` (in „Wie wird gezählt?“ und am Admin-Hinweis „Orte zuordnen“), `/admin/data` (Orte zuordnen), `/research/duplicates`, `/ai-access`, `/admin/settings`, in `ReferencePanel` und `LineLegend`; `FooterHelpLink` in `app/layout.tsx` (nur angemeldet).
+- **Wo eingesetzt:** `HelpLink` auf `/map` (in „Wie wird gezählt?“, beim Lebensweg in „Wie entsteht der Weg?“ und am Admin-Hinweis „Orte zuordnen“), `/admin/data` (Orte zuordnen), `/research/duplicates`, `/ai-access`, `/admin/settings`, in `ReferencePanel` und `LineLegend`; `FooterHelpLink` in `app/layout.tsx` (nur angemeldet).
 - **Props:** `to` (Schlüssel aus `HELP_LINKS` in `lib/help/links.ts` — nie eine freie Adresse, damit der Test alle Ziele kennt), `label` (Standard „Wie funktioniert das?“), `compact` (nur „?“ im Kreis; Text dann als `sr-only` und Tooltip; auf dem Telefon 44 px Tippziel), `className`.
 - **Verhalten:** `next/link`, `data-testid="help-link"`. Neue Stellen: Ziel in `HELP_LINKS` ergänzen (Anker aus der Überschrift, siehe `slugify`).
 - **Server oder Client:** neutral (kein `"use client"`), auch in Client-Komponenten nutzbar.

@@ -1,6 +1,6 @@
 # Karte „Wurzeln nach Jahr“
 
-Wo lebten die Vorfahren in einem bestimmten Jahr? Wie die Karte zählt, was mit ungenauen Daten geschieht und woher die Koordinaten kommen — und wie der Ring „Wurzeln“ auf der Personenseite rechnet.
+Wo lebten die Vorfahren in einem bestimmten Jahr? Wie die Karte zählt, was mit ungenauen Daten geschieht und woher die Koordinaten kommen — dazu der „Lebensweg“ einer Person und wie der Ring „Wurzeln“ auf der Personenseite rechnet.
 
 ## Was die Karte zeigt
 
@@ -38,6 +38,39 @@ Weitere Regeln:
 ## Ungenaue Daten
 
 Ungenaue Daten zählen mit ihrem Jahr: „um 1850“, „vor 1850“ und „nach 1850“ als 1850, „zwischen 1850 und 1854“ als 1852 (die Mitte), ein Zeitraum „von 1901 bis 1910“ mit seinem Beginn, also 1901.
+
+## Lebensweg
+
+Die dritte Auswahl auf der Karte, **Lebensweg**, zeigt die Orte eines Lebens als Weg: nummerierte Punkte, verbunden durch eine Linie mit Pfeilen in Wegrichtung, am Punkt das Jahr. Daneben (auf dem Telefon darunter) steht die Liste der **Stationen** mit Jahr, Ereignis und Ort. Tippst du eine Station in der Liste an, wird ihr Punkt auf der Karte hervorgehoben — und umgekehrt. **Ganzer Weg** passt den Ausschnitt wieder an den Weg an.
+
+Du erreichst den Lebensweg auch von der **Personenseite** über **Lebensweg auf der Karte** — der Knopf erscheint, sobald der Weg mindestens zwei Punkte auf der Karte hat. Mit „Andere Person …“ wählst du eine andere Person; die Adresse kannst du teilen.
+
+Oben wählst du die Art des Wegs:
+
+- **Person**: alle Angaben der Person mit Ort — Geburt, Taufe, Wohnorte, Ausbildung und Beruf, Heirat, Auswanderung und Einwanderung, Tod, Beerdigung und weitere Ereignisse.
+- **Vaterlinie**: der Vater, dessen Vater und so weiter hinauf, je mit Geburtsort — von der ältesten bekannten Generation bis zur Person. So siehst du, wie die Familie gewandert ist. Jede Station nennt Name und Geburtsjahr und führt zur Personenseite.
+- **Mutterlinie**: dasselbe über die Mutter, deren Mutter und so weiter.
+
+**Reihenfolge:** Die Geburt steht immer vorn, Tod und Beerdigung immer hinten — auch wenn ein Datum fehlt. Dazwischen ordnet die App nach Datum. Ungenaue Daten („um 1850“, nur das Jahr) ordnet sie mit ihrem Jahr ein und schreibt **(ungenau)** dahinter. Angaben **ohne Datum** stehen unten in der Liste unter **ohne Datum** und gehören nicht zum Weg. **Abweichende Angaben** zählen nicht.
+
+Beispiel: Anna Muster wurde um 1850 in Musterstadt geboren und dort getauft, wanderte 1878 nach Neu-Erfunden aus und starb 1912 in Beispielhausen; ihr Beruf steht ohne Datum.
+
+| Nr. | Station | auf der Karte |
+|---|---|---|
+| 1 | um 1850 · Geburt · Musterstadt | Punkt „1–2“ |
+| 2 | um 1850 · Taufe · Musterstadt | (derselbe Punkt) |
+| 3 | 1878 · Auswanderung · Neu-Erfunden | Punkt „3“ |
+| 4 | 1912 · Tod · Beispielhausen | Punkt „4“ |
+| – | Beruf (ohne Datum) | nicht auf dem Weg |
+
+Weitere Regeln:
+
+- Folgen zwei Stationen **am selben Ort** aufeinander, ist das auf der Karte ein Punkt mit beiden Nummern; die Liste zeigt beide. Kehrt der Weg später an einen Ort zurück, stehen dort alle Nummern („1–2, 5“).
+- Auf der Karte stehen nur Orte mit Koordinaten (siehe [Woher kommen die Koordinaten?](05-karte.md#woher-kommen-die-koordinaten)). Ein Ort ohne Zuordnung steht in der Liste mit **Ort nicht zugeordnet**. Liegt so eine Station zwischen zwei Punkten, ist die Linie dort **gestrichelt**.
+- Bei der Vater- und Mutterlinie zählt der **Geburtsort**, fehlt er, der Ort der Taufe. Es zählen nur **leibliche** Eltern. Vater ist der männliche, Mutter der weibliche Elternteil — ist das nicht eindeutig (Geschlecht fehlt, zwei Väter erfasst), endet die Linie dort. Gezeigt werden höchstens 12 Generationen.
+- Über der Liste steht, warum eine Linie endet: kein Vater bzw. keine Mutter erfasst, nicht eindeutig, **weiter hinauf nicht freigegeben** oder Grenze von 12 Generationen erreicht.
+
+> **Datenschutz:** Der Lebensweg zeigt nur Personen und Angaben, die du sehen darfst. Eine Heirat steht nur da, wenn du auch den Partner sehen darfst. Endet eine Linie an einem Vorfahren, den du nicht sehen darfst, steht dort nur „weiter hinauf nicht freigegeben“ — ohne Name, Ort oder Jahr.
 
 ## Woher kommen die Koordinaten?
 

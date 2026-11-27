@@ -88,6 +88,26 @@
   }
 }
 
+/* „Lebensweg“ auf der Karte (components/LifePathMap.tsx): Weg und Punkte in
+   einer kräftigen Farbe mit heller bzw. dunkler Kontur, damit sie auf Land
+   und Meer lesbar bleiben. Nie allein: Punkte tragen Nummern, die Liste
+   steht daneben. */
+:root {
+  --path-stroke: #b43c0c;
+  --path-casing: #fffdf8;
+  --path-fg: #ffffff;
+  --path-label: #1c1917;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --path-stroke: #fb923c;
+    --path-casing: #14110f;
+    --path-fg: #0c0a09;
+    --path-label: #fafaf9;
+  }
+}
+
 /* Ringdiagramme (components/DonutChart.tsx, z.B. „Wurzeln“ der
    Personenseite): acht unterscheidbare Farben für Kategorien — die ersten
    drei wie die Ahnenlinien (Okabe-Ito), alle mit mindestens 3:1 Kontrast
