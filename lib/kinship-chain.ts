@@ -1,7 +1,7 @@
 /**
  * Verbindungen zweier Personen für die Seite „Wie sind wir verwandt?“ —
- * reine Funktionen ohne Datenbank und ohne Rechteprüfung (die maskiert der
- * Dienst lib/services/kinship-view.ts).
+ * reine Funktionen ohne Datenbank und ohne Rechteprüfung (der Dienst
+ * lib/services/kinship-view.ts reicht nur den sichtbaren Teilgraphen herein).
  *
  * Blutsverwandtschaft wird hier nicht neu definiert: Gezählt werden wie in
  * lib/kinship.ts leibliche und Adoptiv-Elternschaften (`ancestorDistances`).

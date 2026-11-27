@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { requireScope } from "@/lib/session";
-import { loadKinshipPage, type KinshipCard, type KinshipConnectionView, type KinshipFound } from "@/lib/services/kinship-view";
+import { loadKinshipPage, type KinshipConnectionView, type KinshipFound } from "@/lib/services/kinship-view";
 import { HelpLink } from "@/components/HelpLink";
 import { KinshipPersonField } from "@/components/KinshipPersonField";
 import { KinshipBloodDiagram, KinshipLegend, KinshipPathDiagram, type Roles } from "@/components/KinshipDiagram";
@@ -19,15 +19,8 @@ const ROLES: Roles = { a: "Erste Person", b: "Zweite Person" };
 
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 const generations = (n: number) => (n === 1 ? "eine Generation" : `${n} Generationen`);
-const nameOf = (c: KinshipCard) => (c.restricted ? "nicht freigegeben" : c.name);
 
-function ancestorsText(conn: KinshipConnectionView): string {
-  const visible = conn.ancestors.filter((c) => !c.restricted).map(nameOf);
-  const hidden = conn.ancestors.length - visible.length;
-  const parts = [...visible];
-  if (hidden > 0) parts.push(hidden === 1 ? "eine nicht freigegebene Person" : "zwei nicht freigegebene Personen");
-  return parts.join(" und ");
-}
+const ancestorsText = (conn: KinshipConnectionView): string => conn.ancestors.map((c) => c.name).join(" und ");
 
 /** „Du und X“ bzw. Generationen bis zu den gemeinsamen Vorfahren. */
 function degreeText(conn: KinshipConnectionView, a: string, b: string): string {
@@ -58,10 +51,6 @@ function Found({ r }: { r: KinshipFound }) {
   const b = r.b.name;
   const main = r.connections[0];
   const more = r.connections.slice(1);
-  const drawn: KinshipCard[] = main
-    ? [...main.ancestors, ...main.lineA.map((s) => s.card), ...main.lineB.map((s) => s.card)]
-    : r.path.map((s) => s.card);
-  const hasRestricted = drawn.some((c) => c.restricted);
   return (
     <section aria-labelledby="kinship-result-h" className="space-y-5" data-testid="kinship-result">
       <div className="card space-y-2 p-5">
@@ -120,12 +109,6 @@ function Found({ r }: { r: KinshipFound }) {
         <h2 className="section-title">So seid ihr verbunden</h2>
         {main ? <KinshipBloodDiagram conn={main} roles={ROLES} /> : <KinshipPathDiagram path={r.path} roles={ROLES} />}
         <KinshipLegend partner={!main} />
-        {hasRestricted && (
-          <p className="text-sm muted" data-testid="kinship-restricted-hint">
-            Der Weg führt über Personen, die für dich nicht freigegeben sind — sie erscheinen ohne Namen und Daten.{" "}
-            <HelpLink to="verwandtschaftFreigabe" label="Warum?" />
-          </p>
-        )}
       </div>
 
       {more.length > 0 && (
@@ -238,13 +221,17 @@ export default async function KinshipPage({ searchParams }: { searchParams: Prom
       )}
 
       {r?.status === "none" && (
+        // Wortgleich mit der Personenseite (components/ReferencePanel.tsx).
+        // Ob es eine Verbindung über nicht freigegebene Personen gibt, bleibt
+        // bewusst offen — die Seite rechnet nur über sichtbare Personen.
         <div className="card space-y-1 p-5" data-testid="kinship-none">
           <p className="font-serif text-lg">
-            Zwischen {r.a.name} und {r.b.name} ist im Stammbaum keine Verbindung erfasst.
+            {r.a.name} und {r.b.name}: keine Verwandtschaft über freigegebene Personen bekannt.
           </p>
           <p className="text-sm muted">
-            Das heißt nicht, dass die beiden nicht verwandt sind — vielleicht fehlen nur noch Einträge, etwa
-            Eltern oder eine Ehe.
+            Das heißt nicht, dass die beiden nicht verwandt sind — vielleicht fehlen noch Einträge, etwa Eltern oder
+            eine Ehe, oder die Verbindung führt über Personen, die für dich nicht freigegeben sind.{" "}
+            <HelpLink to="verwandtschaftFreigabe" label="Warum?" />
           </p>
         </div>
       )}

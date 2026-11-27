@@ -835,8 +835,8 @@ hinter dem Zusatz („Cousine 2. Grades (über Adoption) väterlicherseits“).
 
 ### lib/kinship-chain.ts
 **Zweck:** Verbindungen zweier Personen als Personenketten für die Seite
-„Wie sind wir verwandt?“ — rein, ohne Datenbank und ohne Rechte (maskiert
-wird in `lib/services/kinship-view.ts`).
+„Wie sind wir verwandt?“ — rein, ohne Datenbank und ohne Rechte
+(`lib/services/kinship-view.ts` übergibt nur den sichtbaren Teilgraphen).
 
 **Wichtige Funktionen/Typen:** `bloodConnections`, `lineUp`,
 `connectionTerms`, `parentChildLabels`, Typen `BloodConnection`, `LineStep`.

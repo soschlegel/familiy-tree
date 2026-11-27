@@ -656,9 +656,10 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
 - **`kinship.test.ts`** — Verwandtschaftsbegriffe und Wegbeschreibung.
 - **`kinship-chain.test.ts`** — Verbindungen als Personenketten
   (`lib/kinship-chain.ts`) und Sicht der Seite „Wie sind wir verwandt?“:
-  beide Blickrichtungen, mehrere Verbindungen, Ahnenschwund, gesperrte
-  Zwischenpersonen, keine Verbindung, Abgleich mit `findBloodRelation`,
-  12 000 Personen.
+  beide Blickrichtungen, mehrere Verbindungen, Ahnenschwund, streng nur über
+  sichtbare Personen (Verbindung nur über gesperrte = keine, sichtbarer
+  Umweg), Übereinstimmung mit der Bezugsperson für jedes Paar, keine
+  Verbindung, Abgleich mit `findBloodRelation`, 12 000 Personen.
 - **`layout.test.ts`** — Generationen- und Zeitstrahl-Layout, auch mit
   Hochzeiten.
 - **`map.test.ts`** — Lebend- und Ortsregel der Karte, Auswertung eines
@@ -785,8 +786,10 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   „sicher“) und „Erst die Eltern, dann dieses Paar“ (nur vorgeschlagene
   Paare, kein schwacher Treffer, bei jedem Hindernis ändert sich nichts).
 - **`kinship-view.db.test.ts`** — „Wie sind wir verwandt?“ je Rolle:
-  Cousine nur über gesperrte Personen (Platzhalter ohne Kennung und Namen),
-  nicht sichtbare Auswahl gilt als nicht gefunden, angeheiratet, keine
+  Cousine nur über gesperrte Personen ergibt für den Bearbeiter keine
+  Verbindung (wie seine Personenseite, ohne Kennung und Namen der
+  Gesperrten), der Administrator sieht sie; Seite und Personenseite stimmen
+  für die eigene Person überein; nicht sichtbare Auswahl gilt als nicht gefunden, angeheiratet, keine
   Verbindung, dieselbe Person.
 - **`person-redirect.db.test.ts`** — alte Kennung als Umleitung: Anlegen,
   Kette, Sichtbarkeit, gelöschtes Ziel, Rückfüllung aus dem Audit (einzeln,
@@ -902,9 +905,11 @@ Benutzer bekommt keinen gespeicherten Zustand.
   und fremden Feldern).
 - **`kinship.spec.ts`** — „Wie sind wir verwandt?“: Einstieg von
   Personenseite und Recherche, Auswahl über die Suche, Sätze in beide
-  Richtungen, Zeichnung mit verlinkten Karten, Platzhalter ohne Angaben im
-  Seitenquelltext, Tauschen, nicht sichtbare Auswahl, dieselbe Person,
-  keine Verbindung, 390 px und axe hell/dunkel.
+  Richtungen, Zeichnung mit verlinkten Karten, Verbindung nur über
+  gesperrte Personen: derselbe Hinweis wie auf der Personenseite, keine
+  Zeichnung, nichts Gesperrtes im Seitenquelltext, Kontexthilfe; Tauschen,
+  nicht sichtbare Auswahl, dieselbe Person, keine Verbindung, Administrator
+  sieht die Verbindung, 390 px und axe hell/dunkel.
 - **`navigation.spec.ts`** — Navigation und Untermenü „Verwaltung“ je Rolle
   und Breite.
 - **`people-list.spec.ts`** — Personenliste: Suche, Familienfilter,

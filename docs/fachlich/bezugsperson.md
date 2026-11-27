@@ -38,9 +38,9 @@ zurück. Vorrang: Adresse vor Cookie vor eigener Person.
   Farbschema.
 - **Personenseite** — „Für dich (…) ist X: Großonkel väterlicherseits“, dazu
   „Das bin ich“, „Baum aus dieser Sicht“ und „Wie sind wir verwandt?“
-  (Seite `/kinship` mit dieser Person und der Bezugsperson; dort zählt —
-  wie bei `get_kinship` — auch ein Weg über gesperrte Personen, die als
-  „Nicht freigegeben“ erscheinen, siehe
+  (Seite `/kinship` mit dieser Person und der Bezugsperson; sie rechnet
+  ebenso streng nur über sichtbare Personen und sagt für jedes Paar
+  dasselbe wie Baumkarte und Personenseite, siehe
   [dienste.md](../komponenten/dienste.md#libserviceskinship-viewts)).
 
 **Berechnung** ([lib/reference.ts](../../lib/reference.ts)): ein Durchgang von der
@@ -65,5 +65,6 @@ Gesperrte Platzhalter bekommen keine Angabe und keine Linie, kein Weg führt
 über sie (ein sichtbarer Urgroßvater hinter einem gesperrten Großvater bleibt
 ohne Bezeichnung), eine gesperrte Person kann nicht Bezugsperson sein
 (unbekannt und gesperrt sehen gleich aus), und die Legende nennt nur
-sichtbare Großeltern („nicht erfasst“ sonst). Das ist strenger als die
-MCP-Abfrage `get_kinship`, die Wege durch Platzhalter zulässt.
+sichtbare Großeltern („nicht erfasst“ sonst). Dieselbe Regel gilt für die
+Seite „Wie sind wir verwandt?“. Das ist strenger als die MCP-Abfrage
+`get_kinship` (unverändert), die Wege durch Platzhalter zulässt.

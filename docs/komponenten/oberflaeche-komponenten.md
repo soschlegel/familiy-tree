@@ -360,7 +360,8 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 - *Blutsverwandte, breit (ab `sm`):* oben die gemeinsamen Vorfahren (eine Karte oder ein Paar, dazwischen ⚭ bei Ehe, sonst „und“), darunter eine Gabel aus Linien und zwei Spalten: links die Linie hinab zur ersten, rechts zur zweiten Person. Ist eine Person selbst der Vorfahr, eine Spalte.
 - *Blutsverwandte, schmal:* dieselbe Kette als eine Spalte von der ersten Person hinauf zu den Vorfahren und hinab zur zweiten (Vorfahrenpaar untereinander). Die jeweils andere Fassung ist mit `display: none` ausgeblendet (also auch für Screenreader).
 - *Weg:* eine Spalte in Wegreihenfolge.
-- *Karten:* sichtbare Personen als Link zur Personenseite (Name, Lebensjahre, die beiden gewählten Personen mit Messingrahmen und Rollenname), gesperrte als schraffierte Karte „Nicht freigegeben“ ohne Link (`.kinship-restricted`).
+- *Karten:* jede Karte ist eine sichtbare Person (die Seite rechnet nur über sie) und ein Link zur Personenseite: Name, Lebensjahre, die beiden gewählten Personen mit Messingrahmen und Rollenname. Platzhalter „Nicht freigegeben“ gibt es hier nicht mehr.
+- *Zeichenerklärung (`KinshipLegend`):* leibliche Eltern/Kinder, Adoptiv-/Stief-/Pflegeeltern, bei Wegen zusätzlich Ehe/Partnerschaft.
 - *Verbindungen:* jede mit ihrer Bezeichnung als Text („Tochter“, „Vater“, „Ehefrau“; Partnerschaften zusätzlich ⚭); die Linienart ist nur Zusatz: durchgezogen leiblich, gestrichelt Adoptiv/Stief/Pflege, doppelt (Akzentfarbe) Partnerschaft.
 - *Screenreader:* zusätzlich die Kette als versteckte Textliste („Die Verbindung als Liste“) ohne Links; die Zeichnung ist eine Gruppe „Zeichnung der Verbindung“.
 
@@ -368,7 +369,7 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 **Ruft auf:** nichts.
 
-**Tests:** `e2e/read/kinship.spec.ts` (Karten, Links, Platzhalter, Telefon-Spalte, axe hell/dunkel bei 390 und 1280 px).
+**Tests:** `e2e/read/kinship.spec.ts` (Karten, Links, Telefon-Spalte, axe hell/dunkel bei 390 und 1280 px).
 
 ### components/kinship-url.ts
 
@@ -508,7 +509,6 @@ Globale Styles plus wenige gemeinsame Bausteinklassen statt einer Komponentenbib
 - Karte: `--map-sea`, `--map-land`, `--map-border`, `--map-neutral` (Personen ohne Ahnenlinie), `--map-ring` (gewählter Kreis).
 - Lebensweg (`LifePathMap`): `--path-stroke` (Weg, Pfeile, Punkte), `--path-casing` (Kontur und Schrifthof), `--path-fg` (Nummern auf den Punkten), `--path-label` (Beschriftung); je hell und dunkel. Nie allein — Nummern und Liste.
 - Diagramme (`DonutChart`): `--chart-1` … `--chart-8` (unterscheidbare Kategorienfarben, die ersten drei wie die Ahnenlinien, hell mit mindestens 3:1 Kontrast zur Kartenfläche) und Grautöne `--chart-other` („Sonstige“), `--chart-unassigned`, `--chart-unknown`, `--chart-restricted`; im dunklen Schema hellere Töne. Nie allein — Legende mit Bezeichnung und Prozent.
-- „Wie sind wir verwandt?“: `.kinship-restricted` schraffiert die Karte „Nicht freigegeben“ mit `--rings-restricted` (hell und dunkel wie in den Ringen); der Text steht auf eigener Fläche.
 - Ringe (`AncestorRings`): `--rings-strength` (Dämpfung der Flächenfarben, im Dunklen 0,82), `--rings-ink` (Schrift auf den Flächen), `--rings-restricted` und `--rings-hatch` (Schraffur „nicht freigegeben“), `--rings-gap` (leere Plätze); je hell und dunkel.
 
 **Dunkles Schema**

@@ -549,9 +549,10 @@ Titel „Wie sind wir verwandt?“. Bedienung: Anwender-Hilfe
 
 - **Rechte:** angemeldet. Beide gewählten Personen müssen sichtbar sein,
   sonst zeigt das Feld „Diese Person wurde nicht gefunden“ (ohne
-  Unterscheidung unbekannt/gesperrt) und es gibt kein Ergebnis. Gesperrte
-  Personen auf dem Weg erscheinen als Karte „Nicht freigegeben“ ohne
-  Namen, Daten und Link; Regel und Begründung bei
+  Unterscheidung unbekannt/gesperrt) und es gibt kein Ergebnis. Gerechnet
+  wird streng wie im Stammbaum nur über sichtbare Personen — Seite,
+  Baumkarte und Personenseite sagen für dasselbe Paar dasselbe; Regel und
+  Begründung bei
   [`lib/services/kinship-view.ts`](dienste.md#libserviceskinship-viewts).
 - **Suchparameter:** `a` (erste Person), `b` (zweite Person) — die Adresse
   ist teilbar, der Empfänger sieht sie mit seinen eigenen Rechten. Adressen
@@ -567,16 +568,18 @@ Titel „Wie sind wir verwandt?“. Bedienung: Anwender-Hilfe
   zwei `KinshipPersonField` mit „Tauschen“ dazwischen (Link mit vertauschten
   Parametern, funktioniert ohne Skript); ohne zwei Personen ein Hinweis.
   Ergebnis: dieselbe Person (`kinship-same`, `alert-info`), keine
-  Verbindung (`kinship-none`: „im Stammbaum keine Verbindung erfasst“, nie
-  „nicht verwandt“) oder die Ergebniskarte mit Art („Blutsverwandt“,
+  Verbindung über sichtbare Personen (`kinship-none`: „A und B: keine
+  Verwandtschaft über freigegebene Personen bekannt.“ — wortgleich mit der
+  Personenseite, ohne Zeichnung, nie „nicht verwandt“; dazu Kontexthilfe
+  „Warum?“ → `#nicht-freigegebene-personen`; ob es eine Verbindung über
+  gesperrte Personen gibt, bleibt offen) oder die Ergebniskarte mit Art („Blutsverwandt“,
   „Angeheiratet“, „Über Stief- oder Pflegeeltern verbunden“), zwei Sätzen
   „A ist <Begriff> von B.“ in beide Richtungen, bei fehlendem Begriff der
   Schrittkette, gemeinsamen Vorfahren und Generationen (Zählung wie in den
   Begriffen: „Cousin n. Grades“, „eine Generation darüber“), ggf. dem
   Begriff des kürzeren Wegs. Darunter „So seid ihr verbunden“ mit
   `KinshipBloodDiagram` (nächste Blutsverwandtschaft) bzw.
-  `KinshipPathDiagram`, Zeichenerklärung und — bei gesperrten Personen —
-  Hinweis mit Kontexthilfe „Warum?“; „Weitere Verbindungen“ (bis zu drei,
+  `KinshipPathDiagram` und Zeichenerklärung; „Weitere Verbindungen“ (bis zu drei,
   je aufklappbar mit eigener Zeichnung).
 - **Bewusst ohne `loading.tsx`** und nicht unter `/research` (dessen
   `loading.tsx` gälte sonst auch hier): Wechsel, die nur Suchparameter

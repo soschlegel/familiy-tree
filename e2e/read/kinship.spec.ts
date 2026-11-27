@@ -6,7 +6,8 @@ import { L, fullName, mock, person } from "../support/mock";
 /**
  * „Wie sind wir verwandt?“ (/kinship): Auswahl zweier Personen, Ergebnis in
  * Worten, Zeichnung mit verlinkten Karten, Tauschen, Einstieg von der
- * Personenseite und unter „Recherche“, gesperrte Personen, Telefonbreite.
+ * Personenseite und unter „Recherche“, streng wie der Baum (Verbindung nur
+ * über gesperrte Personen = Hinweis wie auf der Personenseite), Telefonbreite.
  * Nur lesend.
  */
 const SELF = L.selfEditor;
@@ -32,32 +33,28 @@ const PATERNAL_COUSIN = bioParents(FATHER)
   .find((c) => person(c).familyKeys.includes("A") && bioParents(c).length === 2)!;
 
 const visibleCards = (page: Page) => page.locator('[data-testid="kinship-card"]:visible');
-const visibleRestricted = (page: Page) => page.locator('[data-testid="kinship-card-restricted"]:visible');
+
+/** Wortlaut wie auf der Personenseite (components/ReferencePanel.tsx). */
+const NO_KINSHIP = "keine Verwandtschaft über freigegebene Personen bekannt";
 
 test.describe("als Bearbeiter", () => {
   test.use({ storageState: authFile("editor") });
 
-  test("Einstieg von der Personenseite, Weg über gesperrte Personen, Tauschen", async ({ page }) => {
+  test("Verbindung nur über gesperrte Personen: derselbe Hinweis wie die Personenseite, nichts gezeichnet, Tauschen", async ({ page }) => {
+    // Personenseite der Cousine aus Sicht der eigenen Person.
     await page.goto(`/people/${COUSIN}`);
+    await expect(page.getByTestId("person-reference-term")).toContainText(NO_KINSHIP);
     await page.getByTestId("person-kinship-link").click();
     await expect(page).toHaveURL(new RegExp(`/kinship\\?a=${COUSIN}&b=${SELF}$`));
     await expect(page.getByRole("heading", { level: 1, name: "Wie sind wir verwandt?" })).toBeVisible();
     await expect(page.getByTestId("kinship-selected-a")).toHaveText(fullName(COUSIN));
     await expect(page.getByTestId("kinship-selected-b")).toHaveText(fullName(SELF));
 
-    await expect(page.getByTestId("kinship-kind")).toHaveText("Blutsverwandt");
-    // Sicht der Cousine läuft über ihre gesperrte Mutter: ohne Seite.
-    await expect(page.getByTestId("kinship-a-for-b")).toHaveText(`${fullName(COUSIN)} ist Cousine 1. Grades mütterlicherseits von ${fullName(SELF)}.`);
-    await expect(page.getByTestId("kinship-b-for-a")).toHaveText(`${fullName(SELF)} ist Cousine 1. Grades von ${fullName(COUSIN)}.`);
-    await expect(page.getByTestId("kinship-degree")).toContainText("zwei nicht freigegebene Personen");
-
-    // Zeichnung: Großeltern und Tante als Platzhalter, sichtbare Karten verlinkt.
-    await expect(visibleRestricted(page)).toHaveCount(3);
-    await expect(visibleRestricted(page).first()).toHaveText("Nicht freigegeben");
-    await expect(visibleRestricted(page).locator("a")).toHaveCount(0);
-    const hrefs = await visibleCards(page).evaluateAll((as) => as.map((a) => (a as HTMLAnchorElement).getAttribute("href")));
-    expect(hrefs.sort()).toEqual([`/people/${COUSIN}`, `/people/${SELF}`, `/people/${bioParents(SELF).find((p) => person(p).gender === "FEMALE")}`].sort());
-    await expect(page.getByTestId("kinship-restricted-hint")).toBeVisible();
+    // Streng wie der Baum: keine Verbindung über freigegebene Personen, keine Zeichnung.
+    await expect(page.getByTestId("kinship-none")).toContainText(`${fullName(COUSIN)} und ${fullName(SELF)}: ${NO_KINSHIP}.`);
+    await expect(page.getByTestId("kinship-result")).toHaveCount(0);
+    await expect(page.getByTestId("kinship-diagram")).toHaveCount(0);
+    await expect(page.getByTestId("kinship-card")).toHaveCount(0);
 
     // Nichts über die gesperrten Personen im Seitenquelltext.
     const html = await page.content();
@@ -66,14 +63,14 @@ test.describe("als Bearbeiter", () => {
       expect(html).not.toContain(person(id).givenName);
     }
 
-    // Tauschen.
+    // Tauschen: dasselbe Ergebnis.
     await page.getByTestId("kinship-swap").click();
     await expect(page).toHaveURL(new RegExp(`/kinship\\?a=${SELF}&b=${COUSIN}$`));
-    await expect(page.getByTestId("kinship-a-for-b")).toHaveText(`${fullName(SELF)} ist Cousine 1. Grades von ${fullName(COUSIN)}.`);
     await expect(page.getByTestId("kinship-selected-a")).toHaveText(fullName(SELF));
+    await expect(page.getByTestId("kinship-none")).toContainText(NO_KINSHIP);
 
     // Kontexthilfe.
-    await page.getByTestId("kinship-restricted-hint").getByTestId("help-link").click();
+    await page.getByTestId("kinship-none").getByTestId("help-link").click();
     await expect(page).toHaveURL(/\/hilfe\/verwandtschaft#nicht-freigegebene-personen$/);
   });
 });
@@ -106,7 +103,6 @@ test.describe("als Betrachter", () => {
     const diagram = page.getByTestId("kinship-diagram");
     await expect(diagram.getByText("Gemeinsame Vorfahren").first()).toBeVisible();
     await expect(visibleCards(page)).toHaveCount(6);
-    await expect(visibleRestricted(page)).toHaveCount(0);
     // Screenreader-Liste nennt die Kette.
     await expect(diagram.locator(".sr-only li").first()).toHaveText(`Erste Person: ${fullName(SELF)}${person(SELF).birthDate ? ` (* ${person(SELF).birthDate!.getUTCFullYear()})` : ""}`);
     await visibleCards(page).filter({ hasText: fullName(PATERNAL_COUSIN) }).click();
@@ -157,10 +153,18 @@ test.describe("als Betrachter", () => {
 test.describe("als Administrator", () => {
   test.use({ storageState: authFile("admin") });
 
-  test("keine Verbindung erfasst", async ({ page }) => {
+  test("keine Verbindung erfasst: derselbe Hinweis", async ({ page }) => {
     const isolated = L.noFamily.find((id) => !mock.relationships.some((r) => r.fromPersonId === id || r.toPersonId === id))!;
     await page.goto(`/kinship?a=${L.founders.A}&b=${isolated}`);
-    await expect(page.getByTestId("kinship-none")).toContainText("keine Verbindung erfasst");
+    await expect(page.getByTestId("kinship-none")).toContainText(NO_KINSHIP);
     await expect(page.getByTestId("kinship-none")).toContainText("Das heißt nicht, dass die beiden nicht verwandt sind");
+  });
+
+  test("Administrator sieht die Cousine über alle Personen verbunden", async ({ page }) => {
+    await page.goto(`/kinship?a=${COUSIN}&b=${SELF}`);
+    await expect(page.getByTestId("kinship-kind")).toHaveText("Blutsverwandt");
+    await expect(page.getByTestId("kinship-a-for-b")).toHaveText(`${fullName(COUSIN)} ist Cousine 1. Grades mütterlicherseits von ${fullName(SELF)}.`);
+    const hrefs = await visibleCards(page).evaluateAll((as) => as.map((a) => (a as HTMLAnchorElement).getAttribute("href")));
+    expect(hrefs).toContain(`/people/${AUNT}`);
   });
 });

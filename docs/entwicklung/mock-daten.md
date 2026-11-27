@@ -90,7 +90,8 @@ Verwandtschaftsgrade und Linien. Für „Wie sind wir verwandt?“ hat seine
 Mutter eine Schwester nur in Familie D und diese eine Tochter nur in
 Familie B (`landmarks.kinshipHidden`, ganz am Ende und ohne Zufallszahlen
 erzeugt): Für den Bearbeiter ist die Cousine sichtbar, die Verbindung führt
-aber nur über gesperrte Personen. Für die Nachfahren-Ringe hat die Cousine
+aber nur über gesperrte Personen (Testfall für den Hinweis „keine
+Verwandtschaft über freigegebene Personen bekannt“). Für die Nachfahren-Ringe hat die Cousine
 einen Sohn nur in Familie D und dieser eine Tochter nur in Familie B
 (`landmarks.descendantHidden`, ebenso am Ende angehängt): Der Bearbeiter
 sieht den Sohn nur als „nicht freigegeben“ und die Enkelin dort gar nicht.

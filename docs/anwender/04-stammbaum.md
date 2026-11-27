@@ -73,7 +73,7 @@ Die Bezugsperson ist im Baum gestrichelt umrandet und mit „Bezugsperson“ (bz
 
 Unter jeder Karte steht, was diese Person für die Bezugsperson ist: „Urgroßvater väterlicherseits“, „Cousine 1. Grades, eine Generation darüber“, „Schwägerin“, „angeheirateter Onkel“ … Auf der Personenseite steht es als Satz: „Für dich (Paul Vogt) ist Hans Vogt: Großvater väterlicherseits“.
 
-Gerechnet wird nur über Personen, die du sehen darfst. Führt die Verbindung nur über eine „nicht freigegebene“ Person, bleibt die Karte ohne Angabe — auf der Personenseite steht dann „keine Verwandtschaft über freigegebene Personen bekannt“.
+Gerechnet wird nur über Personen, die du sehen darfst. Führt die Verbindung nur über eine „nicht freigegebene“ Person, bleibt die Karte ohne Angabe — auf der Personenseite und unter [Wie sind wir verwandt?](15-verwandtschaft.md) steht dann „keine Verwandtschaft über freigegebene Personen bekannt“.
 
 ## Linienfarben
 

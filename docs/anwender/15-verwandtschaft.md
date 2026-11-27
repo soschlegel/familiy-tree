@@ -45,14 +45,16 @@ Manchmal sind zwei Personen auf mehreren Wegen verwandt, etwa wenn zwei Brüder 
 - Als blutsverwandt zählen **leibliche Eltern** und **Adoption**. Stief- und Pflegeeltern begründen keine Blutsverwandtschaft — die Seite zeigt solche Wege trotzdem.
 - **Cousin 1. Grades** heißt: gemeinsame Großeltern; **2. Grades**: gemeinsame Urgroßeltern. Steht eine Person eine Generation höher oder tiefer, heißt es zum Beispiel „Cousine 1. Grades, eine Generation darüber“ — wie unter den Karten im Stammbaum.
 - **Halbgeschwister** (und Halbonkel, Halbcousinen …) erkennt die App nur, wenn bei beiden Linien beide Eltern erfasst sind. Fehlt ein Elternteil, sagt sie lieber nichts dazu.
-- **väterlicherseits** oder **mütterlicherseits** steht nur da, wenn der Elternteil, über den die Linie läuft, für dich sichtbar ist und sein Geschlecht erfasst ist.
+- **väterlicherseits** oder **mütterlicherseits** steht nur da, wenn beim Elternteil, über den die Linie läuft, das Geschlecht erfasst ist.
 
 ## Besondere Fälle
 
 - **Zweimal dieselbe Person** gewählt: Die Seite weist freundlich darauf hin.
-- **Keine Verbindung erfasst:** Die Seite sagt dann, dass im Stammbaum keine Verbindung erfasst ist. Das heißt nicht, dass die beiden nicht verwandt sind — oft fehlen nur Eltern oder eine Ehe.
+- **Keine Verbindung:** Findet die App über die Personen, die du sehen darfst, keinen Weg, steht dort „keine Verwandtschaft über freigegebene Personen bekannt“ — genau wie auf der Personenseite. Das heißt nicht, dass die beiden nicht verwandt sind: Oft fehlen nur Eltern oder eine Ehe, oder der Weg führt über nicht freigegebene Personen (siehe unten).
 - **Person nicht gefunden:** Steht in der Adresse eine Person, die es nicht gibt oder die du nicht sehen darfst, bittet die Seite dich, eine andere zu wählen.
 
 ## Nicht freigegebene Personen
 
-Führt der Weg über Personen aus Familien, die für dich nicht freigegeben sind, erscheinen sie als graue, schraffierte Karte **Nicht freigegeben** — ohne Namen, Daten und Link. Die Verwandtschaft wird trotzdem benannt, nur ohne Angaben, die etwas über diese Personen verraten würden (zum Beispiel heißt es dann „Elternteil“ statt „Vater“, und „väterlicherseits“ entfällt). Wer die Personen sehen darf, sieht denselben Weg mit Namen. Mehr dazu: [Datenschutz](11-datenschutz.md).
+Die Seite rechnet nur über Personen, die du sehen darfst — genau wie die Verwandtschaftsangabe an den Karten im Stammbaum und auf der Personenseite. Alle drei sagen für dieselben zwei Personen deshalb dasselbe.
+
+Führt die einzige Verbindung über Personen aus Familien, die für dich nicht freigegeben sind, zeigt die Seite keine Zeichnung, sondern den Hinweis „keine Verwandtschaft über freigegebene Personen bekannt“. Gibt es einen anderen Weg über freigegebene Personen, nennt sie diesen. Wer mehr Familien sehen darf, sieht unter Umständen eine nähere Verbindung. Mehr dazu: [Datenschutz](11-datenschutz.md).
