@@ -13,20 +13,24 @@ aktuell halten — Erledigtes streichen, keine Paketgeschichte sammeln.
   Portainer aktualisiert den Stack von dort. **Ein Merge ist ein
   Produktiv-Deployment auf echte Daten.**
 - `optimierung` = Arbeitsbranch, zum Zeitpunkt der Übergabe gleich `main`.
-- Letztes Release: **2026-11-27.2** (Ansicht „Ringe“ im Stammbaum). Davor
-  am selben Tag .1 (Abschnitt „Wurzeln“ auf der Personenseite, Seite
+- Letztes Release: **2026-11-27.3** (Startseite „Heute in der Familie“,
+  `/kinship` „Wie sind wir verwandt?“, Lebenslauf-Text, Karte: Lebensweg
+  und Zeitreise, Ringe: Nachfahren und Druckseite, Seiten „Rekorde“ und
+  „Forschungs-Fortschritt“, Zeitgeschichte). Davor am selben Tag .2
+  (Ansicht „Ringe“ im Stammbaum) und .1 (Abschnitt „Wurzeln“ auf der Personenseite, Seite
   „Statistik“) und **2026-11-26.3** (Anmeldung per E-Mail-Link über SMTP,
   Vollbild im Stammbaum, Vorschläge schon beim GEDCOM-Import gegen alle
   vorhandenen Personen, Familien auch an Ereignis-/Namens-/Beleg-/Bild- und
   Beziehungseinträgen der Änderungsgeschichte, Content-Security-Policy mit
   Not-Schalter `CSP_MODE`), am selben Tag .2 (Verlauf aufgegangener
   Personen, verschlankte Doku) und .1 (Seite „Einstellungen“). Neueste
-  Migration: `20261126000100_audit_personenfamilien` (Liste aller
+  Migration: `20261127000100_zeitgeschichte` (Liste aller
   Migrationen:
   [datenmodell.md](docs/komponenten/datenmodell.md#migrationen-prismamigrations)).
-- Prüfstand dieses Releases: Migrationen ↔ Schema ohne Abweichung, keine
-  neue Migration, Typecheck, Lint, Vitest 1117/1117; `npm run test:e2e`
-  (Produktions-Build, strenger Hydration-Wächter, CSP-Wächter): 383
+- Prüfstand dieses Releases: Migrationen ↔ Schema ohne Abweichung, eine
+  neue, rein ergänzende Migration, Typecheck, Lint, Vitest 1345/1345;
+  `npm run test:e2e` (Produktions-Build, strenger Hydration-Wächter,
+  CSP-Wächter): 464
   bestanden, 1 übersprungen.
 - Git-Verlauf am 23.11. umgeschrieben (alle Zweige neu hochgeladen). Ältere
   Klone und Worktrees passen nicht mehr dazu — neu klonen statt
@@ -55,7 +59,14 @@ Anleitungen: [docs/entwicklung/tests.md](docs/entwicklung/tests.md),
 ### Bekannte Fallen dieser Umgebung
 
 - **PowerShell:** in Befehlen absolute Pfade des eigenen Worktrees
-  verwenden — sonst landen Änderungen im Hauptordner.
+  verwenden — sonst landen Änderungen im Hauptordner. Das gilt auch für
+  .NET-Aufrufe (`[IO.File]::…`): Sie lösen relative Pfade gegen den
+  Hauptordner auf, nicht gegen `Set-Location`.
+- **Mock-Daten:** `e2e/read/tree-whole.spec.ts` erwartet die Gesamtzahl der
+  Personen und Beziehungen fest; ergänzt ein Paket Mock-Personen (nur am
+  Ende des Generators, ohne Zufallszahlen), die Zahl dort nachziehen.
+- **E2E-Build:** Die Aktualitätsprüfung erkennt gelöschte Dateien nicht —
+  nach dem Löschen einer Datei mit `--rebuild` bauen.
 - **`npx prisma db push` ohne Mock-Skript** nimmt `DATABASE_URL` (die
   normale Dev-Datenbank), nicht die Mock-Datenbank.
 - **`MOCK_PORT`** wirkt nur aus der Shell (`scripts/mock.mjs` liest ihn vor
@@ -142,6 +153,21 @@ Anleitungen: [docs/entwicklung/tests.md](docs/entwicklung/tests.md),
   Vorschau, Liste „unklar“ bei Tausenden Einträgen, erneuter Import mit
   verknüpften Personen). Beziehungsfelder (z. B. Heiratsdatum) werden beim
   Verknüpfen nicht ergänzt.
+- **Neue Funktionen vom 27.11.** (Startseite, Verwandtschaft, Lebenslauf,
+  Lebensweg, Zeitreise, Rekorde, Forschungs-Fortschritt, Zeitgeschichte):
+  nur mit Mock-Daten geprüft, Laufzeiten bei echtem Bestand nicht gemessen.
+  Mehrfache Verwandtschaft, „nur fremder Stammbaum“ als Beleg und die
+  400-Flächen-Grenze der Nachfahren-Ringe nur in Vitest. Lebenslauf:
+  Freitexte (Beruf, Orte mit eigener Präposition) können holpern; die Liste
+  der Länder mit Artikel ist klein. Zeitgeschichte: Jahreszahlen der
+  mitgelieferten Liste nicht gegen eine Quelle geprüft; kein Abgleich mit
+  Wohnorten. Forschungs-Fortschritt: nähere Generationen stehen vor
+  fehlenden Eltern entfernterer — bei Bedarf Reihenfolge ändern.
+- **Ringe drucken:** nur mit Chromium geprüft (Firefox, Safari, echte
+  Drucker und Druckereien nicht); SVG ohne eingebettete Schriften.
+- **`/kinship` gegenüber `get_kinship`:** Die Seite rechnet streng nur über
+  sichtbare Personen (Entscheidung des Eigentümers); das MCP-Werkzeug
+  zeigt weiterhin Wege über nicht sichtbare Personen als Platzhalter.
 - **Ringe:** mit echten Datenmengen und auf echten Telefonen nicht geprüft;
   bei 7 Generationen sind die äußersten Flächen auf dem Telefon sehr klein
   (dafür das Vollbild). Kein Zoomen/Verschieben.
@@ -171,9 +197,3 @@ Gesammelte Wünsche des Eigentümers — **erst nach seiner Freigabe bauen**
   erscheinen bei späteren Texten als Vorschlag, die automatische Zuordnung
   nutzt sie aber nicht (gleichnamige Weiler wären riskant). Bei Bedarf
   entscheiden.
-- **Ideen vom 27.11.2026** (gesammelt, nicht beauftragt): Zeitreise
-  (Schieberegler für das Jahr auf Karte oder Baum); Nachfahren-Ringe;
-  Seite „Rekorde“ (nennt einzelne Personen — Sichtbarkeitsregeln wie im
-  Baum); Lebenslauf als Text aus den Ereignissen (Regeln, ohne KI);
-  Ahnentafel als PDF im Posterformat; historischer Rahmen im Zeitstrahl
-  (braucht gepflegte Ereignisliste); Forschungs-Fortschritt je Linie.

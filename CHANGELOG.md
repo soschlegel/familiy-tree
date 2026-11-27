@@ -17,6 +17,39 @@ Regeln für neue Einträge (AGENTS.md, Abschnitt 3 „Ausrollen“):
 - Geprüft von tests/release-notes.test.ts (lib/release-notes.ts).
 -->
 
+## 2026-11-27.3 — Startseite, Lebenslauf, Zeitreise und mehr
+
+- Neue Startseite „Heute in der Familie“: Jahrestage des Tages, die
+  Geburtstage der nächsten 30 Tage und runde Jubiläen. Du landest nach dem
+  Anmelden dort; das Zeichen „Stammbaum“ oben links führt immer dorthin
+  zurück, der Baum ist einen Klick entfernt.
+- „Wie sind wir verwandt?“: Wähle zwei Personen — die App nennt die
+  Verwandtschaft in Worten und zeichnet den Weg über die gemeinsamen
+  Vorfahren. Den Knopf findest du auf der Personenseite und unter
+  „Recherche“.
+- Lebenslauf: Auf der Personenseite steht ein kurzer Text in ganzen Sätzen,
+  automatisch aus den erfassten Daten erstellt — mit „Text kopieren“.
+- Karte: Die neue Art „Lebensweg“ zeigt die Orte eines Lebens als Weg mit
+  Jahreszahlen, wahlweise auch die Vater- oder Mutterlinie über die
+  Generationen.
+- Karte: Zeitreise mit Zeitstrahl, Schritten und „Abspielen“ — daneben
+  steht, wer im gewählten Jahr lebte, wie alt er war und was in dem Jahr
+  in der Familie geschah.
+- Ringe: Mit „Nachfahren“ siehst du Kinder, Enkel und Urenkel einer Person
+  im Kreis. „Drucken“ macht aus den Ringen ein Blatt von A4 bis zum Poster,
+  als PDF oder als Bild für die Druckerei.
+- Neue Seite „Rekorde“: höchstes Alter, längste Ehe, meiste Kinder, längste
+  Abstammungslinie und mehr — erreichbar über „Statistik“ und die
+  Startseite.
+- Neue Seite „Forschungs-Fortschritt“: wie vollständig die Vorfahren je
+  Generation und Linie erfasst und belegt sind, mit Vorschlägen, wo sich
+  das Weitersuchen lohnt — erreichbar über „Recherche“ und die Startseite.
+- Zeitgeschichte: Im Zeitstrahl des Baums, in der Zeitreise der Karte und
+  unter dem Lebenslauf steht, was in der Zeit geschah — vom Dreißigjährigen
+  Krieg bis zur Wiedervereinigung. Mit dem Schalter „Zeitgeschichte“
+  blendest du das aus; Administratoren ergänzen eigene Ereignisse unter
+  „Verwaltung“.
+
 ## 2026-11-27.2 — Stammbaum als Ringe
 
 - Neue Ansicht „Ringe“ im Stammbaum: In der Mitte steht eine Person, im
