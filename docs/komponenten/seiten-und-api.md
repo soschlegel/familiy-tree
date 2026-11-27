@@ -97,6 +97,7 @@ Alle Seiten außer `/login`, `/login/email` und der Weiterleitung `/` sind
 | `/research` | Recherche-Überblick: Bestand, Lücken, Dubletten, Widersprüche | angemeldet |
 | `/research/duplicates` | Alle möglichen Dubletten | angemeldet |
 | `/research/connect` | Importe verbinden | nur Admin (sonst 404) |
+| `/statistics` | Statistik: Diagramme über den sichtbaren Teil des Stammbaums | angemeldet |
 | `/sources` | Quellenliste | angemeldet |
 | `/sources/new` | Quelle anlegen | Bearbeiter in ≥ 1 Familie, sonst → `/sources` |
 | `/sources/[id]` | Quellenseite | Quelle sichtbar, sonst 404 |
@@ -195,7 +196,7 @@ Dienst über den `Scope`.
 
 - Lädt die Sitzung. Für angemeldete Benutzer: Navigationsleiste
   (`NavBar`, `MainContainer` aus `components/NavBar.tsx`) mit Baum, Karte,
-  Personen, Recherche, Quellen, Daten; im Untermenü „Verwaltung“:
+  Personen, Recherche, Statistik, Quellen, Daten; im Untermenü „Verwaltung“:
   KI-Zugang (nur bei KI-Recht oder noch nicht widerrufenen Schlüsseln —
   dafür eine kleine Abfrage am Benutzer), Familien, Benutzer, Änderungen,
   Einstellungen (je nach globalem Recht) und für alle zuletzt „Hilfe“ (`/hilfe`) — damit
@@ -427,6 +428,40 @@ Die Personenseite.
   mögliche Dubletten (`DuplicateList`, Link „alle prüfen“), Widersprüche
   je Art. Für Administratoren zusätzlich der Hinweis auf „Importe
   verbinden“.
+
+### `/statistics` — `app/statistics/page.tsx`
+
+- **Rechte:** angemeldet, kein Admin-Recht nötig (Menüpunkt „Statistik“ für
+  alle); gezählt werden nur sichtbare Personen, Beziehungen nur zwischen
+  ihnen. Die Seite nennt keine einzelnen Personen.
+- **Parameter:** `family` (Kennung einer Familie aus `listFamilies`; fremde
+  oder unbekannte gelten als „Alle“), `level=region` (sonst nach Land). Die
+  Adresse ist damit teilbar; der Empfänger sieht dieselbe Auswahl mit
+  seinen eigenen Rechten.
+- **Daten:** `getFamilyStatistics` (`lib/services/statistics.ts`).
+- **Anzeige:** Kopf mit Kontexthilfe (`HelpLink` → `/hilfe/statistik`);
+  Filter „Familie“ (`AutoSubmitSelect`, GET-Formular mit Knopf „Anzeigen“,
+  `level` als verstecktes Feld) nur bei mehr als einer Familie; Kennzahlen
+  (Personen mit lebend/verstorben, Partnerschaften mit
+  Eltern-Kind-Beziehungen, frühestes/spätestes Geburtsjahr, Hinweis auf
+  vermutlich Verstorbene); je Auswertung eine Karte (`StatsCard`) mit
+  Überschrift und Grundlage („aus 812 von 1.240 Personen mit …“):
+  Geburtsorte (Ring mit Legende, Umschalter „nach Land“/„nach Region“ als
+  Links mit `aria-current`, Familie bleibt erhalten), Geschlecht (Ring),
+  häufigste Nachnamen und Vornamen (je 15 Balken), Geburten je Jahrzehnt
+  bzw. Jahrhundert, erreichtes Lebensalter (Durchschnitt, Tabelle je
+  Geburtsjahrhundert, Altersklassen), Kinderzahl (Durchschnitt, Tabelle je
+  Geburtsjahrhundert der Eltern, Verteilung), Heiratsalter (Männer/Frauen,
+  Klassen), Geburtsmonate. Leere Auswertungen zeigen einen Hinweis statt
+  eines Diagramms, zu kleine Grundlagen „zu wenige“. Ohne sichtbare
+  Personen nur „Noch nichts auszuwerten.“
+- **Bewusst ohne `loading.tsx`:** Mit einer Ladeanzeige bleibt in diesem
+  Aufbau eine Navigation auf dieselbe Seite mit anderen Suchparametern
+  hängen (Adresse und Inhalt ändern sich nicht) — so hier der Umschalter
+  Land/Region. Die Seite rechnet ohnehin in wenigen Millisekunden.
+- **Darstellung:** ohne Skript außer dem Familienfilter, ohne
+  Diagramm-Bibliothek (Ring `DonutChart`, Balken und Tabellen aus
+  `components/StatisticsCharts.tsx`); bei 390 px ohne waagerechtes Scrollen.
 
 ### `/research/duplicates` — `app/research/duplicates/page.tsx`
 
@@ -980,6 +1015,7 @@ Dienste (`tests/*.db.test.ts`) und das Zusammenspiel im Browser
 | Baum | `e2e/read/tree-focus.spec.ts`, `tree-whole.spec.ts`, `reference.spec.ts`; `e2e/write/reference.spec.ts` |
 | Karte, Orte | `e2e/read/map.spec.ts`; `e2e/write/places.spec.ts` |
 | Personen | `e2e/read/people-list.spec.ts`, `person-families.spec.ts`, `dates.spec.ts`; `e2e/write/person-lifecycle.spec.ts`, `genealogy.spec.ts`, `dates.spec.ts` |
+| Statistik | `e2e/read/statistics.spec.ts`; Unit: `tests/statistics.test.ts`, `tests/statistics.db.test.ts` |
 | Recherche, Dubletten, Zusammenführen | `e2e/read/research.spec.ts`, `quality.spec.ts`, `duplicate-banner.spec.ts`; `e2e/write/merge.spec.ts`, `duplicate-banner.spec.ts`, `connect.spec.ts` |
 | Quellen, Bilder | `e2e/write/sources.spec.ts`, `import-sources.spec.ts`, `media.spec.ts`, `attached-media.spec.ts` |
 | Export, Import | `e2e/read/export.spec.ts`, `gedcom-export-dialog.spec.ts`; `e2e/write/import.spec.ts`, `gedcom-import.spec.ts` |

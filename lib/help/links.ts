@@ -17,6 +17,7 @@ export const HELP_LINKS = {
   dublettenKi: "/hilfe/dubletten#von-der-ki-vorgepruefte-paare",
   kiZugang: "/hilfe/ki-zugang",
   einstellungen: "/hilfe/einstellungen",
+  statistik: "/hilfe/statistik",
   importVorschlaege: "/hilfe/import-und-export#vorschlaege-personen-die-es-schon-gibt",
 } as const;
 

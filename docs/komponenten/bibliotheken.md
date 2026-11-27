@@ -21,6 +21,7 @@ Test-Briefkasten).
 | Protokoll | `audit`, `change-sets`, `change-time` |
 | Daten und Regeln | `dates`, `date-fields`, `events`, `event-labels`, `validation`, `consistency`, `partner-labels`, `source-labels`, `source-classify` |
 | Graph und Verwandtschaft | `graph`, `kinship`, `reference`, `roots` |
+| Auswertungen | `statistics`, `chart-slices` |
 | Baumdarstellung | `tree-layout`, `layout-generations`, `focus-tree` |
 | Dubletten und Zusammenführen | `name-keys`, `duplicates`, `merge-rules`, `import-linking` |
 | Import/Export | `exchange`, `export-selection`, `import-fingerprint`, `gedcom/*`, `gedcom-import/*` |
@@ -924,6 +925,12 @@ Grenzen `ROOTS_MIN_GENERATION` (2), `ROOTS_MAX_GENERATION` (8),
   Eltern werden nicht einmal abgefragt.
 - **Stücke:** Gebiete absteigend nach Anteil (gleich: Name), dann
   „Sonstige“, „Ort nicht zugeordnet“, „Unbekannt“, „Nicht freigegeben“.
+  Das Zusammenfassen, die Prozentrundung, Bezeichnungen und Farben liegen
+  gemeinsam mit der Seite „Statistik“ in `lib/chart-slices.ts`
+  (`groupAreaSlices` mit dem Ganzen 1); `rootsSlices` gibt die Stücke ohne
+  den Zählwert zurück, die Antwort ist also wie zuvor. `ROOTS_LABELS`,
+  `ROOTS_COLORS`, `ROOTS_MIN_SLICE`, `ROOTS_MAX_PLACE_SLICES` und
+  `roundPercentages` sind Verweise darauf.
   Gebiete unter 2 % oder jenseits des achten werden „Sonstige“ (mit Liste
   der Gebiete) — aber nie ein einzelnes Gebiet allein: Das bleibt beim
   Namen bzw. nimmt, wenn schon acht Farben vergeben sind, das kleinste
@@ -938,6 +945,98 @@ Grenzen `ROOTS_MIN_GENERATION` (2), `ROOTS_MAX_GENERATION` (8),
 **Benutzt von:** `lib/services/roots.ts`, `components/PersonRoots.tsx`.
 
 **Tests:** `tests/roots.test.ts`, `tests/roots.db.test.ts`.
+---
+
+## Auswertungen
+
+### lib/chart-slices.ts
+**Zweck:** Stücke eines Rings nach Gebieten (Land bzw. Region) — gemeinsam
+für „Wurzeln“ (`lib/roots.ts`) und die Seite „Statistik“
+(`lib/statistics.ts`). Rein.
+
+**Wichtige Funktionen/Typen:** `groupAreaSlices` (Gebietswerte plus graue
+Restwerte „Ort nicht zugeordnet“, „Unbekannt“, „Nicht freigegeben“ →
+Stücke mit Wert, Anteil, Prozent, Farbe und bei „Sonstige“ der Liste der
+Gebiete; das Ganze ist die Summe aller Werte oder ein mitgegebener Wert),
+`roundPercentages`, `chartColor`, `SLICE_LABELS`, `SLICE_COLORS`,
+`CHART_MIN_SLICE` (2 %), `CHART_MAX_AREA_SLICES` (8), Typ `AreaSlice`.
+
+**Regeln:** wie unter `lib/roots.ts` beschrieben — Gebiete absteigend (gleich:
+Name), unter 2 % bzw. jenseits des achten nach „Sonstige“, nie ein einzelnes
+Gebiet allein; Prozent nach größten Resten mit Summe 100; Farben
+`--chart-1` … `--chart-8` und Grautöne aus `app/globals.css`.
+
+**Benutzt von:** `lib/roots.ts`, `lib/statistics.ts`.
+
+**Tests:** `tests/roots.test.ts` (über `rootsSlices`), `tests/statistics.test.ts`.
+
+### lib/statistics.ts
+**Zweck:** Rechnung der Seite **„Statistik“** (`/statistics`): Kennzahlen und
+Verteilungen über die gezählten Personen, nach dem Vorbild der
+Familienstatistik der Ahnenportale. Rein, alles in einem Durchgang über
+Personen und Beziehungen; Laden, Rechte und Familienfilter in
+`lib/services/statistics.ts`.
+
+**Wichtige Funktionen/Typen:** `computeStatistics` (Eingabe: Personen mit
+Namen, Geschlecht, ungenauem Geburts-/Sterbedatum, Ort und `visible`;
+Beziehungen mit Art, Unterart und Beginn; Stichtag; Stufe; Ort → Gebiet),
+Hilfen `usableYear`, `usableAge`, `centuryOf`, `cleanName`,
+`surnameForCount`, `firstGivenName`; Grenzen `MIN_BASIS` (5),
+`MAX_DATE_SPAN_YEARS` (10), `TOP_NAMES` (15), `MAX_DECADE_BARS` (30),
+`MAX_CHILDREN_CLASS` (10); Ergebnis `StatisticsResult` mit Balken (`Bar`) und
+Durchschnittszeilen (`AverageRow`).
+
+**Regeln:**
+- **Wer zählt:** nur Personen mit `visible` (die Funktion filtert selbst,
+  auch wenn der Dienst schon nur sichtbare liefert). Beziehungen nur, wenn
+  beide Seiten gezählt werden — Kinder, Partner und Ehen nicht sichtbarer
+  Personen fließen nirgends ein. Das Ergebnis enthält keine Kennungen und
+  keine einzelnen Personen, nur Summen, Namen und Gebiete.
+- **Lebend/verstorben:** verstorben mit Sterbedatum oder Sterbeangabe ohne
+  Datum (Ort, Wortlaut); ohne Sterbeangabe „vermutlich verstorben“, wenn der
+  späteste mögliche Geburtstag über `PRESUMED_LIFESPAN` (100) Jahre zurückliegt
+  (gleiche Regel wie `getStatistics`, dort aber nur gemeldet); lebend ist der
+  Rest. Die Seite nennt die Zahl der vermutlich Verstorbenen eigens.
+- **Ungenaue Daten (`lib/dates.ts`):** Ein Jahr gilt, wenn der mögliche
+  Zeitraum (`dateBounds`, „um“ mit ±2 Jahren) endlich und höchstens zehn
+  Jahre weit ist; gezählt wird die Mitte. „vor“, „nach“, „ab“, „bis“ und
+  weitere Bereiche fallen heraus. Ein Alter gilt, wenn beide Angaben
+  tagesgenau sind (vollendete Jahre nach dem Kalender) oder die mögliche
+  Spanne (`yearsBetween`) endlich und höchstens zehn Jahre weit ist
+  (vollendete Jahre zur Mitte); negative Alter und solche über
+  `MAX_LIFESPAN` (110) gelten als Datenfehler und zählen nicht.
+- **Kennzahlen:** Personen, lebend/verstorben, Partnerschaften,
+  Eltern-Kind-Beziehungen, frühestes/spätestes verwertbares Geburtsjahr.
+- **Geburtsorte:** Ort je Person (der Dienst wählt Geburtsort, sonst Taufort)
+  → Gebiet; ohne Ort „Unbekannt“, Ort ohne Zuordnung „Ort nicht
+  zugeordnet“; Stücke über `groupAreaSlices`.
+- **Geschlecht:** feste Reihenfolge Weiblich, Männlich, Divers, Unbekannt
+  (grau); Prozent nach größten Resten.
+- **Namen:** Nachname = Geburtsname, sonst Nachname (`familyName` ist der
+  heutige, ggf. Ehename; wie der GEDCOM-Export). Vorname = erstes Wort des
+  Vornamensfelds. Platzhalter ohne Buchstaben bzw. „NN“, „N.N.“,
+  „unbekannt“ zählen nicht. Gezählt ohne Groß-/Kleinschreibung, angezeigt
+  die häufigste Schreibweise; die 15 häufigsten, Gleichstand nach Name.
+- **Geburten:** je Jahrzehnt, bei mehr als 30 Jahrzehnten je Jahrhundert,
+  lückenlos vom ersten bis zum letzten (leere Zeiträume mit 0).
+- **Lebensalter:** Durchschnitt gesamt und je Geburtsjahrhundert
+  („1800–1899“), Klassen 0–9 … 90–99, „100 und älter“.
+- **Kinderzahl:** je Person die verschiedenen gezählten Kinder über
+  leibliche und Adoptiv-Beziehungen (keine Stief-/Pflegekinder);
+  Durchschnitt über Personen mit mindestens einem Kind, gesamt und je
+  Geburtsjahrhundert der Eltern; Verteilung 1 … 9, „10 und mehr“.
+- **Heiratsalter (Zusatz):** je Person die erste Ehe (Unterart verheiratet
+  oder geschieden) mit Datum; Alter wie oben; Durchschnitt für Männer und
+  Frauen, Klassen „unter 20“, 20–24 … 35–39, „40 und älter“.
+- **Geburtsmonate (Zusatz):** nur Geburtsdaten mit Tag oder Monat ohne Zusatz
+  („genau“).
+- **Kleine Grundlagen:** Durchschnitte erst ab 5 Personen (`MIN_BASIS`),
+  sonst `average: null` — die Seite zeigt „zu wenige“ und die Anzahl.
+
+**Benutzt von:** `lib/services/statistics.ts`, `app/statistics/page.tsx`,
+`components/StatisticsCharts.tsx` (Typen).
+
+**Tests:** `tests/statistics.test.ts`, `tests/statistics.db.test.ts`.
 
 ---
 
@@ -1877,7 +1976,7 @@ Entwicklung bei jedem Aufruf. Ins Standalone-Image kommen die Dateien über
 ### lib/help/links.ts
 **Zweck:** Ziele der Kontexthilfe (`HELP_LINKS`: Karte, Wurzeln, Orte zuordnen,
 Linien, Bezugsperson, Dubletten, Dubletten-Klassen, KI-Vorprüfung der
-Dubletten, KI-Zugang, Einstellungen) an einer
+Dubletten, KI-Zugang, Einstellungen, Statistik) an einer
 Stelle, damit der Test prüfen kann, dass Thema und Anker existieren.
 
 **Benutzt von:** `components/HelpLink.tsx`, `components/DuplicateBanner.tsx`.

@@ -682,6 +682,12 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   http(s)-Adressen, Rückfall auf die Umgebungsvariable.
 - **`source-classify.test.ts`** — Einordnung importierter Quellen und Anzeige
   älterer Importe.
+- **`statistics.test.ts`** — Seite „Statistik“: Datumsregeln (Jahr und
+  Alter bei ungenauen Daten), Namensregeln (Geburtsname vor Ehename, erster
+  Vorname, Platzhalter), Kennzahlen, Sichtbarkeit (gesperrte Personen und
+  ihre Kinder/Partner zählen nicht), Geburtsorte, Geburten je Zeitraum,
+  Lebensalter mit kleiner Grundlage, Kinderzahl, Heiratsalter,
+  Geburtsmonate, `groupAreaSlices`.
 - **`storage.test.ts`** — Schlüsselprüfung gegen Pfad-Ausbrüche, atomares
   Schreiben, Lesen, Löschen, Ordnerprüfung (in eigenem Temp-Ordner).
 - **`validation.test.ts`** — Datumsprüfungen, Beziehungsregeln,
@@ -764,6 +770,10 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   Administratoren, Protokoll vorher → nachher samt Anzeige in der
   Änderungsübersicht; Routen `/api/settings…` (Fehlercodes, 403 für
   Nicht-Admins und fremde Herkunft).
+- **`statistics.db.test.ts`** — Statistik je Rolle (Zahlen wie
+  `getStatistics`, eingeschränkte Benutzer sehen weniger), keine Kennungen
+  und keine Namen aus gesperrten Familien, Familienfilter (fremde Familie =
+  „Alle“), Stufe Region, Benutzer ohne Familie (nur lesend).
 - **`sources.db.test.ts`** — Quellen, Belege und ungenaue Daten.
 
 ---
@@ -860,6 +870,11 @@ Benutzer bekommt keinen gespeicherten Zustand.
   390 px ohne Querscrollen, axe.
 - **`sources-list.spec.ts`** — Quellenliste: eine Seite jenseits des Endes
   zeigt die letzte Seite mit Einträgen.
+- **`statistics.spec.ts`** — Seite „Statistik“: alle Karten mit Grundlage,
+  Hilfe-Link, Umschalter Land/Region und Familienfilter in der Adresse,
+  Betrachter sieht kleinere Zahlen (fremde Familie in der Adresse gibt
+  nichts frei), ohne Familie nur Hinweis, 390 px hell/dunkel ohne
+  Querscrollen, axe.
 - **`tree-focus.spec.ts`** — Fokus-Ansicht ab fester Person, Startperson.
 - **`tree-whole.spec.ts`** — Gesamtansichten Generationen und Zeitstrahl.
 

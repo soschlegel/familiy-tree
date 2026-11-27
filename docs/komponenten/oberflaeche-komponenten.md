@@ -24,7 +24,7 @@ Abschnitt 1). Seiten und API-Routen selbst stehen in
 - [Personen, Ereignisse, Quellen und Medien](#personen-ereignisse-quellen-und-medien)
   — `PersonForm`, `DateInput`, `EventSection`, `CitationSection`,
   `CitationLink`, `NameVariants`, `PersonFamilies`, `RelationshipEditor`,
-  `PersonChanges`, `PersonRoots`, `DonutChart` (mit `DonutLegend`), `PersonOrigin`, `PersonPicker`, `AttachedMedia`, `MediaGallery`,
+  `PersonChanges`, `PersonRoots`, `DonutChart` (mit `DonutLegend`), `StatisticsCharts`, `PersonOrigin`, `PersonPicker`, `AttachedMedia`, `MediaGallery`,
   `DeletePersonButton`, `SelfPersonButton`, `SourceForm`, `DeleteSourceButton`
 - [Rahmen und Helfer](#rahmen-und-helfer) — `NavBar`, `PageLoading`,
   `AutoSubmit`, `api-client`, `useDismiss`, `ai-access-labels`,
@@ -844,9 +844,10 @@ Rechnung: `tests/roots.db.test.ts`, `tests/roots.test.ts`.
 Diagramm-Bibliothek, kein Skript, verträglich mit der
 Content-Security-Policy (`lib/csp.ts`; Farben über `fill`-Attribute bzw.
 `style`, die `style-src 'unsafe-inline'` erlaubt). Für „Wurzeln“ gebaut,
-für weitere Auswertungen (Statistik) gedacht.
+auch für die Seite „Statistik“ benutzt.
 
-**Wo eingesetzt:** `components/PersonRoots.tsx`.
+**Wo eingesetzt:** `components/PersonRoots.tsx`, `app/statistics/page.tsx`
+(Geburtsorte, Geschlecht).
 
 **Props/Daten:** `DonutChart`: `slices` (je `key`, `label`, `value`,
 `color` als CSS-Farbe, optional `valueText`), `label` (Titel für
@@ -866,7 +867,38 @@ Client-Komponenten nutzbar.
 
 **Server oder Client:** beides.
 
-**Tests:** über `e2e/read/roots.spec.ts`.
+**Tests:** über `e2e/read/roots.spec.ts` und `e2e/read/statistics.spec.ts`.
+
+### components/StatisticsCharts.tsx
+
+**Zweck:** Bausteine der Seite „Statistik“ (`app/statistics/page.tsx`):
+Karte mit Überschrift und Grundlage, waagerechte Balken,
+Durchschnittstabelle, Kennzahl, Hinweis für leere Auswertungen. Reines
+HTML/CSS ohne Diagramm-Bibliothek und ohne Skript; die Balkenbreite steht
+im `style`-Attribut (CSP: `style-src 'unsafe-inline'`).
+
+**Wo eingesetzt:** `app/statistics/page.tsx`.
+
+**Props/Daten:** `StatsCard` (`id`, `title`, `basis` = Grundlage als Text,
+`testId`, optional `actions` rechts neben der Überschrift), `BarList`
+(`bars` aus `lib/statistics.ts`, `caption`, Spaltenköpfe, `wideLabels` für
+Namen), `AverageTable` (`rows` mit Bezeichnung, Durchschnitt oder `null`,
+Anzahl; `unit`), `KeyFigure`, `EmptyHint`; Hilfen `formatCount`
+(Tausenderpunkt), `formatAverage` (eine Nachkommastelle), `basisText`
+(„aus 812 von 1.240 Personen mit …“).
+
+**Verhalten:** Balken und Tabellen sind echte Tabellen mit unsichtbarer
+Überschrift; jede Zahl steht als Text in der letzten Spalte, der Balken ist
+`aria-hidden`. Der längste Balken füllt die Breite, Nullzeilen bleiben
+sichtbar. Feste Spaltenaufteilung (`table-fixed`), lange Namen werden
+gekürzt (voller Name im Tooltip) — bei 390 px nichts über dem Rand. Ein
+Durchschnitt `null` erscheint als „zu wenige“. Helles und dunkles Schema
+über Tailwind-Klassen.
+
+**Server oder Client:** beides (keine Hooks); eingesetzt als
+Server-Komponente.
+
+**Tests:** `e2e/read/statistics.spec.ts` (Desktop, 390 px hell/dunkel, axe).
 
 ### components/PersonOrigin.tsx
 

@@ -83,6 +83,8 @@ export default async function RootLayout({
         { href: "/map", label: "Karte" },
         { href: "/people", label: "Personen" },
         { href: "/research", label: "Recherche" },
+        // Diagramme über den sichtbaren Teil des Stammbaums — für alle.
+        { href: "/statistics", label: "Statistik" },
         { href: "/sources", label: "Quellen" },
         // Export steht allen offen (enthält nur, was der Benutzer sehen
         // darf); der Import ist auf der Seite selbst Administratoren

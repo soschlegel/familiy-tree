@@ -24,6 +24,7 @@ const PAGES: { name: string; url: string; heading: string | RegExp }[] = [
   { name: "Quelle", url: `/sources/${L.sources.churchBookA}`, heading: /.+/ },
   { name: "Quelle anlegen", url: "/sources/new", heading: /.+/ },
   { name: "Recherche", url: "/research", heading: "Recherche" },
+  { name: "Statistik", url: "/statistics", heading: "Statistik" },
   { name: "Mögliche Dubletten", url: "/research/duplicates", heading: "Mögliche Dubletten" },
   { name: "Importe verbinden", url: "/research/connect", heading: /.+/ },
   { name: "Benutzer", url: "/admin/users", heading: "Benutzer" },

@@ -116,6 +116,7 @@ beide). Ereignisse, Belege, Namen und Rohdaten folgen ihrem Träger.
 | `places.ts` | Ortstexte → Koordinaten (Ortszuordnung, nur Admin) |
 | `place-areas.ts` | Ortstexte → Land bzw. Region (eine Abfrage, für Auswertungen) |
 | `roots.ts` | „Wurzeln“ einer Person: Anteile der Länder/Regionen ihrer Vorfahren |
+| `statistics.ts` | Seite „Statistik“: sichtbaren Teil des Stammbaums schlank laden und auswerten, Familienfilter |
 | `changes.ts` | Änderungsgeschichte lesen (Personenverlauf, Paketübersicht) |
 | `ai-access.ts` | KI-Recht, persönliche Schlüssel, Prüfung je MCP-Aufruf |
 | `imports.ts` | Importläufe, Herkunft, Fremdkennungen, Rohdaten |
@@ -1529,8 +1530,7 @@ Einspielen werden nur Texte ohne vorhandene Zuordnung übernommen
 ### lib/services/place-areas.ts
 
 **Zweck:** Ortstexte auf Länder bzw. Regionen abbilden — gemeinsamer
-Baustein für Auswertungen (heute „Wurzeln“, vorgesehen für eine
-Statistik-Seite).
+Baustein für Auswertungen („Wurzeln“ und Seite „Statistik“).
 
 **Wichtige Funktionen:** `placeAreasFor(texts, level)` — Ergebnis
 `placeKey` → Gebiet (`lib/places/area.ts`, `placeArea`). Eine Abfrage der
@@ -1542,9 +1542,9 @@ hat (erster Aufruf rund 1 s, danach zwischengespeichert).
 Ortstexte von Angaben, die der Benutzer sehen darf. Heraus kommen nur
 Länder- bzw. Regionsnamen, keine Koordinaten, keine Notizen der Zuordnung.
 
-**Benutzt von:** `lib/services/roots.ts`.
+**Benutzt von:** `lib/services/roots.ts`, `lib/services/statistics.ts`.
 
-**Tests:** über `tests/roots.db.test.ts`; Regeln in `tests/roots.test.ts`.
+**Tests:** über `tests/roots.db.test.ts` und `tests/statistics.db.test.ts`; Regeln in `tests/roots.test.ts`.
 
 ### lib/services/roots.ts
 
@@ -1592,6 +1592,54 @@ erkennbar — mehr nicht.
 
 **Tests:** `tests/roots.db.test.ts` (Regeln: `tests/roots.test.ts`);
 `e2e/read/roots.spec.ts`.
+
+### lib/services/statistics.ts
+
+**Zweck:** Daten der Seite „Statistik“ (`/statistics`): den sichtbaren Teil
+des Stammbaums schlank laden, wahlweise auf eine Familie beschränken und mit
+`computeStatistics` (`lib/statistics.ts`) auswerten.
+
+**Wichtige Funktionen/Typen:** `getFamilyStatistics(scope, {familyId,
+level})` → `FamilyStatisticsDto` (alle Auswertungen aus `StatisticsResult`,
+dazu die wählbaren Familien und die gewählte Familie oder `null`).
+
+**Regeln:**
+- **Laden:** eine Abfrage der Personen — schon in der Datenbank auf sichtbare
+  (`personVisibilityFilter`) und ggf. die gewählte Familie beschränkt, nur
+  die Felder der Auswertung (keine Notizen, keine Bilder); eine Abfrage aller
+  Beziehungen mit Kennungen, Art und Beginn (gefiltert im Speicher — eine
+  `in`-Liste mit tausenden Kennungen wäre langsamer und begrenzt); eine der
+  Taufen mit Ort (nur für Personen ohne Geburtsort verwendet); eine der
+  Ortszuordnungen (`placeAreasFor`). Nie eine Abfrage je Person. Gemessen
+  auf den Mock-Daten (195 Personen) 13 ms, Stufe „Region“ 20 ms (ohne das
+  einmalige Laden des Ortsverzeichnisses); die reine Rechnung braucht für
+  12 000 Personen und 18 000 Beziehungen rund 50 ms. `loadGraph` wird bewusst
+  nicht benutzt: es lädt Notizen und Bilder mit.
+- **Ort:** Geburtsort, sonst Ort der frühesten Taufe (`BAPTISM`,
+  `CHRISTENING`, keine Zweitangabe) — wie „Wurzeln“.
+- **Verstorben ohne Datum:** Sterbeort oder Wortlaut ohne Datum zählt als
+  verstorben.
+- **Stufe:** `region` oder sonst `country` (unbekannte Werte aus der Adresse
+  gelten als Land, kein Fehler).
+
+**Rechte/Datenschutz:** Gezählt wird nur, wer sichtbar ist — Datenbankfilter
+und zusätzlich `canViewPerson` je Person. Beziehungen zählen nur zwischen
+gezählten Personen (beim Familienfilter: nur innerhalb der Familie). Der
+Familienfilter nimmt nur Familien aus `listFamilies` (Admin: alle, sonst die
+eigenen); eine fremde oder unbekannte Kennung gilt als „Alle“, ohne Fehler
+und ohne zu verraten, ob es sie gibt. Die Antwort enthält keine
+Personenkennungen und keine einzelnen Personen — nur Summen, Namen und
+Gebiete. Für lebende Personen kennt die App keine eigene Sichtbarkeitsregel
+(Sichtbarkeit hängt nur an den Familien); die Seite nennt ohnehin niemanden
+einzeln.
+
+**Protokoll:** — (nur lesend).
+
+**Benutzt von:** `app/statistics/page.tsx`. Kein MCP-Werkzeug (`get_statistics`
+nutzt weiter `getStatistics` aus `research.ts`).
+
+**Tests:** `tests/statistics.db.test.ts` (Regeln: `tests/statistics.test.ts`);
+`e2e/read/statistics.spec.ts`.
 
 ---
 
