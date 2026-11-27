@@ -63,6 +63,7 @@ export type RingSlotDto =
 export type RingAreaDto = { key: string; label: string; color: string; count: number; members?: string[] };
 
 export type AncestorRingsDto = {
+  direction: "vorfahren";
   root: RingPersonDto;
   generations: number;
   /** Sichtbare Personen der Plätze (und die Ausgangsperson) nach Kennung. */
@@ -76,7 +77,7 @@ export type AncestorRingsDto = {
   areas: RingAreaDto[];
 };
 
-const PERSON_SELECT = {
+export const RING_PERSON_SELECT = {
   id: true,
   givenName: true,
   familyName: true,
@@ -97,7 +98,7 @@ const PERSON_SELECT = {
   families: { select: { familyId: true } },
 } as const;
 
-type Row = {
+export type RingPersonRow = {
   id: string;
   givenName: string;
   familyName: string | null;
@@ -117,7 +118,7 @@ type Row = {
   birthPlace: string | null;
 };
 
-function toDto(p: Row): RingPersonDto {
+export function toRingPersonDto(p: RingPersonRow): RingPersonDto {
   return {
     id: p.id,
     givenName: p.givenName,
@@ -148,12 +149,12 @@ export async function loadAncestorRings(
   generations: unknown = undefined,
 ): Promise<AncestorRingsDto | null> {
   const n = parseRingsGeneration(generations);
-  const root = await prisma.person.findUnique({ where: { id: rootId }, select: PERSON_SELECT });
+  const root = await prisma.person.findUnique({ where: { id: rootId }, select: RING_PERSON_SELECT });
   if (!root || !canViewPerson(scope, root.families.map((f) => f.familyId))) return null;
 
   // Generation für Generation: Eltern nur von sichtbaren, noch nicht
   // gefragten Personen. Ahnenschwund und Zyklen fragen nichts doppelt.
-  const rows = new Map<string, Row>([[root.id, root]]);
+  const rows = new Map<string, RingPersonRow>([[root.id, root]]);
   const restricted = new Set<string>();
   const parents = new Map<string, RingParent[]>();
   let frontier = [root.id];
@@ -161,7 +162,7 @@ export async function loadAncestorRings(
     const rels = await prisma.relationship.findMany({
       where: { type: "PARENT_OF", subtype: "BIOLOGICAL", toPersonId: { in: frontier } },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      select: { toPersonId: true, fromPerson: { select: PERSON_SELECT } },
+      select: { toPersonId: true, fromPerson: { select: RING_PERSON_SELECT } },
     });
     for (const id of frontier) parents.set(id, []);
     const next: string[] = [];
@@ -202,8 +203,56 @@ export async function loadAncestorRings(
     return (side === "paternal" && sex === "MALE") || (side === "maternal" && sex === "FEMALE") ? side : null;
   };
 
-  // Ort je sichtbarem Vorfahren: Geburtsort, sonst Taufort (wie „Wurzeln“).
   const shown = [...new Set(slots.flatMap((s) => (s.kind === "person" ? [s.personId] : [])))];
+  const { areas, areaOf } = await ringPlaceLegend(
+    rows,
+    slots.map((s) => (s.kind === "person" ? s.personId : null)),
+  );
+
+  const persons: Record<string, RingPersonDto> = { [root.id]: toRingPersonDto(root) };
+  for (const id of shown) persons[id] = toRingPersonDto(rows.get(id)!);
+
+  return {
+    direction: "vorfahren",
+    root: persons[root.id],
+    generations: n,
+    persons,
+    slots: slots.map((s) =>
+      s.kind === "person"
+        ? {
+            generation: s.generation,
+            index: s.index,
+            kind: "person" as const,
+            personId: s.personId,
+            term: ringRelationTerm(s.generation, persons[s.personId].gender, sideOf(s.generation, s.index)),
+            area: areaOf(s.personId),
+          }
+        : {
+            generation: s.generation,
+            index: s.index,
+            kind: "restricted" as const,
+            term: ringRelationTerm(s.generation, "UNKNOWN", sideOf(s.generation, s.index)),
+          },
+    ),
+    known: slots.length,
+    restricted: slots.filter((s) => s.kind === "restricted").length,
+    areas,
+  };
+}
+
+/**
+ * Färbung „nach Wurzeln“ für beide Richtungen der Ringe: Ort je sichtbarer
+ * Person (Geburtsort, sonst früheste Taufe ohne Zweitangabe — wie
+ * „Wurzeln“), Land über die Ortszuordnung, Legende über `groupAreaSlices`.
+ * `appearances` sind die Flächen (Kennung bzw. null für „nicht
+ * freigegeben“) — wer mehrfach erscheint, zählt mehrfach. Zwei Abfragen
+ * (Taufen nur für Personen ohne Geburtsort, Ortszuordnungen).
+ */
+export async function ringPlaceLegend(
+  rows: ReadonlyMap<string, Pick<RingPersonRow, "birthPlace">>,
+  appearances: readonly (string | null)[],
+): Promise<{ areas: RingAreaDto[]; areaOf: (id: string) => string }> {
+  const shown = [...new Set(appearances.filter((id): id is string => id !== null))];
   const placeOf = new Map<string, string>();
   const withoutBirthPlace: string[] = [];
   for (const id of shown) {
@@ -232,16 +281,17 @@ export async function loadAncestorRings(
     return { kind: "area", key: area.key, label: area.label };
   };
 
-  // Legende: Plätze je Land (Ahnenschwund zählt mehrfach), dieselben Regeln
-  // und Farben wie „Wurzeln“ und „Statistik“ (lib/chart-slices.ts).
+  // Legende: Flächen je Land (wer mehrfach erscheint, zählt mehrfach),
+  // dieselben Regeln und Farben wie „Wurzeln“ und „Statistik“
+  // (lib/chart-slices.ts).
   const areaCounts = new Map<string, { label: string; value: number }>();
   const gray = { unassigned: 0, unknown: 0, restricted: 0 };
-  for (const s of slots) {
-    if (s.kind === "restricted") {
+  for (const id of appearances) {
+    if (id === null) {
       gray.restricted += 1;
       continue;
     }
-    const c = categoryOf(s.personId);
+    const c = categoryOf(id);
     if (c.kind !== "area") gray[c.kind] += 1;
     else {
       const a = areaCounts.get(c.key);
@@ -250,38 +300,13 @@ export async function loadAncestorRings(
     }
   }
   const legend = groupAreaSlices(areaCounts, gray);
-  const sliceOf = (id: string): string => {
+  const areaOf = (id: string): string => {
     const c = categoryOf(id);
     if (c.kind !== "area") return c.kind;
     return legend.some((l) => l.key === `area:${c.key}`) ? `area:${c.key}` : "other";
   };
-
-  const persons: Record<string, RingPersonDto> = { [root.id]: toDto(root) };
-  for (const id of shown) persons[id] = toDto(rows.get(id)!);
-
   return {
-    root: persons[root.id],
-    generations: n,
-    persons,
-    slots: slots.map((s) =>
-      s.kind === "person"
-        ? {
-            generation: s.generation,
-            index: s.index,
-            kind: "person" as const,
-            personId: s.personId,
-            term: ringRelationTerm(s.generation, persons[s.personId].gender, sideOf(s.generation, s.index)),
-            area: sliceOf(s.personId),
-          }
-        : {
-            generation: s.generation,
-            index: s.index,
-            kind: "restricted" as const,
-            term: ringRelationTerm(s.generation, "UNKNOWN", sideOf(s.generation, s.index)),
-          },
-    ),
-    known: slots.length,
-    restricted: slots.filter((s) => s.kind === "restricted").length,
+    areaOf,
     areas: legend.map((l) => ({
       key: l.key,
       label: l.label,

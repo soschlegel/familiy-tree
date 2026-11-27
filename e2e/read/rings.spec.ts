@@ -8,13 +8,15 @@ import {
   expectNoHorizontalOverflow,
   waitForHydration,
 } from "../support/fixtures";
-import { L, forbiddenNamesFor, mock } from "../support/mock";
+import { L, forbiddenNamesFor, mock, person } from "../support/mock";
 
 /**
  * Ansicht „Ringe“ der Stammbaum-Seite (components/AncestorRings.tsx,
- * lib/services/ancestor-rings.ts). Nur lesend. Die eigene Person des
- * Bearbeiters hat alle vier Großeltern; die mütterlichen gehören nur zu
- * Familie D und sind für ihn gesperrt.
+ * lib/services/ancestor-rings.ts, lib/services/descendant-rings.ts). Nur
+ * lesend. Die eigene Person des Bearbeiters hat alle vier Großeltern; die
+ * mütterlichen gehören nur zu Familie D und sind für ihn gesperrt. Für die
+ * Nachfahren: der Stammvater B mit vielen Nachkommen und die Cousine des
+ * Bearbeiters, deren Sohn nur zu Familie D gehört (L.descendantHidden).
  */
 
 const ringsUrl = (q = "") => `/tree?view=rings&focus=${L.selfEditor}${q}`;
@@ -221,5 +223,140 @@ test.describe("Ringe auf dem Telefon", () => {
     await page.keyboard.press("Escape");
     await expect(shell).not.toHaveAttribute("data-fullscreen", "true");
     await expect(page).not.toHaveURL(/vollbild=/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Richtung „Nachfahren“
+// ---------------------------------------------------------------------------
+
+const descUrl = (id: string, q = "") => `/tree?view=rings&focus=${id}&richtung=nachfahren${q}`;
+
+test.describe("Nachfahren-Ringe als Bearbeiter", () => {
+  test.use({ storageState: authFile("editor") });
+
+  test("Umschalter, Flächen, Auswahl, „In die Mitte“, zurück zu den Vorfahren", async ({ page }) => {
+    await page.goto(`/tree?view=rings&focus=${L.founders.B}`);
+    const area = await waitForRings(page);
+    await expect(area).toHaveAttribute("data-direction", "vorfahren");
+    await expect(page.getByTestId("rings-direction-vorfahren")).toHaveAttribute("aria-pressed", "true");
+
+    await page.getByTestId("rings-direction-nachfahren").click();
+    await expect(page).toHaveURL(new RegExp(`view=rings&focus=${L.founders.B}&richtung=nachfahren$`));
+    await expect(area).toHaveAttribute("data-direction", "nachfahren");
+    await waitForRings(page);
+    await expect(page.getByTestId("rings-direction-nachfahren")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("rings-generations")).toHaveValue("4");
+    await expect(page.getByTestId("rings-summary")).toHaveText(/^\d+ Nachkommen in 4 Generationen$/);
+    await expect(page.getByTestId("rings-chart")).toHaveAttribute("aria-label", /^Nachfahren von /);
+    await expect(slot(page, 1, 0)).toHaveAttribute("aria-label", /, (Sohn|Tochter|Kind)$/);
+    await expect(page.locator('[data-testid="rings-slot"][data-generation="3"]').first()).toHaveAttribute("aria-label", /Urenkel/);
+    // Keine gestrichelten leeren Plätze bei den Nachfahren.
+    await expect(page.locator(".rings-gap")).toHaveCount(0);
+
+    // Auswahl eines Kindes: Angaben, Wege „Zur Person“ / „In die Mitte“.
+    const child = slot(page, 1, 0);
+    await hit(page, child);
+    await expect(child).toHaveAttribute("aria-pressed", "true");
+    await page.mouse.move(2, 2);
+    const info = page.getByTestId("rings-info");
+    await expect(info).toContainText(/(Sohn|Tochter|Kind) von /);
+    const open = info.getByTestId("rings-open");
+    const childId = (await open.getAttribute("href"))!.split("/").pop()!;
+    await info.getByTestId("rings-center").click();
+    await expect(page).toHaveURL(new RegExp(`focus=${childId}&richtung=nachfahren`));
+    await expect(area).toHaveAttribute("data-focus-id", childId);
+    await waitForRings(page);
+    await page.goBack();
+    await expect(area).toHaveAttribute("data-focus-id", L.founders.B);
+    await waitForRings(page);
+
+    // Enkel: über wen.
+    await hit(page, slot(page, 2, 0));
+    await page.mouse.move(2, 2);
+    await expect(info).toContainText(/Enkel(in|kind)? von /);
+    await expect(info.getByTestId("rings-info-via")).toHaveText(/^(Adoptivk|K)ind von /);
+
+    // Färbung nach Linie: je Kind ein Eintrag; nach Wurzeln: Länder.
+    await expect(page.getByTestId("rings-legend")).toContainText("Farben nach Linie (je Kind)");
+    await page.getByTestId("rings-coloring-wurzeln").click();
+    await expect(page).toHaveURL(/richtung=nachfahren&farbe=wurzeln/);
+    await expect(page.getByTestId("rings-legend")).toContainText("Deutschland");
+    await expectNoA11yViolations(page);
+
+    // Tiefe: Adresse folgt, Richtung bleibt.
+    await page.getByTestId("rings-generations").selectOption("3");
+    await expect(page).toHaveURL(/richtung=nachfahren&generationen=3/);
+    await expect(page.locator('[data-testid="rings-slot"][data-generation="4"]')).toHaveCount(0);
+    await waitForRings(page);
+
+    // Zurück zu den Vorfahren: Adresse ohne Richtung und Tiefe.
+    await page.getByTestId("rings-direction-vorfahren").click();
+    await expect(page).toHaveURL(new RegExp(`view=rings&focus=${L.founders.B}&farbe=wurzeln$`));
+    await expect(area).toHaveAttribute("data-direction", "vorfahren");
+  });
+
+  test("Tastatur: von innen nach außen", async ({ page }) => {
+    await page.goto(descUrl(L.founders.B));
+    await waitForRings(page);
+    await page.getByTestId("rings-root").focus();
+    await page.keyboard.press("Tab");
+    await expect(slot(page, 1, 0)).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(slot(page, 1, 1)).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("rings-info").getByTestId("rings-open")).toBeFocused();
+  });
+
+  test("Datenschutz: gesperrter Nachkomme nur als „nicht freigegeben“, nichts von ihm und seinen Kindern", async ({ page }) => {
+    const { parent, child, grandchild } = L.descendantHidden;
+    const res = await page.request.get(descUrl(parent, "&generationen=7"));
+    expect(res.status()).toBe(200);
+    const html = await res.text();
+    for (const id of [child, grandchild]) {
+      expect(html).not.toContain(id);
+      expect(html).not.toContain(person(id).givenName);
+    }
+    for (const name of forbiddenNamesFor(["A", "B"])) expect(html).not.toContain(name);
+
+    await page.goto(descUrl(parent, "&generationen=7"));
+    await waitForRings(page);
+    await expect(page.getByTestId("rings-slot")).toHaveCount(1);
+    await expect(slot(page, 1, 0)).toHaveAttribute("data-kind", "restricted");
+    await expect(slot(page, 1, 0)).toHaveAttribute("aria-label", "Nicht freigegeben, Kind");
+    await expect(page.getByTestId("rings-summary")).toHaveText("1 Nachkomme in 1 Generation, davon 1 nicht freigegeben");
+    await hit(page, slot(page, 1, 0));
+    const info = page.getByTestId("rings-info");
+    await expect(info).toContainText("Nicht freigegeben");
+    await expect(info.getByTestId("rings-open")).toHaveCount(0);
+    await expect(info.getByTestId("rings-center")).toHaveCount(0);
+    const text = (await page.getByTestId("ancestor-rings").textContent()) ?? "";
+    for (const id of [child, grandchild]) expect(text).not.toContain(person(id).givenName);
+  });
+});
+
+test.describe("Nachfahren-Ringe im dunklen Schema auf dem Telefon", () => {
+  test.use({ storageState: authFile("editor"), colorScheme: "dark", viewport: { width: 390, height: 844 }, hasTouch: true });
+
+  test("390 px: kein waagerechtes Scrollen, Tippflächen, Antippen", async ({ page }) => {
+    await page.goto(descUrl(L.founders.B));
+    await waitForRings(page);
+    await expectNoHorizontalOverflow(page);
+    const chart = (await page.getByTestId("rings-chart").boundingBox())!;
+    expect(chart.width).toBeGreaterThanOrEqual(320);
+    for (const id of ["rings-direction-vorfahren", "rings-direction-nachfahren", "rings-generations", "rings-coloring-linie"]) {
+      const box = (await page.getByTestId(id).boundingBox())!;
+      expect(Math.round(box.height), `Höhe von ${id}`).toBeGreaterThanOrEqual(44);
+    }
+    await hit(page, slot(page, 1, 0), true);
+    const info = page.getByTestId("rings-info-mobile");
+    await expect(info).toBeVisible();
+    await expect(info).toContainText(/(Sohn|Tochter|Kind) von /);
+    for (const id of ["rings-open", "rings-center", "rings-info-close"]) {
+      const box = (await info.getByTestId(id).boundingBox())!;
+      expect(Math.round(box.height), `Höhe von ${id}`).toBeGreaterThanOrEqual(44);
+    }
+    await expectNoHorizontalOverflow(page);
+    await expectNoA11yViolations(page);
   });
 });

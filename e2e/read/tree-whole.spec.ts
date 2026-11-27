@@ -42,7 +42,7 @@ test("Wechsel zwischen Generationen und Zeitstrahl", async ({ page }) => {
   const tree = await waitForTree(page);
   await expect(tree).toHaveAttribute("data-view", "generations");
   await expect(page.getByTestId("tree-view-generations")).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByTestId("tree-counts")).toHaveText("195 Personen · 302 Beziehungen");
+  await expect(page.getByTestId("tree-counts")).toHaveText("199 Personen · 307 Beziehungen");
   // Familienfilter ist hier aktiv, Tiefenauswahl gibt es nicht.
   await expect(page.getByTestId("tree-family-filter")).toBeEnabled();
   await expect(page.getByTestId("tree-depth-up")).toHaveCount(0);

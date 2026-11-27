@@ -599,6 +599,11 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   Daten.
 - **`dates.test.ts`** — Einlesen ungenauer Daten, Anzeige und Rundlauf,
   Vergleich.
+- **`descendant-rings.test.ts`** — „Ringe“, Richtung „Nachfahren“:
+  Gewichtung nach Teilbaum, kinderlose Kinder, Reihenfolge, Gruppen nach
+  Partnerschaft mit Lücke, Mindestbreite, Mehrfach-Nachkomme, Zyklus, nicht
+  sichtbarer Nachkomme, Obergrenze, Adoption, Begriffe, Zusammenfassung,
+  Richtung in der Adresse, `arcLabelPlan` gleich `ringLabelPlan`.
 - **`duplicates.test.ts`** — Bewertung und Paarbildung der
   Dublettenerkennung, Vorfahren/Nachkommen-Regel.
 - **`focus.test.ts`** — Ausschnitt, Layout und Startperson der
@@ -722,6 +727,11 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   aufgegangenen Personen: gespeicherte Familien im Eintrag, Bearbeiter mit
   und ohne passende Familie, Administrator, ohne Familie, Altbestand,
   später gelöschte Familie, aufgegangene Person.
+- **`descendant-rings.db.test.ts`** — „Ringe“, Richtung „Nachfahren“:
+  Kinder, Begriffe, Bögen in den Bögen der Eltern, Zählung und Legenden,
+  Adoptivkind ja, Stief- und Pflegekind nein, gesperrter Nachkomme nur als
+  „nicht freigegeben“ ohne Kennung oder Namen von ihm und seiner Tochter,
+  Tiefe 3…7, Obergrenze, unsichtbare Mitte, Startperson (nur lesend).
 - **`focus.db.test.ts`** — Fokus-Ausschnitt mit Sichtbarkeit und Rückfall auf
   die Startperson (nur lesend).
 - **`gedcom-export-selection.db.test.ts`** — GEDCOM-Export mit
@@ -900,7 +910,10 @@ Benutzer bekommt keinen gespeicherten Zustand.
   Namen und Verwandtschaftsstufe, „Nicht freigegeben“ ohne Angaben und ohne
   alles dahinter, Auswahl mit „Zur Person“ und „In die Mitte“, Tiefe,
   Färbung, Tastatur, Quelltext ohne fremde Namen/Kennungen, „Person nicht
-  gefunden“, 390 px mit Tippflächen und Vollbild, axe.
+  gefunden“, 390 px mit Tippflächen und Vollbild, axe. Richtung
+  „Nachfahren“: Umschalter hin und zurück, Flächen und Begriffe, Auswahl,
+  „In die Mitte“ mit Richtung, Färbung, Tiefe, Tastatur, gesperrter
+  Nachkomme samt Quelltext, dunkel auf 390 px.
 - **`roots.spec.ts`** — Abschnitt „Wurzeln“ der Personenseite: Legende und
   Prozente, „Nicht freigegeben“, Umschalten Land/Region und Generation,
   kein Abschnitt ohne Eltern, Schnittstelle (400/404, keine Kennungen),

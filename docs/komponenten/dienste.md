@@ -117,7 +117,8 @@ beide). Ereignisse, Belege, Namen und Rohdaten folgen ihrem Träger.
 | `places.ts` | Ortstexte → Koordinaten (Ortszuordnung, nur Admin) |
 | `place-areas.ts` | Ortstexte → Land bzw. Region (eine Abfrage, für Auswertungen) |
 | `roots.ts` | „Wurzeln“ einer Person: Anteile der Länder/Regionen ihrer Vorfahren |
-| `ancestor-rings.ts` | Ansicht „Ringe“: Vorfahren einer Person auf festen Plätzen, generationsweise geladen |
+| `ancestor-rings.ts` | Ansicht „Ringe“: Vorfahren einer Person auf festen Plätzen, generationsweise geladen; gemeinsame Personenangaben und Legende „nach Wurzeln“ für beide Richtungen |
+| `descendant-rings.ts` | Ansicht „Ringe“, Richtung „Nachfahren“: Nachkommen einer Person, Vollkreis nach Teilbaumgröße, generationsweise geladen |
 | `statistics.ts` | Seite „Statistik“: sichtbaren Teil des Stammbaums schlank laden und auswerten, Familienfilter |
 | `today.ts` | Startseite „Heute in der Familie“: Jahrestage, Geburtstage und runde Jahrestage aus sichtbaren, tagesgenauen Daten |
 | `changes.ts` | Änderungsgeschichte lesen (Personenverlauf, Paketübersicht) |
@@ -1674,7 +1675,11 @@ Zahl der belegten und der nicht freigegebenen Plätze, Legende nach Land
 der Adresse und wird mit `parseRingsGeneration` auf 3…7 begrenzt.
 `defaultRingsRootId(scope)` — Mitte, wenn nichts anderes passt: die
 jüngste sichtbare Person mit leiblichen Eltern (sonst irgendeine sichtbare),
-eine Abfrage; ohne sichtbare Person `null`.
+eine Abfrage; ohne sichtbare Person `null`. Für beide Richtungen
+exportiert: `RING_PERSON_SELECT`, `RingPersonRow`, `toRingPersonDto`
+(Personenangaben der Flächen) und `ringPlaceLegend(rows, appearances)` —
+Ort je Person, Land, Legende und Gebietsschlüssel je Person für „nach
+Wurzeln“ (zwei Abfragen; wer mehrfach erscheint, zählt mehrfach).
 
 **Regeln:**
 - **Eltern:** nur `PARENT_OF` mit Untertyp `BIOLOGICAL` (wie „Wurzeln“),
@@ -1708,6 +1713,69 @@ Begriff neutral: „Großelternteil“), seine Eltern werden nicht gesucht.
 
 **Tests:** `tests/ancestor-rings.db.test.ts` (Plätze, Begriffe, Rechte,
 Tiefe, Startperson; Regeln: `tests/ancestor-rings.test.ts`);
+`e2e/read/rings.spec.ts`.
+
+### lib/services/descendant-rings.ts
+
+**Zweck:** Daten der Ansicht „Ringe“ in der Richtung „Nachfahren“: die
+Nachkommen einer Person als Vollkreis, aufgeteilt nach der Größe der
+Teilbäume (Aufteilung, Gruppen, Obergrenze, Begriffe:
+`lib/descendant-rings.ts`; Darstellung: `components/AncestorRings.tsx`).
+
+**Wichtige Funktionen/Typen:** `loadDescendantRings(scope, rootId,
+generations, maxSegments?)` → `DescendantRingsDto` oder `null` — Mitte,
+gewählte und gezeigte Tiefe, tiefste Generation, ob die Obergrenze griff,
+sichtbare Personen der Flächen, sichtbare Partner (Namen) je Person,
+Flächen (Schlüssel, Generation, Winkel, Linie, Elternfläche,
+Verwandtschaftsstufe; sichtbar zusätzlich Kennung, Adoption,
+Gebietsschlüssel), Zahl der Nachkommen und der nicht freigegebenen
+Flächen, Linien (je Kind der Mitte Farbe und Zahl der Flächen), Legende
+nach Land. Die Tiefe kommt roh aus der Adresse (3…7, Standard 4).
+`defaultDescendantRingsRootId(scope)` — Mitte, wenn nichts anderes passt:
+die älteste sichtbare Person mit Kindern (sonst irgendeine sichtbare); eine
+Abfrage, ohne sichtbare Person `null`.
+
+**Regeln:**
+- **Kinder:** `PARENT_OF` mit Untertyp `BIOLOGICAL` oder `ADOPTIVE` — so
+  zählt auch die Seite „Statistik“; Stief- und Pflegekinder nicht. Doppelt
+  erfasst (leiblich und adoptiert): leiblich gewinnt. Reihenfolge: nach
+  Geburtsdatum, ohne Datum danach, gleich nach Anlage der Person.
+- **Partnerschaftsgruppen:** Schlüssel je Kind sind seine übrigen Eltern
+  (leiblich/adoptiert), aus einer Abfrage über alle geladenen Kinder.
+- **Partner in den Angaben:** `PARTNER_OF` der gezeigten Personen und der
+  Mitte (eine Abfrage) sowie die Mit-Eltern ihrer gezeigten Kinder — nur
+  sichtbare, als Name.
+- **Laden:** Generation für Generation eine Abfrage der Kinder samt
+  Angaben (höchstens N; Mehrfach-Nachkommen und Zyklen fragen nichts
+  doppelt). Übersteigt die Zahl der Flächen die Obergrenze, wird nicht
+  tiefer geladen. Danach je eine Abfrage für die übrigen Eltern, die
+  Partnerschaften, die Taufen und die Ortszuordnungen (`ringPlaceLegend`).
+  Nie eine Abfrage je Person, nie der ganze Graph.
+- **Zählung:** jede sichtbare Person einmal, jede Fläche „nicht
+  freigegeben“ als eine Person (ihre Kennung verlässt den Server nicht).
+
+**Rechte/Datenschutz:** Mitte nicht sichtbar oder nicht vorhanden → `null`
+(Seite: „Person nicht gefunden“). Ein nicht sichtbares Kind erscheint nur
+als Fläche „restricted“ — ohne Kennung, Name, Daten, Ort, Geschlecht
+(Begriff neutral: „Kind“, „Enkelkind“), ohne Adoptionsvermerk; nach seinem
+Geburtsdatum wird nicht sortiert (es steht wie ein Kind ohne Datum), seine
+Kinder werden nicht gesucht, im Gewicht zählt es als eine Person.
+Begründung: Die Ansichten Fokus und Generationen zeigen nicht sichtbare
+Kinder als anonymen Platzhalter (`maskPerson` in `lib/services/tree.ts`) —
+dass dort jemand steht, ist also ohnehin ablesbar; die Ringe zeigen genau
+das, aber nicht mehr. Hinter einem Gesperrten wird nicht weitergesucht
+(wie bei den Vorfahren-Ringen), auch wenn dort wieder sichtbare Personen
+stünden: Der Weg dorthin führte nur über Angaben, die der Benutzer nicht
+sehen darf. `persons` enthält genau die Mitte und die sichtbaren Personen
+der Flächen; Partner nur, wenn sichtbar.
+
+**Protokoll:** — (nur lesend).
+
+**Benutzt von:** `app/tree/page.tsx` (`view=rings&richtung=nachfahren`).
+
+**Tests:** `tests/descendant-rings.db.test.ts` (Flächen, Begriffe,
+Adoption, keine Stief-/Pflegekinder, Partner, Rechte, Tiefe, Obergrenze,
+Startperson; Regeln: `tests/descendant-rings.test.ts`);
 `e2e/read/rings.spec.ts`.
 
 ### lib/services/statistics.ts

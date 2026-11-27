@@ -1,9 +1,12 @@
 import {
   RINGS_COLORING_PARAM,
   RINGS_DEFAULT_COLORING,
-  RINGS_DEFAULT_GENERATION,
+  RINGS_DEFAULT_DIRECTION,
+  RINGS_DIRECTION_PARAM,
   RINGS_GENERATION_PARAM,
+  ringsDefaultGeneration,
   type RingsColoring,
+  type RingsDirection,
 } from "@/lib/ancestor-rings";
 import { FOCUS_DEPTH, type TreeView } from "@/lib/focus-tree";
 import { ORIGIN_PARAM } from "@/lib/origin";
@@ -22,7 +25,8 @@ export function treeUrl({
   focus,
   up = FOCUS_DEPTH.up,
   down = FOCUS_DEPTH.down,
-  generations = RINGS_DEFAULT_GENERATION,
+  direction = RINGS_DEFAULT_DIRECTION,
+  generations,
   coloring = RINGS_DEFAULT_COLORING,
   herkunft = false,
   vollbild = false,
@@ -31,7 +35,9 @@ export function treeUrl({
   focus?: string | null;
   up?: number;
   down?: number;
-  /** Ansicht „Ringe“: Tiefe (`?generationen=…`, Standard 5 bleibt weg). */
+  /** Ansicht „Ringe“: Richtung (`?richtung=nachfahren`, Standard „vorfahren“ bleibt weg). */
+  direction?: RingsDirection;
+  /** Ansicht „Ringe“: Tiefe (`?generationen=…`; der Standard der Richtung — 5 bzw. 4 — bleibt weg). */
   generations?: number;
   /** Ansicht „Ringe“: Färbung (`?farbe=wurzeln`, Standard „linie“ bleibt weg). */
   coloring?: RingsColoring;
@@ -48,7 +54,10 @@ export function treeUrl({
     if (down !== FOCUS_DEPTH.down) s.set("down", String(down));
   }
   if (view === "rings") {
-    if (generations !== RINGS_DEFAULT_GENERATION) s.set(RINGS_GENERATION_PARAM, String(generations));
+    if (direction !== RINGS_DEFAULT_DIRECTION) s.set(RINGS_DIRECTION_PARAM, direction);
+    if (generations !== undefined && generations !== ringsDefaultGeneration(direction)) {
+      s.set(RINGS_GENERATION_PARAM, String(generations));
+    }
     if (coloring !== RINGS_DEFAULT_COLORING) s.set(RINGS_COLORING_PARAM, coloring);
   }
   if (herkunft) s.set(ORIGIN_PARAM, "1");

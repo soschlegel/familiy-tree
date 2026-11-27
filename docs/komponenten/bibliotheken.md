@@ -1245,12 +1245,16 @@ Rechteprüfung, auch im Browser nutzbar; Laden und Sichtbarkeit in
 **Wichtige Funktionen/Typen:** Grenzen `RINGS_MIN_GENERATION` (3),
 `RINGS_MAX_GENERATION` (7), `RINGS_DEFAULT_GENERATION` (5); Adressparameter
 `RINGS_GENERATION_PARAM` (`generationen`), `RINGS_COLORING_PARAM` (`farbe`),
-`parseRingsGeneration`, `parseRingsColoring`, `RingsColoring` (`linie`,
-`wurzeln`); `ringSlotCount`; Platzvergabe `orderParents`, `assignRingSlots`
+`RINGS_DIRECTION_PARAM` (`richtung`), `parseRingsGeneration` (mit
+Standard je Richtung als zweitem Wert), `parseRingsColoring`,
+`parseRingsDirection`, `ringsDefaultGeneration` (Vorfahren 5, Nachfahren
+4), `RingsColoring` (`linie`, `wurzeln`), `RingsDirection` (`vorfahren`,
+`nachfahren`); `ringSlotCount`; Platzvergabe `orderParents`, `assignRingSlots`
 (→ `RingSlot`), `childSlot`, `slotSide`, `slotLine`, `ringRelationTerm`;
 Geometrie `RINGS_VIEWBOX`, `ringGeometry`, `slotAngles`, `polar`,
 `sectorPath`, `isLowerHalf`, `labelArcPath`, `radialRotation`; Beschriftung
-`ringLabelPlan`, `truncate`, `fitName`, `fitYears`, `ringsSummary`; Farben
+`ringLabelPlan`, `arcLabelPlan` (eine Fläche mit beliebigem Anteil am
+Vollkreis — auch für die Nachfahren), `truncate`, `fitName`, `fitYears`, `ringsSummary`; Farben
 `lineTint`, `lineColorVar`.
 
 **Regeln (Entscheidungen des Eigentümers):**
@@ -1290,12 +1294,76 @@ Geometrie `RINGS_VIEWBOX`, `ringGeometry`, `slotAngles`, `polar`,
   Rest Kartenfläche).
 
 **Benutzt von:** `lib/services/ancestor-rings.ts`,
-`components/AncestorRings.tsx`, `components/tree-url.ts`, `app/tree/page.tsx`.
+`lib/services/descendant-rings.ts`, `components/AncestorRings.tsx`,
+`components/tree-url.ts`, `app/tree/page.tsx`.
 
 **Tests:** `tests/ancestor-rings.test.ts` (volle Belegung, Lücken,
 Seitenregel, Ahnenschwund, Zyklus, nicht sichtbarer Vorfahr, Geometrie,
 Textausrichtung, Beschriftung, Verwandtschaftsstufe, Adresse),
-`tests/ancestor-rings.db.test.ts`.
+`tests/ancestor-rings.db.test.ts`; Richtung und `arcLabelPlan` auch in
+`tests/descendant-rings.test.ts`.
+
+### lib/descendant-rings.ts
+**Zweck:** Ansicht „Ringe“, Richtung „Nachfahren“ — die Nachkommen einer
+Person als Vollkreis: Aufteilung der Bögen, Partnerschaftsgruppen,
+Obergrenze, Verwandtschaftsstufe, Zusammenfassung. Rein, ohne Datenbank und
+ohne Rechteprüfung; Geometrie, Beschriftung und Farbstufen teilt es mit
+`lib/ancestor-rings.ts`. Laden und Sichtbarkeit in
+`lib/services/descendant-rings.ts`, Darstellung in
+`components/AncestorRings.tsx`.
+
+**Wichtige Funktionen/Typen:** `DESCENDANT_RINGS_DEFAULT_GENERATION` (4),
+`DESCENDANT_RINGS_MAX_SEGMENTS` (400), `MIN_SPAN_DEG` (0,6°),
+`GROUP_GAP_DEG` (1,6°); `layoutDescendants(graph)` → `DescendantLayout`
+(Flächen `DescendantSegment` mit Schlüssel `Generation:Nummer`, Winkeln,
+Linie, Elternfläche, Adoption, Art; gezeigte Tiefe, tiefste Generation,
+`capped`); `splitArc`, `groupChildren`, `descendantRelationTerm`,
+`descendantsSummary`, `descendantsCapNotice`; Eingabe `DescendantGraph`
+(`childrenOf`, `visible`) mit `RingChild` (Kennung, adoptiert,
+Partnerschaftsschlüssel).
+
+**Regeln (Entscheidungen des Eigentümers):**
+- **Keine festen Plätze:** Der Vollkreis (ab 9 Uhr im Uhrzeigersinn) wird
+  unter den Kindern nach dem Gewicht ihres Teilbaums aufgeteilt — die
+  Person selbst plus alle gezeigten Nachkommen; so zählt jede Person
+  mindestens sich selbst, und kinderlose Kinder bleiben sichtbar. Jede
+  Person gibt ihren Bogen vollständig an ihre Kinder weiter (die Kinder
+  füllen ihn ganz, nach demselben Gewicht).
+- **Mindestbreite:** jedem Kind zuerst `MIN_SPAN_DEG`, der Rest nach
+  Gewicht; reicht der Bogen nicht einmal dafür, gleichmäßig.
+- **Reihenfolge und Gruppen:** Eingabe nach Geburt (Dienst); Kinder
+  derselben Partnerschaft (gleiche übrige Eltern) stehen beieinander,
+  Gruppen in der Reihenfolge ihres ältesten Kindes. Zwischen zwei Gruppen
+  eine Lücke von höchstens `GROUP_GAP_DEG`, zusammen höchstens ein
+  Zehntel des Bogens.
+- **Mehrfach-Nachkomme** (Ehe unter Verwandten): erscheint an jeder
+  Stelle, mit seinem Teilbaum, und zählt im Gewicht je Stelle. **Zyklen:**
+  ein Kind, das schon auf dem eigenen Weg zur Mitte liegt (oder die Mitte
+  selbst ist), fällt weg; doppelte Einträge zählen einmal.
+- **Nicht sichtbar:** Fläche `restricted` ohne Kennung; seine Kinder
+  werden nicht gefragt; Gewicht 1.
+- **Obergrenze:** Würde eine Generation mehr als
+  `DESCENDANT_RINGS_MAX_SEGMENTS` Flächen ergeben, entfallen sie und alle
+  tieferen ganz (lieber ganze Ringe als zufällig abgeschnittene Zweige);
+  die Kinder der Mitte immer. Die Ansicht nennt es
+  (`descendantsCapNotice`). 400 Flächen bleiben im Browser flüssig und
+  im äußersten Ring noch antippbar.
+- **Schlüssel:** je Ring fortlaufend im Uhrzeigersinn — die
+  Tab-Reihenfolge läuft so von innen nach außen.
+- **Begriffe:** `bloodRelationTerm` mit `down` = Generation („Tochter“,
+  „Enkel“, „Urenkelin“, ab 7: „Nachfahre in der 7. Generation“),
+  unbekanntes Geschlecht neutral („Kind“, „Enkelkind“).
+- **Zusammenfassung:** „47 Nachkommen in 4 Generationen“ (Einzahl „1
+  Nachkomme in 1 Generation“), „, davon 2 nicht freigegeben“, ohne
+  Nachkommen „Keine Nachkommen erfasst“.
+
+**Benutzt von:** `lib/services/descendant-rings.ts`,
+`components/AncestorRings.tsx`, `lib/ancestor-rings.ts` (Standardtiefe).
+
+**Tests:** `tests/descendant-rings.test.ts` (Gewichtung, kinderlose
+Kinder, Reihenfolge, Gruppen und Lücken, Mindestbreite, Mehrfach-Nachkomme,
+Zyklus, nicht sichtbarer Nachkomme, Obergrenze, Adoption, Begriffe,
+Zusammenfassung, Adresse), `tests/descendant-rings.db.test.ts`.
 
 ---
 

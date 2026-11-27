@@ -320,8 +320,10 @@ Der Stammbaum in vier Ansichten (Fokus, Generationen, Zeitstrahl, Ringe). Bedien
   - `vollbild=1` — Baumfläche bildschirmfüllend (für alle Rollen). Nur im
     Browser ausgewertet (`useTreeFullscreen`); der Server lädt dafür nichts
     anders.
-  - `generationen` (3–7, Standard 5) und `farbe=wurzeln` — nur Ringe
-    (`parseRingsGeneration`, `parseRingsColoring` in `lib/ancestor-rings.ts`).
+  - `richtung=nachfahren`, `generationen` (3–7, Standard 5, bei den
+    Nachfahren 4) und `farbe=wurzeln` — nur Ringe (`parseRingsDirection`,
+    `parseRingsGeneration`, `ringsDefaultGeneration`, `parseRingsColoring`
+    in `lib/ancestor-rings.ts`). Ohne `richtung` die Vorfahren wie bisher.
     Die Färbung schaltet der Browser um; der Server liefert beides.
   - `denied` — Hinweis nach einer Umleitung wegen fehlender Rechte.
 - **Cookies:** `tree-focus` (zuletzt fokussierte Person), `tree-bezug`
@@ -334,10 +336,12 @@ Der Stammbaum in vier Ansichten (Fokus, Generationen, Zeitstrahl, Ringe). Bedien
   ergibt den Hinweis „Person nicht gefunden“ (gemerkte Personen dürfen
   fehlen, dann Ersatzperson). Ringe: weder `loadGraph` noch `listFamilies`
   noch `referenceView` — `loadAncestorRings` lädt nur die Vorfahren der
-  Mitte generationsweise; Mitte in derselben Reihenfolge wie die
-  Fokus-Ansicht, zuletzt `defaultRingsRootId`; eine angefragte, aber
-  fehlende oder gesperrte Person ergibt „Person nicht gefunden“ (Link
-  „Ringe öffnen“). Ganzer Baum: `loadTree`. Verwandtschaftsgrade
+  Mitte generationsweise, mit `richtung=nachfahren` stattdessen
+  `loadDescendantRings` nur die Nachkommen; Mitte in derselben Reihenfolge
+  wie die Fokus-Ansicht, zuletzt `defaultRingsRootId` bzw.
+  `defaultDescendantRingsRootId`; eine angefragte, aber fehlende oder
+  gesperrte Person ergibt „Person nicht gefunden“ (Link „Ringe öffnen“, in
+  derselben Richtung). Ganzer Baum: `loadTree`. Verwandtschaftsgrade
   und Linien über `referenceView` — in der Fokus-Ansicht nur für die
   Personen im Ausschnitt. Nur mit `herkunft=1` (und Recht):
   `loadTreeOrigin`, ebenfalls auf den Ausschnitt begrenzt; sonst wird keine

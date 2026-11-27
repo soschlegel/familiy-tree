@@ -16,6 +16,7 @@ import {
 } from "react";
 
 import {
+  arcLabelPlan,
   fitName,
   fitYears,
   isLowerHalf,
@@ -25,7 +26,6 @@ import {
   polar,
   radialRotation,
   ringGeometry,
-  ringLabelPlan,
   RINGS_MAX_GENERATION,
   RINGS_MIN_GENERATION,
   RINGS_VIEWBOX,
@@ -36,10 +36,14 @@ import {
   truncate,
   type RingLabelPlan,
   type RingsColoring,
+  type RingsDirection,
 } from "@/lib/ancestor-rings";
+import { chartColor } from "@/lib/chart-slices";
+import { descendantsCapNotice, descendantsSummary } from "@/lib/descendant-rings";
 import { FOCUS_COOKIE, type TreeView } from "@/lib/focus-tree";
 import { LINE_CODE, LINE_KEYS, LINE_LABEL } from "@/lib/reference";
-import type { AncestorRingsDto, RingPersonDto, RingSlotDto } from "@/lib/services/ancestor-rings";
+import type { AncestorRingsDto, RingPersonDto } from "@/lib/services/ancestor-rings";
+import type { DescendantRingsDto } from "@/lib/services/descendant-rings";
 import { HelpLink } from "./HelpLink";
 import { treeUrl } from "./tree-url";
 import { FULLSCREEN_BUTTON_CLASS, FullscreenIcon, TreeViewSwitch } from "./TreeViewSwitch";
@@ -47,13 +51,16 @@ import { useDismiss } from "./useDismiss";
 import { useTreeFullscreen } from "./useTreeFullscreen";
 
 /**
- * Ansicht „Ringe“ der Stammbaum-Seite: die Vorfahren einer Person als
- * Vollkreis (Ahnenfächer) — Mitte die Ausgangsperson, außen herum Ring für
- * Ring die Generationen. Eigenes Inline-SVG statt React-Flow-Fläche; die
- * Werkzeugleiste (Suche, Ansicht, Generationen, Färbung) und der
- * Vollbild-Knopf verhalten sich wie in den übrigen Ansichten (FamilyTree).
- * Plätze, Geometrie und Beschriftungsregeln: lib/ancestor-rings.ts; Daten
- * und Rechte: lib/services/ancestor-rings.ts.
+ * Ansicht „Ringe“ der Stammbaum-Seite: die Vorfahren (Ahnenfächer) bzw. mit
+ * dem Umschalter „Nachfahren“ die Nachkommen einer Person als Vollkreis —
+ * Mitte die Ausgangsperson, außen herum Ring für Ring die Generationen.
+ * Eigenes Inline-SVG statt React-Flow-Fläche; die Werkzeugleiste (Suche,
+ * Ansicht, Richtung, Generationen, Färbung) und der Vollbild-Knopf verhalten
+ * sich wie in den übrigen Ansichten (FamilyTree). Beide Richtungen werden
+ * zu denselben Flächen (Ring, Winkel, Art) umgerechnet und gleich
+ * gezeichnet. Plätze, Geometrie und Beschriftungsregeln:
+ * lib/ancestor-rings.ts bzw. lib/descendant-rings.ts; Daten und Rechte:
+ * lib/services/ancestor-rings.ts bzw. lib/services/descendant-rings.ts.
  */
 
 type Hit = { id: string; givenName: string; familyName: string | null; birthDate: string | null; deathDate: string | null };
@@ -63,10 +70,46 @@ const GENERATIONS = Array.from(
   (_, i) => RINGS_MIN_GENERATION + i,
 );
 
-const COLORINGS: { value: RingsColoring; label: string; title: string }[] = [
-  { value: "linie", label: "nach Linie", title: "Je Großelternteil ein Farbton, nach außen heller" },
-  { value: "wurzeln", label: "nach Wurzeln", title: "Nach dem Land des Geburtsorts (fehlt er, des Taufortes)" },
+const COLORINGS: { value: RingsColoring; label: string; title: Record<RingsDirection, string> }[] = [
+  {
+    value: "linie",
+    label: "nach Linie",
+    title: { vorfahren: "Je Großelternteil ein Farbton, nach außen heller", nachfahren: "Je Kind ein Farbton, nach außen heller" },
+  },
+  {
+    value: "wurzeln",
+    label: "nach Wurzeln",
+    title: {
+      vorfahren: "Nach dem Land des Geburtsorts (fehlt er, des Taufortes)",
+      nachfahren: "Nach dem Land des Geburtsorts (fehlt er, des Taufortes)",
+    },
+  },
 ];
+
+const DIRECTIONS: { value: RingsDirection; label: string; title: string }[] = [
+  { value: "vorfahren", label: "Vorfahren", title: "Eltern, Großeltern … von innen nach außen" },
+  { value: "nachfahren", label: "Nachfahren", title: "Kinder, Enkel … von innen nach außen" },
+];
+
+type RingsData = AncestorRingsDto | DescendantRingsDto;
+
+/** Eine Fläche, wie sie gezeichnet wird — gleich für beide Richtungen. */
+type Segment = {
+  key: string;
+  generation: number;
+  start: number;
+  end: number;
+  kind: "person" | "restricted";
+  personId: string | null;
+  term: string;
+  /** Färbung „nach Wurzeln“: Schlüssel des Legendeneintrags. */
+  area: string | null;
+  /** Nachfahren: Fläche des Elternteils und ob adoptiert. */
+  parentKey: string | null;
+  adopted: boolean;
+  /** Farbe für „nach Linie“ (ungemischt; die Stärke kommt aus lineTint). */
+  lineColor: string;
+};
 
 /** Schlüssel eines Platzes; die Mitte heißt „root“. */
 const slotKey = (generation: number, index: number) => `${generation}:${index}`;
@@ -101,7 +144,7 @@ export function AncestorRings({
   data,
   initialColoring,
 }: {
-  data: AncestorRingsDto;
+  data: RingsData;
   /** Färbung beim Laden (`?farbe=wurzeln`). */
   initialColoring: RingsColoring;
 }) {
@@ -118,6 +161,8 @@ export function AncestorRings({
   const fullscreen = useTreeFullscreen(overlayRef);
   const rootId = data.root.id;
   const n = data.generations;
+  const direction: RingsDirection = data.direction;
+  const desc = data.direction === "nachfahren" ? data : null;
 
   // Neue Ausgangsperson oder Tiefe: Auswahl aufheben (abgeleiteter Zustand).
   const [seen, setSeen] = useState(data);
@@ -129,8 +174,8 @@ export function AncestorRings({
 
   const tUrl = useCallback(
     (o: Partial<Parameters<typeof treeUrl>[0]> = {}) =>
-      treeUrl({ view: "rings", focus: rootId, generations: n, coloring, vollbild: fullscreen.on, ...o }),
-    [rootId, n, coloring, fullscreen.on],
+      treeUrl({ view: "rings", focus: rootId, direction, generations: n, coloring, vollbild: fullscreen.on, ...o }),
+    [rootId, direction, n, coloring, fullscreen.on],
   );
 
   const navigate = useCallback(
@@ -164,6 +209,12 @@ export function AncestorRings({
     window.history.replaceState(null, "", tUrl({ coloring: next }));
   }
 
+  function switchDirection(next: RingsDirection) {
+    if (next === direction) return;
+    // Neue Daten; die Tiefe beginnt beim Standard der Richtung.
+    navigate(treeUrl({ view: "rings", focus: rootId, direction: next, coloring, vollbild: fullscreen.on }));
+  }
+
   function switchView(next: TreeView) {
     if (next === "rings") return;
     navigate(treeUrl({ view: next, focus: rootId, vollbild: fullscreen.on }));
@@ -190,26 +241,60 @@ export function AncestorRings({
     return () => ro.disconnect();
   }, [fullscreen.on]);
 
-  const geometry = useMemo(() => ringGeometry(n), [n]);
-  const plans = useMemo(() => ringLabelPlan(geometry, size / RINGS_VIEWBOX), [geometry, size]);
+  // Gezeigte Ringe: bei den Nachfahren nur so viele, wie es Generationen
+  // gibt (mindestens drei) — sonst blieben außen leere Ringe stehen.
+  const ringCount = desc ? Math.max(RINGS_MIN_GENERATION, Math.min(desc.shownGenerations, desc.deepest)) : n;
+  const geometry = useMemo(() => ringGeometry(ringCount), [ringCount]);
 
-  const slotByKey = useMemo(() => {
-    const m = new Map<string, RingSlotDto>();
-    for (const s of data.slots) m.set(slotKey(s.generation, s.index), s);
-    return m;
-  }, [data.slots]);
+  // Beide Richtungen als dieselben Flächen.
+  const segments = useMemo<Segment[]>(() => {
+    if (data.direction === "nachfahren") {
+      return data.segments.map((s) => ({
+        key: s.key,
+        generation: s.generation,
+        start: s.start,
+        end: s.end,
+        kind: s.kind,
+        personId: s.kind === "person" ? s.personId : null,
+        term: s.term,
+        area: s.kind === "person" ? s.area : null,
+        parentKey: s.parentKey,
+        adopted: s.kind === "person" && s.adopted,
+        lineColor: chartColor(s.line),
+      }));
+    }
+    return data.slots.map((s) => {
+      const { start, end } = slotAngles(s.generation, s.index);
+      const line = slotLine(s.generation, s.index);
+      return {
+        key: slotKey(s.generation, s.index),
+        generation: s.generation,
+        start,
+        end,
+        kind: s.kind,
+        personId: s.kind === "person" ? s.personId : null,
+        term: s.term,
+        area: s.kind === "person" ? s.area : null,
+        parentKey: null,
+        adopted: false,
+        lineColor: line ? lineColorVar(line) : (PARENT_COLORS[s.index] ?? PARENT_COLORS[0]),
+      };
+    });
+  }, [data]);
+
+  const segmentByKey = useMemo(() => new Map(segments.map((s) => [s.key, s])), [segments]);
 
   const areaByKey = useMemo(() => new Map(data.areas.map((a) => [a.key, a])), [data.areas]);
 
   const fillOf = useCallback(
-    (s: RingSlotDto): string => {
+    (s: Segment): string => {
       if (s.kind === "restricted") return `url(#${uid}-hatch)`;
       if (coloring === "wurzeln") {
-        const color = areaByKey.get(s.area)?.color ?? "var(--chart-unknown)";
-        return tint(color, s.area.startsWith("area:") ? 55 : 70);
+        const area = s.area ?? "unknown";
+        const color = areaByKey.get(area)?.color ?? "var(--chart-unknown)";
+        return tint(color, area.startsWith("area:") ? 55 : 70);
       }
-      const line = slotLine(s.generation, s.index);
-      return tint(line ? lineColorVar(line) : PARENT_COLORS[s.index] ?? PARENT_COLORS[0], lineTint(s.generation));
+      return tint(s.lineColor, lineTint(s.generation));
     },
     [coloring, areaByKey, uid],
   );
@@ -266,57 +351,74 @@ export function AncestorRings({
 
   // ---- Zeichnen -----------------------------------------------------------
   const C = geometry.center;
+  const pxPerUnit = size / RINGS_VIEWBOX;
   const slots: ReactNode[] = [];
   const gaps: ReactNode[] = [];
   const labels: ReactNode[] = [];
-  for (const ring of geometry.rings) {
-    const plan = plans[ring.generation - 1];
-    const count = 2 ** ring.generation;
-    for (let i = 0; i < count; i++) {
-      const key = slotKey(ring.generation, i);
-      const { start, end, mid } = slotAngles(ring.generation, i);
-      const d = sectorPath(C, ring.inner, ring.outer, start, end);
-      const s = slotByKey.get(key);
-      if (!s) {
-        gaps.push(<path key={key} d={d} className="rings-gap" style={{ fill: "color-mix(in srgb, var(--rings-gap) 10%, transparent)", stroke: "var(--rings-gap)" }} strokeWidth={1} strokeDasharray="3 5" />);
-        continue;
-      }
-      const person = s.kind === "person" ? data.persons[s.personId] : null;
-      const name = person ? personName(person) : "Nicht freigegeben";
-      const life = person?.lifeSpan ?? "";
-      const label = [name, life, s.term].filter(Boolean).join(", ");
-      // Mittelpunkt der Fläche (viewBox) — für Tests, die genau dort klicken.
-      const anchor = polar(C, (ring.inner + ring.outer) / 2, mid);
-      const lines = person
-        ? [fitName(person.givenName, person.familyName, plan.maxChars), plan.lines > 1 ? fitYears(life, Math.floor(plan.maxChars * 1.12)) : ""]
-        : [truncate("Nicht freigegeben", plan.maxChars), ""];
-      slots.push(
-        <g
-          key={key}
-          role="button"
-          tabIndex={0}
-          aria-label={label}
-          aria-pressed={selected === key}
-          data-slot={key}
-          data-testid="rings-slot"
-          data-kind={s.kind}
-          data-generation={ring.generation}
-          data-x={anchor.x}
-          data-y={anchor.y}
-          className="cursor-pointer outline-none"
-          {...slotHandlers(key)}
-        >
-          <path d={d} style={{ fill: fillOf(s), stroke: "rgb(var(--surface))" }} strokeWidth={1.5} />
-        </g>,
-      );
-      // Beschriftung in eigener, verborgener Ebene: Der zugängliche Name der
-      // Fläche nennt alles ausführlich; die (oft gekürzte) Schrift gehört
-      // nicht hinein.
-      if (plan.mode !== "none" && lines[0]) {
-        labels.push(
-          <SlotLabel key={key} uid={uid} slotId={key} plan={plan} center={C} inner={ring.inner} outer={ring.outer} start={start} end={end} mid={mid} lines={lines} restricted={s.kind === "restricted"} />,
+  // Vorfahren: leere Plätze gestrichelt (die Nachfahren haben keine festen Plätze).
+  if (!desc) {
+    for (const ring of geometry.rings) {
+      for (let i = 0; i < 2 ** ring.generation; i++) {
+        const key = slotKey(ring.generation, i);
+        if (segmentByKey.has(key)) continue;
+        const { start, end } = slotAngles(ring.generation, i);
+        gaps.push(
+          <path
+            key={key}
+            d={sectorPath(C, ring.inner, ring.outer, start, end)}
+            className="rings-gap"
+            style={{ fill: "color-mix(in srgb, var(--rings-gap) 10%, transparent)", stroke: "var(--rings-gap)" }}
+            strokeWidth={1}
+            strokeDasharray="3 5"
+          />,
         );
       }
+    }
+  }
+  for (const s of segments) {
+    const ring = geometry.rings[s.generation - 1];
+    if (!ring) continue;
+    const key = s.key;
+    const { start, end } = s;
+    const mid = (start + end) / 2;
+    const plan = arcLabelPlan(ring, (end - start) / 360, pxPerUnit);
+    const d = sectorPath(C, ring.inner, ring.outer, start, end);
+    const person = s.personId ? data.persons[s.personId] : null;
+    const name = person ? personName(person) : "Nicht freigegeben";
+    const life = person?.lifeSpan ?? "";
+    const label = [name, life, s.term].filter(Boolean).join(", ");
+    // Mittelpunkt der Fläche (viewBox) — für Tests, die genau dort klicken.
+    const anchor = polar(C, (ring.inner + ring.outer) / 2, mid);
+    const lines = person
+      ? [fitName(person.givenName, person.familyName, plan.maxChars), plan.lines > 1 ? fitYears(life, Math.floor(plan.maxChars * 1.12)) : ""]
+      : [truncate("Nicht freigegeben", plan.maxChars), ""];
+    slots.push(
+      <g
+        key={key}
+        role="button"
+        tabIndex={0}
+        aria-label={label}
+        aria-pressed={selected === key}
+        data-slot={key}
+        data-testid="rings-slot"
+        data-kind={s.kind}
+        data-generation={s.generation}
+        data-x={anchor.x}
+        data-y={anchor.y}
+        className="cursor-pointer outline-none"
+        {...slotHandlers(key)}
+      >
+        {/* Sehr schmale Bögen: dünnerer Rand, damit von der Fläche etwas bleibt. */}
+        <path d={d} style={{ fill: fillOf(s), stroke: "rgb(var(--surface))" }} strokeWidth={end - start < 2 ? 0.75 : 1.5} />
+      </g>,
+    );
+    // Beschriftung in eigener, verborgener Ebene: Der zugängliche Name der
+    // Fläche nennt alles ausführlich; die (oft gekürzte) Schrift gehört
+    // nicht hinein. Vollkreis (ein einziges Kind): Beschriftung oben mittig.
+    if (plan.mode !== "none" && lines[0]) {
+      labels.push(
+        <SlotLabel key={key} uid={uid} slotId={key} plan={plan} center={C} inner={ring.inner} outer={ring.outer} {...(end - start >= 359.99 ? { start: 90, end: 450, mid: 270 } : { start, end, mid })} lines={lines} restricted={s.kind === "restricted"} />,
+      );
     }
   }
 
@@ -329,11 +431,10 @@ export function AncestorRings({
       const r = geometry.centerRadius;
       d = `M${C - r} ${C}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0Z`;
     } else {
-      const [g, i] = key.split(":").map(Number);
-      const ring = geometry.rings[g - 1];
-      if (!ring) return null;
-      const { start, end } = slotAngles(g, i);
-      d = sectorPath(C, ring.inner, ring.outer, start, end);
+      const s = segmentByKey.get(key);
+      const ring = s ? geometry.rings[s.generation - 1] : undefined;
+      if (!s || !ring) return null;
+      d = sectorPath(C, ring.inner, ring.outer, s.start, s.end);
     }
     const style =
       kind === "selected"
@@ -360,14 +461,19 @@ export function AncestorRings({
   // Grundlinien so, dass der Block mittig steht (Zeilenhöhe 1,15).
   const centerTop = C - (centerRows.length * centerFont * 1.15) / 2 + centerFont * 0.85;
 
-  const summary = ringsSummary(n, data.known, data.restricted);
+  const summary =
+    data.direction === "nachfahren"
+      ? descendantsSummary(data.count, data.deepest, data.restricted)
+      : ringsSummary(n, data.known, data.restricted);
+  const what = desc ? "Nachfahren" : "Vorfahren";
 
   const panel = (
     <InfoPanel
       shownKey={shownKey}
       selected={selected}
       data={data}
-      slotByKey={slotByKey}
+      segmentByKey={segmentByKey}
+      segments={segments}
       areaLabel={(key) => areaByKey.get(key)?.label ?? null}
       coloring={coloring}
       rootName={rootName}
@@ -389,7 +495,30 @@ export function AncestorRings({
       <div className={`flex flex-wrap items-start gap-2 ${fullscreen.on ? "hidden" : ""}`} role="toolbar" aria-label="Baumansicht">
         <RingsSearch onPick={centerTo} />
         <TreeViewSwitch active="rings" onSwitch={switchView} className="max-sm:order-1" />
-        <div className="flex items-center gap-1 rounded-lg border border-stone-300 bg-surface py-1 pl-3 pr-1 text-sm max-md:py-0 max-sm:order-2 dark:border-stone-700">
+        <div
+          role="group"
+          aria-label="Richtung"
+          className="flex overflow-hidden rounded-lg border border-stone-300 bg-surface text-sm max-sm:order-2 dark:border-stone-700"
+        >
+          {DIRECTIONS.map((c) => (
+            <button
+              key={c.value}
+              type="button"
+              title={c.title}
+              aria-pressed={direction === c.value}
+              data-testid={`rings-direction-${c.value}`}
+              onClick={() => switchDirection(c.value)}
+              className={`px-2.5 py-1.5 transition max-md:min-h-11 sm:px-3 ${
+                direction === c.value
+                  ? "bg-accent-700 text-white dark:bg-accent-300 dark:text-stone-950"
+                  : "hover:bg-stone-100 dark:hover:bg-stone-800"
+              }`}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1 rounded-lg border border-stone-300 bg-surface py-1 pl-3 pr-1 text-sm max-md:py-0 max-sm:order-1 dark:border-stone-700">
           <label htmlFor="rings-generations" className="muted">
             <span className="max-sm:sr-only">Generationen</span>
             <span aria-hidden className="sm:hidden">Gen.</span>
@@ -417,7 +546,7 @@ export function AncestorRings({
             <button
               key={c.value}
               type="button"
-              title={c.title}
+              title={c.title[direction]}
               aria-pressed={coloring === c.value}
               data-testid={`rings-coloring-${c.value}`}
               onClick={() => switchColoring(c.value)}
@@ -427,7 +556,9 @@ export function AncestorRings({
                   : "hover:bg-stone-100 dark:hover:bg-stone-800"
               }`}
             >
-              {c.label}
+              {/* Telefon: kurz „Linie“/„Wurzeln“, damit Richtung, Färbung und „?“ in eine Zeile passen. */}
+              <span className="max-sm:sr-only">nach </span>
+              {c.label.replace(/^nach /, "")}
             </button>
           ))}
         </div>
@@ -438,6 +569,7 @@ export function AncestorRings({
         data-testid="ancestor-rings"
         data-view="rings"
         data-focus-id={rootId}
+        data-direction={direction}
         data-coloring={coloring}
         aria-busy={pending}
         className={`relative w-full flex-1 overflow-hidden bg-[radial-gradient(ellipse_at_top,rgb(var(--surface)),rgb(var(--paper))_70%)] ${
@@ -454,7 +586,7 @@ export function AncestorRings({
               width={size}
               height={size}
               role="group"
-              aria-label={`Vorfahren von ${rootName} in Ringen, ${n} Generationen`}
+              aria-label={`${what} von ${rootName} in Ringen, ${geometry.rings.length} Generationen`}
               data-testid="rings-chart"
               className="block max-w-full touch-manipulation select-none"
             >
@@ -501,6 +633,11 @@ export function AncestorRings({
             <p className="px-2 text-center text-sm muted" data-testid="rings-summary">
               {summary}
             </p>
+            {desc?.capped && (
+              <p role="note" className="max-w-md px-2 text-center text-xs text-amber-800 dark:text-amber-300" data-testid="rings-capped">
+                {descendantsCapNotice(desc.shownGenerations, desc.generations)}
+              </p>
+            )}
             <p className="px-2 text-center text-xs muted md:hidden">Tippe auf eine Fläche: Name, Lebensdaten und Verwandtschaft erscheinen unten.</p>
           </div>
 
@@ -652,7 +789,8 @@ function InfoPanel({
   shownKey,
   selected,
   data,
-  slotByKey,
+  segmentByKey,
+  segments,
   areaLabel,
   coloring,
   rootName,
@@ -660,8 +798,9 @@ function InfoPanel({
 }: {
   shownKey: string | null;
   selected: string | null;
-  data: AncestorRingsDto;
-  slotByKey: Map<string, RingSlotDto>;
+  data: RingsData;
+  segmentByKey: Map<string, Segment>;
+  segments: Segment[];
   areaLabel: (key: string) => string | null;
   coloring: RingsColoring;
   rootName: string;
@@ -675,7 +814,7 @@ function InfoPanel({
     );
   }
   const isSelected = shownKey === selected;
-  const slot = shownKey === ROOT_KEY ? null : slotByKey.get(shownKey);
+  const slot = shownKey === ROOT_KEY ? null : segmentByKey.get(shownKey);
   if (shownKey !== ROOT_KEY && !slot) return null;
 
   if (slot?.kind === "restricted") {
@@ -688,14 +827,35 @@ function InfoPanel({
     );
   }
 
-  const person = slot ? data.persons[slot.personId] : data.root;
+  const person = slot?.personId ? data.persons[slot.personId] : data.root;
   const dates = [person.born && `* ${person.born}`, person.died && `† ${person.died}`].filter(Boolean).join("  ");
-  const area = slot && coloring === "wurzeln" ? areaLabel(slot.area) : null;
+  const area = slot?.area && coloring === "wurzeln" ? areaLabel(slot.area) : null;
+  // Nachfahren: über wen (bei Enkeln und weiter), Adoption, Partner, mehrfach im Kreis.
+  const desc = data.direction === "nachfahren" ? data : null;
+  const parentSeg = slot?.parentKey ? segmentByKey.get(slot.parentKey) : null;
+  const parent = desc && slot ? (parentSeg?.personId ? data.persons[parentSeg.personId] : slot.generation === 1 ? data.root : null) : null;
+  const via =
+    parent && slot && (slot.adopted || slot.generation > 1)
+      ? `${slot.adopted ? "Adoptivkind" : "Kind"} von ${personName(parent)}`
+      : null;
+  const partners = desc ? (desc.partners[person.id] ?? []) : [];
+  const times = desc && slot ? segments.filter((s) => s.personId === person.id).length : 0;
   return (
     <div aria-live="polite" data-testid="rings-info-person">
       <p className="font-semibold">{personName(person)}</p>
       {dates && <p className="text-xs">{dates}</p>}
       <p className="muted">{slot ? `${slot.term} von ${rootName}` : "Ausgangsperson in der Mitte"}</p>
+      {via && (
+        <p className="text-xs muted" data-testid="rings-info-via">
+          {via}
+        </p>
+      )}
+      {partners.length > 0 && (
+        <p className="text-xs muted" data-testid="rings-info-partners">
+          Partner: {partners.join(", ")}
+        </p>
+      )}
+      {times > 1 && <p className="text-xs muted">Erscheint {times}-mal im Kreis — Nachkomme über mehrere Linien.</p>}
       {area && <p className="text-xs muted">Geburtsort: {area}</p>}
       {isSelected && (
         <div className="mt-2 flex flex-wrap gap-2">
@@ -713,12 +873,13 @@ function InfoPanel({
   );
 }
 
-function Legend({ data, coloring, uid }: { data: AncestorRingsDto; coloring: RingsColoring; uid: string }) {
+function Legend({ data, coloring, uid }: { data: RingsData; coloring: RingsColoring; uid: string }) {
   const swatch = (style: React.CSSProperties) => (
     <svg width="16" height="16" aria-hidden className="shrink-0">
       <rect x="1" y="1" width="14" height="14" rx="3" style={style} strokeWidth={1} />
     </svg>
   );
+  if (data.direction === "nachfahren") return <DescendantLegend data={data} coloring={coloring} uid={uid} swatch={swatch} />;
   const gp = (index: number) => data.slots.find((s) => s.generation === 2 && s.index === index);
   return (
     <div className="rounded-lg bg-white/95 p-3 text-xs text-stone-600 shadow-sm ring-1 ring-stone-200 dark:bg-stone-900/95 dark:text-stone-300 dark:ring-stone-800" data-testid="rings-legend">
@@ -758,6 +919,67 @@ function Legend({ data, coloring, uid }: { data: AncestorRingsDto; coloring: Rin
         </li>
       </ul>
       {coloring === "linie" && <p className="mt-1.5 muted">Nach außen heller. Vater und Mutter in den Mischfarben ihrer Seite.</p>}
+    </div>
+  );
+}
+
+/** Legende der Nachfahren: je Kind der Mitte ein Farbton bzw. nach Land. */
+function DescendantLegend({
+  data,
+  coloring,
+  uid,
+  swatch,
+}: {
+  data: DescendantRingsDto;
+  coloring: RingsColoring;
+  uid: string;
+  swatch: (style: React.CSSProperties) => ReactNode;
+}) {
+  const anyRestricted = data.restricted > 0;
+  // „nach Linie“ nennt gesperrte Kinder der Mitte schon als eigene Linie;
+  // ein eigener Eintrag nur für gesperrte Flächen weiter außen.
+  const deeperRestricted = data.segments.some((s) => s.kind === "restricted" && s.generation > 1);
+  return (
+    <div className="rounded-lg bg-white/95 p-3 text-xs text-stone-600 shadow-sm ring-1 ring-stone-200 dark:bg-stone-900/95 dark:text-stone-300 dark:ring-stone-800" data-testid="rings-legend">
+      <p className="mb-1.5 font-medium text-stone-800 dark:text-stone-100">
+        {coloring === "linie" ? "Farben nach Linie (je Kind)" : "Farben nach Wurzeln (Land des Geburtsorts)"}
+      </p>
+      <ul className="space-y-1">
+        {coloring === "linie"
+          ? data.lines.map((l) => (
+              <li key={l.line} className="flex items-center gap-2">
+                {swatch({ fill: l.personId ? tint(l.color, 50) : `url(#${uid}-hatch)` })}
+                <span className="min-w-0 flex-1 text-stone-800 dark:text-stone-100">
+                  {l.personId ? personName(data.persons[l.personId]) : "nicht freigegeben"}
+                </span>
+                <span className="tabular-nums" title="Flächen dieser Linie: das Kind und seine Nachkommen">
+                  {l.count}
+                </span>
+              </li>
+            ))
+          : data.areas
+              .filter((a) => a.key !== "restricted")
+              .map((a) => (
+                <li key={a.key} className="flex items-center gap-2" title={a.members?.join(", ")}>
+                  {swatch({ fill: tint(a.color, a.key.startsWith("area:") ? 55 : 70) })}
+                  <span className="min-w-0 flex-1">{a.label}</span>
+                  <span className="tabular-nums">{a.count}</span>
+                </li>
+              ))}
+        {(coloring === "wurzeln" || deeperRestricted) && (
+          <li className="flex items-center gap-2">
+            {swatch({ fill: `url(#${uid}-hatch)` })}
+            <span className="min-w-0 flex-1">nicht freigegeben</span>
+            {coloring === "wurzeln" && anyRestricted && <span className="tabular-nums">{data.restricted}</span>}
+          </li>
+        )}
+      </ul>
+      {coloring === "linie" && data.lines.length > 0 && (
+        <p className="mt-1.5 muted">
+          Nach außen heller.
+          {data.lines.length > 8 ? " Bei mehr als acht Kindern wiederholen sich die Farben — jede Fläche nennt ihren Namen." : ""}
+        </p>
+      )}
     </div>
   );
 }
