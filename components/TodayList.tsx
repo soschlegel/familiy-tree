@@ -50,10 +50,17 @@ export function AnniversarySentence({ item, isRealToday }: { item: Anniversary; 
   );
 }
 
-function Item({ item, isRealToday }: { item: Anniversary; isRealToday: boolean }) {
+function Item({ item, isRealToday, markToday }: { item: Anniversary; isRealToday: boolean; markToday: boolean }) {
   const label = roundLabel(item);
+  const isDay = markToday && item.daysAway === 0;
   return (
-    <li className="flex items-start gap-3 py-2.5" data-testid="today-item" data-kind={item.kind} data-round={item.round || undefined}>
+    <li
+      className={`flex items-start gap-3 py-2.5 ${isDay ? "-mx-2 rounded-lg bg-accent-50 px-2 dark:bg-accent-900/30" : ""}`}
+      data-testid="today-item"
+      data-kind={item.kind}
+      data-round={item.round || undefined}
+      data-days-away={item.daysAway}
+    >
       <span
         aria-hidden
         title={KIND_LABEL[item.kind]}
@@ -69,6 +76,13 @@ function Item({ item, isRealToday }: { item: Anniversary; isRealToday: boolean }
         {SYMBOL[item.kind]}
       </span>
       <p className="min-w-0 flex-1 leading-relaxed [overflow-wrap:anywhere]">
+        {isDay && (
+          <>
+            <span className="badge-accent align-middle font-semibold" data-testid="today-mark">
+              {isRealToday ? "heute" : "an diesem Tag"}
+            </span>{" "}
+          </>
+        )}
         <AnniversarySentence item={item} isRealToday={isRealToday} />
         {label && (
           <>
@@ -83,17 +97,23 @@ function Item({ item, isRealToday }: { item: Anniversary; isRealToday: boolean }
   );
 }
 
-/** Liste mit höchstens SECTION_LIMIT Einträgen, der Rest aufklappbar. */
+/**
+ * Liste mit höchstens SECTION_LIMIT Einträgen, der Rest aufklappbar.
+ * `markToday`: Einträge am gewählten Tag selbst farbig hinterlegen und mit
+ * „heute“ (bzw. „an diesem Tag“) kennzeichnen — für die Karte „Geburtstage“.
+ */
 export function AnniversaryList({
   items,
   isRealToday,
   testId,
   label,
+  markToday = false,
 }: {
   items: Anniversary[];
   isRealToday: boolean;
   testId: string;
   label: string;
+  markToday?: boolean;
 }) {
   const shown = items.slice(0, SECTION_LIMIT);
   const rest = items.slice(SECTION_LIMIT);
@@ -101,7 +121,7 @@ export function AnniversaryList({
     <div data-testid={testId}>
       <ul aria-label={label} className="divide-y divide-stone-200/80 dark:divide-stone-800">
         {shown.map((a) => (
-          <Item key={a.key} item={a} isRealToday={isRealToday} />
+          <Item key={a.key} item={a} isRealToday={isRealToday} markToday={markToday} />
         ))}
       </ul>
       {rest.length > 0 && (
@@ -112,7 +132,7 @@ export function AnniversaryList({
           </summary>
           <ul aria-label={`${label} (weitere)`} className="divide-y divide-stone-200/80 border-t border-stone-200/80 dark:divide-stone-800 dark:border-stone-800">
             {rest.map((a) => (
-              <Item key={a.key} item={a} isRealToday={isRealToday} />
+              <Item key={a.key} item={a} isRealToday={isRealToday} markToday={markToday} />
             ))}
           </ul>
         </details>

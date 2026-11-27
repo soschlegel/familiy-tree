@@ -1,14 +1,15 @@
 # Startseite: Heute in der Familie
 
-Wer heute Geburtstag hat, wer vor 100 Jahren geheiratet hat und welche runden Jahrestage bald anstehen — die Startseite zeigt es dir jeden Tag neu.
+Wer heute oder bald Geburtstag hat, wer vor 100 Jahren geheiratet hat und welche runden Jahrestage bald anstehen — die Startseite zeigt es dir jeden Tag neu.
 
 ## Was die Seite zeigt
 
-Nach dem Anmelden — und immer, wenn du oben links auf **Stammbaum** (das Zeichen mit dem Namen) tippst — landest du auf **Heute in der Familie**. Dort stehen drei Bereiche:
+Nach dem Anmelden — und immer, wenn du oben links auf **Stammbaum** (das Zeichen mit dem Namen) tippst — landest du auf **Heute in der Familie**. Dort stehen diese Bereiche:
 
-- **Heute** — alle Jahrestage des heutigen Tages, zum Beispiel „Heute vor 120 Jahren wurde Anna Beispiel geboren“, „Karl Muster wird heute 34“ oder „Heute vor 75 Jahren heirateten Erna Muster und Karl Muster“. Auch Taufen, Auswanderungen und andere Lebensereignisse mit genauem Datum erscheinen hier.
+- **Geburtstage** — ganz oben: wer von den Lebenden heute oder in den nächsten 14 Tagen Geburtstag hat, nach Datum und mit dem Alter, das er oder sie erreicht, etwa „Karl Muster wird heute 34“ oder „Am 3. Mai wird Anna Beispiel 40“. Wer heute Geburtstag hat, steht zuerst, ist farbig hinterlegt und mit **heute** markiert. Hat in dieser Zeit niemand Geburtstag, steht dort ein kurzer Satz.
+- **Jahrestage** — was heute vor Jahren geschah, zum Beispiel „Heute vor 120 Jahren wurde Anna Beispiel geboren“ oder „Heute vor 75 Jahren heirateten Erna Muster und Karl Muster“. Auch Taufen, Auswanderungen und andere Lebensereignisse mit genauem Datum erscheinen hier. Einträge von Personen, die noch leben, stehen zuerst. Die heutigen Geburtstage findest du oben unter **Geburtstage** — hier werden sie nicht noch einmal genannt.
 - **Demnächst** — was in den nächsten 30 Tagen ansteht:
-  - **Geburtstage** von Personen, die noch leben, mit dem Alter, das sie erreichen.
+  - **Weitere Geburtstage**: Geburtstage von Lebenden, die nach den 14 Tagen oben folgen.
   - **Runde Jahrestage**: 25, 50, 75, 100, 125 … Jahre seit einer Geburt, einem Todestag oder einer Hochzeit.
 - **Einstieg** — große Verweise auf **Stammbaum**, **Karte**, **Personen**, **Statistik**, **Rekorde** (siehe [Rekorde](13-statistik.md#rekorde)) und **Forschungs-Fortschritt** (siehe [Forschungs-Fortschritt](13-statistik.md#forschungs-fortschritt)).
 
@@ -20,7 +21,7 @@ Stehen in einem Bereich mehr als zehn Einträge, tippe auf **Weitere … anzeige
 
 ## Ein anderer Tag
 
-Mit **Vortag** und **Folgetag** blätterst du Tag für Tag; **Heute** bringt dich zurück. Ist an einem Tag nichts zu berichten, nennt die Seite den nächsten Jahrestag — mit **Diesen Tag ansehen** springst du direkt dorthin.
+Mit **Vortag** und **Folgetag** (oben in der Karte **Geburtstage**) blätterst du Tag für Tag; **Heute** bringt dich zurück. Die 14 Tage der Geburtstage zählen dann ab dem gewählten Tag, und wer an diesem Tag Geburtstag hat, ist mit **an diesem Tag** markiert. Ist an einem Tag kein Jahrestag zu berichten, nennt die Seite den nächsten Jahrestag — mit **Diesen Tag ansehen** springst du direkt dorthin.
 
 Den Stammbaum selbst erreichst du jederzeit über **Baum** im Menü oder den Verweis **Stammbaum** unter **Einstieg**.
 

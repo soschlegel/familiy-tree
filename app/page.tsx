@@ -2,7 +2,18 @@ import Link from "next/link";
 
 import { requireScope } from "@/lib/session";
 import { getToday } from "@/lib/services/today";
-import { addDays, calendarDayIn, daysBetween, formatDayMonth, formatIsoDay, formatLongDay, parseIsoDay, UPCOMING_DAYS, type CalendarDay } from "@/lib/today";
+import {
+  addDays,
+  BIRTHDAY_WINDOW_DAYS,
+  calendarDayIn,
+  daysBetween,
+  formatDayMonth,
+  formatIsoDay,
+  formatLongDay,
+  parseIsoDay,
+  UPCOMING_DAYS,
+  type CalendarDay,
+} from "@/lib/today";
 import { HelpLink } from "@/components/HelpLink";
 import { AnniversaryList, AnniversarySentence } from "@/components/TodayList";
 
@@ -34,8 +45,10 @@ const dayNavClass =
   "btn-secondary btn-sm max-md:min-h-11 max-md:px-3";
 
 /**
- * Startseite „Heute in der Familie“: Jahrestage des Tages, Geburtstage und
- * runde Jahrestage der nächsten Wochen, Einstieg in die Bereiche. Nur über
+ * Startseite „Heute in der Familie“: zuerst Geburtstage Lebender (der Tag und
+ * die BIRTHDAY_WINDOW_DAYS Tage danach), dann die übrigen Jahrestage des
+ * Tages, weitere Geburtstage und runde Jahrestage der nächsten Wochen,
+ * Einstieg in die Bereiche. Nur über
  * Personen, die der Benutzer sehen darf. Regeln: lib/today.ts, Laden und
  * Rechte: lib/services/today.ts. Ein anderer Tag per `?datum=JJJJ-MM-TT`.
  */
@@ -48,6 +61,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<Par
   const { day, isRealToday } = data;
   const hasFamily = scope.isAdmin || scope.families.size > 0;
   const dayName = isRealToday ? "Heute" : `Am ${formatDayMonth(day)}`;
+  const windowText = isRealToday
+    ? `heute und in den nächsten ${BIRTHDAY_WINDOW_DAYS} Tagen`
+    : `am ${formatDayMonth(day)} und in den ${BIRTHDAY_WINDOW_DAYS} Tagen danach`;
+  // Hat am gewählten Tag ein Lebender Geburtstag? Dann steht er oben, und die
+  // leere Tageskarte sagt „sonst kein Jahrestag“.
+  const birthdayOnDay = data.birthdays.some((a) => a.daysAway === 0);
 
   return (
     <div className="space-y-6">
@@ -74,11 +93,14 @@ export default async function Home({ searchParams }: { searchParams: Promise<Par
             </section>
           ) : (
             <>
-              <section aria-labelledby="today-h" className="card p-4 sm:p-5" data-testid="today-section">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h2 id="today-h" className="section-title">
-                    {dayName}
-                  </h2>
+              <section aria-labelledby="birthdays-h" className="card p-4 sm:p-5" data-testid="birthdays-section">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <h2 id="birthdays-h" className="section-title">
+                      Geburtstage
+                    </h2>
+                    <p className="text-xs muted">{windowText}</p>
+                  </div>
                   <nav aria-label="Anderer Tag" className="flex flex-wrap gap-2">
                     <Link href={dayHref(addDays(day, -1), realToday)} className={dayNavClass} data-testid="today-prev" scroll={false}>
                       <span aria-hidden>‹</span> Vortag
@@ -93,6 +115,29 @@ export default async function Home({ searchParams }: { searchParams: Promise<Par
                     </Link>
                   </nav>
                 </div>
+                {data.birthdays.length > 0 ? (
+                  <div className="mt-2">
+                    <AnniversaryList
+                      items={data.birthdays}
+                      isRealToday={isRealToday}
+                      testId="birthdays-list"
+                      label={`Geburtstage ${windowText}`}
+                      markToday
+                    />
+                  </div>
+                ) : (
+                  <p className="mt-3 rounded-lg bg-stone-50 px-4 py-4 text-sm dark:bg-stone-800/40" data-testid="birthdays-empty">
+                    {windowText.charAt(0).toUpperCase() + windowText.slice(1)} hat niemand Geburtstag.{" "}
+                    <span className="muted">Gezählt werden Lebende, deren Geburtstag auf den Tag genau bekannt ist.</span>
+                  </p>
+                )}
+              </section>
+
+              <section aria-labelledby="today-h" className="card p-4 sm:p-5" data-testid="today-section">
+                <h2 id="today-h" className="section-title">
+                  Jahrestage
+                </h2>
+                <p className="text-xs muted">was {isRealToday ? "heute" : `am ${formatDayMonth(day)}`} vor Jahren geschah</p>
                 {data.today.length > 0 ? (
                   <div className="mt-2">
                     <AnniversaryList items={data.today} isRealToday={isRealToday} testId="today-list" label={`Jahrestage ${dayName.toLowerCase()}`} />
@@ -100,7 +145,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<Par
                 ) : (
                   <div className="mt-3 rounded-lg bg-stone-50 px-4 py-5 dark:bg-stone-800/40" data-testid="today-empty">
                     <p className="font-serif text-lg">
-                      {isRealToday ? "Heute" : `Am ${formatDayMonth(day)}`} steht kein Jahrestag im Stammbaum.
+                      {isRealToday ? "Heute" : `Am ${formatDayMonth(day)}`} steht {birthdayOnDay ? "sonst " : ""}kein Jahrestag im
+                      Stammbaum.
                     </p>
                     <p className="mt-1 text-sm muted">
                       Gezählt werden nur Daten, die auf den Tag genau bekannt sind.
@@ -126,12 +172,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<Par
                 <p className="text-xs muted">in den nächsten {UPCOMING_DAYS} Tagen</p>
                 <div className="mt-3 grid gap-6 md:grid-cols-2">
                   <div>
-                    <h3 className="text-sm font-semibold">Geburtstage</h3>
-                    {data.birthdays.length > 0 ? (
-                      <AnniversaryList items={data.birthdays} isRealToday={isRealToday} testId="soon-birthdays" label="Geburtstage demnächst" />
+                    <h3 className="text-sm font-semibold">Weitere Geburtstage</h3>
+                    {data.laterBirthdays.length > 0 ? (
+                      <AnniversaryList items={data.laterBirthdays} isRealToday={isRealToday} testId="soon-birthdays" label="Weitere Geburtstage demnächst" />
                     ) : (
                       <p className="mt-2 text-sm muted" data-testid="soon-birthdays-empty">
-                        In den nächsten {UPCOMING_DAYS} Tagen hat niemand Geburtstag.
+                        Danach hat bis zum {formatDayMonth(addDays(day, UPCOMING_DAYS))} niemand Geburtstag.
                       </p>
                     )}
                   </div>

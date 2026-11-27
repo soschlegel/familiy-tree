@@ -84,7 +84,7 @@ Alle Seiten außer `/login`, `/login/email` und der Weiterleitung `/` sind
 
 | Adresse | Zweck | Rechte |
 |---|---|---|
-| `/` | Startseite „Heute in der Familie“: Jahrestage, Geburtstage, Einstieg | angemeldet |
+| `/` | Startseite „Heute in der Familie“: Geburtstage (14 Tage), Jahrestage, Demnächst, Einstieg | angemeldet |
 | `/login` | Anmeldung (GitHub, Google, E-Mail-Link, Dev-Login) | öffentlich; angemeldet → `/` |
 | `/login/email` | Bestätigung eines E-Mail-Links („Jetzt anmelden“) | öffentlich; angemeldet → `/` |
 | `/tree` | Stammbaum: Fokus-Ansicht, Generationen, Zeitstrahl | angemeldet |
@@ -251,13 +251,20 @@ bewusst nicht (die Kopfzeile ist voll; das Logo genügt).
   Europe/Berlin (`calendarDayIn`).
 - **Anzeige:** Kopf mit Datum (`formatLongDay`), Überschrift („Heute in der
   Familie“ bzw. „Der 14. März in der Familie“) und Kontexthilfe
-  (`HelpLink` → `/hilfe/startseite#wie-wird-gezaehlt`). Karte **Heute** mit
-  „‹ Vortag“, „Heute“ (nur an anderen Tagen), „Folgetag ›“ (der heutige Tag
-  immer als `/`) und der Liste der Jahrestage (`AnniversaryList` aus
-  `components/TodayList.tsx`, höchstens zehn, der Rest hinter „Weitere …
-  anzeigen“); leer: freundlicher Hinweis und der nächste Jahrestag mit
-  „Diesen Tag ansehen“. Karte **Demnächst** (30 Tage) mit „Geburtstage“ und
-  „Runde Jahrestage“. Daneben (Telefon: darunter) **Einstieg** mit sechs
+  (`HelpLink` → `/hilfe/startseite#wie-wird-gezaehlt`). Zuerst die Karte
+  **Geburtstage** („heute und in den nächsten 14 Tagen“ bzw. „am 14. März
+  und in den 14 Tagen danach“) mit „‹ Vortag“, „Heute“ (nur an anderen
+  Tagen), „Folgetag ›“ (der heutige Tag immer als `/`) und den Geburtstagen
+  Lebender (`birthdays`; `AnniversaryList` aus `components/TodayList.tsx`
+  mit `markToday`: der Tag selbst hinterlegt und mit „heute“ bzw. „an
+  diesem Tag“ markiert; höchstens zehn, der Rest hinter „Weitere …
+  anzeigen“); leer: kurzer Satz, die Karte bleibt stehen. Danach die Karte
+  **Jahrestage** („was heute vor Jahren geschah“) mit den übrigen
+  Jahrestagen des Tages (`today`, ohne Geburtstage Lebender); leer:
+  freundlicher Hinweis („sonst kein Jahrestag“, wenn oben ein Geburtstag
+  des Tages steht) und der nächste Jahrestag mit „Diesen Tag ansehen“.
+  Karte **Demnächst** (30 Tage) mit „Weitere Geburtstage“ (nur Tag 15–30,
+  `laterBirthdays`) und „Runde Jahrestage“. Daneben (Telefon: darunter) **Einstieg** mit sechs
   Kacheln: Stammbaum, Karte, Personen, Statistik, Rekorde,
   Forschungs-Fortschritt (`start-progress`).
 - **Daten:** `getToday` (`lib/services/today.ts`), Regeln in `lib/today.ts`.

@@ -1330,7 +1330,8 @@ Wochen, dazu die Sätze in Anwendersprache. Rein; Laden und Rechte in
 wirklicher heutiger Tag, Personen mit Name, `visible`, Geburt, Tod,
 Sterbeangabe ohne Datum; Partnerschaften mit Unterart, beiden Partnern und
 Beginn; Lebensereignisse mit Art, Titel, Datum, `isAlternative`) →
-`TodayResult` (`today`, `birthdays`, `upcoming`, `next`, `isRealToday`) aus
+`TodayResult` (`birthdays`, `today`, `laterBirthdays`, `upcoming`, `next`,
+`isRealToday`) aus
 `Anniversary`-Einträgen (Art, Personen mit `living`, Jahre, `round`,
 `birthday`, `jubilee`, Tag des Begehens, Abstand in Tagen).
 Kalenderhilfen `calendarDayIn` (Tag in Europe/Berlin), `parseIsoDay`,
@@ -1338,7 +1339,7 @@ Kalenderhilfen `calendarDayIn` (Tag in Europe/Berlin), `parseIsoDay`,
 `daysBetween`, `observedDay`; Regeln `preciseDay`, `isLiving`; Sätze
 `anniversarySentence` (Teile aus Text und Person, die Oberfläche verlinkt
 die Personen), `sentenceText`, `whenText`, `roundLabel`. Grenzen
-`UPCOMING_DAYS` (30), `SECTION_LIMIT` (10), `ROUND_ANNIVERSARY` (25),
+`BIRTHDAY_WINDOW_DAYS` (14), `UPCOMING_DAYS` (30), `SECTION_LIMIT` (10), `ROUND_ANNIVERSARY` (25),
 `ROUND_BIRTHDAY` (10), `NEXT_SEARCH_DAYS` (366); Listen
 `ANNIVERSARY_EVENT_TYPES`, `ANNIVERSARY_PARTNER_SUBTYPES`.
 
@@ -1364,12 +1365,25 @@ die Personen), `sentenceText`, `whenText`, `roundLabel`. Grenzen
   Vielfachen von 10. Leben beide Partner, trägt die Hochzeit den Namen des
   Jubiläums (25 Silberne, 50 Goldene, 60 Diamantene, 65 Eiserne,
   70 Gnaden-, 75 Kronjuwelenhochzeit) und gilt als rund.
-- **Abschnitte:** `today` = alles am gewählten Tag, runde zuerst, dann
-  jüngere Jahrestage, Art, Name. `birthdays` = Geburtstage Lebender in den
-  nächsten 30 Tagen (ohne den Tag selbst), nach Datum. `upcoming` = runde
-  Jahrestage von Geburten Verstorbener, Todestagen und Partnerschaften in
-  den nächsten 30 Tagen (keine Lebensereignisse), nach Datum. `next` nur
-  bei leerem Tag: der nächste Jahrestag überhaupt bis ein Jahr voraus.
+- **Abschnitte** (Wunsch des Eigentümers: Lebende, die bald Geburtstag
+  haben, vor den historischen Jahrestagen):
+  - `birthdays` = Geburtstage Lebender am gewählten Tag und in den
+    `BIRTHDAY_WINDOW_DAYS` (14) Tagen danach (Abstand 0–14), nach Datum; am
+    selben Tag runde zuerst, dann nach Name. Das Fenster zählt ab dem
+    gewählten Tag (auch bei `?datum=`).
+  - `today` = alle übrigen Jahrestage des gewählten Tages **ohne** die
+    Geburtstage Lebender — die stehen schon in `birthdays`; zweimal
+    derselbe Satz in zwei aufeinanderfolgenden Karten wirkte doppelt.
+    Einträge, deren Personen alle leben (Hochzeitstag eines lebenden
+    Paares, Taufe einer Lebenden …), zuerst; dann runde, jüngere
+    Jahrestage, Art, Name.
+  - `laterBirthdays` = Geburtstage Lebender nach dem Fenster (Abstand
+    15–30), nach Datum. Jeder Geburtstag steht damit genau einmal.
+  - `upcoming` = runde Jahrestage von Geburten Verstorbener, Todestagen und
+    Partnerschaften in den nächsten 30 Tagen (keine Lebensereignisse), nach
+    Datum.
+  - `next` nur bei leerem `today`: der nächste Jahrestag bis ein Jahr
+    voraus, ohne Geburtstage Lebender (die haben ihre eigene Karte).
 - **Sätze:** „Heute“/„Morgen“ nur, wenn der gewählte Tag der wirkliche
   heutige ist, sonst „Am 14. März“; Einträge des gewählten Tages selbst
   ohne Zeitangabe („Vor 75 Jahren starb …“, „… wird 50“), weil die

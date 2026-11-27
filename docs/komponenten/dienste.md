@@ -123,7 +123,7 @@ beide). Ereignisse, Belege, Namen und Rohdaten folgen ihrem Träger.
 | `statistics.ts` | Seite „Statistik“: sichtbaren Teil des Stammbaums schlank laden und auswerten, Familienfilter (`familyFilter`, auch für die Rekorde) |
 | `records.ts` | Seite „Rekorde“: sichtbaren Teil des Stammbaums schlank laden, Bestwerte mit Namen berechnen, Familienfilter |
 | `research-progress.ts` | Seite „Forschungs-Fortschritt“: Vorfahren der Ausgangsperson generationsweise laden, Belege in einer Abfrage, Vollständigkeit, Qualität und Vorschläge |
-| `today.ts` | Startseite „Heute in der Familie“: Jahrestage, Geburtstage und runde Jahrestage aus sichtbaren, tagesgenauen Daten |
+| `today.ts` | Startseite „Heute in der Familie“: Geburtstage Lebender (14 Tage), Jahrestage, weitere Geburtstage und runde Jahrestage aus sichtbaren, tagesgenauen Daten |
 | `changes.ts` | Änderungsgeschichte lesen (Personenverlauf, Paketübersicht) |
 | `ai-access.ts` | KI-Recht, persönliche Schlüssel, Prüfung je MCP-Aufruf |
 | `imports.ts` | Importläufe, Herkunft, Fremdkennungen, Rohdaten |
