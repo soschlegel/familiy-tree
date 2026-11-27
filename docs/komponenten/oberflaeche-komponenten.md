@@ -287,7 +287,7 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 **Zweck:** Darstellungsbausteine für Bezugsperson und Ahnenlinien: `ReferenceContext` (Bezugsperson und Schalterzustand), `lineTint` (zarte Kartentönung, mehrere Linien als Streifen nebeneinander), `LineStripe` (Farbstreifen am linken Kartenrand), `LineCodes`/`LineCode` (Kurzzeichen VV/VM/MV/MM, höchstens zwei plus „+n“), `linesText` (Screenreader-Text) und `LineLegend` (Legende mit den Namen der vier Großeltern, „nicht erfasst“ für fehlende/gesperrte, darunter Kontexthilfe „Wie funktioniert das?“ → `/hilfe/stammbaum#linienfarben`).
 
-**Wo eingesetzt:** `FamilyTree` (Kontext, Legende), `PersonNode` (Tönung, Streifen, Kurzzeichen, Text), `MapExplorer` (`LineCode` in Legende, Personen- und Ortsliste).
+**Wo eingesetzt:** `FamilyTree` (Kontext, Legende), `PersonNode` (Tönung, Streifen, Kurzzeichen, Text), `MapExplorer` (`LineCode` in Legende, Personen- und Ortsliste), `app/progress/page.tsx` (`LineCode` je Großeltern-Linie).
 
 **Props/Daten:** Liste der Linien einer Person bzw. die Bezugsperson-Sicht mit Großeltern.
 
@@ -408,19 +408,19 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 ### components/MapPersonChooser.tsx
 
-**Zweck:** Knopf „Andere Person …“ mit aufklappendem Suchfeld, um die Ausgangsperson der Karte zu wählen (ändert die Bezugsperson des Baums nicht).
+**Zweck:** Knopf „Andere Person …“ mit aufklappendem Suchfeld, um die Ausgangsperson der Karte zu wählen (ändert die Bezugsperson des Baums nicht) — ebenso auf dem Forschungs-Fortschritt.
 
-**Wo eingesetzt:** `app/map/page.tsx`.
+**Wo eingesetzt:** `app/map/page.tsx`, `app/progress/page.tsx`.
 
-**Props/Daten:** die aktuelle Auswahl (`vorfahren`, `alle` oder `lebensweg`) und beim Lebensweg die Art (`art`: `person`, `vaterlinie`, `mutterlinie`), die bei der Navigation erhalten bleiben.
+**Props/Daten:** die aktuelle Auswahl (`vorfahren`, `alle` oder `lebensweg`) und beim Lebensweg die Art (`art`: `person`, `vaterlinie`, `mutterlinie`), die bei der Navigation erhalten bleiben. Für andere Seiten: `target` (Pfad samt übrigen Suchparametern, an den `person=<id>` angehängt wird), `label` (Knopftext) und `testId`.
 
-**Verhalten:** Öffnen setzt den Fokus ins Suchfeld; ab zwei Zeichen verzögert gesucht (max. 8 Treffer, Name und Lebensjahre), „Niemand gefunden.“ bei leerem Ergebnis. Auswahl führt zu `/map?person=<id>&mode=…` (beim Lebensweg mit `&art=…`). Schließen bei Klick daneben, Escape oder Fokusverlust (`useDismiss`). Telefon: Box höchstens Bildschirmbreite minus Rand; Feld nutzt `.field` (16 px, 44 px). Liste mit `aria-busy`; die Trefferliste ist eine einfache Knopfliste ohne Listbox-Rolle.
+**Verhalten:** Öffnen setzt den Fokus ins Suchfeld; ab zwei Zeichen verzögert gesucht (max. 8 Treffer, Name und Lebensjahre; auf dem Telefon je 44 px hoch), „Niemand gefunden.“ bei leerem Ergebnis. Auswahl führt zu `/map?person=<id>&mode=…` (beim Lebensweg mit `&art=…`) bzw. zu `target` mit `person=<id>`. Schließen bei Klick daneben, Escape oder Fokusverlust (`useDismiss`). Telefon: Box höchstens Bildschirmbreite minus Rand; Feld nutzt `.field` (16 px, 44 px). Liste mit `aria-busy`; die Trefferliste ist eine einfache Knopfliste ohne Listbox-Rolle.
 
 **Server oder Client:** Client.
 
 **Ruft auf:** `GET /api/persons?q=…&limit=8`.
 
-**Tests:** `e2e/read/map.spec.ts` („andere Ausgangsperson wählen“); `e2e/read/lifepath.spec.ts` (Art bleibt beim Wechsel der Person erhalten).
+**Tests:** `e2e/read/map.spec.ts` („andere Ausgangsperson wählen“); `e2e/read/lifepath.spec.ts` (Art bleibt beim Wechsel der Person erhalten); `e2e/read/progress.spec.ts` (Person wählen, Tiefe bleibt erhalten).
 
 ### components/LifePathMap.tsx
 
@@ -1025,7 +1025,10 @@ HTML/CSS ohne Diagramm-Bibliothek und ohne Skript; die Balkenbreite steht
 im `style`-Attribut (CSP: `style-src 'unsafe-inline'`).
 
 **Wo eingesetzt:** `app/statistics/page.tsx`; `StatsCard`, `EmptyHint` und
-`formatCount` auch auf `app/records/page.tsx` bzw. in `RecordCards`.
+`formatCount` auch auf `app/records/page.tsx` bzw. in `RecordCards`;
+`StatsCard`, `KeyFigure`, `EmptyHint` und `formatCount` auf
+`app/progress/page.tsx` (Forschungs-Fortschritt; dessen gestapelte Balken
+„gefunden | nicht freigegeben“ sind seitenintern).
 
 **Props/Daten:** `StatsCard` (`id`, `title`, `basis` = Grundlage als Text,
 `testId`, optional `actions` rechts neben der Überschrift), `BarList`

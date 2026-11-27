@@ -121,6 +121,7 @@ beide). Ereignisse, Belege, Namen und Rohdaten folgen ihrem Träger.
 | `descendant-rings.ts` | Ansicht „Ringe“, Richtung „Nachfahren“: Nachkommen einer Person, Vollkreis nach Teilbaumgröße, generationsweise geladen |
 | `statistics.ts` | Seite „Statistik“: sichtbaren Teil des Stammbaums schlank laden und auswerten, Familienfilter (`familyFilter`, auch für die Rekorde) |
 | `records.ts` | Seite „Rekorde“: sichtbaren Teil des Stammbaums schlank laden, Bestwerte mit Namen berechnen, Familienfilter |
+| `research-progress.ts` | Seite „Forschungs-Fortschritt“: Vorfahren der Ausgangsperson generationsweise laden, Belege in einer Abfrage, Vollständigkeit, Qualität und Vorschläge |
 | `today.ts` | Startseite „Heute in der Familie“: Jahrestage, Geburtstage und runde Jahrestage aus sichtbaren, tagesgenauen Daten |
 | `changes.ts` | Änderungsgeschichte lesen (Personenverlauf, Paketübersicht) |
 | `ai-access.ts` | KI-Recht, persönliche Schlüssel, Prüfung je MCP-Aufruf |
@@ -1389,6 +1390,7 @@ Benutzerverwaltung unter `app/api/users`).
 
 **Benutzt von:** `app/tree/page.tsx`, `app/api/me/person/route.ts`,
 `components/ReferencePanel.tsx` (Server-Komponente); `map.ts`;
+`research-progress.ts` (Ausgangsperson des Forschungs-Fortschritts);
 `lib/reference.ts` (`visibleIndex`).
 
 **Tests:** `tests/reference.db.test.ts`, `tests/reference.test.ts`;
@@ -1969,6 +1971,58 @@ unbekannte Kennung gilt als „Alle“, ohne Fehler.
 
 **Tests:** `tests/records.db.test.ts` (Regeln: `tests/records.test.ts`);
 `e2e/read/records.spec.ts`.
+
+### lib/services/research-progress.ts
+
+**Zweck:** Daten der Seite „Forschungs-Fortschritt“ (`/progress`): die
+Vorfahren der Ausgangsperson bis zur gewählten Tiefe laden, die Belege von
+Geburt und Tod dazu, und mit `computeProgress`
+(`lib/research-progress.ts`) Vollständigkeit je Generation und Linie,
+Qualität und Vorschläge berechnen.
+
+**Wichtige Funktionen/Typen:** `getResearchProgress(scope, {person,
+cookie, generations, now})` → `ResearchProgressPage` (Tiefe, Ausgangsperson
+mit Name, Lebensjahren, „ich“ und Herkunft der Wahl oder `null`,
+`notFound`, `hasSelf`, `ProgressResult` oder `null`). Die Tiefe kommt roh
+aus der Adresse (`parseProgressGeneration`: 4…10, Standard 6).
+
+**Regeln:**
+- **Ausgangsperson:** `resolveReference` (`reference.ts`) — Adresse vor
+  Cookie „Baum aus dieser Sicht“ vor „Das bin ich“; unbekannte und
+  gesperrte Kennungen fallen still weg und setzen nur `notFound`.
+- **Eltern:** nur `PARENT_OF` mit Untertyp `BIOLOGICAL` (wie „Ringe“ und
+  „Wurzeln“), Reihenfolge nach Anlage.
+- **Laden:** Generation für Generation eine Abfrage der Eltern der zuletzt
+  gefundenen sichtbaren Personen samt ihren Angaben — bis zur Tiefe plus
+  eins; die letzte Runde dient nur der Frage „beide Eltern erfasst?“ für die
+  äußerste Generation, ihre Personen werden weder gezeigt noch weiter
+  verfolgt. Ahnenschwund und Zyklen fragen nichts doppelt. Danach eine
+  Abfrage aller Belege (`Citation`, Angabe `BIRTH`/`DEATH`) der gezeigten
+  Personen samt Quellenart. Nie eine Abfrage je Vorfahr, nie der ganze
+  Graph (bei Tiefe 10 höchstens 11 + 1 Abfragen plus die zwei der
+  Bezugsperson).
+- **Beleg:** mindestens ein Zitat einer Quelle, deren Art nicht
+  `ONLINE_TREE` ist → „unabhängig“; nur Zitate fremder Stammbäume → „nur
+  Hinweis“; sonst „kein Beleg“. Belege an Taufe/Beerdigung (Ereignisse)
+  zählen nicht — wie `findDataGaps` („Angaben ohne Beleg“).
+
+**Rechte/Datenschutz:** Ausgangsperson muss sichtbar sein (sonst keine).
+Ein nicht sichtbarer Vorfahr geht nur als Platz „nicht freigegeben“ in die
+Rechnung — mit Geschlecht „unbekannt“, damit weder Platzvergabe noch der
+Satz „Vater/Mutter fehlt“ etwas verraten; seine Angaben werden nicht
+behalten, seine Eltern nicht gesucht, seine Belege nicht gelesen. Ein
+gesperrter Elternteil gilt beim Kind als „erfasst“ (der Stammbaum zeigt ihn
+ohnehin als Platzhalter), damit kein falscher Vorschlag „Eltern fehlen“
+entsteht. Die Antwort enthält Kennungen, Namen und Angaben nur sichtbarer
+Personen.
+
+**Protokoll:** — (nur lesend).
+
+**Benutzt von:** `app/progress/page.tsx`. Kein MCP-Werkzeug
+(`find_data_gaps` bleibt unverändert).
+
+**Tests:** `tests/research-progress.db.test.ts` (Regeln:
+`tests/research-progress.test.ts`); `e2e/read/progress.spec.ts`.
 
 ### lib/services/today.ts
 

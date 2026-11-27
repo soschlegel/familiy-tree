@@ -40,7 +40,7 @@ test("gesperrter Benutzer wird mit Meldung abgelehnt", async ({ page }) => {
 });
 
 test("ohne Anmeldung leiten Seiten auf /login, die API antwortet 401", async ({ page, request }) => {
-  for (const url of ["/", "/tree", "/people", "/people/mock-p-001", "/sources", "/research", "/statistics", "/records", "/admin/users"]) {
+  for (const url of ["/", "/tree", "/people", "/people/mock-p-001", "/sources", "/research", "/statistics", "/records", "/progress", "/admin/users"]) {
     await page.goto(url);
     await expect(page, url).toHaveURL(/\/login$/);
   }

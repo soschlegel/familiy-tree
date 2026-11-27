@@ -58,6 +58,7 @@ setup("Routen vorwärmen", async ({ browser }) => {
     "/research",
     "/statistics",
     "/records",
+    "/progress",
     "/admin/data",
     "/admin/users",
     "/admin/families",

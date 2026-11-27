@@ -10,7 +10,7 @@ Nach dem Anmelden — und immer, wenn du oben links auf **Stammbaum** (das Zeich
 - **Demnächst** — was in den nächsten 30 Tagen ansteht:
   - **Geburtstage** von Personen, die noch leben, mit dem Alter, das sie erreichen.
   - **Runde Jahrestage**: 25, 50, 75, 100, 125 … Jahre seit einer Geburt, einem Todestag oder einer Hochzeit.
-- **Einstieg** — große Verweise auf **Stammbaum**, **Karte**, **Personen**, **Statistik** und **Rekorde** (siehe [Rekorde](13-statistik.md#rekorde)).
+- **Einstieg** — große Verweise auf **Stammbaum**, **Karte**, **Personen**, **Statistik**, **Rekorde** (siehe [Rekorde](13-statistik.md#rekorde)) und **Forschungs-Fortschritt** (siehe [Forschungs-Fortschritt](13-statistik.md#forschungs-fortschritt)).
 
 Jeder Name ist ein Link: Tippe darauf, und du kommst zur Seite der Person.
 

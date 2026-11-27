@@ -705,6 +705,14 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   http(s)-Adressen, Rückfall auf die Umgebungsvariable.
 - **`source-classify.test.ts`** — Einordnung importierter Quellen und Anzeige
   älterer Importe.
+- **`research-progress.test.ts`** — Forschungs-Fortschritt
+  (`lib/research-progress.ts`): Tiefe 4…10, Zählung je Generation und Linie,
+  Ahnenschwund (je Platz, verschiedene Personen einmal), nicht freigegebener
+  Vorfahr samt Plätzen dahinter (keine Kennung, keine Vorschläge),
+  Qualitätspunkte (genau/ungenau/fehlt, Lebende ohne Sterbepunkte),
+  fremder Stammbaum ist kein Beleg, vermutlich verstorben (auch über ein
+  Kind), Vorschläge (Elternteil, Linie, abgeschnittene Plätze, gesperrter
+  Elternteil neutral), Reihenfolge der Vorschläge.
 - **`records.test.ts`** — Seite „Rekorde“ (`lib/records.ts`): Datumsregeln
   (vollendete Jahre, „etwa“, zu weite Spannen), lebend/verstorben,
   Rangfolge mit Gleichstand und Obergrenze, Datenfehler (Alter über 110,
@@ -825,6 +833,13 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   Administratoren, Protokoll vorher → nachher samt Anzeige in der
   Änderungsübersicht; Routen `/api/settings…` (Fehlercodes, 403 für
   Nicht-Admins und fremde Herkunft).
+- **`research-progress.db.test.ts`** — Forschungs-Fortschritt: Admin ohne
+  eigene Person (keine Ausgangsperson) bzw. mit gewählter Person (Plätze wie
+  die Ringe, Vorschläge nur zu gezeigten Personen), Tiefe begrenzt,
+  Bearbeiter mit eigener Person (gesperrte Großeltern mütterlicherseits nur
+  „nicht freigegeben“, keine Kennung und kein Name von ihnen oder ihren
+  Vorfahren, kein falscher Vorschlag „Eltern fehlen“), nicht sichtbare bzw.
+  unbekannte Person in der Adresse, Benutzer ohne Familie (nur lesend).
 - **`records.db.test.ts`** — Rekorde je Rolle: Personenzahl wie die
   Statistik, eingeschränkte Benutzer sehen weniger, genannt werden nur
   sichtbare Personen (auch als Kind, Partner, Linienende), Familienfilter
@@ -955,6 +970,12 @@ Benutzer bekommt keinen gespeicherten Zustand.
   390 px ohne Querscrollen, axe.
 - **`sources-list.spec.ts`** — Quellenliste: eine Seite jenseits des Endes
   zeigt die letzte Seite mit Einträgen.
+- **`progress.spec.ts`** — Seite „Forschungs-Fortschritt“: Einstiege von
+  Recherche und Startseite, Hinweis ohne Ausgangsperson, Balken mit Zahlen
+  je Generation und Linie, Vorschläge verlinken auf Personenseiten, Tiefe
+  und Person wählbar (Adresse), eingeschränkter Benutzer (eigene Person,
+  „nicht freigegeben“, keine fremden Namen), 390 px hell/dunkel ohne
+  Querscrollen mit Tippflächen ≥ 44 px, axe.
 - **`records.spec.ts`** — Seite „Rekorde“: Einstieg von der Startseite,
   alle Karten mit Zählsatz und Grundlage, Bestwerte mit verlinkten
   Personen, Hilfe-Link, Verweise Statistik ↔ Rekorde mit Familie, Filter in
