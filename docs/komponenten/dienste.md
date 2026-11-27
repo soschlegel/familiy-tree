@@ -119,7 +119,8 @@ beide). Ereignisse, Belege, Namen und Rohdaten folgen ihrem Träger.
 | `roots.ts` | „Wurzeln“ einer Person: Anteile der Länder/Regionen ihrer Vorfahren |
 | `ancestor-rings.ts` | Ansicht „Ringe“: Vorfahren einer Person auf festen Plätzen, generationsweise geladen; gemeinsame Personenangaben und Legende „nach Wurzeln“ für beide Richtungen |
 | `descendant-rings.ts` | Ansicht „Ringe“, Richtung „Nachfahren“: Nachkommen einer Person, Vollkreis nach Teilbaumgröße, generationsweise geladen |
-| `statistics.ts` | Seite „Statistik“: sichtbaren Teil des Stammbaums schlank laden und auswerten, Familienfilter |
+| `statistics.ts` | Seite „Statistik“: sichtbaren Teil des Stammbaums schlank laden und auswerten, Familienfilter (`familyFilter`, auch für die Rekorde) |
+| `records.ts` | Seite „Rekorde“: sichtbaren Teil des Stammbaums schlank laden, Bestwerte mit Namen berechnen, Familienfilter |
 | `today.ts` | Startseite „Heute in der Familie“: Jahrestage, Geburtstage und runde Jahrestage aus sichtbaren, tagesgenauen Daten |
 | `changes.ts` | Änderungsgeschichte lesen (Personenverlauf, Paketübersicht) |
 | `ai-access.ts` | KI-Recht, persönliche Schlüssel, Prüfung je MCP-Aufruf |
@@ -1843,7 +1844,9 @@ des Stammbaums schlank laden, wahlweise auf eine Familie beschränken und mit
 
 **Wichtige Funktionen/Typen:** `getFamilyStatistics(scope, {familyId,
 level})` → `FamilyStatisticsDto` (alle Auswertungen aus `StatisticsResult`,
-dazu die wählbaren Familien und die gewählte Familie oder `null`).
+dazu die wählbaren Familien und die gewählte Familie oder `null`);
+`familyFilter(scope, familyIdRaw)` → wählbare Familien, wirksame Auswahl und
+Prisma-Bedingung für die Personen (gemeinsam mit `lib/services/records.ts`).
 
 **Regeln:**
 - **Laden:** eine Abfrage der Personen — schon in der Datenbank auf sichtbare
@@ -1882,6 +1885,44 @@ nutzt weiter `getStatistics` aus `research.ts`).
 
 **Tests:** `tests/statistics.db.test.ts` (Regeln: `tests/statistics.test.ts`);
 `e2e/read/statistics.spec.ts`.
+
+### lib/services/records.ts
+
+**Zweck:** Daten der Seite „Rekorde“ (`/records`): den sichtbaren Teil des
+Stammbaums schlank laden, wahlweise auf eine Familie beschränken und mit
+`computeRecords` (`lib/records.ts`) die Bestwerte mit Namen berechnen.
+
+**Wichtige Funktionen/Typen:** `getFamilyRecords(scope, {familyId, now})` →
+`FamilyRecordsDto` (`RecordsResult` plus wählbare Familien und gewählte
+Familie oder `null`).
+
+**Regeln:**
+- **Laden:** eine Abfrage der Personen — in der Datenbank auf sichtbare und
+  ggf. die gewählte Familie beschränkt (`familyFilter` aus
+  `lib/services/statistics.ts`), nur die Felder der Auswertung und der
+  Lebensjahre; eine Abfrage aller Beziehungen mit Kennungen, Art, Beginn und
+  Ende (gefiltert im Speicher). Nie eine Abfrage je Person; `loadGraph` wird
+  nicht benutzt (lädt Notizen und Bilder).
+- **Anzeigename** „Vorname Nachname“, Lebensjahre über `lifeSpan`
+  (wie „Wie sind wir verwandt?“).
+- **Verstorben ohne Datum:** Sterbeort oder Wortlaut ohne Datum zählt als
+  verstorben (nicht lebend, aber ohne Alter).
+
+**Rechte/Datenschutz:** Genannt und gezählt wird nur, wer sichtbar ist —
+Datenbankfilter und zusätzlich `canViewPerson` je Person. Beziehungen nur
+zwischen gezählten Personen (beim Familienfilter: nur innerhalb der
+Familie), Ehen also nur mit beiden Partnern sichtbar; Kinder, Nachkommen und
+Linien nur über sichtbare Personen. Lebende Personen dürfen genannt werden
+(Entscheidung des Eigentümers); es gelten allein die Sichtbarkeitsregeln. Der
+Familienfilter nimmt nur Familien aus `listFamilies`; eine fremde oder
+unbekannte Kennung gilt als „Alle“, ohne Fehler.
+
+**Protokoll:** — (nur lesend).
+
+**Benutzt von:** `app/records/page.tsx`. Kein MCP-Werkzeug.
+
+**Tests:** `tests/records.db.test.ts` (Regeln: `tests/records.test.ts`);
+`e2e/read/records.spec.ts`.
 
 ### lib/services/today.ts
 

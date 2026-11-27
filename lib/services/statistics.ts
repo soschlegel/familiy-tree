@@ -37,13 +37,22 @@ export type FamilyStatisticsDto = StatisticsResult & {
 
 export type StatisticsOptions = { familyId?: string | null; level?: string | null; now?: Date };
 
-export async function getFamilyStatistics(scope: Scope, opts: StatisticsOptions = {}): Promise<FamilyStatisticsDto> {
-  const level: AreaLevel = opts.level === "region" ? "region" : "country";
-  const families = (await listFamilies(scope)).map(({ id, name }) => ({ id, name }));
-  const familyId = families.some((f) => f.id === opts.familyId) ? opts.familyId! : null;
-
+/**
+ * Familienfilter der Auswertungsseiten (Statistik, Rekorde): wählbare
+ * Familien, die wirksame Auswahl (fremde oder unbekannte Kennung = „Alle“)
+ * und die Personenbedingung für Prisma (sichtbar und ggf. in der Familie).
+ */
+export async function familyFilter(scope: Scope, familyIdRaw: string | null | undefined) {
+  const families: StatisticsFamily[] = (await listFamilies(scope)).map(({ id, name }) => ({ id, name }));
+  const familyId = families.some((f) => f.id === familyIdRaw) ? familyIdRaw! : null;
   const visibility = personVisibilityFilter(scope);
   const where = familyId ? { AND: [visibility, { families: { some: { familyId } } }] } : visibility;
+  return { families, familyId, where };
+}
+
+export async function getFamilyStatistics(scope: Scope, opts: StatisticsOptions = {}): Promise<FamilyStatisticsDto> {
+  const level: AreaLevel = opts.level === "region" ? "region" : "country";
+  const { families, familyId, where } = await familyFilter(scope, opts.familyId);
 
   const [rows, relRows] = await Promise.all([
     prisma.person.findMany({

@@ -24,7 +24,7 @@ Abschnitt 1). Seiten und API-Routen selbst stehen in
 - [Personen, Ereignisse, Quellen und Medien](#personen-ereignisse-quellen-und-medien)
   — `PersonForm`, `DateInput`, `EventSection`, `CitationSection`,
   `CitationLink`, `NameVariants`, `PersonFamilies`, `RelationshipEditor`,
-  `PersonChanges`, `PersonRoots`, `DonutChart` (mit `DonutLegend`), `StatisticsCharts`, `TodayList`, `PersonOrigin`, `PersonPicker`, `AttachedMedia`, `MediaGallery`,
+  `PersonChanges`, `PersonRoots`, `DonutChart` (mit `DonutLegend`), `StatisticsCharts`, `RecordCards`, `TodayList`, `PersonOrigin`, `PersonPicker`, `AttachedMedia`, `MediaGallery`,
   `DeletePersonButton`, `SelfPersonButton`, `SourceForm`, `DeleteSourceButton`
 - [Rahmen und Helfer](#rahmen-und-helfer) — `NavBar`, `PageLoading`,
   `AutoSubmit`, `api-client`, `useDismiss`, `ai-access-labels`,
@@ -991,7 +991,8 @@ Durchschnittstabelle, Kennzahl, Hinweis für leere Auswertungen. Reines
 HTML/CSS ohne Diagramm-Bibliothek und ohne Skript; die Balkenbreite steht
 im `style`-Attribut (CSP: `style-src 'unsafe-inline'`).
 
-**Wo eingesetzt:** `app/statistics/page.tsx`.
+**Wo eingesetzt:** `app/statistics/page.tsx`; `StatsCard`, `EmptyHint` und
+`formatCount` auch auf `app/records/page.tsx` bzw. in `RecordCards`.
 
 **Props/Daten:** `StatsCard` (`id`, `title`, `basis` = Grundlage als Text,
 `testId`, optional `actions` rechts neben der Überschrift), `BarList`
@@ -1013,6 +1014,37 @@ Durchschnitt `null` erscheint als „zu wenige“. Helles und dunkles Schema
 Server-Komponente.
 
 **Tests:** `e2e/read/statistics.spec.ts` (Desktop, 390 px hell/dunkel, axe).
+
+### components/RecordCards.tsx
+
+**Zweck:** Bausteine der Seite „Rekorde“ (`app/records/page.tsx`):
+`RecordPlaces` (Bestwert groß mit den Einträgen darunter, dann die Plätze
+2–5 als nummerierte Liste) und `NamesByCentury` (Tabelle häufigster Vorname
+je Jahrhundert, Spalten Mädchen/Jungen). Reines HTML/CSS ohne Hooks und
+ohne Skript (CSP); die Karte selbst ist `StatsCard`.
+
+**Wo eingesetzt:** `app/records/page.tsx`.
+
+**Props/Daten:** `RecordPlaces` — `places` (`RecordPlace[]` aus
+`lib/records.ts`), `empty` (Text ohne Treffer, erscheint als `EmptyHint`);
+`NamesByCentury` — `rows` (`NameRow[]`).
+
+**Verhalten:** Jeder Eintrag ist ein Satz aus Teilen (Vorwort wie „bei der
+Geburt von“, „von … bis …“, „Kinder von“) mit Personen als Links zur
+Personenseite (`records-person`), Lebensjahre klein dahinter; mehrere
+Personen mit „und“. Zusätze: Einzelwerte (`detail`, etwa beide Heiratsalter)
+und Plakette (`note`, „besteht noch“). Gleichstand: alle Einträge eines
+Platzes untereinander, darüber hinaus „und N weitere Einträge mit demselben
+Wert“. Unter md vergrößert ein Innenabstand die Tippfläche der Namen auf
+44 px, ohne die Zeilenhöhe zu ändern (wie `TodayList`); lange Namen brechen
+um (`overflow-wrap:anywhere`). Vornamenzelle ohne genug Träger: „zu wenige“.
+Helles und dunkles Schema über Tailwind-Klassen.
+
+**Server oder Client:** beides (keine Hooks); eingesetzt als
+Server-Komponente.
+
+**Tests:** `e2e/read/records.spec.ts` (Links, Desktop, 390 px hell/dunkel,
+Tippflächen, axe).
 
 ### components/TodayList.tsx
 

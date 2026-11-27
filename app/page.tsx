@@ -17,6 +17,7 @@ const ENTRIES = [
   { href: "/map", title: "Karte", text: "Wo die Familie in einem Jahr lebte", testId: "start-map" },
   { href: "/people", title: "Personen", text: "Alle Personen mit Suche nach Namen und Orten", testId: "start-people" },
   { href: "/statistics", title: "Statistik", text: "Namen, Orte, Lebensalter und Kinderzahl in Zahlen", testId: "start-statistics" },
+  { href: "/records", title: "Rekorde", text: "Die Ältesten, die längste Ehe, die meisten Nachkommen — mit Namen", testId: "start-records" },
 ] as const;
 
 /** Adresse eines Tages: der wirkliche heutige Tag ohne Parameter. */

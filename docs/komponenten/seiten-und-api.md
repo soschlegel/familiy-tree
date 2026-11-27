@@ -98,6 +98,7 @@ Alle Seiten außer `/login`, `/login/email` und der Weiterleitung `/` sind
 | `/research/duplicates` | Alle möglichen Dubletten | angemeldet |
 | `/research/connect` | Importe verbinden | nur Admin (sonst 404) |
 | `/statistics` | Statistik: Diagramme über den sichtbaren Teil des Stammbaums | angemeldet |
+| `/records` | Rekorde: Bestwerte des sichtbaren Stammbaums mit Namen | angemeldet |
 | `/kinship` | „Wie sind wir verwandt?“: Verwandtschaft zweier Personen in Worten und als Zeichnung | angemeldet; gewählte Personen müssen sichtbar sein |
 | `/sources` | Quellenliste | angemeldet |
 | `/sources/new` | Quelle anlegen | Bearbeiter in ≥ 1 Familie, sonst → `/sources` |
@@ -250,8 +251,8 @@ bewusst nicht (die Kopfzeile ist voll; das Logo genügt).
   `components/TodayList.tsx`, höchstens zehn, der Rest hinter „Weitere …
   anzeigen“); leer: freundlicher Hinweis und der nächste Jahrestag mit
   „Diesen Tag ansehen“. Karte **Demnächst** (30 Tage) mit „Geburtstage“ und
-  „Runde Jahrestage“. Daneben (Telefon: darunter) **Einstieg** mit vier
-  Kacheln: Stammbaum, Karte, Personen, Statistik.
+  „Runde Jahrestage“. Daneben (Telefon: darunter) **Einstieg** mit fünf
+  Kacheln: Stammbaum, Karte, Personen, Statistik, Rekorde.
 - **Daten:** `getToday` (`lib/services/today.ts`), Regeln in `lib/today.ts`.
 - **Tests:** `e2e/read/today.spec.ts`; `tests/today.test.ts`,
   `tests/today.db.test.ts`.
@@ -491,7 +492,8 @@ Die Personenseite.
   Adresse ist damit teilbar; der Empfänger sieht dieselbe Auswahl mit
   seinen eigenen Rechten.
 - **Daten:** `getFamilyStatistics` (`lib/services/statistics.ts`).
-- **Anzeige:** Kopf mit Kontexthilfe (`HelpLink` → `/hilfe/statistik`);
+- **Anzeige:** Kopf mit Kontexthilfe (`HelpLink` → `/hilfe/statistik`) und
+  Verweis „Mit Namen: Rekorde“ (`stats-to-records`, nimmt die Familie mit);
   Filter „Familie“ (`AutoSubmitSelect`, GET-Formular mit Knopf „Anzeigen“,
   `level` als verstecktes Feld) nur bei mehr als einer Familie; Kennzahlen
   (Personen mit lebend/verstorben, Partnerschaften mit
@@ -514,6 +516,31 @@ Die Personenseite.
 - **Darstellung:** ohne Skript außer dem Familienfilter, ohne
   Diagramm-Bibliothek (Ring `DonutChart`, Balken und Tabellen aus
   `components/StatisticsCharts.tsx`); bei 390 px ohne waagerechtes Scrollen.
+
+### `/records` — `app/records/page.tsx`
+
+- **Rechte:** angemeldet, kein Admin-Recht nötig. Genannt werden nur
+  sichtbare Personen (auch lebende), Beziehungen nur zwischen ihnen.
+- **Einbindung:** kein Menüpunkt (die Hauptnavigation ist voll); erreichbar
+  über „Mit Namen: Rekorde“ auf `/statistics` und die Kachel „Rekorde“ auf
+  der Startseite (`start-records`); zurück über „Zahlen und Diagramme:
+  Statistik“ (`records-to-statistics`). Beide Verweise nehmen die Familie mit.
+- **Parameter:** `family` wie `/statistics` (fremde oder unbekannte = „Alle“).
+- **Daten:** `getFamilyRecords` (`lib/services/records.ts`), Regeln in
+  `lib/records.ts`.
+- **Anzeige:** Kopf mit Kontexthilfe (`HelpLink` → `/hilfe/statistik#rekorde`);
+  Filter „Familie“ wie die Statistik (`records-filter`, `#records-family`)
+  nur bei mehr als einer Familie; je Rekord eine Karte (`StatsCard`,
+  `records-<schlüssel>`) mit Überschrift, einem Satz zur Zählweise samt
+  Grenzen aus `lib/records.ts` und „Grundlage: …“; darin `RecordPlaces`
+  (`components/RecordCards.tsx`). Zuletzt „Häufigster Vorname je
+  Jahrhundert“ (`NamesByCentury`). Ohne sichtbare Personen nur „Noch keine
+  Rekorde.“ (`records-nothing`).
+- **Bewusst ohne `loading.tsx`** (wie `/statistics`: ein Wechsel nur der
+  Suchparameter bliebe hängen).
+- **Darstellung:** ohne Skript außer dem Familienfilter; zwei Spalten ab
+  `lg`, bei 390 px eine Spalte ohne waagerechtes Scrollen; Namen mit 44 px
+  Tippfläche auf dem Telefon.
 
 ### `/kinship` — `app/kinship/page.tsx`
 
@@ -1113,6 +1140,7 @@ Dienste (`tests/*.db.test.ts`) und das Zusammenspiel im Browser
 | Lebensweg | `e2e/read/lifepath.spec.ts`; Unit: `tests/life-path.test.ts`, `tests/life-path.db.test.ts` |
 | Personen | `e2e/read/people-list.spec.ts`, `person-families.spec.ts`, `dates.spec.ts`; `e2e/write/person-lifecycle.spec.ts`, `genealogy.spec.ts`, `dates.spec.ts` |
 | Statistik | `e2e/read/statistics.spec.ts`; Unit: `tests/statistics.test.ts`, `tests/statistics.db.test.ts` |
+| Rekorde | `e2e/read/records.spec.ts`; Unit: `tests/records.test.ts`, `tests/records.db.test.ts` |
 | Startseite | `e2e/read/today.spec.ts`; Unit: `tests/today.test.ts`, `tests/today.db.test.ts` |
 | Wie sind wir verwandt? | `e2e/read/kinship.spec.ts`; Unit: `tests/kinship-chain.test.ts`, `tests/kinship-view.db.test.ts` |
 | Recherche, Dubletten, Zusammenführen | `e2e/read/research.spec.ts`, `quality.spec.ts`, `duplicate-banner.spec.ts`; `e2e/write/merge.spec.ts`, `duplicate-banner.spec.ts`, `connect.spec.ts` |

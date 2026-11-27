@@ -105,7 +105,16 @@ export default async function StatisticsPage({ searchParams }: { searchParams: P
           Zahlen und Diagramme über deinen Stammbaum — nur über die Personen, die für dich freigegeben sind.
           Einzelne Personen nennt diese Seite nicht.
         </p>
-        <HelpLink to="statistik" className="mt-1" />
+        <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
+          <HelpLink to="statistik" />
+          <Link
+            href={stats.familyId ? `/records?family=${encodeURIComponent(stats.familyId)}` : "/records"}
+            className="btn-link inline-flex min-h-11 items-center text-sm"
+            data-testid="stats-to-records"
+          >
+            Mit Namen: Rekorde <span aria-hidden className="ml-1">→</span>
+          </Link>
+        </div>
       </div>
 
       {stats.families.length > 1 && (

@@ -697,6 +697,13 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   http(s)-Adressen, Rückfall auf die Umgebungsvariable.
 - **`source-classify.test.ts`** — Einordnung importierter Quellen und Anzeige
   älterer Importe.
+- **`records.test.ts`** — Seite „Rekorde“ (`lib/records.ts`): Datumsregeln
+  (vollendete Jahre, „etwa“, zu weite Spannen), lebend/verstorben,
+  Rangfolge mit Gleichstand und Obergrenze, Datenfehler (Alter über 110,
+  Eltern- und Heiratsalter, Zukunft), Partnerschaftsdauer (Tod, Scheidung,
+  besteht noch, Offenes), Kinder/Paare, Nachkommen und Linie nur über
+  sichtbare Personen, Kreise, Vornamen je Jahrhundert, nicht sichtbare
+  Personen, Familienfilter, Leistung bei 12 000 Personen.
 - **`statistics.test.ts`** — Seite „Statistik“: Datumsregeln (Jahr und
   Alter bei ungenauen Daten), Namensregeln (Geburtsname vor Ehename, erster
   Vorname, Platzhalter), Kennzahlen, Sichtbarkeit (gesperrte Personen und
@@ -803,6 +810,11 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   Administratoren, Protokoll vorher → nachher samt Anzeige in der
   Änderungsübersicht; Routen `/api/settings…` (Fehlercodes, 403 für
   Nicht-Admins und fremde Herkunft).
+- **`records.db.test.ts`** — Rekorde je Rolle: Personenzahl wie die
+  Statistik, eingeschränkte Benutzer sehen weniger, genannt werden nur
+  sichtbare Personen (auch als Kind, Partner, Linienende), Familienfilter
+  (Admin mit Familie A = Betrachter; fremde Familie = „Alle“), Benutzer ohne
+  Familie (nur lesend).
 - **`statistics.db.test.ts`** — Statistik je Rolle (Zahlen wie
   `getStatistics`, eingeschränkte Benutzer sehen weniger), keine Kennungen
   und keine Namen aus gesperrten Familien, Familienfilter (fremde Familie =
@@ -920,6 +932,12 @@ Benutzer bekommt keinen gespeicherten Zustand.
   390 px ohne Querscrollen, axe.
 - **`sources-list.spec.ts`** — Quellenliste: eine Seite jenseits des Endes
   zeigt die letzte Seite mit Einträgen.
+- **`records.spec.ts`** — Seite „Rekorde“: Einstieg von der Startseite,
+  alle Karten mit Zählsatz und Grundlage, Bestwerte mit verlinkten
+  Personen, Hilfe-Link, Verweise Statistik ↔ Rekorde mit Familie, Filter in
+  der Adresse, Betrachter sieht nur sichtbare Personen (keine fremden
+  Namen, fremde Familie gibt nichts frei), ohne Familie nur Hinweis, 390 px
+  hell/dunkel ohne Querscrollen mit 44-px-Tippflächen, axe.
 - **`statistics.spec.ts`** — Seite „Statistik“: alle Karten mit Grundlage,
   Hilfe-Link, Umschalter Land/Region und Familienfilter in der Adresse,
   Betrachter sieht kleinere Zahlen (fremde Familie in der Adresse gibt

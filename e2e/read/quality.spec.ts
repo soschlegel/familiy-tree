@@ -33,6 +33,7 @@ const PAGES = [
   "/sources/new",
   "/research",
   "/statistics",
+  "/records",
   "/admin/data",
   "/ai-access",
   "/admin/users",

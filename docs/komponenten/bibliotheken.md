@@ -21,7 +21,7 @@ Test-Briefkasten).
 | Protokoll | `audit`, `change-sets`, `change-time` |
 | Daten und Regeln | `dates`, `date-fields`, `events`, `event-labels`, `validation`, `consistency`, `partner-labels`, `source-labels`, `source-classify` |
 | Graph und Verwandtschaft | `graph`, `kinship`, `kinship-chain`, `reference`, `roots` |
-| Auswertungen | `statistics`, `chart-slices`, `today` |
+| Auswertungen | `statistics`, `records`, `chart-slices`, `today` |
 | Baumdarstellung | `tree-layout`, `layout-generations`, `focus-tree`, `ancestor-rings` |
 | Dubletten und Zusammenführen | `name-keys`, `duplicates`, `merge-rules`, `import-linking` |
 | Import/Export | `exchange`, `export-selection`, `import-fingerprint`, `gedcom/*`, `gedcom-import/*` |
@@ -1076,9 +1076,102 @@ Durchschnittszeilen (`AverageRow`).
   sonst `average: null` — die Seite zeigt „zu wenige“ und die Anzahl.
 
 **Benutzt von:** `lib/services/statistics.ts`, `app/statistics/page.tsx`,
-`components/StatisticsCharts.tsx` (Typen).
+`components/StatisticsCharts.tsx` (Typen); `lib/records.ts` (Datums- und
+Namensregeln: `usableYear`, `completedYears`, `presumedDead`, `centuryOf`,
+`firstGivenName`).
 
 **Tests:** `tests/statistics.test.ts`, `tests/statistics.db.test.ts`.
+
+### lib/records.ts
+**Zweck:** Rechnung der Seite **„Rekorde“** (`/records`): die Bestwerte des
+sichtbaren Stammbaums mit den Personen beim Namen — die Ergänzung zur
+Statistik, die nur Summen zeigt. Rein, wenige Durchgänge über Personen und
+Beziehungen; Laden, Rechte und Familienfilter in `lib/services/records.ts`.
+
+**Wichtige Funktionen/Typen:** `computeRecords` (Eingabe: Personen mit
+Anzeigename, Lebensjahren, Vorname, Geschlecht, ungenauem Geburts-/Sterbedatum,
+Sterbeangabe ohne Datum und `visible`; Beziehungen mit Art, Unterart, Beginn
+und Ende; Stichtag) → `RecordsResult` (je Rekord eine `RecordCard` mit Plätzen
+`RecordPlace` aus Einträgen `RecordEntry`, dazu die Vornamen je Jahrhundert);
+Hilfen `recordYears`, `recordInstant`, `isLiving`, `rankPlaces`; Liste
+`RECORD_KEYS`; Grenzen `TOP_PLACES` (5), `MAX_TIED` (5),
+`RECORD_MAX_SPAN_YEARS` (5), `MIN_PARENT_AGE` (12), `MAX_MOTHER_AGE` (55),
+`MAX_FATHER_AGE` (70), `MIN_MARRIAGE_AGE` (14), `MAX_PARTNERSHIP_YEARS` (90),
+`MAX_PARTNER_AGE_GAP` (60), `MIN_NAME_COUNT` (2), `MAX_TIED_NAMES` (3).
+
+**Rekorde:** höchstes erreichtes Alter (Verstorbene), ältestes lebendes
+Mitglied, jüngstes Mitglied (zuletzt geboren, lebend oder verstorben),
+frühester bekannter Vorfahr (frühestes Geburtsjahr), längste Ehe/Partnerschaft,
+meiste Kinder, meiste Nachkommen, längste Abstammungslinie, größte
+Geschwisterschar, jüngste und älteste Eltern bei der Geburt, größter
+Altersunterschied eines Paares, jüngstes und ältestes Brautpaar; dazu der
+häufigste erste Vorname je Geburtsjahrhundert für Mädchen und Jungen (nur
+Summen). Keine zusätzlichen Rekorde über die Vorgabe hinaus.
+
+**Regeln:**
+- **Wer zählt:** nur Personen mit `visible` (die Funktion filtert selbst);
+  Beziehungen nur zwischen gezählten Personen. Kinder, Nachkommen, Linien
+  und Geschwister laufen über leibliche und Adoptiv-Elternschaften zwischen
+  sichtbaren Personen — ein sichtbarer Enkel hinter einem nicht sichtbaren
+  Kind zählt nicht (er verriete das Kind). Ehen nur, wenn beide Partner
+  sichtbar sind.
+- **Datumsregeln (enger als die Statistik):** Alter und Dauern
+  (`recordYears`) tagesgenau in vollendeten Jahren; ungenau nur, wenn die
+  mögliche Spanne (`yearsBetween`) höchstens fünf Jahre weit ist — dann die
+  vollendeten Jahre zur Mitte und `about` („etwa“). Ein Jahr bzw. ein
+  Zeitpunkt (`recordInstant`) gilt, wenn der mögliche Zeitraum höchstens fünf
+  Jahre weit ist („um 1650“ ja, „vor 1700“ nein). Die Statistik lässt für
+  Durchschnitte zehn Jahre zu; für einen einzelnen Bestwert wäre das zu weit.
+- **Datenfehler (zählen nicht):** negative Werte; Alter über
+  `MAX_LIFESPAN` (110); Eltern bei der Geburt unter 12, Mütter (und Personen
+  ohne Geschlecht „männlich“) über 55, Väter über 70; ein Partner bei Beginn
+  der Partnerschaft unter 14 oder über 110 (dann zählt auch die Dauer
+  nicht); Dauer über 90 Jahre; Altersunterschied über 60 Jahre; Geburten
+  nach dem Stichtag.
+- **Lebend:** keine Sterbeangabe und nicht „vermutlich verstorben“
+  (`presumedDead` aus `lib/statistics.ts`, über 100 Jahre).
+- **Längste Partnerschaft:** Beginn bis zum erfassten Ende; Scheidung ohne
+  Datum → offen; sonst bis zum Tod des zuerst Verstorbenen, wenn er
+  feststeht (der andere lebt oder hat ein Sterbedatum); leben beide, bis
+  heute (Zusatz „besteht noch“). Ist ein Partner verstorben ohne Datum oder
+  vermutlich verstorben, bleibt die Dauer offen. Dasselbe Paar mehrfach
+  erfasst: die früheste Partnerschaft.
+- **Eltern bei der Geburt:** nur leibliche Elternschaften (ein Adoptivkind
+  wird nicht „geboren“); je Elternteil nur sein jüngstes bzw. ältestes Alter.
+- **Meiste Kinder:** verschiedene Kinder je Person (leiblich und adoptiert,
+  keine Stief-/Pflegekinder wie in der Statistik); Personen mit genau
+  derselben Kinderschar (ein Paar) bilden einen Eintrag.
+- **Meiste Nachkommen:** verschiedene Nachkommen über alle Generationen, je
+  Person einmal; Paare mit denselben Kindern ein Eintrag. Berechnet nur für
+  Personen mit höchstens fünf Generationen über sich (jeder Vorfahr hat
+  strikt mehr Nachkommen, tiefer kann niemand unter die ersten fünf kommen).
+- **Längste Linie:** Generationen von einer Person ohne gezählte Eltern bis
+  zum tiefsten Nachkommen (längster Weg, Reihenfolge nach Kahn — Kreise in
+  den Daten fallen heraus, die Rechnung endet immer). Endpunkt: aus der
+  tiefsten Generation eine lebende Person, sonst die zuletzt geborene, sonst
+  nach Name. Stammeltern mit demselben Endpunkt (ein Paar) ein Eintrag.
+- **Geschwisterschar:** Kinder mit genau denselben gezählten Eltern
+  (mindestens zwei Kinder).
+- **Brautpaare:** Ehen (verheiratet, geschieden) mit Heiratsdatum und beiden
+  Geburtsdaten; gereiht nach der Summe beider Alter („39 Jahre zusammen“),
+  je Eintrag beide Alter als `detail` („20 und 19 Jahre“).
+- **Vornamen je Jahrhundert:** Jahr nach `usableYear` der Statistik, erster
+  Vorname (`firstGivenName`), ohne Groß-/Kleinschreibung gezählt; genannt
+  erst ab zwei Trägern, Gleichstand bis zu drei Namen; angezeigt die
+  häufigste Schreibweise (bei Gleichstand die großgeschriebene).
+- **Rangfolge (`rankPlaces`):** Platz = 1 + Zahl der besseren Einträge
+  („1, 1, 3“); Plätze bis fünf, je Platz höchstens fünf Einträge plus
+  Anzahl der übrigen; innerhalb eines Platzes genaue vor ungenauen, dann
+  nach Name.
+
+**Leistung:** Kahn-Reihenfolge für Generationen, Breitensuche nur für
+Kandidaten der Nachkommen; 12 000 erzeugte Personen mit rund 40 000
+Beziehungen in rund 0,4 s (`tests/records.test.ts`).
+
+**Benutzt von:** `lib/services/records.ts`, `app/records/page.tsx` (Grenzen
+für die Zählsätze), `components/RecordCards.tsx` (Typen).
+
+**Tests:** `tests/records.test.ts`, `tests/records.db.test.ts`.
 
 ### lib/today.ts
 **Zweck:** Rechnung der Startseite **„Heute in der Familie“** (`/`):

@@ -149,7 +149,7 @@ export function usableAge(from: FuzzyDate | null | undefined, to: FuzzyDate | nu
 }
 
 /** Vollendete Lebensjahre nach dem Kalender (Geburtstag zählt mit). */
-function completedYears(from: Date, to: Date): number {
+export function completedYears(from: Date, to: Date): number {
   let years = to.getUTCFullYear() - from.getUTCFullYear();
   const before =
     to.getUTCMonth() < from.getUTCMonth() ||
@@ -158,8 +158,8 @@ function completedYears(from: Date, to: Date): number {
   return years;
 }
 
-/** Ohne Sterbeangabe, aber sicher älter als PRESUMED_LIFESPAN (wie getStatistics). */
-function presumedDead(birth: FuzzyDate | null, now: Date): boolean {
+/** Ohne Sterbeangabe, aber sicher älter als PRESUMED_LIFESPAN (wie getStatistics; auch für lib/records.ts). */
+export function presumedDead(birth: FuzzyDate | null, now: Date): boolean {
   if (!birth) return false;
   const latest = dateBounds(birth).end;
   if (!Number.isFinite(latest)) return false;
