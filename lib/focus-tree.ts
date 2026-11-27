@@ -19,8 +19,11 @@ import type { TreeData, TreePerson } from "./tree-layout";
  * preisgeben, was der Gesamtbaum nicht ohnehin zeigt.
  */
 
-/** Ansichten der Baumseite; „focus“ ist die Fokus-Ansicht. */
-export type TreeView = "focus" | "generations" | "timeline";
+/**
+ * Ansichten der Baumseite; „focus“ ist die Fokus-Ansicht, „rings“ die
+ * Vorfahren als Vollkreis (components/AncestorRings.tsx).
+ */
+export type TreeView = "focus" | "generations" | "timeline" | "rings";
 
 /** Cookie mit der zuletzt fokussierten Person — Einstieg beim nächsten Öffnen. */
 export const FOCUS_COOKIE = "tree-focus";

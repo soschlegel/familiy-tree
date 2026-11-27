@@ -20,6 +20,14 @@ import {
 import { LINES_COOKIE, REFERENCE_COOKIE, type ReferenceView } from "@/lib/reference";
 import { FOCUS_COOKIE, FOCUS_DEPTH, parseDepth, type TreeView } from "@/lib/focus-tree";
 import { ORIGIN_PARAM } from "@/lib/origin";
+import {
+  parseRingsColoring,
+  parseRingsGeneration,
+  RINGS_COLORING_PARAM,
+  RINGS_GENERATION_PARAM,
+} from "@/lib/ancestor-rings";
+import { defaultRingsRootId, loadAncestorRings } from "@/lib/services/ancestor-rings";
+import { AncestorRings } from "@/components/AncestorRings";
 import { FamilyTree } from "@/components/FamilyTree";
 import { BrandMark } from "@/components/NavBar";
 import { PageLoading } from "@/components/PageLoading";
@@ -38,9 +46,13 @@ export const metadata = { title: "Baum" };
  *   Person zurück.
  * - `herkunft=1` — Schalter „Herkunft“: Importe je Person als Chips. Nur für
  *   Bearbeiter und Administratoren; die Zuordnung wird nur dann geladen.
+ * - `view=rings` — Vorfahren als Vollkreis (components/AncestorRings.tsx):
+ *   Ausgangsperson wie in der Fokus-Ansicht über `focus`, Tiefe über
+ *   `generationen` (3–7), Färbung über `farbe=wurzeln`. Lädt nur die
+ *   Vorfahren generationsweise, nicht den ganzen Graphen.
  */
 function parseView(view: string | undefined): TreeView {
-  return view === "generations" || view === "timeline" ? view : "focus";
+  return view === "generations" || view === "timeline" || view === "rings" ? view : "focus";
 }
 
 const ID_PATTERN = /^[\w-]{1,64}$/;
@@ -53,6 +65,8 @@ type TreeSearchParams = Promise<{
   down?: string;
   bezug?: string;
   herkunft?: string;
+  generationen?: string;
+  farbe?: string;
 }>;
 
 /**
@@ -100,11 +114,13 @@ async function TreeContent({
   // Ein Graph für Baum und Bezugsperson. Verwandtschaft und Linien nur über
   // sichtbare Personen (lib/services/reference.ts).
   const jar = await cookies();
-  const graph = noAccess ? null : await loadGraph(scope);
+  // Die Ringe laden nur die Vorfahren selbst — ohne den ganzen Graphen.
+  const rings = view === "rings";
+  const graph = noAccess || rings ? null : await loadGraph(scope);
   const choice = await resolveReference(
     scope,
     { param: params.bezug ?? null, cookie: jar.get(REFERENCE_COOKIE)?.value ?? null },
-    (id) => graph?.persons.get(id)?.visible ?? false,
+    graph ? (id) => graph.persons.get(id)?.visible ?? false : undefined,
   );
   const bezugParam = params.bezug && choice.source === "param" ? choice.id : null;
   const initialLines = jar.get(LINES_COOKIE)?.value === "1";
@@ -115,11 +131,32 @@ async function TreeContent({
 
   // Ohne freigegebene Familie gäbe es nur Platzhalter — dann gar nicht erst
   // laden (und auch keine Zahlen über fremde Familien nennen).
-  const familyList = noAccess ? [] : await listFamilies(scope);
+  const familyList = noAccess || rings ? [] : await listFamilies(scope);
   // Nur Familien zur Auswahl anbieten, die der Benutzer auch sehen darf.
   const families = familyList.map(({ id, name }) => ({ id, name }));
 
-  if (!noAccess && view === "focus") {
+  if (!noAccess && rings) {
+    const generations = parseRingsGeneration(params[RINGS_GENERATION_PARAM]);
+    const remembered = jar.get(FOCUS_COOKIE)?.value;
+    // Wie die Fokus-Ansicht: angefragte Person → `bezug` → gemerkte Person →
+    // Bezugsperson → Startperson. Eine angefragte Person muss sichtbar sein.
+    let data = requested ? await loadAncestorRings(scope, requested, generations) : null;
+    if (requested && !data) {
+      content = <NotFound rings />;
+    } else {
+      for (const id of [bezugParam, remembered && ID_PATTERN.test(remembered) ? remembered : null, choice.id]) {
+        if (data) break;
+        if (id) data = await loadAncestorRings(scope, id, generations);
+      }
+      if (!data) {
+        const start = await defaultRingsRootId(scope);
+        data = start ? await loadAncestorRings(scope, start, generations) : null;
+      }
+      if (data) {
+        content = <AncestorRings data={data} initialColoring={parseRingsColoring(params[RINGS_COLORING_PARAM])} />;
+      }
+    }
+  } else if (!noAccess && view === "focus") {
     const remembered = jar.get(FOCUS_COOKIE)?.value;
     const result = await loadFocusTree(scope, {
       graph: graph ?? undefined,
@@ -136,23 +173,7 @@ async function TreeContent({
     });
     counts = result.counts;
     if (result.notFound) {
-      content = (
-        <div className="card mx-auto max-w-2xl space-y-4 px-6 py-10 text-center" role="alert" data-testid="tree-focus-missing">
-          <h2 className="section-title">Person nicht gefunden</h2>
-          <p className="text-sm muted">
-            Diese Person gibt es nicht, oder sie gehört zu einer Familie, für die du keine
-            Freigabe hast. Deshalb lässt sie sich nicht in den Mittelpunkt stellen.
-          </p>
-          <div className="flex flex-wrap justify-center gap-2">
-            <Link href="/tree?view=focus" className="btn-primary">
-              Fokus-Ansicht öffnen
-            </Link>
-            <Link href="/tree?view=generations" className="btn-secondary">
-              Ganzen Baum zeigen
-            </Link>
-          </div>
-        </div>
-      );
+      content = <NotFound />;
     } else if (result.tree) {
       // Nur der Ausschnitt verlässt den Server — berechnet wird trotzdem in
       // einem Durchgang von der Bezugsperson aus.
@@ -214,7 +235,8 @@ async function TreeContent({
       <div className="flex flex-wrap items-end justify-between gap-3 px-1">
         <div>
           <h1 className="font-serif text-2xl font-semibold tracking-tight">Stammbaum</h1>
-          {!noAccess && (
+          {/* Die Ringe zählen nicht den ganzen Bestand — sie nennen unter dem Kreis, wie viele Vorfahren bekannt sind. */}
+          {!noAccess && !rings && (
             <p className="text-sm muted" data-testid="tree-counts">
               {counts.visible} Personen
               {counts.hidden > 0 && ` (${counts.hidden} weitere nicht freigegeben)`}
@@ -259,6 +281,30 @@ async function TreeContent({
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Angefragte Person fehlt oder ist gesperrt — beides sieht gleich aus, damit
+ * sich die Existenz gesperrter Personen nicht abfragen lässt.
+ */
+function NotFound({ rings = false }: { rings?: boolean }) {
+  return (
+    <div className="card mx-auto max-w-2xl space-y-4 px-6 py-10 text-center" role="alert" data-testid="tree-focus-missing">
+      <h2 className="section-title">Person nicht gefunden</h2>
+      <p className="text-sm muted">
+        Diese Person gibt es nicht, oder sie gehört zu einer Familie, für die du keine
+        Freigabe hast. Deshalb lässt sie sich nicht in den Mittelpunkt stellen.
+      </p>
+      <div className="flex flex-wrap justify-center gap-2">
+        <Link href={rings ? "/tree?view=rings" : "/tree?view=focus"} className="btn-primary">
+          {rings ? "Ringe öffnen" : "Fokus-Ansicht öffnen"}
+        </Link>
+        <Link href="/tree?view=generations" className="btn-secondary">
+          Ganzen Baum zeigen
+        </Link>
+      </div>
     </div>
   );
 }

@@ -16,7 +16,7 @@ Abschnitt 1). Seiten und API-Routen selbst stehen in
 
 ## Inhalt
 
-- [Stammbaum und Karte](#stammbaum-und-karte) — `FamilyTree`, `useTreeFullscreen`, `PersonNode`,
+- [Stammbaum und Karte](#stammbaum-und-karte) — `FamilyTree`, `AncestorRings`, `TreeViewSwitch`, `tree-url`, `useTreeFullscreen`, `PersonNode`,
   `OriginChips`, `MarriageNode`, `MarriageEdge`, `ParentEdge`, `ReferenceLines`,
   `ReferenceChip`, `ReferencePanel`, `MapExplorer`, `MapPersonChooser`, `Avatar`,
   `gender-style`
@@ -42,18 +42,19 @@ Abschnitt 1). Seiten und API-Routen selbst stehen in
 
 ### Zusammenspiel der Stammbaum-Ansichten
 
-Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adresse, welche Daten sie lädt, und übergibt sie an **eine** Client-Komponente, `FamilyTree`. Alle drei Ansichten teilen sich Werkzeugleiste, Knoten- und Kantentypen; sie unterscheiden sich nur in Datenmenge und Layout.
+Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adresse, welche Daten sie lädt, und übergibt sie an eine Client-Komponente: `FamilyTree` für Fokus, Generationen und Zeitstrahl, `AncestorRings` für die Ansicht „Ringe“. Die drei React-Flow-Ansichten teilen sich Werkzeugleiste, Knoten- und Kantentypen; sie unterscheiden sich nur in Datenmenge und Layout. Die Ringe sind ein eigenes Inline-SVG mit eigener, schmalerer Werkzeugleiste; Ansichtsumschalter (`TreeViewSwitch`), Adressbau (`components/tree-url.ts`), Vollbild (`useTreeFullscreen`) und die gemerkte Ausgangsperson (Cookie `tree-focus`) sind gemeinsam.
 
 **URL-Parameter und Cookies**
 
-- `view` — `generations` oder `timeline` zeigen den ganzen Baum; jeder andere Wert (oder keiner) die Fokus-Ansicht.
-- `focus` — Fokusperson (Fokus-Ansicht) bzw. Person, auf die der ganze Baum zentriert wird. Geprüft gegen ein ID-Muster.
+- `view` — `generations` oder `timeline` zeigen den ganzen Baum, `rings` die Ringe; jeder andere Wert (oder keiner) die Fokus-Ansicht.
+- `focus` — Fokusperson (Fokus-Ansicht), Person, auf die der ganze Baum zentriert wird, bzw. Mitte der Ringe. Geprüft gegen ein ID-Muster.
+- `generationen` (3–7, Standard 5) und `farbe=wurzeln` (Standard „nach Linie“) — nur Ansicht „Ringe“ (`RINGS_GENERATION_PARAM`, `RINGS_COLORING_PARAM` in `lib/ancestor-rings.ts`); Standardwerte lässt `treeUrl` weg.
 - `up`, `down` — Tiefe der Vorfahren bzw. Nachkommen in der Fokus-Ansicht (1–4, Standard 2, `FOCUS_DEPTH` in `lib/focus-tree.ts`). Standardwerte lässt `treeUrl` (exportiert aus `FamilyTree.tsx`) weg, damit Adressen kurz bleiben.
 - `bezug` — vorübergehende Bezugsperson; `bezug=ich` kehrt zur eigenen Person zurück.
 - `herkunft=1` — Schalter „Herkunft“ (`ORIGIN_PARAM` in `lib/origin.ts`). Nur für Bearbeiter und Administratoren (`canSeeOrigin`); bei anderen wirkt die Adresse nicht. Nur dann lädt der Server die Zuordnung (`loadTreeOrigin`, in der Fokus-Ansicht nur für den Ausschnitt). `treeUrl` trägt den Parameter bei allen Baum-Links mit, solange der Schalter an ist; kein Cookie.
 - `vollbild=1` — Vollbild der Baumfläche (`FULLSCREEN_PARAM` in `components/useTreeFullscreen.ts`). Wertet nur der Browser aus (`useSearchParams`), der Server ignoriert ihn. `treeUrl` trägt ihn wie `herkunft=1` bei allen Baum-Links mit, solange das Vollbild an ist.
 - `denied` — nur für den Hinweis „fehlende Berechtigung“ der Seite.
-- Cookies: `tree-focus` (zuletzt fokussierte Person, `FOCUS_COOKIE`), `tree-lines` (Schalter „Linien“, `LINES_COOKIE`), `tree-bezug` (vorübergehende Bezugsperson, `REFERENCE_COOKIE`). Gesetzt werden sie im Browser von `FamilyTree` bzw. `ReferenceChip`, gelesen vom Server.
+- Cookies: `tree-focus` (zuletzt fokussierte Person bzw. Mitte der Ringe, `FOCUS_COOKIE`), `tree-lines` (Schalter „Linien“, `LINES_COOKIE`), `tree-bezug` (vorübergehende Bezugsperson, `REFERENCE_COOKIE`). Gesetzt werden sie im Browser von `FamilyTree`, `AncestorRings` bzw. `ReferenceChip`, gelesen vom Server.
 
 **Datenfluss**
 
@@ -61,6 +62,7 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 - **Fokus-Ansicht:** `loadFocusTree` liefert nur den Ausschnitt um die Fokusperson (Personen, Beziehungen und je Person Generation, Rolle sowie Anzahl verborgener Eltern/Kinder jenseits des Ausschnitts). Ohne `focus` gilt: angefragte Person → `bezug` → gemerkte Person aus dem Cookie → Bezugsperson; ein nicht vorhandener oder gesperrter `focus` ergibt den Hinweis „Person nicht gefunden“ statt eines Baums.
 - **Generationen/Zeitstrahl:** `loadTree` liefert den ganzen (maskierten) Bestand; gesperrte Personen sind Platzhalter mit `restricted`. Zwischen Generationen und Zeitstrahl wechselt der Browser ohne neues Laden (nur die Adresse wird per `replaceState` nachgeführt); der Wechsel zwischen Fokus und ganzem Baum ist eine Navigation, weil sich die Daten ändern.
 - Zur Bezugsperson berechnet der Server `referenceView` (Verwandtschaftsbegriffe je sichtbarer Person, vier Großeltern, Ahnenlinien je Person) — in der Fokus-Ansicht beschränkt auf die Personen des Ausschnitts.
+- **Ringe:** kein `loadGraph`, kein `referenceView`, keine Familienliste und keine Zählzeile über dem Baum. `loadAncestorRings` (`lib/services/ancestor-rings.ts`) lädt nur die Vorfahren der Mitte, Generation für Generation. Mitte wie in der Fokus-Ansicht: angefragte Person → `bezug` → gemerkte Person → Bezugsperson → `defaultRingsRootId` (jüngste sichtbare Person mit leiblichen Eltern); eine angefragte, aber fehlende oder gesperrte Person ergibt „Person nicht gefunden“ (mit Link „Ringe öffnen“). Die Bezugsperson wird dafür ohne Graph geprüft (`resolveReference` mit Datenbankabfrage je Kandidat).
 
 **Layout (lib/)**
 
@@ -104,7 +106,7 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 ### components/FamilyTree.tsx
 
-**Zweck:** Interaktive Stammbaumfläche für alle drei Ansichten (Fokus, Generationen, Zeitstrahl) samt Werkzeugleiste, Suche, Familienfilter, Legende, Fokus-Verlauf und Jahresachse. Exportiert außerdem `treeUrl` (Adressbau der Baumseite).
+**Zweck:** Interaktive Stammbaumfläche für die drei React-Flow-Ansichten (Fokus, Generationen, Zeitstrahl) samt Werkzeugleiste, Suche, Familienfilter, Legende, Fokus-Verlauf und Jahresachse. Exportiert außerdem `treeUrl` weiter (Adressbau der Baumseite, definiert in `components/tree-url.ts`).
 
 **Wo eingesetzt:** `app/tree/page.tsx` — je einmal für die Fokus-Ansicht und für den ganzen Baum (mit unterschiedlichem `key`, damit beim Wechsel neu aufgebaut wird).
 
@@ -112,7 +114,7 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 **Verhalten:**
 
-- *Ansichtsumschalter* „Fokus / Generationen / Zeitstrahl“ als Knopfgruppe mit `aria-pressed`. In der Fokus-Ansicht zusätzlich Auswahlfelder „Vorfahren“/„Nachkommen“ (Tiefe, ersetzt die Adresse) und ein Link „Ganzer Baum“; im ganzen Baum stattdessen „Alles zeigen“ (passt alles ein).
+- *Ansichtsumschalter* „Fokus / Generationen / Zeitstrahl / Ringe“ (`TreeViewSwitch`) als Knopfgruppe mit `aria-pressed`. „Ringe“ navigiert mit der Fokusperson bzw. der zuletzt gewählten Person zur Ansicht `view=rings` (eigene Daten, eigene Komponente `AncestorRings`). In der Fokus-Ansicht zusätzlich Auswahlfelder „Vorfahren“/„Nachkommen“ (Tiefe, ersetzt die Adresse) und ein Link „Ganzer Baum“; im ganzen Baum stattdessen „Alles zeigen“ (passt alles ein).
 - *Fokus-Navigation:* Klicks auf Fokus-Verweise führt die Komponente selbst aus (Mittel-/Strg-Klick bleibt beim Browser). Der neue Ausschnitt wird so verschoben, dass die angeklickte Karte stehen bleibt; bekannte Karten gleiten an ihre neue Position, neue blenden ein (Übergang abgeschaltet bei `prefers-reduced-motion`). Danach rückt der Blick auf die Kernfamilie (Fokus, Eltern, Kinder), passt bei ausreichender Größe den ganzen Ausschnitt ein und hält sonst eine lesbare Zoomstufe.
 - *Adresse und Gedächtnis:* Die Fokusperson wird im Cookie gemerkt; hat der Server die Person selbst gewählt, wird die Adresse per `replaceState` ergänzt. Ein Fokus-Verlauf (bis zu vier zuletzt besuchte Personen) liegt bewusst nur im Speicher der laufenden Sitzung und erscheint oben als „Im Fokus: … · zuletzt: …“.
 - *Suche:* Kombinationsfeld mit Trefferliste (max. 8). Im ganzen Baum sucht sie lokal (alle Wörter im Namen, gesperrte Personen ausgenommen), dimmt Nicht-Treffer und zentriert auf den gewählten Treffer. In der Fokus-Ansicht fragt sie verzögert den Server und stellt den Treffer in den Mittelpunkt. Pfeiltasten bewegen die Auswahl, Enter wählt, Escape schließt erst die Liste und leert beim zweiten Mal das Feld; Trefferzahl wird über `aria-live` angesagt.
@@ -126,7 +128,7 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 - *Leistung:* Knotenobjekte werden zwischengespeichert, solange sich ihr Zustand nicht ändert; Kanten hängen nur davon ab, *ob* gesucht wird. Im ganzen Baum werden nur sichtbare Elemente gezeichnet, in der Fokus-Ansicht alle (damit Tab alle Karten erreicht).
 - *Tastatur/Fokus:* Karten sind Links; beim Tab-Sprung auf eine Karte setzt die Komponente das Browser-Scrollen der Fläche zurück und zentriert stattdessen die Karte. React-Flow-eigene Knoten-/Kantenfokussierung ist aus.
 - *Vollbild* (Knopf „Vollbild“ rechts oben in der Baumfläche, alle drei Ansichten; Zustand über `useTreeFullscreen`): Die Hülle um Werkzeugleiste und Fläche (`data-testid="tree-shell"`, `data-fullscreen`) wird zur festen Überlagerung über der ganzen Seite (`fixed inset-0`, `100dvh`, Innenabstand `env(safe-area-inset-*)`, Papierfarbe, auch dunkel), die Werkzeugleiste ist ausgeblendet, die Fläche verliert Rand und Mindesthöhe. Alles in der Fläche bleibt: Zoom-Knöpfe, Fokus-Verlauf, Legende (samt Linien- und Herkunfts-Legende, falls eingeschaltet — so bleiben die Farben erklärbar, ohne die Leiste einzublenden), Jahresachse, MiniMap. Beim Umschalten bleibt die Bildmitte stehen (Verschiebung um die halbe Größenänderung, gemessene Größe per `ResizeObserver`). Der Knopf ist ein Umschalter mit `aria-pressed`, beschriftet „Vollbild“ bzw. „Vollbild beenden“, auf dem Telefon ≥ 44 px hoch, ab `md` klein und unaufdringlich; der Fokus-Verlauf lässt rechts Platz dafür, die MiniMap rückt darunter (`!top-12`). Weil es derselbe Knopf an derselben Stelle ist, bleibt der Tastaturfokus beim Umschalten erhalten.
-- *Telefonbreite:* Suche volle Breite, Werkzeugleiste umsortiert (Ansicht zuerst, „Ehen zeigen“ und Tiefe teilen sich eine Zeile), Tiefe-Beschriftungen als ▲/▼, Tippziele ≥ 44 px, Übersichtskarte (MiniMap) erst ab `sm`, aufgeklappte Legende rückt über die Zoom-Knöpfe.
+- *Telefonbreite:* Suche volle Breite, Werkzeugleiste umsortiert (Ansicht zuerst, „Ehen zeigen“ und Tiefe teilen sich eine Zeile; „Ehen zeigen“ sichtbar nur als „Ehen“ — der zugängliche Name bleibt vollständig — und die vier Ansichtsknöpfe mit knappem Innenabstand, damit Ansicht und „Ehen“ bzw. „Alles zeigen“ bei 390 px in eine Zeile passen), Tiefe-Beschriftungen als ▲/▼, Tippziele ≥ 44 px, Übersichtskarte (MiniMap) erst ab `sm`, aufgeklappte Legende rückt über die Zoom-Knöpfe.
 - *Barrierefreiheit:* Werkzeugleiste mit `role="toolbar"`, Menü mit `menuitemradio`/`menuitemcheckbox`, `aria-busy` und Statusanzeige „Lädt …“ während Navigationen, beschriftete Übersichtskarte. Leerer Filter zeigt „Keine Person in dieser Familie.“
 - Dunkles Schema: Hintergrundraster und MiniMap-Farben folgen `prefers-color-scheme`.
 
@@ -136,12 +138,52 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 **Tests:** `e2e/read/tree-focus.spec.ts` (Startperson, Fokus-Klick, Verlauf, Tiefe, Zurück/Vor, Suche, „Ganzer Baum“, gesperrte Personen), `e2e/read/tree-whole.spec.ts` (Ansichtswechsel, Hochzeitsknoten im Zeitstrahl, Suche, Familienfilter, „Ehen zeigen“, Legende), `e2e/read/reference.spec.ts` (Schalter „Linien“, farbige Kanten, Linienlegende), `e2e/read/origin.spec.ts` und `e2e/write/origin.spec.ts` (Schalter „Herkunft“, Rechte, Legende, Hervorheben, mit „Linien“ zugleich, Telefonbreite), `e2e/read/permissions.spec.ts` (keine fremden Namen, Suche), `e2e/read/mobile.spec.ts` und `e2e/read/quality.spec.ts` (Tippziele, Bildschirmhöhe, axe; Vollbild bei 360 px: ein/aus, Escape, Zurück, Karte antippen, `inert`, axe), `e2e/read/tree-whole.spec.ts` auch Vollbild per Adresse im dunklen Schema (MiniMap unter dem Knopf, Beenden ohne Verlaufsschritt), `e2e/read/navigation.spec.ts` (Fußzeile auf der Baumseite). Layout-Logik: `tests/layout.test.ts`, `tests/focus.test.ts`, `tests/focus.db.test.ts`.
 
+### components/AncestorRings.tsx
+
+**Zweck:** Ansicht „Ringe“ der Baumseite: die Vorfahren einer Person als Vollkreis (Ahnenfächer) — Mitte die Ausgangsperson, Ring für Ring die Generationen nach außen. Eigenes Inline-SVG ohne React Flow und ohne neue Abhängigkeit; Plätze, Geometrie und Beschriftungsregeln aus `lib/ancestor-rings.ts`.
+
+**Wo eingesetzt:** `app/tree/page.tsx` bei `view=rings`, anstelle von `FamilyTree`.
+
+**Props/Daten:** `data` (`AncestorRingsDto` aus `lib/services/ancestor-rings.ts`: Mitte, sichtbare Personen der Plätze, belegte Plätze mit Verwandtschaftsstufe und Gebietsschlüssel, Zählungen, Legende nach Land) und `initialColoring` (aus `farbe`).
+
+**Verhalten:**
+
+- *Werkzeugleiste* (`role="toolbar"`, im Vollbild ausgeblendet): Suche (wie in der Fokus-Ansicht über `GET /api/persons?q=…&limit=8`; ein Treffer wird Mitte), `TreeViewSwitch` (andere Ansicht mit derselben Person), Auswahlfeld „Generationen“ 3–7 (ersetzt die Adresse, lädt neu; auf dem Telefon „Gen.“), Umschalter „nach Linie / nach Wurzeln“ (`aria-pressed`; ohne neues Laden, Adresse per `replaceState` nachgeführt) und Kontexthilfe „?“ (`HELP_LINKS.ringe`).
+- *Kreis:* Größe misst ein `ResizeObserver` an der Fläche (kleinste Seite abzüglich der Zusammenfassung, mindestens 240 px); Zoomen und Verschieben gibt es nicht — für mehr Größe ist das Vollbild da. Belegte Plätze sind Flächen mit Füllfarbe; leere Plätze blasse, gestrichelte Lücken (nicht bedienbar); nicht freigegebene Plätze schraffiert grau (SVG-Muster) mit „Nicht freigegeben“ im Bogen.
+- *Beschriftung:* in einer eigenen, für Screenreader verborgenen Ebene über den Flächen (der zugängliche Name nennt alles ausführlich; gekürzte Schrift gehört nicht hinein). Je Ring nach `ringLabelPlan` im Bogen (`textPath`, unten mit umgekehrtem Pfad, also nie kopfüber), entlang des Radius (links um 180° gedreht) oder gar nicht; Name und, wenn Platz ist, Lebensjahre (`fitName`, `fitYears`). Die Schriftgröße richtet sich nach der gezeichneten Größe (mindestens 12–13 px auf dem Bildschirm) — auf dem Telefon tragen deshalb weniger Ringe Text. Mitte: Vor- und Nachname und Lebensjahre in eigenen Zeilen.
+- *Bedienung:* Jede Fläche (und die Mitte) ist ein `g` mit `role="button"`, `tabIndex=0`, `aria-pressed` und `aria-label` „Name, Lebensjahre, Verwandtschaftsstufe“ (gesperrt: „Nicht freigegeben, Großelternteil mütterlicherseits“). Tab-Reihenfolge von innen nach außen, im Uhrzeigersinn. Überfahren und Fokus zeigen Name, Lebensdaten (Geburt, Tod ausführlich), Verwandtschaftsstufe „… von“ plus Name der Mitte und bei „nach Wurzeln“ das Land; Klick, Tippen, Enter oder Leertaste wählen aus und bieten „Zur Person“ (`/people/<id>`) und „In die Mitte“ (navigiert mit derselben Tiefe und Färbung). Per Tastatur springt der Fokus nach der Auswahl auf „Zur Person“, Escape führt zurück zur Fläche. Rahmen für Auswahl (durchgezogen), Tastaturfokus (gestrichelt, nur bei `:focus-visible`) und Zeiger werden obenauf gezeichnet.
+- *Angaben:* ab `md` links neben dem Kreis (`rings-info`, mit Hinweis, solange nichts gewählt ist); auf dem Telefon als Karte unten über der Fläche (`rings-info-mobile`), sobald etwas angetippt ist, mit Knopf „×“ zum Schließen. Darunter bzw. links die Legende: „nach Linie“ die vier Großeltern-Linien (Kurzzeichen VV/VM/MV/MM, Bezeichnung, Name bzw. „nicht erfasst“/„nicht freigegeben“), „nach Wurzeln“ die Länder mit Zahl der Plätze; immer „nicht freigegeben“ und „nicht erfasst“.
+- *Färbung:* Mischung der Farbe mit der Kartenfläche (CSS `color-mix`, Anteil gedämpft über `--rings-strength`): „nach Linie“ Linienfarbe (`--line-ff` …) je Großelternteil, nach außen heller (`lineTint`), Vater und Mutter in der Mischfarbe ihrer Seite; „nach Wurzeln“ die Diagrammfarbe des Landes (`--chart-*`, Grautöne für „Unbekannt“/„Ort nicht zugeordnet“/„Sonstige“). Schrift in `--rings-ink` (hell: fast schwarz, dunkel: fast weiß) — die Flächen bleiben dafür höchstens etwa halb gesättigt. Nichts hängt nur an der Farbe: Legende, Bogentext und zugänglicher Name.
+- *Zusammenfassung* unter dem Kreis (`ringsSummary`): „23 von 62 Vorfahren bis zur 5. Generation bekannt“, ggf. „, davon 2 nicht freigegeben“.
+- *Adresse und Gedächtnis:* Mitte im Cookie `tree-focus` (wie die Fokus-Ansicht); hat der Server die Mitte selbst gewählt, ergänzt `replaceState` die Adresse. Neue Mitte oder Tiefe heben die Auswahl auf.
+- *Vollbild:* wie in `FamilyTree` (`useTreeFullscreen`, Hülle `tree-shell`, Knopf `tree-fullscreen` oben rechts über der Fläche, die Fläche selbst rollt auf dem Telefon senkrecht). „In die Mitte“ bleibt im Vollbild.
+- *Telefonbreite:* keine waagerechte Scrollleiste, Kreis in voller Breite, Bedienelemente ≥ 44 px.
+
+**Server oder Client:** Client.
+
+**Ruft auf:** `GET /api/persons?q=…&limit=8` (Suche); Navigation über den Next-Router.
+
+**Tests:** `e2e/read/rings.spec.ts` (Ansicht wählbar, Namen und Begriffe, gesperrte Plätze ohne Angaben und ohne alles dahinter, Auswahl mit beiden Wegen, Tiefe, Färbung, Tastatur, Quelltext ohne fremde Namen und Kennungen, „Person nicht gefunden“, zurück zur Fokus-Ansicht, 390 px mit Tippflächen und Vollbild, axe). Regeln: `tests/ancestor-rings.test.ts`, Daten und Rechte: `tests/ancestor-rings.db.test.ts`.
+
+### components/TreeViewSwitch.tsx
+
+**Zweck:** Gemeinsame Teile der Werkzeugleiste aller Baumansichten: `TreeViewSwitch` (Knopfgruppe „Fokus / Generationen / Zeitstrahl / Ringe“, `role="group"`, `aria-pressed`, Testkennungen `tree-view-<ansicht>`), `TREE_VIEWS`, `FullscreenIcon` und `FULLSCREEN_BUTTON_CLASS` (Aussehen des Vollbild-Knopfs).
+
+**Wo eingesetzt:** `FamilyTree`, `AncestorRings`.
+
+**Server oder Client:** Client.
+
+### components/tree-url.ts
+
+**Zweck:** `treeUrl` — Adresse der Baumseite; Standardwerte (Tiefe 2/2, Ringe 5 Generationen, Färbung „nach Linie“, ohne Herkunft und Vollbild) bleiben weg, `up`/`down` nur in der Fokus-Ansicht, `generationen`/`farbe` nur bei den Ringen. Dazu `FULLSCREEN_PARAM`. Reines Modul ohne React Flow, damit es beide Ansichten nutzen; `FamilyTree` exportiert `treeUrl` weiter.
+
+**Tests:** `tests/ancestor-rings.test.ts` („Adresse“), indirekt über die Baum-Specs.
 
 ### components/useTreeFullscreen.ts
 
-**Zweck:** Hook für das Vollbild der Baumfläche: Zustand, Ein-/Ausschalten, Escape, Zurück-Taste, Stilllegen der übrigen Seite. Exportiert außerdem `FULLSCREEN_PARAM` (`"vollbild"`).
+**Zweck:** Hook für das Vollbild der Baumfläche: Zustand, Ein-/Ausschalten, Escape, Zurück-Taste, Stilllegen der übrigen Seite. Exportiert außerdem `FULLSCREEN_PARAM` (`"vollbild"`, definiert in `components/tree-url.ts`).
 
-**Wo eingesetzt:** nur in `FamilyTree`.
+**Wo eingesetzt:** `FamilyTree` und `AncestorRings` (gleiche Überlagerung, gleicher Knopf).
 
 **Verhalten:**
 
@@ -396,10 +438,11 @@ Globale Styles plus wenige gemeinsame Bausteinklassen statt einer Komponentenbib
 - `--line-ff` (Blau, Großvater väterlicherseits), `--line-fm` (Grün), `--line-mf` (Rot), `--line-mm` (Gelb), angelehnt an die farbfehlsichtigen-freundliche Okabe-Ito-Palette; je `--line-*-fg` als Schriftfarbe auf der Linienfarbe. Nie allein verwendet — Kurzzeichen (und auf der Karte Muster) kommen immer hinzu.
 - Karte: `--map-sea`, `--map-land`, `--map-border`, `--map-neutral` (Personen ohne Ahnenlinie), `--map-ring` (gewählter Kreis).
 - Diagramme (`DonutChart`): `--chart-1` … `--chart-8` (unterscheidbare Kategorienfarben, die ersten drei wie die Ahnenlinien, hell mit mindestens 3:1 Kontrast zur Kartenfläche) und Grautöne `--chart-other` („Sonstige“), `--chart-unassigned`, `--chart-unknown`, `--chart-restricted`; im dunklen Schema hellere Töne. Nie allein — Legende mit Bezeichnung und Prozent.
+- Ringe (`AncestorRings`): `--rings-strength` (Dämpfung der Flächenfarben, im Dunklen 0,82), `--rings-ink` (Schrift auf den Flächen), `--rings-restricted` und `--rings-hatch` (Schraffur „nicht freigegeben“), `--rings-gap` (leere Plätze); je hell und dunkel.
 
 **Dunkles Schema**
 
-- Ausschließlich über `prefers-color-scheme: dark` (kein Umschalter): dunkle Werte für `--paper`, `--surface`, alle `--line-*` (hellere Töne, dunkle Schrift darauf), `--map-*` und `--chart-*`; Fließtext hell. Die `accent`- und `brass`-Skalen haben keine dunklen Werte; Komponenten wählen im Dunklen über `dark:`-Klassen andere Stufen.
+- Ausschließlich über `prefers-color-scheme: dark` (kein Umschalter): dunkle Werte für `--paper`, `--surface`, alle `--line-*` (hellere Töne, dunkle Schrift darauf), `--map-*`, `--chart-*` und `--rings-*`; Fließtext hell. Die `accent`- und `brass`-Skalen haben keine dunklen Werte; Komponenten wählen im Dunklen über `dark:`-Klassen andere Stufen.
 - `color-scheme: light dark` auf `:root`, damit Browser-Bedienelemente mitziehen.
 
 **Tests:** `e2e/read/mobile.spec.ts` (Tippziele, 16-px-Feld, `dvh`-Mindesthöhe, kein Querscrollen), `e2e/read/quality.spec.ts` (axe auf Desktop- und Telefonbreite). Das dunkle Schema ist nicht gezielt getestet (unklar, ob axe im dunklen Modus läuft).

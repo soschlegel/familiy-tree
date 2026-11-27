@@ -9,6 +9,7 @@ export const HELP_LINKS = {
   wurzeln: "/hilfe/karte#wurzeln-auf-der-personenseite",
   orteZuordnen: "/hilfe/orte-zuordnen",
   linien: "/hilfe/stammbaum#linienfarben",
+  ringe: "/hilfe/stammbaum#ringe",
   bezugsperson: "/hilfe/stammbaum#bezugsperson",
   herkunft: "/hilfe/stammbaum#herkunft",
   herkunftPerson: "/hilfe/personen#herkunft",

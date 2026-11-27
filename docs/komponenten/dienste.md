@@ -116,6 +116,7 @@ beide). Ereignisse, Belege, Namen und Rohdaten folgen ihrem Träger.
 | `places.ts` | Ortstexte → Koordinaten (Ortszuordnung, nur Admin) |
 | `place-areas.ts` | Ortstexte → Land bzw. Region (eine Abfrage, für Auswertungen) |
 | `roots.ts` | „Wurzeln“ einer Person: Anteile der Länder/Regionen ihrer Vorfahren |
+| `ancestor-rings.ts` | Ansicht „Ringe“: Vorfahren einer Person auf festen Plätzen, generationsweise geladen |
 | `statistics.ts` | Seite „Statistik“: sichtbaren Teil des Stammbaums schlank laden und auswerten, Familienfilter |
 | `changes.ts` | Änderungsgeschichte lesen (Personenverlauf, Paketübersicht) |
 | `ai-access.ts` | KI-Recht, persönliche Schlüssel, Prüfung je MCP-Aufruf |
@@ -1592,6 +1593,58 @@ erkennbar — mehr nicht.
 
 **Tests:** `tests/roots.db.test.ts` (Regeln: `tests/roots.test.ts`);
 `e2e/read/roots.spec.ts`.
+
+### lib/services/ancestor-rings.ts
+
+**Zweck:** Daten der Ansicht „Ringe“ der Baumseite: die Vorfahren einer
+Person auf festen Plätzen eines Vollkreises (Platzvergabe, Begriffe:
+`lib/ancestor-rings.ts`; Darstellung: `components/AncestorRings.tsx`).
+
+**Wichtige Funktionen/Typen:** `loadAncestorRings(scope, rootId,
+generations)` → `AncestorRingsDto` oder `null` — Mitte, sichtbare Personen
+der Plätze (Name, Geschlecht, Lebensjahre kurz, Geburt und Tod
+ausführlich), belegte Plätze (Generation, Platz, Art „person“ bzw.
+„restricted“, Verwandtschaftsstufe, Gebietsschlüssel für „nach Wurzeln“),
+Zahl der belegten und der nicht freigegebenen Plätze, Legende nach Land
+(Schlüssel, Bezeichnung, Farbe, Zahl der Plätze). Die Tiefe kommt roh aus
+der Adresse und wird mit `parseRingsGeneration` auf 3…7 begrenzt.
+`defaultRingsRootId(scope)` — Mitte, wenn nichts anderes passt: die
+jüngste sichtbare Person mit leiblichen Eltern (sonst irgendeine sichtbare),
+eine Abfrage; ohne sichtbare Person `null`.
+
+**Regeln:**
+- **Eltern:** nur `PARENT_OF` mit Untertyp `BIOLOGICAL` (wie „Wurzeln“),
+  Reihenfolge nach Anlage — sie entscheidet bei gleichem bzw. unbekanntem
+  Geschlecht über den Platz.
+- **Laden:** Generation für Generation eine Abfrage der Eltern der zuletzt
+  gefundenen sichtbaren Personen samt deren Angaben (höchstens N
+  Abfragen; Ahnenschwund und Zyklen fragen nichts doppelt), dann eine der
+  Taufen (nur für Vorfahren ohne Geburtsort) und eine der Ortszuordnungen
+  (`placeAreasFor`, Stufe Land). Nie eine Abfrage je Vorfahr, nie der ganze
+  Graph.
+- **Seite im Begriff:** „väterlicherseits“/„mütterlicherseits“ nur, wenn der
+  Elternplatz der Mitte nachweislich vom Vater bzw. von der Mutter belegt
+  ist; sonst der Begriff ohne Seite.
+- **Färbung nach Land:** Ort wie bei „Wurzeln“ (Geburtsort, sonst früheste
+  Taufe ohne Zweitangabe). Legende über `groupAreaSlices` mit der Zahl der
+  Plätze als Wert (Ahnenschwund zählt mehrfach); Gebiete jenseits der acht
+  Farben werden „Sonstige“, dazu „Ort nicht zugeordnet“, „Unbekannt“,
+  „Nicht freigegeben“.
+
+**Rechte/Datenschutz:** Mitte nicht sichtbar oder nicht vorhanden → `null`
+(Seite: „Person nicht gefunden“). Ein nicht sichtbarer Vorfahr erscheint
+nur als Platz „restricted“ — ohne Kennung, Name, Daten, Ort; sein
+Geschlecht wird für die Platzvergabe als unbekannt behandelt (und der
+Begriff neutral: „Großelternteil“), seine Eltern werden nicht gesucht.
+`persons` enthält genau die Mitte und die sichtbaren Personen der Plätze.
+
+**Protokoll:** — (nur lesend).
+
+**Benutzt von:** `app/tree/page.tsx` (`view=rings`).
+
+**Tests:** `tests/ancestor-rings.db.test.ts` (Plätze, Begriffe, Rechte,
+Tiefe, Startperson; Regeln: `tests/ancestor-rings.test.ts`);
+`e2e/read/rings.spec.ts`.
 
 ### lib/services/statistics.ts
 

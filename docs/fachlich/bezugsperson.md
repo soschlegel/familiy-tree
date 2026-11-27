@@ -15,7 +15,8 @@ sich im Cookie `tree-bezug`; oben steht dann deutlich „Sicht von: <Name> ·
 zurück zu mir“ (ohne eigene Person: „aufheben“), `?bezug=ich` führt ebenfalls
 zurück. Vorrang: Adresse vor Cookie vor eigener Person.
 
-- **Baum** (alle drei Ansichten) — unter jeder Karte der Verwandtschaftsgrad
+- **Baum** (Fokus, Generationen, Zeitstrahl; die Ringe benennen die
+  Verwandtschaft zur Person in ihrer Mitte) — unter jeder Karte der Verwandtschaftsgrad
   zur Bezugsperson („Urgroßvater väterlicherseits“, „Cousine 1. Grades,
   eine Generation darüber“, „Schwägerin“, „angeheirateter Onkel …“), auch für
   Screenreader. Die Bezugsperson selbst ist gestrichelt umrandet und trägt
