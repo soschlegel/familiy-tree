@@ -53,6 +53,7 @@ import { getPersonOrigin } from "@/lib/services/origin";
 import { getPersonRoots } from "@/lib/services/roots";
 import { lifePathEntry } from "@/lib/services/life-path";
 import { PersonRoots } from "@/components/PersonRoots";
+import { gedcomPersonHref } from "@/lib/export-selection";
 import { PersonBiography } from "@/components/PersonBiography";
 import { getPersonBiography } from "@/lib/services/biography";
 import { getLifetimeHistory } from "@/lib/services/history";
@@ -765,6 +766,13 @@ export default async function PersonPage({
             ))}
           </Group>
         </div>
+        {/* Export „Ab einer Person“ auf /admin/data — dieselben Rechte wie dort
+            (jeder Angemeldete exportiert, was er sieht). */}
+        <p className="text-sm">
+          <Link href={gedcomPersonHref(person.id)} className="btn-link max-md:inline-flex max-md:min-h-11 max-md:items-center" data-testid="person-gedcom-export-link">
+            Vorfahren als GEDCOM exportieren …
+          </Link>
+        </p>
       </section>
 
       {roots && roots.parentCount > 0 && <PersonRoots personId={person.id} initial={roots} />}

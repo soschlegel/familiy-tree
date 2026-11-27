@@ -3,7 +3,7 @@ import { personVisibilityFilter, type Scope } from "../scope";
 import { canViewMedia } from "../media-scope";
 import { exchangePlacesFor } from "./place-export";
 import { EXCHANGE_VERSION, exportDateFields, mediaFileName, type ExchangeFile } from "../exchange";
-import type { ExportSelection } from "../export-selection";
+import type { AnyExportSelection } from "../export-selection";
 import { selectionPersonFilter } from "./export-selection";
 
 /**
@@ -11,13 +11,13 @@ import { selectionPersonFilter } from "./export-selection";
  * Personen. Ohne diese Einschränkung wäre der Export ein Weg, das gesamte
  * Rechtekonzept mit einem Klick zu umgehen.
  *
- * Mit `selection` (Familienauswahl des GEDCOM-Exports) zusätzlich nur die
- * Personen der gewählten Familien; alles Weitere folgt daraus wie gehabt
+ * Mit `selection` (Auswahl des GEDCOM-Exports: Familien oder „Ab einer
+ * Person“) zusätzlich nur die Personen der Auswahl; alles Weitere folgt daraus wie gehabt
  * (Beziehungen nur zwischen exportierten Personen, Ereignisse, Namen, Belege,
  * Rohdaten, Bilder nur an Exportiertem). Quellen dann nur die zitierten —
  * unbelegte Quellen gehören zu keiner Familie.
  */
-export async function buildExport(scope: Scope, selection: ExportSelection | null = null): Promise<{
+export async function buildExport(scope: Scope, selection: AnyExportSelection | null = null): Promise<{
   data: ExchangeFile;
   keyByFileName: Map<string, string>;
 }> {

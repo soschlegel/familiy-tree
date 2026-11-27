@@ -136,7 +136,7 @@ beide). Ereignisse, Belege, Namen und Rohdaten folgen ihrem Träger.
 | `import-linking.ts` | „Importe verbinden“ (Abgleich und Zusammenführen im Hintergrund) |
 | `exchange-export.ts` | Export (JSON/ZIP) des sichtbaren Bestands |
 | `gedcom-export.ts` | GEDCOM-Export (Datei bzw. ZIP mit Bildern) |
-| `export-selection.ts` | Familienauswahl für den GEDCOM-Export |
+| `export-selection.ts` | Auswahl für den GEDCOM-Export (Familien, ab einer Person) |
 | `release-notes.ts` | Neuigkeiten: zuletzt gesehenes Release je Benutzer merken |
 | `settings.ts` | Einstellungen der Installation: wirksamen Wert lesen (App vor Umgebung), pflegen (nur Admin) |
 | `history.ts` | Zeitgeschichte: mitgelieferte Liste plus eigene Ereignisse lesen (alle), Zeile für den Lebenslauf, pflegen, mitgelieferte ausblenden und KI-Einträge bestätigen (nur Admin); Lesen und Pflegen für die KI (MCP) mit Herkunft „von KI“ |
@@ -3192,32 +3192,56 @@ oder ZIP mit Bildern.
 
 ### lib/services/export-selection.ts
 
-**Zweck:** Familienauswahl für den GEDCOM-Export: Anfrage prüfen,
-Personenfilter bilden, Übersicht für den Dialog liefern (Regeln in
-`lib/export-selection.ts`).
+**Zweck:** Auswahl für den GEDCOM-Export — „Nach Familien“ und „Ab einer
+Person“: Anfrage prüfen, Personenmenge bzw. Personenfilter bilden, Übersicht
+und Zahlen für den Dialog liefern (Regeln in `lib/export-selection.ts` und
+`lib/export-lineage.ts`).
 
 **Wichtige Funktionen:**
+- `parseExportRequest(scope, params)` — Einstieg der Export-Route: mit
+  `person=<id>` die Auswahl „Ab einer Person“ (Schalter `partners`,
+  `siblings`, `siblingFamilies`, `descendants`, `allParents`, `generations`),
+  sonst `parseExportSelection`. Person und Familien zugleich: `VALIDATION`.
 - `parseExportSelection(scope, params)` — liest `families=<id>,<id>` und
   `withoutFamily=1`; ohne beide `null` (alles Sichtbare).
+- `loadLineage(scope, personId, schalter)` — lädt schlank die sichtbaren
+  Personen (nur Kennungen) und alle Beziehungen (Art, Unterart, Enden) und
+  ruft `collectLineage` auf.
+- `exportLineageCount(scope, params)` — nur die Zahlen je Gruppe für den
+  Dialog (`GET /api/export/count`).
+- `exportStartPersonCard(scope, id)` — Name und Lebensdaten einer sichtbaren
+  Person für die Vorbelegung (eigene Person bzw. Einstieg von der
+  Personenseite), sonst `null`.
 - `selectionPersonFilter(auswahl)` — Datenbankfilter: Personen der gewählten
-  Familien und/oder ohne Familie.
+  Familien und/oder ohne Familie bzw. die berechneten Kennungen „Ab einer
+  Person“. Derselbe Weg für beide Arten: `buildExport` filtert damit, alles
+  Weitere (Beziehungen, FAM, Belege, Bilder) folgt wie bei der
+  Familienauswahl.
 - `exportFamilyOverview(scope)` — Familien des Benutzers, Personenzahlen je
   Kombination von Familien (für die Zählung im Dialog), Zahl der Personen
   ohne Familie (nur für Administratoren).
 
 **Regeln und Entscheidungen:** Höchstens 1000 Familien je Anfrage; mindestens
-eine Familie oder „ohne Familie“ muss gewählt sein.
+eine Familie oder „ohne Familie“ muss gewählt sein. „Ab einer Person“: Die
+Menge berechnet allein der Server aus Person und Schaltern — Kennungen
+weiterer Personen nimmt die Anfrage nicht an. Alte Kennungen
+zusammengeführter Personen werden aufgelöst (`resolvePersonRedirect`).
+Generationen: ganze Zahl ab 1, sonst `VALIDATION`.
 
 **Rechte/Datenschutz:** „Ohne Familie“ nur für Administratoren. Fremde **und**
 unbekannte Familien lehnen wir für Nicht-Administratoren einheitlich mit
 `FORBIDDEN` ab, ohne zu unterscheiden — sonst ließe sich die Existenz fremder
 Familien abfragen. Administratoren bekommen für unbekannte Kennungen
-`VALIDATION`.
+`VALIDATION`. „Ab einer Person“: Die gewählte Person muss sichtbar sein;
+gesperrt und unbekannt melden gleich `NOT_FOUND`. Gesammelt und gezählt wird
+nur über Sichtbare (ein gesperrter Elternteil beendet die Linie); die
+Zahlen-Antwort enthält keine Kennungen.
 
 **Protokoll:** —
 
-**Benutzt von:** `app/api/export/route.ts`, `app/admin/data/page.tsx`;
-`exchange-export.ts`.
+**Benutzt von:** `app/api/export/route.ts`, `app/api/export/count/route.ts`,
+`app/admin/data/page.tsx`; `exchange-export.ts`.
 
-**Tests:** `tests/gedcom-export-selection.db.test.ts`;
+**Tests:** `tests/gedcom-export-selection.db.test.ts`,
+`tests/gedcom-export-person.db.test.ts`;
 `e2e/read/gedcom-export-dialog.spec.ts`.

@@ -39,7 +39,7 @@ import {
 import type { EventTypeName } from "../events";
 import { buildExport } from "./exchange-export";
 import { gedcomPlaceResolver } from "./place-export";
-import { selectionFileSuffix, type ExportSelection } from "../export-selection";
+import { selectionFileSuffix, type AnyExportSelection } from "../export-selection";
 import { REJECTED_RAW_SUFFIX } from "./import-apply";
 
 /**
@@ -54,7 +54,8 @@ import { REJECTED_RAW_SUFFIX } from "./import-apply";
  * Notizen werden als Text geschrieben (HTML des Originals nur, wenn der Text
  * in der App unverändert ist).
  *
- * Teil-Export (`selection`, Familienauswahl im Dialog auf /admin/data):
+ * Teil-Export (`selection`, Familienauswahl oder „Ab einer Person“ im
+ * Dialog auf /admin/data):
  * dieselbe Grenze, nur enger — Verweise entstehen nur auf mitexportierte
  * Datensätze (FAMC/FAMS aus Beziehungen zwischen exportierten Personen, SOUR
  * nur auf zitierte und damit exportierte Quellen, Rohdaten-Zeiger wie oben
@@ -267,7 +268,7 @@ export type GedcomExportResult = {
 
 export async function buildGedcomExport(
   scope: Scope,
-  options: { mediaPrefix?: string; selection?: ExportSelection | null } = {},
+  options: { mediaPrefix?: string; selection?: AnyExportSelection | null } = {},
 ): Promise<GedcomExportResult> {
   const { data, keyByFileName } = await buildExport(scope, options.selection ?? null);
   const d = data as unknown as {
@@ -809,7 +810,7 @@ export async function buildGedcomExport(
 }
 
 /** ZIP: stammbaum.ged + media/<Datei> (wie der ZIP-Export). */
-export async function buildGedcomZip(scope: Scope, selection: ExportSelection | null = null): Promise<{ buffer: Buffer; fileName: string; missing: number }> {
+export async function buildGedcomZip(scope: Scope, selection: AnyExportSelection | null = null): Promise<{ buffer: Buffer; fileName: string; missing: number }> {
   const g = await buildGedcomExport(scope, { mediaPrefix: "media/", selection });
   const zip = new JSZip();
   zip.file("stammbaum.ged", g.bytes);

@@ -24,7 +24,7 @@ Test-Briefkasten).
 | Auswertungen | `statistics`, `records`, `research-progress`, `chart-slices`, `today` |
 | Baumdarstellung | `tree-layout`, `layout-generations`, `focus-tree`, `ancestor-rings`, `descendant-rings`, `rings-segments`, `rings-print` |
 | Dubletten und Zusammenführen | `name-keys`, `duplicates`, `merge-rules`, `import-linking` |
-| Import/Export | `exchange`, `export-selection`, `import-fingerprint`, `gedcom/*`, `gedcom-import/*` |
+| Import/Export | `exchange`, `export-selection`, `export-lineage`, `import-fingerprint`, `gedcom/*`, `gedcom-import/*` |
 | Medien | `storage`, `media-processing`, `media-scope`, `safe-fetch` |
 | Karte und Orte | `map/*`, `places/*` |
 | Anwender-Hilfe | `help/markdown`, `help/content`, `help/links` |
@@ -1922,23 +1922,76 @@ Freitext an Personen, Beziehungen und Ereignissen bleibt). Neue Felder sind opti
 **Tests:** `tests/genealogy.test.ts`.
 
 ### lib/export-selection.ts
-**Zweck:** Familienauswahl für den GEDCOM-Export — rein, auch im Browser.
+**Zweck:** Auswahl für den GEDCOM-Export — „Nach Familien“ und „Ab einer
+Person“ — rein, auch im Browser.
 
-**Wichtige Funktionen/Typen:** `ExportSelection`, `ExportFamilyOverview`
-(Personenzahlen je Kombination sichtbarer Familien, ohne Personen-IDs und
-ohne fremde Familien; „ohne Familie“ nur für Admins), `countSelection`,
-`selectionQuery`, `selectionFileSuffix` (nur Anzahlen, keine
-Familiennamen).
+**Wichtige Funktionen/Typen:** `ExportSelection` (Familien),
+`PersonExportSelection` (Person, Schalter, vom Server berechnete
+Personenkennungen und Zahlen), `AnyExportSelection`, `isPersonSelection`,
+`ExportFamilyOverview` (Personenzahlen je Kombination sichtbarer Familien,
+ohne Personen-IDs und ohne fremde Familien; „ohne Familie“ nur für Admins),
+`countSelection`, `selectionQuery`, `personSelectionParams` /
+`parseLineageOptions` (Schalter ↔ Suchparameter `person`, `partners`,
+`siblings`, `siblingFamilies`, `descendants`, `allParents`, `generations`),
+`selectionFileSuffix` (nur Anzahlen, keine Familien- oder Personennamen:
+`_auswahl-2-familien`, `_auswahl-ab-person-23-personen`),
+`GEDCOM_PERSON_PARAM` / `gedcomPersonHref` (Einstieg von der Personenseite),
+`ExportPersonCard`.
 
-**Regeln:** Eine Person gehört zum Export, sobald sie in einer gewählten
-Familie ist; die Sichtbarkeitsgrenze gilt zusätzlich — eine Auswahl
-schränkt nur ein.
+**Regeln:** Nach Familien gehört eine Person zum Export, sobald sie in einer
+gewählten Familie ist; ab einer Person gelten die Regeln von
+`lib/export-lineage.ts`. Die Sichtbarkeitsgrenze gilt zusätzlich — eine
+Auswahl schränkt nur ein. „Partner und Kinder der Geschwister“ gilt nur
+zusammen mit „Geschwister“ (beim Erzeugen und beim Lesen der Parameter);
+eine Generationenzahl muss eine ganze Zahl ab 1 sein, über 99 heißt „alle“.
 
 **Benutzt von:** `components/DataTransfer.tsx`,
-`components/GedcomExportDialog.tsx`, Dienste `export-selection`,
-`exchange-export`, `gedcom-export`.
+`components/GedcomExportDialog.tsx`, `app/admin/data/page.tsx`,
+`app/people/[id]/page.tsx`, Dienste `export-selection`, `exchange-export`,
+`gedcom-export`.
 
-**Tests:** `tests/gedcom-export-selection.db.test.ts`.
+**Tests:** `tests/gedcom-export-selection.db.test.ts`,
+`tests/gedcom-export-person.db.test.ts`, `tests/export-lineage.test.ts`.
+
+### lib/export-lineage.ts
+**Zweck:** Personenmenge der Exportauswahl „Ab einer Person“ — rein, ohne
+Datenbank (`collectLineage`).
+
+**Wichtige Funktionen/Typen:** `collectLineage(sichtbar, kanten, start,
+schalter)` → Kennungen und `LineageCounts` (je Gruppe: Person, Vorfahren,
+Nachkommen, Geschwister, Partner, Familien der Geschwister, Summe; jede
+Person zählt einmal, in der ersten passenden Gruppe dieser Reihenfolge),
+`LineageOptions`, `DEFAULT_LINEAGE_OPTIONS` (alles aus = nur Vorfahren),
+`MAX_GENERATIONS`.
+
+**Regeln:**
+- Immer: die Person und ihre Vorfahren — leibliche Eltern, deren Eltern
+  usw., ohne Tiefengrenze außer „Generationen hinauf“ (1 = Eltern).
+- „Auch Adoptiv-, Stief- und Pflegeeltern“ (`allParents`): Eltern-Kind-
+  Verbindungen aller Arten zählen — überall gleich (Vorfahren, Geschwister,
+  Nachkommen, Kinder der Geschwister); sonst nur leibliche.
+- „Partner“: alle Partnerschaften (Ehe, Partnerschaft, geschieden, Ehestand
+  unbekannt) der Person und der Vorfahren, mit „Nachkommen“ auch die der
+  Nachkommen — nicht die der Geschwister.
+- „Geschwister“: alle weiteren Kinder der Vorfahren, also Geschwister und
+  Halbgeschwister der Person und jedes Vorfahren, soweit der gemeinsame
+  Elternteil im Export ist (Geschwister der obersten Vorfahren fehlen bei
+  begrenzten Generationen bzw. unbekannten Eltern — ohne Eltern ließe sich
+  die Geschwisterschaft in GEDCOM nicht darstellen).
+- „Partner und Kinder der Geschwister“ (nur mit „Geschwister“): Partner und
+  Kinder dieser Geschwister — eine Stufe, keine Enkel.
+- „Nachkommen der Person“: Kinder, Enkel usw. ohne Grenze.
+- Gesammelt wird nur über sichtbare Personen; Kanten zu anderen werden
+  verworfen. Ein gesperrter Elternteil beendet die Linie, auch wenn dahinter
+  wieder Sichtbare lägen; die Zahl verrät nichts darüber. Gesperrte oder
+  unbekannte Ausgangsperson: leere Menge. Kreise in fehlerhaften Daten
+  laufen nicht endlos (jede Person wird einmal besucht).
+
+**Benutzt von:** `lib/services/export-selection.ts`
+(`loadLineage`), Typen auch im Dialog.
+
+**Tests:** `tests/export-lineage.test.ts`,
+`tests/gedcom-export-person.db.test.ts`.
 
 ### lib/import-fingerprint.ts
 **Zweck:** Fingerabdruck importierter Werte (`ImportLink.importHash`) — zu

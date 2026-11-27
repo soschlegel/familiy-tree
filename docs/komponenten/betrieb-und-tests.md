@@ -611,6 +611,10 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   Richtung in der Adresse, `arcLabelPlan` gleich `ringLabelPlan`.
 - **`duplicates.test.ts`** — Bewertung und Paarbildung der
   Dublettenerkennung, Vorfahren/Nachkommen-Regel.
+- **`export-lineage.test.ts`** — GEDCOM-Exportauswahl „Ab einer Person“:
+  nur Vorfahren, je Kästchen und kombiniert, Halbgeschwister, Kreise,
+  gesperrte Personen beenden die Linie, Adoptiveltern, Generationen,
+  Parameter und Dateiname.
 - **`focus.test.ts`** — Ausschnitt, Layout und Startperson der
   Fokus-Ansicht, Platzhalter für fremde Familien.
 - **`gedcom-dates.test.ts`** — GEDCOM-Datumsformen (genormt, nachsichtig,
@@ -791,6 +795,11 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
 - **`gedcom-export-selection.db.test.ts`** — GEDCOM-Export mit
   Familienauswahl: nur Gewähltes, keine hängenden Verweise, gültiges
   GEDCOM, Rechte.
+- **`gedcom-export-person.db.test.ts`** — GEDCOM-Export „Ab einer Person“:
+  genau die erwarteten Personen je Kästchen, Beziehungen nur zwischen ihnen,
+  keine hängenden Verweise oder verwaisten Familien, Rundreise, gesperrte
+  Vorfahren beenden die Linie, ZIP nur mit Bildern Exportierter, Rechte
+  (nur lesend).
 - **`gedcom-import.db.test.ts`** — Vorschau, Import, Wiederholungsimporte in
   allen Varianten, zwei Bäume, doppeltes Absenden, Rechte, Vorschläge.
 - **`genealogy.db.test.ts`** — Ereignisse, Namen, Orte, Ehestand unbekannt
