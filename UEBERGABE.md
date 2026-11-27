@@ -171,3 +171,9 @@ Gesammelte Wünsche des Eigentümers — **erst nach seiner Freigabe bauen**
   erscheinen bei späteren Texten als Vorschlag, die automatische Zuordnung
   nutzt sie aber nicht (gleichnamige Weiler wären riskant). Bei Bedarf
   entscheiden.
+- **Ideen vom 27.11.2026** (gesammelt, nicht beauftragt): Zeitreise
+  (Schieberegler für das Jahr auf Karte oder Baum); Nachfahren-Ringe;
+  Seite „Rekorde“ (nennt einzelne Personen — Sichtbarkeitsregeln wie im
+  Baum); Lebenslauf als Text aus den Ereignissen (Regeln, ohne KI);
+  Ahnentafel als PDF im Posterformat; historischer Rahmen im Zeitstrahl
+  (braucht gepflegte Ereignisliste); Forschungs-Fortschritt je Linie.
