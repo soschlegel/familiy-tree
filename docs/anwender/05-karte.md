@@ -1,10 +1,10 @@
 # Karte „Wurzeln nach Jahr“
 
-Wo lebten die Vorfahren in einem bestimmten Jahr? Wie die Karte zählt, was mit ungenauen Daten geschieht und woher die Koordinaten kommen — dazu der „Lebensweg“ einer Person und wie der Ring „Wurzeln“ auf der Personenseite rechnet.
+Wo lebten die Vorfahren in einem bestimmten Jahr? Wie die Karte zählt, was mit ungenauen Daten geschieht und woher die Koordinaten kommen — dazu die Zeitreise mit der Liste „Wer lebte …?“, der „Lebensweg“ einer Person und wie der Ring „Wurzeln“ auf der Personenseite rechnet.
 
 ## Was die Karte zeigt
 
-Unter **Karte** im Menü siehst du eine Europa- bzw. Weltkarte mit einem **Jahresregler**. Für das gewählte Jahr steht jede Person, die damals lebte, an ihrem damaligen Ort. Je Ort gibt es einen Kreis; je mehr Personen, desto größer. Mit **Abspielen** wandert die Karte Jahr für Jahr durch die Zeit.
+Unter **Karte** im Menü siehst du eine Europa- bzw. Weltkarte mit einem **Zeitstrahl**. Für das gewählte Jahr steht jede Person, die damals lebte, an ihrem damaligen Ort. Je Ort gibt es einen Kreis; je mehr Personen, desto größer. Mit **Abspielen** wandert die Karte Jahr für Jahr durch die Zeit — wie du das Jahr wählst und wer daneben aufgelistet wird, steht unter [Zeitreise](05-karte.md#zeitreise-wer-lebte-in-diesem-jahr).
 
 - **Ausgangsperson**: normalerweise deine [Bezugsperson](04-stammbaum.md#bezugsperson). Mit „Andere Person …“ wählst du eine andere — das ändert die Bezugsperson des Baums nicht.
 - **Vorfahren** (Standard) zeigt die Ausgangsperson und ihre Vorfahren, **Alle sichtbaren Personen** alle, die du sehen darfst.
@@ -38,6 +38,39 @@ Weitere Regeln:
 ## Ungenaue Daten
 
 Ungenaue Daten zählen mit ihrem Jahr: „um 1850“, „vor 1850“ und „nach 1850“ als 1850, „zwischen 1850 und 1854“ als 1852 (die Mitte), ein Zeitraum „von 1901 bis 1910“ mit seinem Beginn, also 1901.
+
+## Zeitreise: Wer lebte in diesem Jahr?
+
+Über der Karte steht der **Zeitstrahl**: kleine Balken zeigen, wie viele Personen in jedem Jahr lebten, darunter der Regler vom frühesten bis zum spätesten Jahr deiner Auswahl. So wählst du ein Jahr:
+
+- den Regler ziehen oder antippen,
+- die Knöpfe **−10**, **−1**, **+1** und **+10**,
+- mit der Tastatur auf dem Regler: Pfeiltasten ein Jahr, Bild-auf/Bild-ab zehn Jahre, Pos1/Ende an den Anfang bzw. das Ende,
+- unter **Gehe zu** eine Jahreszahl eintippen und die Eingabetaste drücken.
+
+**Abspielen** läuft Jahr für Jahr weiter; **Pause** hält an, **Weiter** setzt fort, unter **Tempo** wählst du langsam, normal oder schnell. Hast du auf deinem Gerät „Bewegung reduzieren“ eingestellt, läuft nichts von selbst — dann gehst du mit den Knöpfen Schritt für Schritt. Das Jahr steht in der Adresse der Seite: Schickst du den Link weiter, öffnet sich die Karte im selben Jahr.
+
+Neben der Karte (auf dem Telefon darunter) steht die Liste **„Wer lebte 1850?“**: alle Personen deiner Auswahl, die in diesem Jahr lebten, mit Alter und Ort und einem Link zur Personenseite. Oben steht die Zahl („23 Personen lebten 1850“). Unter **Ordnen** wählst du **nach Ort** (Standard, je Ort eine Überschrift), **nach Name** oder **nach Alter** (die Ältesten zuerst). Tippst du einen Kreis auf der Karte oder einen Ort an, zeigt die Liste nur die Personen dort; **Alle Orte zeigen** hebt das wieder auf.
+
+**Das Alter** ist das Alter, das die Person in diesem Jahr erreicht: das Jahr minus das Geburtsjahr. Fehlt die Geburt, zählt das Jahr der Taufe.
+
+| Geburt | im Jahr 1850 steht da |
+|---|---|
+| 12.3.1816 | 34 Jahre |
+| um 1816 | etwa 34 Jahre |
+| nur Taufe 1816 bekannt | etwa 34 Jahre |
+| 1850 | unter 1 Jahr |
+| weder Geburt noch Taufe | Alter unbekannt |
+
+Wer in der Liste steht und an welchem Ort, zählt genau wie die Karte (siehe [Wie wird gezählt?](05-karte.md#wie-wird-gezaehlt)): Die Liste und die Zahl über der Karte stimmen immer überein. Personen ohne Datum stehen nicht darin.
+
+Darüber steht die Zeile **In diesem Jahr**: wie viele Geburten, Hochzeiten und Todesfälle es im gewählten Jahr gab, zum Beispiel „2 Geburten · 1 Hochzeit · 1 Todesfall“. Ein Klick klappt die Namen auf.
+
+- **Geburten**: Geburtsjahr, ersatzweise das Jahr der Taufe (dann steht „(Taufe)“ dabei, bei ungenauer Geburt „(ungenau)“).
+- **Hochzeiten**: Ehen mit Datum — auch später geschiedene. Stehen beide Partner in deiner Auswahl, erscheinen sie zusammen („Anna Muster und Paul Beispiel“).
+- **Todesfälle**: Todesjahr, ersatzweise das Jahr der Beerdigung. Ein nur geschätztes Lebensende zählt nicht.
+
+> **Datenschutz:** Liste, Zahlen und die Zeile „In diesem Jahr“ enthalten nur Personen, die du sehen darfst. Eine Hochzeit erscheint nur, wenn du beide Partner sehen darfst.
 
 ## Lebensweg
 

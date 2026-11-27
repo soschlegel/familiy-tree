@@ -662,7 +662,9 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
 - **`layout.test.ts`** — Generationen- und Zeitstrahl-Layout, auch mit
   Hochzeiten.
 - **`map.test.ts`** — Lebend- und Ortsregel der Karte, Auswertung eines
-  Jahres, Projektion, Laufzeit bei vielen Personen.
+  Jahres, Zeitreise (Spanne des Reglers, Alter, wer lebte, Gruppen und
+  Sortierung, In diesem Jahr, Hochzeiten), Projektion, Laufzeit bei vielen
+  Personen.
 - **`mcp-format.test.ts`** — Formatierungshilfen der MCP-Antworten.
 - **`media-links.test.ts`** — base64-Eingang, Abruf per Adresse mit
   SSRF-Schutz (ohne echtes Netz) und die Belegbild-Regel.
@@ -752,8 +754,9 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   Transaktion.
 - **`import-sources.db.test.ts`** — Einordnung importierter Quellen, Links,
   doppelte Belege, Korrektur beim erneuten Import.
-- **`map.db.test.ts`** — Datenschutz der Kartendaten, Linien, Admin-Rechte
-  und Protokoll der Ortszuordnung.
+- **`map.db.test.ts`** — Datenschutz der Kartendaten (auch Zeitreise:
+  Hochzeiten, „Wer lebte“, „In diesem Jahr“ für einen eingeschränkten
+  Betrachter), Linien, Admin-Rechte und Protokoll der Ortszuordnung.
 - **`mcp-http.db.test.ts`** — MCP-Endpunkt `/api/mcp` über den HTTP-Client
   des SDK (Route direkt aufgerufen, ohne Server) sowie Form der `.mcp.json`.
 - **`mcp.db.test.ts`** — stdio-MCP-Server als Kindprozess: Lesewerkzeuge,
@@ -875,7 +878,9 @@ Benutzer bekommt keinen gespeicherten Zustand.
 - **`export.spec.ts`** — Export-Downloads über die Daten-Seite je Rolle.
 - **`gedcom-export-dialog.spec.ts`** — GEDCOM-Export-Dialog mit
   Familienauswahl, Tastatur, Telefon und Rechten.
-- **`map.spec.ts`** — Karte „Wurzeln nach Jahr“ je Rolle und auf dem Telefon.
+- **`map.spec.ts`** — Karte „Wurzeln nach Jahr“ je Rolle und auf dem Telefon,
+  Zeitreise (Regler per Tastatur und Eingabe, Jahr in der Adresse, Liste,
+  Abspielen/Pause/Weiter, „Bewegung reduzieren“, Tippflächen).
 - **`mcp-http.spec.ts`** — `/api/mcp` nur über HTTP mit den festen
   Testschlüsseln (401/403/200, Werkzeuglisten, Sitzungs-Cookie meldet nicht
   an).

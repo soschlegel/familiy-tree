@@ -16,7 +16,7 @@ Klick auf einen Kreis listet die Personen mit Link zur Personenseite.
   `?jahr=` gibt das Jahr vor; beim Verstellen schreibt die Seite es in die
   Adresse, ohne neu zu laden.
 - **Lebend** im Jahr J: Beginn ≤ J ≤ Ende. Beginn = Geburtsjahr, sonst das
-  früheste datierte Ereignis (Taufe, Heirat …). Ende = Todesjahr, sonst das
+  früheste datierte Ereignis (Taufe — auch ohne Ort —, Heirat …). Ende = Todesjahr, sonst das
   Jahr der Beerdigung/Einäscherung, sonst geschätzt: Beginn + 100 Jahre
   (mindestens das letzte datierte Ereignis, höchstens das laufende Jahr).
   Personen ganz ohne Datum stehen nur in der Zahl „ohne Lebensdaten“.
@@ -32,6 +32,22 @@ Klick auf einen Kreis listet die Personen mit Link zur Personenseite.
   1850“ als 1850, „zwischen 1850 und 1854“ als 1852, ein Zeitraum „von …
   bis …“ mit seinem Beginn. Orte, die nur als Region oder Land bekannt sind,
   stehen in deren Mitte (in der Personenliste vermerkt).
+- **Zeitreise** — Zeitstrahl über die ganze Spanne (frühester Beginn bis
+  spätestes Ende, höchstens das laufende Jahr) mit Balken „Lebende je Jahr“,
+  Schiebefeld (Pfeile ±1, Bild-auf/-ab ±10, Pos1/Ende), Knöpfen ±1/±10,
+  Feld „Gehe zu“ (auf die Spanne begrenzt) und „Abspielen“ mit
+  Pause/Weiter und drei Tempi; bei „Bewegung reduzieren“ kein Abspielen,
+  nur Schritte. Daneben die Liste **„Wer lebte J?“**: genau die Lebenden
+  der Zählzeile, mit Alter, Ort (wie die Karte) und Link; nach Ort
+  gruppiert (Standard), nach Name oder Alter; ein gewählter Kreis bzw. Ort
+  filtert sie. **Alter** = J − Geburtsjahr, ersatzweise Taufjahr; „etwa“
+  bei ungenauer Geburt (jeder Qualifier außer „genau“) oder nur Taufe;
+  ohne beides „Alter unbekannt“. Zeile **„In diesem Jahr“**: Geburten
+  (Geburts- bzw. Taufjahr = J), Hochzeiten (Ehe oder geschiedene Ehe mit
+  Beginn in J, beide Partner sichtbar), Todesfälle (Todes- bzw.
+  Beerdigungsjahr = J; ein geschätztes Ende zählt nicht), je Zahl und
+  aufklappbare Namen. Alles rechnet der Browser aus denselben Daten
+  (`lib/map/year.ts`), kein Abruf je Jahr.
 - **Bedienung** — Ziehen verschiebt (auch mit dem Finger), Mausrad bzw. zwei
   Finger zoomen, Knöpfe „+“/„−“ und die Ausschnitte „Orte“ (alle Orte der
   Auswahl, Standard), „Europa“, „Welt“; auf der fokussierten Karte
@@ -42,7 +58,8 @@ Klick auf einen Kreis listet die Personen mit Link zur Personenseite.
   darf: Vorfahren und Linien auf dem Graphen der sichtbaren Personen
   (`visibleIndex`, wie bei der Bezugsperson), Ereignisse und Heiraten nur
   dieser Personen. Gesperrte erscheinen weder auf der Karte noch in einer
-  Zahl; eine gesperrte `?person=` wird still ignoriert. Dieselben Daten
+  Zahl (auch nicht in „Wer lebte“ und „In diesem Jahr“; eine Hochzeit nur
+  mit beiden Partnern sichtbar); eine gesperrte `?person=` wird still ignoriert. Dieselben Daten
   liefert `GET /api/map?person=&mode=ancestors|all`.
 - **Leistung** — der Server rechnet einmal je Ausgangsperson
   ([lib/services/map.ts](../../lib/services/map.ts),
@@ -51,7 +68,10 @@ Klick auf einen Kreis listet die Personen mit Link zur Personenseite.
   25 ms; mit 12 000 zusätzlichen Personen in der Mock-Datenbank 1,1–1,4 s
   auf dem Server (überwiegend das Laden des Graphen und der Ereignisse),
   1,4 MB Daten; ohne Datenbank 63 ms Aufbau und 0,6 ms je Jahr
-  (`tests/map.test.ts`).
+  (`tests/map.test.ts`). Die Zeitreise ergänzt nur, wo nötig (Geburtsjahr
+  fürs Alter bei ungenauer Geburt oder nur Taufe, Hochzeiten als flache
+  Zahlenliste): im selben Test mit 6 000 Ehen rund 90 KB mehr; Liste und
+  „In diesem Jahr“ unter 1 ms je Jahr.
 
 **Lebensweg** (`/map?mode=lebensweg&person=<id>&art=person|vaterlinie|mutterlinie`,
 eigene Betriebsart der Karte, Einstieg auch von der Personenseite): die Orte

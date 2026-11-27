@@ -95,8 +95,9 @@ export default async function MapPage({
         <p className="eyebrow">Karte</p>
         <h1 className="page-title">Wurzeln nach Jahr</h1>
         <p className="mt-1 max-w-3xl text-sm muted">
-          Wo lebten die Vorfahren in einem bestimmten Jahr? Jede Person steht am zuletzt bekannten Ort; mit dem Regler
-          oder „Abspielen“ wandert die Karte durch die Zeit.
+          Wo lebten die Vorfahren in einem bestimmten Jahr? Jede Person steht am zuletzt bekannten Ort; mit dem
+          Zeitstrahl oder „Abspielen“ reist du durch die Familiengeschichte — daneben steht, wer damals lebte und wie
+          alt er war.
         </p>
       </div>
 
@@ -165,6 +166,15 @@ export default async function MapPage({
           <li>
             <strong>Ungenaue Daten</strong> zählen mit ihrem Jahr: „um 1850“, „vor 1850“ und „nach 1850“ als 1850,
             „zwischen 1850 und 1854“ als 1852, ein Zeitraum mit seinem Beginn.
+          </li>
+          <li>
+            <strong>Alter</strong> ist das Alter, das die Person in diesem Jahr erreicht: Jahr minus Geburtsjahr (fehlt die
+            Geburt, das Jahr der Taufe). „Etwa“ steht davor, wenn die Geburt ungenau ist oder nur die Taufe bekannt ist; ohne
+            beides „Alter unbekannt“.
+          </li>
+          <li>
+            <strong>In diesem Jahr</strong> zählt Geburten (ersatzweise Taufen), Hochzeiten und Todesfälle (ersatzweise
+            Beerdigungen) des Jahres. Eine Hochzeit erscheint nur, wenn du beide Partner sehen darfst.
           </li>
           <li>
             Orte, die nur als Region oder Land bekannt sind, stehen in deren Mitte. Gezählt werden nur Personen, die du sehen

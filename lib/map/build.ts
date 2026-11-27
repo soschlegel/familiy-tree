@@ -24,6 +24,11 @@
  *   (noch nicht zugeordnet oder nicht zuordenbar) zählt als „Ort nicht auf
  *   der Karte“ — er verdrängt einen früheren Ort, weil die Person dann
  *   nicht mehr dort war.
+ * - Zeitreise (Liste „Wer lebte …?“, lib/map/year.ts): Alter im Jahr J =
+ *   J − Geburtsjahr (ersatzweise Taufjahr); „etwa“, wenn die Geburt ungenau
+ *   ist („um“, „vor“, „zwischen“ …) oder nur die Taufe bekannt ist. Ohne
+ *   Geburts- und Taufjahr kein Alter. Hochzeiten (Ehe bzw. geschiedene Ehe
+ *   mit Datum) nur, wenn beide Partner sichtbar sind — wie beim Lebensweg.
  */
 import { PRESUMED_LIFESPAN } from "../consistency";
 import { formatFuzzyYear, type FuzzyDate } from "../dates";
@@ -57,7 +62,18 @@ export type MapPerson = {
   ln?: number;
   /** Stationen: [Jahr, Ortsindex, Jahr, Ortsindex, …]; Ortsindex -1 = Ort ohne Koordinaten */
   st: number[];
+  /** Geburtsjahr für Alter und „Geburten“, nur wenn es von y0 abweicht. */
+  b?: number;
+  /** Alter ungenau (ungenaue Geburt oder nur Taufe bekannt). */
+  ba?: 1;
+  /** Jahr aus der Taufe (keine Geburt bekannt). */
+  bt?: 1;
+  /** Kein Geburts- und kein Taufjahr: kein Alter, keine „Geburt“. */
+  nb?: 1;
 };
+
+/** Hochzeit einer Person der Auswahl: [Jahr, Index, Index des Partners oder -1, …]. */
+export type MapMarriages = number[];
 
 export type MapPayload = {
   places: MapPlace[];
@@ -70,7 +86,12 @@ export type MapPayload = {
   defaultYear: number;
   /** Ortstexte der Auswahl ohne Koordinaten (für den Hinweis an Admins). */
   unmappedTexts: number;
+  /** Hochzeiten der Auswahl (Zeile „In diesem Jahr“), nach Jahr sortiert. */
+  mar: MapMarriages;
 };
+
+/** Hochzeit (Ehe mit Datum); b = Partner, wenn er auch in der Auswahl steht. */
+export type MapMarriageInput = { a: string; b: string | null; date: FuzzyDate };
 
 export type MapPersonInput = {
   id: string;
@@ -80,6 +101,8 @@ export type MapPersonInput = {
   death: FuzzyDate | null;
   deathPlace: string | null;
   lines: LineKey[];
+  /** Früheste Taufe (auch ohne Ort): ersetzt für Beginn und Alter die fehlende Geburt. */
+  baptism?: FuzzyDate | null;
 };
 
 /** Datierte Ortsangabe außer Geburt und Tod (Ereignis, Heirat, Scheidung). */
@@ -91,7 +114,31 @@ export type MapFactInput = {
   burial?: boolean;
 };
 
-export type CoordsLookup = (key: string) => MapPlace | null;
+/** Ehen (wie die Statistik): verheiratet oder geschieden. */
+const MARRIAGE_SUBTYPES = new Set(["MARRIED", "DIVORCED"]);
+
+/**
+ * Hochzeiten für die Zeile „In diesem Jahr“: Ehen (auch geschiedene) mit
+ * Datum, bei denen **beide** Partner sichtbar sind und mindestens einer in
+ * der Auswahl steht — wie beim Lebensweg verrät eine Ehe sonst nichts über
+ * einen gesperrten Partner.
+ */
+export function pickMarriages(
+  relationships: { type: string; subtype: string | null; from: string; to: string; date: FuzzyDate | null }[],
+  visible: (id: string) => boolean,
+  selected: (id: string) => boolean,
+): MapMarriageInput[] {
+  const out: MapMarriageInput[] = [];
+  for (const r of relationships) {
+    if (r.type !== "PARTNER_OF" || !MARRIAGE_SUBTYPES.has(r.subtype ?? "") || !r.date) continue;
+    if (!visible(r.from) || !visible(r.to)) continue;
+    const [a, b] = [r.from, r.to].filter(selected);
+    if (a) out.push({ a, b: b ?? null, date: r.date });
+  }
+  return out;
+}
+
+export type CoordsLookup =(key: string) => MapPlace | null;
 
 /** Repräsentatives Jahr einer (ungenauen) Angabe. */
 export function factYear(f: FuzzyDate): number {
@@ -107,6 +154,7 @@ export function buildMapData(input: {
   facts: MapFactInput[];
   coords: CoordsLookup;
   currentYear: number;
+  marriages?: MapMarriageInput[];
 }): MapPayload {
   const { currentYear } = input;
   const factsOf = new Map<string, MapFactInput[]>();
@@ -135,10 +183,13 @@ export function buildMapData(input: {
   };
 
   const persons: MapPerson[] = [];
+  const indexOfPerson = new Map<string, number>();
   let undated = 0;
   for (const p of input.persons) {
     const facts = factsOf.get(p.id) ?? [];
     const datedYears = facts.filter((f) => f.date).map((f) => factYear(f.date!));
+    const baptismYear = p.baptism ? factYear(p.baptism) : null;
+    if (baptismYear !== null) datedYears.push(baptismYear);
     const birthYear = p.birth ? factYear(p.birth) : null;
     const deathYear = p.death ? factYear(p.death) : null;
 
@@ -182,7 +233,12 @@ export function buildMapData(input: {
       st.push(s.year, idx);
     }
 
+    // Alter: Geburtsjahr, ersatzweise Taufjahr (dann immer „etwa“).
+    const ageBase = birthYear ?? baptismYear;
+    const ageApprox = birthYear !== null ? p.birth!.qualifier !== "EXACT" : baptismYear !== null;
+
     const bits = p.lines.reduce((b, k) => b | LINE_BIT[k], 0);
+    indexOfPerson.set(p.id, persons.length);
     persons.push({
       id: p.id,
       n: p.name,
@@ -192,8 +248,23 @@ export function buildMapData(input: {
       ...(est ? { est: 1 as const } : {}),
       ...(bits ? { ln: bits } : {}),
       st,
+      ...(ageBase !== null && ageBase !== y0 ? { b: ageBase } : {}),
+      ...(ageApprox ? { ba: 1 as const } : {}),
+      ...(birthYear === null && baptismYear !== null ? { bt: 1 as const } : {}),
+      ...(ageBase === null ? { nb: 1 as const } : {}),
     });
   }
+
+  // Hochzeiten: je Ehe ein Eintrag, Personen ohne Lebensdaten fallen weg.
+  const marriages: { year: number; a: number; b: number }[] = [];
+  for (const m of input.marriages ?? []) {
+    const a = indexOfPerson.get(m.a);
+    const b = m.b ? indexOfPerson.get(m.b) : undefined;
+    if (a === undefined && b === undefined) continue;
+    marriages.push({ year: factYear(m.date), a: (a ?? b)!, b: a === undefined ? -1 : (b ?? -1) });
+  }
+  marriages.sort((x, y) => x.year - y.year || x.a - y.a);
+  const mar: MapMarriages = marriages.flatMap((m) => [m.year, m.a, m.b]);
 
   // Jahresbereich und Startjahr (meiste Personen an einem Ort der Karte).
   let yearMin = Infinity;
@@ -230,7 +301,7 @@ export function buildMapData(input: {
     }
   }
 
-  return { places, persons, undated, yearMin, yearMax, defaultYear: best, unmappedTexts: unmapped.size };
+  return { places, persons, undated, yearMin, yearMax, defaultYear: best, unmappedTexts: unmapped.size, mar };
 }
 
 function lifeText(birth: FuzzyDate | null, death: FuzzyDate | null): string {

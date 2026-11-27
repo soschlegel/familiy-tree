@@ -369,11 +369,12 @@ Karte „Wurzeln nach Jahr“ ([karte-und-orte.md](../fachlich/karte-und-orte.md
   anderen Betriebsarten werden dann nicht geladen.
 - **Anzeige:** Ausgangsperson mit Link („ich“ bzw. „Bezugsperson“),
   `MapPersonChooser`, Umschalter Vorfahren/alle/Lebensweg (`ModeSwitch`,
-  auf beiden Ansichten), `MapExplorer` (Karte, Jahresregler; Linien nur mit
+  auf beiden Ansichten), `MapExplorer` (Karte, Zeitstrahl-Regler mit
+  Abspielen, Liste „Wer lebte …?“, Zeile „In diesem Jahr“; Linien nur mit
   Ausgangsperson). Ohne Ausgangsperson im Modus Vorfahren ein Hinweis statt
   Karte. Für Administratoren ein Hinweis auf Ortstexte ohne Koordinaten mit
-  Link nach `/admin/places`. Aufklappbare Zählregeln, Quellenangabe der
-  Geodaten, Rechenzeit.
+  Link nach `/admin/places`. Aufklappbare Zählregeln (auch Alter und „In
+  diesem Jahr“), Quellenangabe der Geodaten, Rechenzeit.
 - **Lebensweg** (`LifePathPage` in derselben Datei): Überschrift
   „Lebensweg“, Person mit „Andere Person …“, Umschalter
   Person/Vaterlinie/Mutterlinie (Links, `aria-current`), `LifePathMap`;
