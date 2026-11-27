@@ -1,6 +1,6 @@
 # Stammbaum
 
-Die vier Ansichten Fokus, Generationen, Zeitstrahl und Ringe, die Bezugsperson („Das bin ich“), der Verwandtschaftsgrad an jeder Karte, die farbigen Großeltern-Linien, die Herkunft aus Importen und das Vollbild fürs Handy.
+Die vier Ansichten Fokus, Generationen, Zeitstrahl und Ringe (Vorfahren oder Nachfahren), die Bezugsperson („Das bin ich“), der Verwandtschaftsgrad an jeder Karte, die farbigen Großeltern-Linien, die Herkunft aus Importen und das Vollbild fürs Handy.
 
 ## Die Ansichten
 
@@ -9,7 +9,7 @@ Oben im Baum wählst du die Ansicht:
 - **Fokus** (Start): eine Person in der Mitte, darüber ihre Vorfahren, darunter ihre Nachkommen, dazu Partner und Geschwister. Mit „Vorfahren“ und „Nachkommen“ stellst du ein, wie viele Generationen (1 bis 4) zu sehen sind. Ein Klick auf eine Karte stellt diese Person in die Mitte — so wanderst du durch die Familie. Die Personenseite öffnet das kleine Symbol in der Kartenecke.
 - **Generationen**: der ganze Baum, Generation für Generation. Hier öffnet ein Klick auf die Karte die Personenseite, das Ecksymbol stellt die Person in die Fokus-Ansicht.
 - **Zeitstrahl**: der ganze Baum an einer Jahresachse — wer früher geboren ist, steht weiter oben; Hochzeiten stehen als eigene Ereignisse an ihrem Jahr.
-- **Ringe**: die Vorfahren einer Person als Kreis, von innen nach außen — mehr dazu unter [Ringe](04-stammbaum.md#ringe).
+- **Ringe**: die Vorfahren oder die Nachfahren einer Person als Kreis, von innen nach außen — mehr dazu unter [Ringe](04-stammbaum.md#ringe).
 
 Karten am Rand zeigen, dass es weitergeht: „▲ Vorfahren“ oder „▼ +3 Kinder“. Ein Klick darauf holt sie in den Ausschnitt.
 
@@ -19,7 +19,7 @@ Von jeder Personenseite führt **Im Stammbaum zeigen** zurück in die Fokus-Ansi
 
 ## Ringe
 
-Die Ansicht **Ringe** zeigt die Vorfahren einer Person als Kreis. In der Mitte steht die Person selbst. Im ersten Ring drumherum stehen Vater und Mutter, jeder auf einer Hälfte des Kreises. Im nächsten Ring folgen die vier Großeltern mit je einem Viertel, dann die acht Urgroßeltern — und so weiter: Jeder Bogen teilt sich für die beiden Eltern dieser Person in zwei gleiche Hälften.
+Die Ansicht **Ringe** zeigt die Vorfahren einer Person als Kreis — oder, mit dem Umschalter **Nachfahren**, ihre Kinder, Enkel und Urenkel (siehe unten). Zuerst zu den Vorfahren: In der Mitte steht die Person selbst. Im ersten Ring drumherum stehen Vater und Mutter, jeder auf einer Hälfte des Kreises. Im nächsten Ring folgen die vier Großeltern mit je einem Viertel, dann die acht Urgroßeltern — und so weiter: Jeder Bogen teilt sich für die beiden Eltern dieser Person in zwei gleiche Hälften.
 
 - **Wer steht wo?** Die Seite des Vaters liegt oben, die der Mutter unten. In jedem Bogen steht im Uhrzeigersinn zuerst der Vater, dann die Mutter. Ist ein Elternteil nicht erfasst, bleibt sein Platz als blasse, gestrichelte Lücke frei — die anderen rücken nicht nach.
 - **Beschriftung:** In den inneren Ringen stehen Name und Lebensjahre im Bogen; wird es eng, wird der Name gekürzt (etwa „Wilhelm S.“). In den äußeren Ringen ist dafür kein Platz mehr, dort siehst du nur die Fläche.
@@ -36,13 +36,25 @@ Mit **nach Linie** und **nach Wurzeln** wählst du die Farben:
 
 Personen aus Familien, für die du keine Freigabe hast, erscheinen als schraffierte graue Fläche **„Nicht freigegeben“** — ohne Namen und Daten. Was dahinter liegt, bleibt leer.
 
+Mit **Vorfahren** und **Nachfahren** neben der Ansichtswahl drehst du den Kreis um: Bei **Nachfahren** steht die Person in der Mitte, im ersten Ring ihre Kinder, dann die Enkel, die Urenkel und so weiter. Die Adresse merkt sich die Richtung — du kannst sie also auch als Link weitergeben.
+
+- **Wer steht wo?** Anders als bei den Vorfahren gibt es keine festen Plätze. Der Kreis wird unter den Kindern aufgeteilt: Wer mehr Nachkommen hat, bekommt einen breiteren Bogen. Jedes Kind gibt seinen Bogen genauso an seine eigenen Kinder weiter. Auch ein Kind ohne Nachkommen bekommt seinen Bogen.
+- Die Kinder stehen im Uhrzeigersinn nach dem Geburtsdatum, die ältesten zuerst. Hat eine Person Kinder mit verschiedenen Partnern, stehen die Kinder je Partnerschaft beieinander, mit einer kleinen Lücke dazwischen.
+- Gezählt werden **leibliche Kinder und Adoptivkinder** (so wie auf der Seite „Statistik“), keine Stief- und Pflegekinder. Bei einem Adoptivkind steht in den Angaben „Adoptivkind von …“.
+- **Antippen bzw. Überfahren** zeigt Name, Lebensdaten und die Verwandtschaft zur Person in der Mitte, etwa „Urenkelin von Paula“, dazu, über wen sie abstammt („Kind von Jonas“) und — soweit du sie sehen darfst — die Partner. Ehepartner haben keine eigene Fläche. **Zur Person** und **In die Mitte** funktionieren wie bei den Vorfahren.
+- **Generationen** stellt die Tiefe ein (3 bis 7, anfangs 4). Unter dem Kreis steht zum Beispiel „47 Nachkommen in 4 Generationen“. Bei sehr vielen Nachkommen zeigt die Ansicht weniger Generationen, damit sie flüssig bleibt — dann steht ein Hinweis darunter.
+- Bei sehr vielen Nachkommen werden die äußeren Bögen schmal und unbeschriftet. Du kannst sie trotzdem antippen, oder du stellst ein Kind **In die Mitte** und siehst seinen Zweig groß.
+- Ist jemand über zwei Linien Nachkomme (etwa wenn Cousin und Cousine geheiratet haben), steht er an beiden Stellen; die Angaben sagen das dazu.
+- **nach Linie** gibt jedem Kind der Person in der Mitte einen eigenen Farbton, nach außen heller; die Legende nennt die Kinder mit der Zahl ihrer Flächen. Bei mehr als acht Kindern wiederholen sich die Farben. **nach Wurzeln** färbt wie bei den Vorfahren nach dem Land des Geburtsorts.
+- Ein Nachkomme aus einer Familie, für die du keine Freigabe hast, erscheint als Fläche **„Nicht freigegeben“** — ohne Namen und Daten. Seine Kinder siehst du hier nicht.
+
 ## Vollbild
 
 Gerade auf dem Handy bleibt unter Kopfzeile und Werkzeugen wenig Platz für den Baum. Der Knopf **Vollbild** oben rechts im Baum zeigt ihn bildschirmfüllend — in allen Ansichten, auch bei den Ringen.
 
 - Im Vollbild kannst du wie gewohnt verschieben und zoomen. Ein Tipp auf eine Karte stellt die Person in die Mitte bzw. öffnet ihre Seite — genau wie sonst.
 - Die **Legende** unten links bleibt da. Hast du vorher **Linien** oder **Herkunft** eingeschaltet, stehen deren Erklärungen ebenfalls darin.
-- Suche, Ansicht, „Ehen zeigen“, „Linien“ und „Herkunft“ (bei den Ringen: „Generationen“ und die Farben) sind im Vollbild ausgeblendet. Stell sie vorher ein, oder beende kurz das Vollbild.
+- Suche, Ansicht, „Ehen zeigen“, „Linien“ und „Herkunft“ (bei den Ringen: „Vorfahren“/„Nachfahren“, „Generationen“ und die Farben) sind im Vollbild ausgeblendet. Stell sie vorher ein, oder beende kurz das Vollbild.
 - **Beenden:** mit dem Knopf **Vollbild beenden** oben rechts, mit der Zurück-Taste bzw. Zurück-Wischgeste des Handys oder am Computer mit der Taste Esc. Du bleibst dabei auf der Baumseite. Hast du im Vollbild andere Personen in die Mitte gestellt, führt die Zurück-Taste erst Schritt für Schritt zu ihnen zurück, bevor das Vollbild endet.
 
 Auf manchen Handys verschwinden im Vollbild zusätzlich die Adress- und die Statusleiste des Browsers; auf dem iPhone bleiben sie stehen.

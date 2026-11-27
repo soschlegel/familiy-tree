@@ -26,6 +26,7 @@
  *   freigegeben“ (ohne Kennung); über ihn hinaus gibt es keine Plätze.
  */
 
+import { DESCENDANT_RINGS_DEFAULT_GENERATION } from "./descendant-rings";
 import { bloodRelationTerm, type Sex, type Side } from "./kinship";
 import type { LineKey } from "./reference";
 
@@ -40,10 +41,28 @@ export const RINGS_COLORING_PARAM = "farbe";
 export type RingsColoring = "linie" | "wurzeln";
 export const RINGS_DEFAULT_COLORING: RingsColoring = "linie";
 
-/** Tiefe aus der Adresse: ganze Zahl 3…7, sonst der Standard 5. */
-export function parseRingsGeneration(value: unknown): number {
+/**
+ * Richtung der Ringe (`?richtung=nachfahren`): Vorfahren (Standard) oder
+ * Nachfahren (lib/descendant-rings.ts).
+ */
+export const RINGS_DIRECTION_PARAM = "richtung";
+export type RingsDirection = "vorfahren" | "nachfahren";
+export const RINGS_DEFAULT_DIRECTION: RingsDirection = "vorfahren";
+
+/** Richtung aus der Adresse: „nachfahren“, sonst „vorfahren“. */
+export function parseRingsDirection(value: unknown): RingsDirection {
+  return value === "nachfahren" ? "nachfahren" : "vorfahren";
+}
+
+/** Standardtiefe je Richtung: Vorfahren 5, Nachfahren 4. */
+export function ringsDefaultGeneration(direction: RingsDirection): number {
+  return direction === "nachfahren" ? DESCENDANT_RINGS_DEFAULT_GENERATION : RINGS_DEFAULT_GENERATION;
+}
+
+/** Tiefe aus der Adresse: ganze Zahl 3…7, sonst der Standard (5 bzw. `fallback`). */
+export function parseRingsGeneration(value: unknown, fallback: number = RINGS_DEFAULT_GENERATION): number {
   const n = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
-  if (!Number.isFinite(n)) return RINGS_DEFAULT_GENERATION;
+  if (!Number.isFinite(n)) return fallback;
   return Math.min(RINGS_MAX_GENERATION, Math.max(RINGS_MIN_GENERATION, Math.round(n)));
 }
 
@@ -202,6 +221,18 @@ export function polar(center: number, r: number, deg: number): { x: number; y: n
 
 /** Ringstück zwischen zwei Radien und zwei Winkeln als SVG-Pfad. */
 export function sectorPath(center: number, inner: number, outer: number, start: number, end: number): string {
+  // Vollkreis (bei den Nachfahren: ein einziges Kind): Ein Bogen mit gleichem
+  // Anfangs- und Endpunkt würde nicht gezeichnet — dann zwei Halbkreise je
+  // Rand; der innere läuft gegenläufig, damit die Mitte frei bleibt.
+  if (end - start >= 360 - 1e-6) {
+    const a = polar(center, outer, start);
+    const b = polar(center, outer, start + 180);
+    const outerRing = `M${a.x} ${a.y}A${outer} ${outer} 0 1 1 ${b.x} ${b.y}A${outer} ${outer} 0 1 1 ${a.x} ${a.y}Z`;
+    if (inner <= 0) return outerRing;
+    const c = polar(center, inner, start);
+    const d = polar(center, inner, start + 180);
+    return `${outerRing}M${c.x} ${c.y}A${inner} ${inner} 0 1 0 ${d.x} ${d.y}A${inner} ${inner} 0 1 0 ${c.x} ${c.y}Z`;
+  }
   const large = end - start > 180 ? 1 : 0;
   const a = polar(center, outer, start);
   const b = polar(center, outer, end);
@@ -273,35 +304,43 @@ export type RingLabelPlan = {
  * eng wird entlang des Radius, sonst gar nicht.
  */
 export function ringLabelPlan(geometry: RingGeometry, pxPerUnit: number): RingLabelPlan[] {
+  return geometry.rings.map((ring) => arcLabelPlan(ring, 1 / 2 ** ring.generation, pxPerUnit));
+}
+
+/**
+ * Beschriftung einer einzelnen Fläche im Ring `ring`, die den Anteil
+ * `fraction` (0…1) des Vollkreises einnimmt — dieselben Regeln wie
+ * `ringLabelPlan` (die Vorfahren haben je Ring gleich breite Plätze, die
+ * Nachfahren verschieden breite Bögen, lib/descendant-rings.ts).
+ */
+export function arcLabelPlan(ring: Ring, fraction: number, pxPerUnit: number): RingLabelPlan {
   const scale = pxPerUnit > 0 ? pxPerUnit : 1;
-  return geometry.rings.map((ring) => {
-    const fontSize = (ring.generation <= 2 ? 13 : 12) / scale;
-    const width = ring.outer - ring.inner;
-    const mid = (ring.inner + ring.outer) / 2;
-    // Bogen an der inneren Textzeile (kürzer als in der Mitte), etwas Rand.
-    const arcLen = ((2 * Math.PI * (mid - fontSize * 0.6)) / 2 ** ring.generation) * 0.86;
-    const charW = fontSize * CHAR_WIDTH;
-    const lineH = fontSize * LINE_HEIGHT;
-    const arc = {
-      chars: Math.min(MAX_CHARS, Math.floor(arcLen / charW)),
-      lines: Math.min(2, Math.floor((width * 0.86) / lineH)),
-    };
-    const radial = {
-      chars: Math.min(MAX_CHARS, Math.floor((width * 0.86) / charW)),
-      lines: Math.min(2, Math.floor((arcLen * 0.9) / lineH)),
-    };
-    const ok = (o: { chars: number; lines: number }) => o.lines >= 1 && o.chars >= MIN_CHARS;
-    let mode: RingLabelMode = "none";
-    let pick = { chars: 0, lines: 0 };
-    if (ok(arc) && (!ok(radial) || arc.chars * arc.lines >= radial.chars * radial.lines)) {
-      mode = "arc";
-      pick = arc;
-    } else if (ok(radial)) {
-      mode = "radial";
-      pick = radial;
-    }
-    return { generation: ring.generation, mode, fontSize, maxChars: pick.chars, lines: pick.lines };
-  });
+  const fontSize = (ring.generation <= 2 ? 13 : 12) / scale;
+  const width = ring.outer - ring.inner;
+  const mid = (ring.inner + ring.outer) / 2;
+  // Bogen an der inneren Textzeile (kürzer als in der Mitte), etwas Rand.
+  const arcLen = 2 * Math.PI * (mid - fontSize * 0.6) * fraction * 0.86;
+  const charW = fontSize * CHAR_WIDTH;
+  const lineH = fontSize * LINE_HEIGHT;
+  const arc = {
+    chars: Math.min(MAX_CHARS, Math.floor(arcLen / charW)),
+    lines: Math.min(2, Math.floor((width * 0.86) / lineH)),
+  };
+  const radial = {
+    chars: Math.min(MAX_CHARS, Math.floor((width * 0.86) / charW)),
+    lines: Math.min(2, Math.floor((arcLen * 0.9) / lineH)),
+  };
+  const ok = (o: { chars: number; lines: number }) => o.lines >= 1 && o.chars >= MIN_CHARS;
+  let mode: RingLabelMode = "none";
+  let pick = { chars: 0, lines: 0 };
+  if (ok(arc) && (!ok(radial) || arc.chars * arc.lines >= radial.chars * radial.lines)) {
+    mode = "arc";
+    pick = arc;
+  } else if (ok(radial)) {
+    mode = "radial";
+    pick = radial;
+  }
+  return { generation: ring.generation, mode, fontSize, maxChars: pick.chars, lines: pick.lines };
 }
 
 /** Text auf höchstens `max` Zeichen kürzen (mit „…“). */

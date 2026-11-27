@@ -247,6 +247,12 @@ export type MockLandmarks = {
    * Cousine ist mit ihm nur über gesperrte Personen verbunden.
    */
   kinshipHidden: { aunt: string; cousin: string };
+  /**
+   * Nachfahren-Ringe: Sohn der Cousine nur in Familie D (für den Bearbeiter
+   * gesperrt), dessen Tochter nur in Familie B (für ihn sichtbar, in den
+   * Ringen aber nicht gezeigt, weil sie nur über den Gesperrten erreichbar ist).
+   */
+  descendantHidden: { parent: string; child: string; grandchild: string };
   /** Lebensereignisse und Namen (Erweiterung für GEDCOM-Daten). */
   genealogy: {
     /** Person mit Taufe, Beruf, Beerdigung (Stammvater A). */
@@ -1522,8 +1528,46 @@ export function generateMockData(seed: number = MOCK_SEED): MockData {
   for (const gp of maternalGrandparents) parentOf(gp, hiddenAunt);
   parentOf(hiddenAunt, hiddenCousin);
 
+  // --- Nachfahren-Ringe: nicht sichtbarer Nachkomme --------------------------
+  // Ebenfalls ganz am Ende und ohne Zufallszahlen. Die Cousine (nur
+  // Familie B, für den Bearbeiter sichtbar) hat einen Sohn nur in Familie D
+  // (für ihn gesperrt) und über ihn eine Enkelin wieder nur in Familie B:
+  // Die Ringe zeigen den Sohn als „nicht freigegeben“ und die Enkelin gar
+  // nicht, obwohl der Bearbeiter sie sehen dürfte.
+  const hiddenChild = add({
+    givenName: "Gerold",
+    familyName: "Brandauer",
+    birthName: null,
+    gender: "MALE",
+    birthDate: utc(motherYear + 55, 3, 21),
+    birthPlace: null,
+    deathDate: null,
+    deathPlace: null,
+    notes: null,
+    familyKeys: ["D"],
+    generation: selfMother.generation + 2,
+    line: new Set(["D"]),
+  });
+  const hiddenGrandchild = add({
+    givenName: "Svenja",
+    familyName: "Brandauer",
+    birthName: null,
+    gender: "FEMALE",
+    birthDate: utc(motherYear + 77, 11, 5),
+    birthPlace: null,
+    deathDate: null,
+    deathPlace: null,
+    notes: null,
+    familyKeys: ["B"],
+    generation: selfMother.generation + 3,
+    line: new Set(["B"]),
+  });
+  parentOf(hiddenCousin, hiddenChild);
+  parentOf(hiddenChild, hiddenGrandchild);
+
   const landmarks: MockLandmarks = {
     kinshipHidden: { aunt: hiddenAunt.id, cousin: hiddenCousin.id },
+    descendantHidden: { parent: hiddenCousin.id, child: hiddenChild.id, grandchild: hiddenGrandchild.id },
     founders,
     crossMarriedIntoA: crossIntoA.wife.id,
     crossMarriedPartnerA: crossIntoA.husband.id,

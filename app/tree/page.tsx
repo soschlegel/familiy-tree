@@ -22,11 +22,15 @@ import { FOCUS_COOKIE, FOCUS_DEPTH, parseDepth, type TreeView } from "@/lib/focu
 import { ORIGIN_PARAM } from "@/lib/origin";
 import {
   parseRingsColoring,
+  parseRingsDirection,
   parseRingsGeneration,
+  ringsDefaultGeneration,
   RINGS_COLORING_PARAM,
+  RINGS_DIRECTION_PARAM,
   RINGS_GENERATION_PARAM,
 } from "@/lib/ancestor-rings";
 import { defaultRingsRootId, loadAncestorRings } from "@/lib/services/ancestor-rings";
+import { defaultDescendantRingsRootId, loadDescendantRings } from "@/lib/services/descendant-rings";
 import { AncestorRings } from "@/components/AncestorRings";
 import { FamilyTree } from "@/components/FamilyTree";
 import { BrandMark } from "@/components/NavBar";
@@ -46,10 +50,11 @@ export const metadata = { title: "Baum" };
  *   Person zurück.
  * - `herkunft=1` — Schalter „Herkunft“: Importe je Person als Chips. Nur für
  *   Bearbeiter und Administratoren; die Zuordnung wird nur dann geladen.
- * - `view=rings` — Vorfahren als Vollkreis (components/AncestorRings.tsx):
- *   Ausgangsperson wie in der Fokus-Ansicht über `focus`, Tiefe über
- *   `generationen` (3–7), Färbung über `farbe=wurzeln`. Lädt nur die
- *   Vorfahren generationsweise, nicht den ganzen Graphen.
+ * - `view=rings` — Vorfahren als Vollkreis (components/AncestorRings.tsx),
+ *   mit `richtung=nachfahren` stattdessen die Nachkommen: Ausgangsperson
+ *   wie in der Fokus-Ansicht über `focus`, Tiefe über `generationen` (3–7,
+ *   Standard 5 bzw. 4), Färbung über `farbe=wurzeln`. Lädt nur Vorfahren
+ *   bzw. Nachkommen generationsweise, nicht den ganzen Graphen.
  */
 function parseView(view: string | undefined): TreeView {
   return view === "generations" || view === "timeline" || view === "rings" ? view : "focus";
@@ -67,6 +72,7 @@ type TreeSearchParams = Promise<{
   herkunft?: string;
   generationen?: string;
   farbe?: string;
+  richtung?: string;
 }>;
 
 /**
@@ -136,21 +142,24 @@ async function TreeContent({
   const families = familyList.map(({ id, name }) => ({ id, name }));
 
   if (!noAccess && rings) {
-    const generations = parseRingsGeneration(params[RINGS_GENERATION_PARAM]);
+    const direction = parseRingsDirection(params[RINGS_DIRECTION_PARAM]);
+    const generations = parseRingsGeneration(params[RINGS_GENERATION_PARAM], ringsDefaultGeneration(direction));
+    const load = (id: string) =>
+      direction === "nachfahren" ? loadDescendantRings(scope, id, generations) : loadAncestorRings(scope, id, generations);
     const remembered = jar.get(FOCUS_COOKIE)?.value;
     // Wie die Fokus-Ansicht: angefragte Person → `bezug` → gemerkte Person →
     // Bezugsperson → Startperson. Eine angefragte Person muss sichtbar sein.
-    let data = requested ? await loadAncestorRings(scope, requested, generations) : null;
+    let data = requested ? await load(requested) : null;
     if (requested && !data) {
-      content = <NotFound rings />;
+      content = <NotFound rings={direction} />;
     } else {
       for (const id of [bezugParam, remembered && ID_PATTERN.test(remembered) ? remembered : null, choice.id]) {
         if (data) break;
-        if (id) data = await loadAncestorRings(scope, id, generations);
+        if (id) data = await load(id);
       }
       if (!data) {
-        const start = await defaultRingsRootId(scope);
-        data = start ? await loadAncestorRings(scope, start, generations) : null;
+        const start = direction === "nachfahren" ? await defaultDescendantRingsRootId(scope) : await defaultRingsRootId(scope);
+        data = start ? await load(start) : null;
       }
       if (data) {
         content = <AncestorRings data={data} initialColoring={parseRingsColoring(params[RINGS_COLORING_PARAM])} />;
@@ -235,7 +244,7 @@ async function TreeContent({
       <div className="flex flex-wrap items-end justify-between gap-3 px-1">
         <div>
           <h1 className="font-serif text-2xl font-semibold tracking-tight">Stammbaum</h1>
-          {/* Die Ringe zählen nicht den ganzen Bestand — sie nennen unter dem Kreis, wie viele Vorfahren bekannt sind. */}
+          {/* Die Ringe zählen nicht den ganzen Bestand — sie nennen unter dem Kreis, wie viele Vorfahren bzw. Nachkommen bekannt sind. */}
           {!noAccess && !rings && (
             <p className="text-sm muted" data-testid="tree-counts">
               {counts.visible} Personen
@@ -289,7 +298,7 @@ async function TreeContent({
  * Angefragte Person fehlt oder ist gesperrt — beides sieht gleich aus, damit
  * sich die Existenz gesperrter Personen nicht abfragen lässt.
  */
-function NotFound({ rings = false }: { rings?: boolean }) {
+function NotFound({ rings }: { rings?: "vorfahren" | "nachfahren" }) {
   return (
     <div className="card mx-auto max-w-2xl space-y-4 px-6 py-10 text-center" role="alert" data-testid="tree-focus-missing">
       <h2 className="section-title">Person nicht gefunden</h2>
@@ -298,7 +307,10 @@ function NotFound({ rings = false }: { rings?: boolean }) {
         Freigabe hast. Deshalb lässt sie sich nicht in den Mittelpunkt stellen.
       </p>
       <div className="flex flex-wrap justify-center gap-2">
-        <Link href={rings ? "/tree?view=rings" : "/tree?view=focus"} className="btn-primary">
+        <Link
+          href={rings === "nachfahren" ? "/tree?view=rings&richtung=nachfahren" : rings ? "/tree?view=rings" : "/tree?view=focus"}
+          className="btn-primary"
+        >
           {rings ? "Ringe öffnen" : "Fokus-Ansicht öffnen"}
         </Link>
         <Link href="/tree?view=generations" className="btn-secondary">
