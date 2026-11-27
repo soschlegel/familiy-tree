@@ -328,6 +328,10 @@ test.describe("Einträge der KI", () => {
 
     // Lebenslauf.
     await page.goto(`/people/${subject.id}`);
+    // Ungeprüfte KI-Einträge zählen als Ergänzung und können unter „weitere
+    // Ereignisse“ eingeklappt sein — dann erst aufklappen.
+    const more = page.getByTestId("biography-history-more");
+    if ((await more.count()) > 0) await more.locator("summary").click();
     const bio = page.getByTestId("biography-history").getByTestId("biography-history-item").filter({ hasText: FLOOD.title });
     await expect(bio).toBeVisible();
     await expect(bio.getByTestId("biography-history-ai")).toHaveCount(count);

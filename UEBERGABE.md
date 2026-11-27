@@ -13,10 +13,12 @@ aktuell halten — Erledigtes streichen, keine Paketgeschichte sammeln.
   Portainer aktualisiert den Stack von dort. **Ein Merge ist ein
   Produktiv-Deployment auf echte Daten.**
 - `optimierung` = Arbeitsbranch, zum Zeitpunkt der Übergabe gleich `main`.
-- Letztes Release: **2026-11-27.3** (Startseite „Heute in der Familie“,
+- Letztes Release: **2026-11-27.4** (Zeitgeschichte über MCP lesen und
+  pflegen, Vermerk „von KI, ungeprüft“ bis zur Bestätigung). Davor am
+  selben Tag **.3** (Startseite „Heute in der Familie“,
   `/kinship` „Wie sind wir verwandt?“, Lebenslauf-Text, Karte: Lebensweg
   und Zeitreise, Ringe: Nachfahren und Druckseite, Seiten „Rekorde“ und
-  „Forschungs-Fortschritt“, Zeitgeschichte). Davor am selben Tag .2
+  „Forschungs-Fortschritt“, Zeitgeschichte), .2
   (Ansicht „Ringe“ im Stammbaum) und .1 (Abschnitt „Wurzeln“ auf der Personenseite, Seite
   „Statistik“) und **2026-11-26.3** (Anmeldung per E-Mail-Link über SMTP,
   Vollbild im Stammbaum, Vorschläge schon beim GEDCOM-Import gegen alle
@@ -24,13 +26,13 @@ aktuell halten — Erledigtes streichen, keine Paketgeschichte sammeln.
   Beziehungseinträgen der Änderungsgeschichte, Content-Security-Policy mit
   Not-Schalter `CSP_MODE`), am selben Tag .2 (Verlauf aufgegangener
   Personen, verschlankte Doku) und .1 (Seite „Einstellungen“). Neueste
-  Migration: `20261127000100_zeitgeschichte` (Liste aller
+  Migration: `20261127000200_zeitgeschichte_herkunft` (Liste aller
   Migrationen:
   [datenmodell.md](docs/komponenten/datenmodell.md#migrationen-prismamigrations)).
 - Prüfstand dieses Releases: Migrationen ↔ Schema ohne Abweichung, eine
-  neue, rein ergänzende Migration, Typecheck, Lint, Vitest 1345/1345;
+  neue, rein ergänzende Migration, Typecheck, Lint, Vitest 1366/1366;
   `npm run test:e2e` (Produktions-Build, strenger Hydration-Wächter,
-  CSP-Wächter): 464
+  CSP-Wächter): 469
   bestanden, 1 übersprungen.
 - Git-Verlauf am 23.11. umgeschrieben (alle Zweige neu hochgeladen). Ältere
   Klone und Worktrees passen nicht mehr dazu — neu klonen statt
@@ -163,6 +165,11 @@ Anleitungen: [docs/entwicklung/tests.md](docs/entwicklung/tests.md),
   mitgelieferten Liste nicht gegen eine Quelle geprüft; kein Abgleich mit
   Wohnorten. Forschungs-Fortschritt: nähere Generationen stehen vor
   fehlenden Eltern entfernterer — bei Bedarf Reihenfolge ändern.
+- **Zeitgeschichte über MCP:** nur gegen Mock und SDK-Client getestet, nicht
+  mit einem echten Claude-Client. Personennamen in Einträgen werden nicht
+  technisch erkannt (nur Werkzeugbeschreibung und Server-Hinweis verbieten
+  sie). Die KI löscht nur eigene, unbestätigte Einträge und kann nichts
+  bestätigen (Entscheidungen des Eigentümers).
 - **Ringe drucken:** nur mit Chromium geprüft (Firefox, Safari, echte
   Drucker und Druckereien nicht); SVG ohne eingebettete Schriften.
 - **`/kinship` gegenüber `get_kinship`:** Die Seite rechnet streng nur über

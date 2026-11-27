@@ -17,6 +17,18 @@ Regeln für neue Einträge (AGENTS.md, Abschnitt 3 „Ausrollen“):
 - Geprüft von tests/release-notes.test.ts (lib/release-notes.ts).
 -->
 
+## 2026-11-27.4 — Zeitgeschichte mit dem KI-Assistenten ergänzen
+
+- Dein KI-Assistent kann die Zeitgeschichte jetzt lesen und — mit einem
+  Schlüssel „lesen und schreiben“ eines Administrators — ergänzen, zum
+  Beispiel um Ereignisse aus den Gegenden, in denen deine Vorfahren lebten.
+- Einträge der KI sind sofort sichtbar, tragen aber überall den Vermerk
+  „von KI, ungeprüft“, bis ein Administrator sie unter „Verwaltung“ →
+  „Zeitgeschichte“ bestätigt. Dort stehen auch die Begründung der KI und
+  ihre Quelle.
+- Solange ein Eintrag ungeprüft ist, steht er unter dem Lebenslauf hinter
+  den großen Ereignissen.
+
 ## 2026-11-27.3 — Startseite, Lebenslauf, Zeitreise und mehr
 
 - Neue Startseite „Heute in der Familie“: Jahrestage des Tages, die
