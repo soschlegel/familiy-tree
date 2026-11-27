@@ -67,6 +67,7 @@ function expected(d: MockData, keys: FamilyKey[] | null, day: CalendarDay): Toda
 const shape = (r: TodayResult) => ({
   today: r.today.map((a) => `${a.key}:${a.years}`),
   birthdays: r.birthdays.map((a) => `${a.key}:${a.years}:${a.daysAway}`),
+  laterBirthdays: r.laterBirthdays.map((a) => `${a.key}:${a.years}:${a.daysAway}`),
   upcoming: r.upcoming.map((a) => `${a.key}:${a.years}:${a.daysAway}`),
   next: r.next ? `${r.next.key}:${r.next.daysAway}` : null,
 });
@@ -115,7 +116,7 @@ describe.skipIf(Boolean(skipReason))("Startseite „Heute“ (Mock-Datenbank)", 
       const got = await getToday(s, { day, now: NOW });
       expect(shape(got), email).toEqual(shape(expected(data, [...keys], day)));
       const allowed = new Set(data.persons.filter((p) => p.familyKeys.some((k) => (keys as readonly string[]).includes(k))).map((p) => p.id));
-      for (const a of [...got.today, ...got.birthdays, ...got.upcoming, ...(got.next ? [got.next] : [])]) {
+      for (const a of [...got.birthdays, ...got.today, ...got.laterBirthdays, ...got.upcoming, ...(got.next ? [got.next] : [])]) {
         for (const p of a.persons) expect(allowed.has(p.id), `${email}: ${a.key}`).toBe(true);
       }
     }
@@ -124,7 +125,31 @@ describe.skipIf(Boolean(skipReason))("Startseite „Heute“ (Mock-Datenbank)", 
     const a = await getToday(admin, { day: REAL_TODAY, now: NOW });
     const v = await getToday(viewer, { day: REAL_TODAY, now: NOW });
     expect(v.birthdays.length).toBeLessThanOrEqual(a.birthdays.length);
+    expect(v.laterBirthdays.length).toBeLessThanOrEqual(a.laterBirthdays.length);
     expect(v.upcoming.length).toBeLessThanOrEqual(a.upcoming.length);
+  });
+
+  it("Geburtstage im 14-Tage-Fenster: geladen wie gerechnet, nur Lebende, nichts doppelt", async () => {
+    const admin = await scope("admin@example.test");
+    // Ein Tag mit Geburtstagen Lebender im Fenster (der erste des Jahres 2026).
+    let withBirthdays: CalendarDay | null = null;
+    for (let m = 1; m <= 12 && !withBirthdays; m++) {
+      for (let d = 1; d <= 28 && !withBirthdays; d++) {
+        const c = { year: 2026, month: m, day: d };
+        if (expected(data, null, c).birthdays.some((a) => a.daysAway === 0)) withBirthdays = c;
+      }
+    }
+    expect(withBirthdays, "Mock-Daten ohne Geburtstag eines Lebenden").not.toBeNull();
+    const got = await getToday(admin, { day: withBirthdays!, now: NOW });
+    expect(shape(got)).toEqual(shape(expected(data, null, withBirthdays!)));
+    expect(got.birthdays[0].daysAway).toBe(0);
+    for (const a of got.birthdays) {
+      expect(a.birthday).toBe(true);
+      expect(a.daysAway).toBeLessThanOrEqual(14);
+      expect(a.persons.every((p) => p.living)).toBe(true);
+    }
+    const keys = [...got.birthdays, ...got.laterBirthdays, ...got.today].map((a) => a.key);
+    expect(new Set(keys).size).toBe(keys.length);
   });
 
   it("ohne Familie: nichts, auch kein nächster Jahrestag", async () => {
@@ -132,6 +157,7 @@ describe.skipIf(Boolean(skipReason))("Startseite „Heute“ (Mock-Datenbank)", 
     const got = await getToday(nofamily, { day, now: NOW });
     expect(got.today).toEqual([]);
     expect(got.birthdays).toEqual([]);
+    expect(got.laterBirthdays).toEqual([]);
     expect(got.upcoming).toEqual([]);
     expect(got.next).toBeNull();
   });

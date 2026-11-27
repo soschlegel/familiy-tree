@@ -1178,7 +1178,10 @@ ihre Personenseite.
 
 **Props/Daten:** `AnniversaryList` (`items` = `Anniversary`-Einträge aus
 `lib/today.ts`, `isRealToday` für „heute“/„morgen“, `testId`, `label` als
-Listenname für Screenreader), `AnniversarySentence` (ein Satz, auch für den
+Listenname für Screenreader, `markToday` für die Karte „Geburtstage“:
+Einträge am gewählten Tag selbst farbig hinterlegt und mit dem Abzeichen
+„heute“ bzw. „an diesem Tag“ (`today-mark`); jeder Eintrag trägt
+`data-days-away`), `AnniversarySentence` (ein Satz, auch für den
 Hinweis „Der nächste: …“ auf einem leeren Tag).
 
 **Verhalten:** Je Eintrag ein genealogisches Zeichen (* Geburt, ⚭ Hochzeit

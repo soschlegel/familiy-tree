@@ -746,7 +746,10 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   nur tagesgenaue sichere Daten (auch keine Zweitangaben, keine
   Dauerereignisse), lebend/vermutlich verstorben, Sätze, runde Jahrestage
   und Jubiläen, geschiedene Ehen, nicht sichtbare Personen und Partner,
-  Fenster „Demnächst“ über den Jahreswechsel, nächster Jahrestag.
+  Geburtstags-Fenster 0–14 (Grenze Tag 14/15, nur Lebende, Jahreswechsel,
+  29. Februar, Reihenfolge am selben Tag), Tageskarte ohne Geburtstage
+  Lebender und mit Lebenden zuerst, „Weitere Geburtstage“ 15–30 ohne
+  Doppelte, nächster Jahrestag.
 - **`storage.test.ts`** — Schlüsselprüfung gegen Pfad-Ausbrüche, atomares
   Schreiben, Lesen, Löschen, Ordnerprüfung (in eigenem Temp-Ordner).
 - **`validation.test.ts`** — Datumsprüfungen, Beziehungsregeln,
@@ -1036,8 +1039,10 @@ Benutzer bekommt keinen gespeicherten Zustand.
   Querscrollen, axe.
 - **`today.spec.ts`** — Startseite „Heute in der Familie“, unabhängig vom
   echten Datum (Tag per `?datum=`, Erwartung mit `lib/today.ts` über den
-  Mock-Datensatz): Sätze, verlinkte Personen, runde Einträge, „Weitere …
-  anzeigen“, Tag blättern und zurück zu heute, Einstieg und Logo,
+  Mock-Datensatz): Karte „Geburtstage“ zuerst (Reihenfolge der Karten,
+  Tag markiert, nicht doppelt in der Tageskarte, Rest unter „Weitere
+  Geburtstage“, leeres Fenster mit Satz), Sätze, verlinkte Personen, runde
+  Einträge, „Weitere … anzeigen“, Tag blättern und zurück zu heute, Einstieg und Logo,
   Betrachter ohne fremde Namen, leerer Tag mit nächstem Jahrestag, ohne
   Familie nur Hinweis, 390 px hell/dunkel mit Tippflächen, axe.
 - **`tree-focus.spec.ts`** — Fokus-Ansicht ab fester Person, Startperson.

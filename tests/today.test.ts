@@ -4,6 +4,7 @@ import type { FuzzyDate } from "@/lib/dates";
 import {
   addDays,
   anniversarySentence,
+  BIRTHDAY_WINDOW_DAYS,
   calendarDayIn,
   computeToday,
   formatLongDay,
@@ -111,12 +112,15 @@ describe("Heute", () => {
     );
     const t = texts(r.today);
     expect(t).toContain("Heute vor 120 Jahren wurde Anna Beispiel geboren");
-    expect(t).toContain("Lena Probe wird heute 34");
+    // Der Geburtstag der Lebenden steht in der Karte „Geburtstage“, nicht doppelt hier.
+    expect(t).not.toContain("Lena Probe wird heute 34");
+    expect(texts(r.birthdays)).toEqual(["Lena Probe wird heute 34"]);
     expect(t).toContain("Heute vor 50 Jahren starb Karl Muster");
     expect(t).toContain("Heute vor 75 Jahren heirateten Erna Muster und Karl Muster");
     expect(t).toContain("Heute vor 36 Jahren wurde Hans Probe getauft");
-    // Runde zuerst (120 ist kein Vielfaches von 25, 75 und 50 schon).
-    expect(r.today.slice(0, 2).every((a) => a.round)).toBe(true);
+    // Lebende zuerst (Taufe von Hans), dann runde (120 ist kein Vielfaches von 25, 75 und 50 schon).
+    expect(r.today[0].key).toBe("event:ev1");
+    expect(r.today.slice(1, 3).every((a) => a.round)).toBe(true);
     expect(r.today.find((a) => a.kind === "marriage")?.persons.map((p) => p.id)).toEqual(["e", "k"]);
     expect(r.next).toBeNull();
   });
@@ -177,10 +181,17 @@ describe("Heute", () => {
 
   it("29. Februar im Nicht-Schaltjahr am 28. Februar, im Schaltjahr am 29.", () => {
     const leap = person("p", "Paula Schalt", exact(1996, 2, 29));
-    expect(texts(run(day(2027, 2, 28), [leap]).today)).toEqual(["Paula Schalt wird heute 31"]);
-    expect(run(day(2027, 3, 1), [leap]).today).toEqual([]);
-    expect(run(day(2028, 2, 28), [leap]).today).toEqual([]);
-    expect(texts(run(day(2028, 2, 29), [leap]).today)).toEqual(["Paula Schalt wird heute 32"]);
+    const onDay = (d: CalendarDay) => run(d, [leap]).birthdays.filter((a) => a.daysAway === 0);
+    expect(texts(onDay(day(2027, 2, 28)))).toEqual(["Paula Schalt wird heute 31"]);
+    expect(onDay(day(2027, 3, 1))).toEqual([]);
+    expect(onDay(day(2028, 2, 28))).toEqual([]);
+    expect(texts(onDay(day(2028, 2, 29)))).toEqual(["Paula Schalt wird heute 32"]);
+    // Im Fenster: vom 20. Februar aus am 28. (2027) bzw. 29. (2028).
+    expect(run(day(2027, 2, 20), [leap]).birthdays.map((a) => [a.on, a.daysAway])).toEqual([[day(2027, 2, 28), 8]]);
+    expect(run(day(2028, 2, 20), [leap]).birthdays.map((a) => [a.on, a.daysAway])).toEqual([[day(2028, 2, 29), 9]]);
+    // Eine Verstorbene am 29. Februar steht als Jahrestag in der Tageskarte.
+    const died = person("q", "Quirina Schalt", exact(1904, 2, 29), { death: exact(1980, 1, 1) });
+    expect(texts(run(day(2027, 2, 28), [died]).today)).toEqual(["Heute vor 123 Jahren wurde Quirina Schalt geboren"]);
   });
 
   it("Verstorbene und vermutlich Verstorbene: „vor N Jahren geboren“ statt Geburtstag", () => {
@@ -203,13 +214,52 @@ describe("Heute", () => {
   });
 });
 
-describe("Demnächst", () => {
-  it("Geburtstage Lebender in den nächsten 30 Tagen, über den Jahreswechsel, runde hervorgehoben", () => {
+describe("Geburtstage: heute und die nächsten 14 Tage", () => {
+  it("Fenster 0–14 mit heute, Grenze Tag 14/15, danach „weitere Geburtstage“ bis Tag 30", () => {
+    expect(BIRTHDAY_WINDOW_DAYS).toBe(14);
+    const d = day(2026, 6, 1);
+    const r = run(d, [
+      person("h", "Hanna Heute", exact(1990, 6, 1)), // Tag 0
+      person("v", "Viktor Vierzehn", exact(1990, 6, 15)), // Tag 14 → noch im Fenster
+      person("f", "Fiona Fünfzehn", exact(1990, 6, 16)), // Tag 15 → „weitere“
+      person("t", "Theo Dreißig", exact(1990, 7, 1)), // Tag 30 → „weitere“
+      person("e", "Emil Einunddreißig", exact(1990, 7, 2)), // Tag 31 → gar nicht
+    ]);
+    expect(r.birthdays.map((a) => [a.persons[0].id, a.daysAway])).toEqual([
+      ["h", 0],
+      ["v", 14],
+    ]);
+    expect(r.laterBirthdays.map((a) => [a.persons[0].id, a.daysAway])).toEqual([
+      ["f", 15],
+      ["t", 30],
+    ]);
+    expect(texts(r.birthdays)).toEqual(["Hanna Heute wird heute 36", "Am 15. Juni wird Viktor Vierzehn 36"]);
+    // Nichts doppelt: jeder Geburtstag genau einmal, nicht in der Tageskarte, nicht bei „Runde Jahrestage“.
+    const keys = [...r.birthdays, ...r.laterBirthdays].map((a) => a.key);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(r.today).toEqual([]);
+    expect(r.upcoming).toEqual([]);
+  });
+
+  it("nur Lebende: Verstorbene und vermutlich Verstorbene haben keinen Geburtstag", () => {
+    const d = day(2026, 6, 1);
+    const r = run(d, [
+      person("l", "Lea Lebend", exact(1980, 6, 3)),
+      person("t", "Tom Tot", exact(1980, 6, 3), { death: exact(2020, 1, 1) }),
+      person("o", "Ort Ohnedatum", exact(1980, 6, 3), { deathWithoutDate: true }),
+      person("u", "Uralt Ohnetod", exact(1900, 6, 3)), // über 100 → vermutlich verstorben
+    ]);
+    expect(r.birthdays.map((a) => a.persons[0].id)).toEqual(["l"]);
+    expect(r.laterBirthdays).toEqual([]);
+  });
+
+  it("über den Jahreswechsel, runde hervorgehoben", () => {
     const d = day(2026, 12, 20);
     const r = run(d, [
-      person("a", "Anna Winter", exact(1987, 1, 2)), // 40 am 2.1.2027 → rund
+      person("a", "Anna Winter", exact(1987, 1, 2)), // 40 am 2.1.2027 (Tag 13) → rund
       person("b", "Bert Winter", exact(1990, 12, 21)), // morgen 36
-      person("c", "Carl Winter", exact(1990, 1, 25)), // 36 Tage → zu weit
+      person("c", "Carl Winter", exact(1990, 1, 10)), // Tag 21 → weitere
+      person("x", "Xenia Winter", exact(1990, 1, 25)), // Tag 36 → zu weit
       person("d", "Dora Winter", exact(1950, 12, 24), { death: exact(2010, 1, 1) }), // verstorben → kein Geburtstag
     ]);
     expect(r.birthdays.map((a) => a.persons[0].name)).toEqual(["Bert Winter", "Anna Winter"]);
@@ -217,7 +267,52 @@ describe("Demnächst", () => {
     expect(r.birthdays.map((a) => a.round)).toEqual([false, true]);
     expect(texts(r.birthdays)).toEqual(["Morgen wird Bert Winter 36", "Am 2. Januar wird Anna Winter 40"]);
     expect(roundLabel(r.birthdays[1])).toBe("runder Geburtstag");
+    expect(r.laterBirthdays.map((a) => [a.persons[0].name, a.on])).toEqual([["Carl Winter", day(2027, 1, 10)]]);
   });
+
+  it("am selben Tag: runde zuerst, dann nach Name (nicht nach Alter)", () => {
+    const d = day(2026, 6, 1);
+    const r = run(d, [
+      person("z", "Zora Gleich", exact(2000, 6, 5)), // 26
+      person("b", "Bea Gleich", exact(1960, 6, 5)), // 66
+      person("r", "Rudi Gleich", exact(1976, 6, 5)), // 50 → rund
+      person("h", "Heute Erst", exact(1999, 6, 1)), // Tag 0 vor allen
+    ]);
+    expect(r.birthdays.map((a) => a.persons[0].name)).toEqual(["Heute Erst", "Rudi Gleich", "Bea Gleich", "Zora Gleich"]);
+  });
+
+  it("ein heutiger Geburtstag allein: Tageskarte leer, der nächste Jahrestag ohne Geburtstage", () => {
+    const d = day(2026, 6, 1);
+    const r = run(d, [
+      person("l", "Lea Lebend", exact(1980, 6, 1)),
+      person("m", "Mia Morgen", exact(1981, 6, 2)),
+      person("o", "Opa Alt", exact(1900, 6, 20), { death: exact(1970, 1, 1) }),
+    ]);
+    expect(r.today).toEqual([]);
+    expect(r.birthdays.map((a) => a.persons[0].id)).toEqual(["l", "m"]);
+    // Der nächste: kein Geburtstag eines Lebenden (der steht schon oben), sondern der Jahrestag.
+    expect(r.next?.key).toBe("birth:o");
+  });
+});
+
+describe("Tageskarte: Lebende zuerst", () => {
+  it("Einträge, deren Personen alle leben, vor den historischen", () => {
+    const d = day(2026, 6, 1);
+    const anna = person("a", "Anna Lebt", exact(1970, 2, 2));
+    const bernd = person("b", "Bernd Lebt", exact(1971, 3, 3));
+    const otto = person("o", "Otto Alt", exact(1876, 6, 1), { death: exact(1950, 1, 1) }); // 150 → rund
+    const r = run(
+      d,
+      [anna, bernd, otto],
+      [{ id: "r", subtype: "MARRIED", partners: ["a", "b"], start: exact(1998, 6, 1) }], // 28, nicht rund
+      [{ id: "e", personId: "a", type: "BAPTISM", title: "Taufe", isAlternative: false, date: exact(1970, 6, 1) }],
+    );
+    expect(r.today.map((a) => a.key)).toEqual(["rel:r", "event:e", "birth:o"]);
+    expect(r.today.map((a) => a.persons.every((p) => p.living))).toEqual([true, true, false]);
+  });
+});
+
+describe("Demnächst", () => {
 
   it("nur runde Jahrestage von Geburt Verstorbener, Tod und Hochzeit — keine Ereignisse", () => {
     const d = day(2026, 5, 1);
@@ -254,7 +349,8 @@ describe("Demnächst", () => {
       events: [],
     });
     expect(r.isRealToday).toBe(false);
-    expect(texts(r.today, r.isRealToday)).toEqual(["Vor 75 Jahren starb Carl Beispiel", "Anna Beispiel wird 36"]);
-    expect(texts(r.birthdays, r.isRealToday)).toEqual(["Am 15. März wird Bert Beispiel 36"]);
+    expect(texts(r.today, r.isRealToday)).toEqual(["Vor 75 Jahren starb Carl Beispiel"]);
+    // Das Fenster zählt ab dem gewählten Tag, nicht ab dem echten heutigen.
+    expect(texts(r.birthdays, r.isRealToday)).toEqual(["Anna Beispiel wird 36", "Am 15. März wird Bert Beispiel 36"]);
   });
 });

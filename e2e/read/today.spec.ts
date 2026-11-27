@@ -84,8 +84,15 @@ const BUSY = find((d) => {
   const v = expected(["A"], d).today.length;
   return a >= 3 && v >= 1 && v < a;
 });
-/** Tag mit mehr Geburtstagen demnächst, als die Liste zeigt. */
-const MANY_BIRTHDAYS = find((d) => expected(null, d).birthdays.length > SECTION_LIMIT);
+/** Tag mit mehr weiteren Geburtstagen (Tag 15–30), als die Liste zeigt. */
+const MANY_BIRTHDAYS = find((d) => expected(null, d).laterBirthdays.length > SECTION_LIMIT);
+/** Tag, an dem ein Lebender Geburtstag hat und die Tageskarte noch anderes zeigt. */
+const BIRTHDAY_DAY = find((d) => {
+  const e = expected(null, d);
+  return e.birthdays.some((a) => a.daysAway === 0) && e.today.length > 0 && e.laterBirthdays.length > 0;
+});
+/** Tag, an dem der Betrachter im 14-Tage-Fenster keinen Geburtstag hat. */
+const NO_BIRTHDAYS = find((d) => expected(["A"], d).birthdays.length === 0);
 /** Tag ohne Jahrestag für den Betrachter, mit einem nächsten. */
 const EMPTY = find((d) => {
   const v = expected(["A"], d);
@@ -117,7 +124,43 @@ test.describe("Startseite als Admin", () => {
     await expect(page).toHaveURL(`/people/${first.id}`);
   });
 
-  test("Demnächst: mehr als zehn Geburtstage → „Weitere … anzeigen“", async ({ page }) => {
+  test("Geburtstage ganz oben: heute hervorgehoben, nicht doppelt in der Tageskarte, Rest unter „Weitere Geburtstage“", async ({ page }) => {
+    const exp = expected(null, BIRTHDAY_DAY);
+    await page.goto(url(BIRTHDAY_DAY));
+    // Reihenfolge der Karten: Geburtstage, Jahrestage, Demnächst.
+    const order = await page
+      .locator("[data-testid=birthdays-section], [data-testid=today-section], [data-testid=soon-section]")
+      .evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")));
+    expect(order).toEqual(["birthdays-section", "today-section", "soon-section"]);
+    const section = page.getByTestId("birthdays-section");
+    await expect(section.getByRole("heading", { level: 2 })).toHaveText("Geburtstage");
+    await expect(section).toContainText("und in den 14 Tagen danach");
+    const items = page.getByTestId("birthdays-list").getByTestId("today-item");
+    await expect(items).toHaveCount(Math.min(exp.birthdays.length, SECTION_LIMIT));
+    for (const [i, a] of exp.birthdays.slice(0, SECTION_LIMIT).entries()) {
+      await expect(items.nth(i)).toContainText(sentenceText(anniversarySentence(a, false)));
+      await expect(items.nth(i)).toHaveAttribute("data-days-away", String(a.daysAway));
+      await expect(items.nth(i).getByTestId("today-mark")).toHaveCount(a.daysAway === 0 ? 1 : 0);
+      await expect(items.nth(i).getByTestId("today-round")).toHaveCount(a.round ? 1 : 0);
+    }
+    await expect(items.first().getByTestId("today-mark")).toHaveText("an diesem Tag");
+    // Die Tageskarte nennt den Geburtstag nicht noch einmal.
+    const dayItems = page.getByTestId("today-list").getByTestId("today-item");
+    await expect(dayItems).toHaveCount(Math.min(exp.today.length, SECTION_LIMIT));
+    for (const a of exp.birthdays.filter((b) => b.daysAway === 0)) {
+      await expect(page.getByTestId("today-list")).not.toContainText(sentenceText(anniversarySentence(a, false)));
+    }
+    // „Demnächst“: nur die Geburtstage nach dem Fenster.
+    await expect(page.getByTestId("soon-section").getByRole("heading", { name: "Weitere Geburtstage" })).toBeVisible();
+    const later = page.getByTestId("soon-birthdays").getByTestId("today-item");
+    await expect(later).toHaveCount(Math.min(exp.laterBirthdays.length, SECTION_LIMIT));
+    for (const [i, a] of exp.laterBirthdays.slice(0, SECTION_LIMIT).entries()) {
+      expect(a.daysAway).toBeGreaterThan(14);
+      await expect(later.nth(i)).toContainText(sentenceText(anniversarySentence(a, false)));
+    }
+  });
+
+  test("Weitere Geburtstage: mehr als zehn → „Weitere … anzeigen“", async ({ page }) => {
     const exp = expected(null, MANY_BIRTHDAYS);
     await page.goto(url(MANY_BIRTHDAYS));
     const list = page.getByTestId("soon-birthdays");
@@ -125,10 +168,10 @@ test.describe("Startseite als Admin", () => {
     const shown = list.getByTestId("today-item").filter({ visible: true });
     await expect(shown).toHaveCount(SECTION_LIMIT);
     const more = page.getByTestId("soon-birthdays-more");
-    await more.getByText(`Weitere ${exp.birthdays.length - SECTION_LIMIT} anzeigen`).click();
-    await expect(shown).toHaveCount(exp.birthdays.length);
+    await more.getByText(`Weitere ${exp.laterBirthdays.length - SECTION_LIMIT} anzeigen`).click();
+    await expect(shown).toHaveCount(exp.laterBirthdays.length);
     await expect(more.getByText("Weniger anzeigen")).toBeVisible();
-    await expect(list.getByTestId("today-item").first()).toContainText(sentenceText(anniversarySentence(exp.birthdays[0], false)));
+    await expect(list.getByTestId("today-item").first()).toContainText(sentenceText(anniversarySentence(exp.laterBirthdays[0], false)));
   });
 
   test("Tag blättern, zurück zu heute, Einstieg und Logo", async ({ page }) => {
@@ -158,6 +201,11 @@ test.describe("Startseite mit eingeschränkten Rechten", () => {
     const exp = expected(["A"], BUSY);
     await page.goto(url(BUSY));
     await expect(page.getByTestId("today-list").getByTestId("today-item")).toHaveCount(Math.min(exp.today.length, SECTION_LIMIT));
+    if (exp.birthdays.length > 0) {
+      await expect(page.getByTestId("birthdays-list").getByTestId("today-item")).toHaveCount(Math.min(exp.birthdays.length, SECTION_LIMIT));
+    } else {
+      await expect(page.getByTestId("birthdays-empty")).toBeVisible();
+    }
     const main = page.locator("main");
     const text = await main.innerText();
     for (const name of forbiddenNamesFor(["A"])) expect(text, name).not.toContain(name);
@@ -178,11 +226,23 @@ test.describe("Startseite mit eingeschränkten Rechten", () => {
     await expect(page.getByTestId("today-list").getByTestId("today-item").first()).toBeVisible();
   });
 
+  test("kein Geburtstag im Fenster: Karte bleibt mit freundlichem Satz", async ({ loginAs }) => {
+    const { page } = await loginAs("viewer");
+    await page.goto(url(NO_BIRTHDAYS));
+    const section = page.getByTestId("birthdays-section");
+    await expect(section).toBeVisible();
+    await expect(page.getByTestId("birthdays-empty")).toContainText("und in den 14 Tagen danach hat niemand Geburtstag");
+    await expect(section.getByTestId("today-item")).toHaveCount(0);
+    // Die Navigation steht weiterhin in der ersten Karte.
+    await expect(section.getByTestId("today-prev")).toBeVisible();
+  });
+
   test("ohne Familie: Hinweis statt Listen, Einstieg bleibt", async ({ loginAs }) => {
     const { page } = await loginAs("nofamily");
     await page.goto(url(BUSY));
     await expect(page.getByTestId("today-no-family")).toContainText("Noch keine Familie freigegeben");
     await expect(page.getByTestId("today-section")).toHaveCount(0);
+    await expect(page.getByTestId("birthdays-section")).toHaveCount(0);
     await expect(page.getByTestId("today-item")).toHaveCount(0);
     await expect(page.getByTestId("start-entries")).toBeVisible();
   });
@@ -194,8 +254,9 @@ test.describe("Startseite auf dem Telefon", () => {
   for (const scheme of ["light", "dark"] as const) {
     test(`kein waagerechtes Scrollen, Tippflächen, Barrierefreiheit (${scheme})`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme });
-      await page.goto(url(MANY_BIRTHDAYS));
-      await expect(page.getByTestId("soon-birthdays")).toBeVisible();
+      await page.goto(url(BIRTHDAY_DAY));
+      await expect(page.getByTestId("birthdays-list")).toBeVisible();
+      await expect(page.getByTestId("today-mark").first()).toBeVisible();
       await expectNoHorizontalOverflow(page);
       for (const id of ["today-prev", "today-next", "start-tree", "start-statistics", "start-records"]) {
         const box = (await page.getByTestId(id).boundingBox())!;

@@ -24,6 +24,11 @@ import { dateBounds, isPreciseDate, MONTH_NAMES, type FuzzyDate } from "./dates"
 
 /** Zeitzone, nach der „heute“ gilt. */
 export const TODAY_TIME_ZONE = "Europe/Berlin";
+/**
+ * Karte „Geburtstage“ ganz oben: Geburtstage Lebender am gewählten Tag und so
+ * viele Tage danach (0 bis einschließlich 14).
+ */
+export const BIRTHDAY_WINDOW_DAYS = 14;
 /** „Demnächst“: so viele Tage nach dem gewählten Tag. */
 export const UPCOMING_DAYS = 30;
 /** So viele Einträge je Abschnitt, der Rest hinter „weitere anzeigen“. */
@@ -200,13 +205,25 @@ export type TodayResult = {
   day: CalendarDay;
   /** Ist der gewählte Tag der wirkliche heutige Tag? */
   isRealToday: boolean;
-  /** Alle Jahrestage des gewählten Tages, sortiert. */
-  today: Anniversary[];
-  /** Geburtstage Lebender in den nächsten UPCOMING_DAYS Tagen. */
+  /**
+   * Geburtstage Lebender am gewählten Tag und in den BIRTHDAY_WINDOW_DAYS
+   * Tagen danach — Karte „Geburtstage“ ganz oben.
+   */
   birthdays: Anniversary[];
+  /**
+   * Übrige Jahrestage des gewählten Tages („heute vor N Jahren“), ohne die
+   * Geburtstage Lebender (die stehen in `birthdays`); Einträge, deren
+   * Personen alle leben, zuerst.
+   */
+  today: Anniversary[];
+  /** Geburtstage Lebender nach dem Fenster: Tag BIRTHDAY_WINDOW_DAYS + 1 bis UPCOMING_DAYS. */
+  laterBirthdays: Anniversary[];
   /** Runde Jahrestage (Geburt Verstorbener, Tod, Hochzeit) in den nächsten UPCOMING_DAYS Tagen. */
   upcoming: Anniversary[];
-  /** Nur wenn `today` leer ist: der nächste Jahrestag überhaupt (bis ein Jahr voraus). */
+  /**
+   * Nur wenn `today` leer ist: der nächste Jahrestag (bis ein Jahr voraus),
+   * ohne Geburtstage Lebender — die haben ihre eigene Karte.
+   */
   next: Anniversary | null;
 };
 
@@ -268,6 +285,24 @@ function compareToday(a: Anniversary, b: Anniversary): number {
 /** Reihenfolge „demnächst“: nach Datum, am selben Tag wie „heute“. */
 function compareUpcoming(a: Anniversary, b: Anniversary): number {
   return a.daysAway - b.daysAway || compareToday(a, b);
+}
+
+/** Betrifft der Eintrag nur lebende Personen (Hochzeitstag eines lebenden Paares, Taufe einer Lebenden …)? */
+const allLiving = (a: Anniversary) => a.persons.length > 0 && a.persons.every((p) => p.living);
+
+/** Reihenfolge der Tageskarte: Einträge Lebender vor den historischen, dann wie „heute“. */
+function compareDay(a: Anniversary, b: Anniversary): number {
+  return Number(allLiving(b)) - Number(allLiving(a)) || compareToday(a, b);
+}
+
+/** Reihenfolge der Geburtstage: nach Datum, am selben Tag runde zuerst, dann nach Name. */
+function compareBirthdays(a: Anniversary, b: Anniversary): number {
+  return (
+    a.daysAway - b.daysAway ||
+    Number(b.round) - Number(a.round) ||
+    firstName(a).localeCompare(firstName(b), "de") ||
+    a.key.localeCompare(b.key)
+  );
 }
 
 /** Alle Jahrestage, je mit ihrem nächsten Begehen ab dem gewählten Tag. */
@@ -338,20 +373,36 @@ function collect(input: TodayInput): Anniversary[] {
   return out;
 }
 
-/** Jahrestage des Tages, Geburtstage und runde Jahrestage der nächsten Wochen. */
+/**
+ * Geburtstage Lebender (heute und die nächsten BIRTHDAY_WINDOW_DAYS Tage),
+ * übrige Jahrestage des Tages, weitere Geburtstage und runde Jahrestage der
+ * nächsten Wochen. Jeder Geburtstag eines Lebenden steht genau einmal: im
+ * Fenster in `birthdays`, danach in `laterBirthdays`.
+ */
 export function computeToday(input: TodayInput): TodayResult {
   const all = collect(input);
-  const today = all.filter((a) => a.daysAway === 0).sort(compareToday);
+  const birthdays = all.filter((a) => a.birthday && a.daysAway <= BIRTHDAY_WINDOW_DAYS).sort(compareBirthdays);
+  const laterBirthdays = all
+    .filter((a) => a.birthday && a.daysAway > BIRTHDAY_WINDOW_DAYS && a.daysAway <= UPCOMING_DAYS)
+    .sort(compareBirthdays);
+  const today = all.filter((a) => a.daysAway === 0 && !a.birthday).sort(compareDay);
   const soon = all.filter((a) => a.daysAway >= 1 && a.daysAway <= UPCOMING_DAYS);
-  const birthdays = soon.filter((a) => a.birthday).sort(compareUpcoming);
   // Geburten Lebender stehen schon bei den Geburtstagen; Ereignisse nur „heute“.
   const upcoming = soon.filter((a) => a.round && !a.birthday && a.kind !== "event").sort(compareUpcoming);
   const next =
     today.length === 0
-      ? (all.filter((a) => a.daysAway >= 1 && a.daysAway <= NEXT_SEARCH_DAYS).sort(compareUpcoming)[0] ?? null)
+      ? (all.filter((a) => !a.birthday && a.daysAway >= 1 && a.daysAway <= NEXT_SEARCH_DAYS).sort(compareUpcoming)[0] ?? null)
       : null;
   const realToday = input.realToday ?? input.day;
-  return { day: input.day, isRealToday: daysBetween(realToday, input.day) === 0, today, birthdays, upcoming, next };
+  return {
+    day: input.day,
+    isRealToday: daysBetween(realToday, input.day) === 0,
+    birthdays,
+    today,
+    laterBirthdays,
+    upcoming,
+    next,
+  };
 }
 
 // ---------------------------------------------------------------------------
