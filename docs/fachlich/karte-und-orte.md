@@ -53,6 +53,48 @@ Klick auf einen Kreis listet die Personen mit Link zur Personenseite.
   1,4 MB Daten; ohne Datenbank 63 ms Aufbau und 0,6 ms je Jahr
   (`tests/map.test.ts`).
 
+**Lebensweg** (`/map?mode=lebensweg&person=<id>&art=person|vaterlinie|mutterlinie`,
+eigene Betriebsart der Karte, Einstieg auch von der Personenseite): die Orte
+eines Lebens bzw. einer Linie als Weg — nummerierte Punkte, Linie mit
+Pfeilen, Beschriftung mit Jahr (bei Linien Name und Jahr), daneben die Liste
+der Stationen; Liste und Karte wählen gegenseitig.
+
+- **Person** — Stationen sind alle Angaben mit Ortstext: Geburt, Tod,
+  Heirat/Scheidung bzw. Beginn/Ende einer Partnerschaft (Ort an der
+  Beziehung), jedes Lebensereignis der Person und ihrer Partnerschaften
+  (ohne Zweitangaben `isAlternative`). Reihenfolge: Geburt vorn; Tod, danach
+  Beerdigung/Einäscherung/Testamentseröffnung hinten — auch ohne Datum;
+  dazwischen nach dem Anker des Datums (wie [ungenaue Daten](ungenaue-daten.md)
+  sortieren), bei gleichem Anker die genauere Angabe zuerst. Mittlere
+  Stationen ohne Datum stehen unter „ohne Datum“ und gehören nicht zur Linie.
+  Ungenaue Daten sind mit „(ungenau)“ beschriftet.
+- **Vater-/Mutterlinie** — je Generation unter den leiblichen Eltern der
+  sichtbare mit Geschlecht MALE bzw. FEMALE. Genau einer → weiter; mehrere
+  oder (wenn keiner passt) ein sichtbarer mit unbekanntem/anderem Geschlecht
+  → Ende „nicht eindeutig“; keiner passt, aber ein Elternteil ist nicht
+  sichtbar → Ende „weiter hinauf nicht freigegeben“; sonst Ende „nicht
+  erfasst“. Höchstens 12 Generationen. Station je Vorfahr: Geburtsort, sonst
+  Taufort; Jahr der Geburt, sonst der Taufe. Älteste Generation zuerst.
+- **Karte** — nur Stationen mit Ortszuordnung samt Koordinaten (Tabelle
+  `Place`, „nicht zuordenbar“ und fehlende Zuordnung wie bei der Karte nicht
+  gezeichnet, in der Liste „Ort nicht zugeordnet“ bzw. „nicht zuordenbar“;
+  „unsicher“ gesetzte Zuordnungen gelten wie auf der Karte). Aufeinander
+  folgende Stationen mit gleichen Koordinaten werden ein Punkt; liegt eine
+  Station ohne Ort auf der Karte zwischen zwei Punkten, ist das Teilstück
+  gestrichelt. Kehrt der Weg an einen früheren Ort zurück, zeichnet die
+  Karte dort eine Marke mit allen Nummern („1–2, 5–6“).
+- **Datenschutz** — Ausgangsperson nur, wenn sichtbar (sonst Bezugsperson).
+  Heirat, Scheidung und Ereignisse einer Partnerschaft nur mit sichtbarem
+  Partner (die Personenseite zeigt Ort und Datum der Ehe nur an der Karte
+  eines sichtbaren Partners). Ein nicht sichtbarer Vorfahr beendet die
+  Linie; Antwort und Seite verraten nur, dass sie dort endet — keine
+  Kennung, kein Name, Geschlecht, Ort oder Jahr.
+- **Leistung** — keine Abfrage je Station und nicht die Kartendaten „alle“:
+  Person mit Partnerschaften, deren Ereignisse und die Ortszuordnungen in je
+  einer Abfrage; Linien Generation für Generation eine Abfrage für beide
+  Linien zugleich (höchstens 13), dann Taufen und Ortszuordnungen. Dieselben
+  Daten liefert `GET /api/map?mode=lifepath&kind=person|father|mother&person=`.
+
 **Orte zuordnen** (`/admin/places`, nur Administratoren; verlinkt auf der
 Karte und unter „Daten“): Orte sind Freitext. Die Tabelle `Place` (Migration
 `20261123000001_orte`) ordnet jedem normalisierten Ortstext (`placeKey`:

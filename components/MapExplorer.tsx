@@ -7,6 +7,7 @@ import { LINE_CODE, LINE_KEYS, LINE_LABEL, type LineKey } from "@/lib/reference"
 import { linesFromBits, type MapPayload } from "@/lib/map/build";
 import { fitViewBox, project, VIEWS, zoomAt, type ViewBox, type ViewName } from "@/lib/map/projection";
 import { snapshot, type PlaceGroup } from "@/lib/map/year";
+import { loadCountries, type Country } from "@/lib/map/countries";
 import { LineCode } from "./ReferenceLines";
 
 /**
@@ -21,19 +22,6 @@ import { LineCode } from "./ReferenceLines";
  * Screenreader und Tastatur steht dieselbe Information in der Ortsliste
  * darunter; der Jahresregler ist ein normales Schiebefeld.
  */
-
-type Country = { id: string; name: string; d: string };
-let countriesCache: Promise<Country[]> | null = null;
-function loadCountries(): Promise<Country[]> {
-  countriesCache ??= fetch("/geo/countries.json")
-    .then((r) => (r.ok ? r.json() : { countries: [] }))
-    .then((j: { countries: Country[] }) => j.countries)
-    .catch(() => {
-      countriesCache = null;
-      return [];
-    });
-  return countriesCache;
-}
 
 const lineColor = (k: LineKey | "none") => (k === "none" ? "var(--map-neutral)" : `var(--line-${k.toLowerCase()})`);
 const CATEGORIES: (LineKey | "none")[] = [...LINE_KEYS, "none"];

@@ -356,16 +356,25 @@ Karte „Wurzeln nach Jahr“ ([karte-und-orte.md](../fachlich/karte-und-orte.md
 
 - **Rechte:** angemeldet; gezählt werden nur sichtbare Personen.
 - **Suchparameter:** `person` (Ausgangsperson; ändert die Bezugsperson des
-  Baums nicht), `mode` = `vorfahren` (Standard) oder `alle`, `jahr`
-  (Startjahr; sonst das Jahr mit den meisten Personen).
+  Baums nicht), `mode` = `vorfahren` (Standard), `alle` oder `lebensweg`,
+  `jahr` (Startjahr; sonst das Jahr mit den meisten Personen), beim
+  Lebensweg `art` = `person` (Standard), `vaterlinie` oder `mutterlinie`.
 - **Daten:** `loadMapView` (aus `lib/services/map.ts`) mit Person, Cookie
-  der Bezugsperson und Modus.
+  der Bezugsperson und Modus; beim Lebensweg stattdessen nur
+  `loadLifePathView` (`lib/services/life-path.ts`) — die Kartendaten der
+  anderen Betriebsarten werden dann nicht geladen.
 - **Anzeige:** Ausgangsperson mit Link („ich“ bzw. „Bezugsperson“),
-  `MapPersonChooser`, Umschalter Vorfahren/alle, `MapExplorer` (Karte,
-  Jahresregler; Linien nur mit Ausgangsperson). Ohne Ausgangsperson im
-  Modus Vorfahren ein Hinweis statt Karte. Für Administratoren ein Hinweis
-  auf Ortstexte ohne Koordinaten mit Link nach `/admin/places`.
-  Aufklappbare Zählregeln, Quellenangabe der Geodaten, Rechenzeit.
+  `MapPersonChooser`, Umschalter Vorfahren/alle/Lebensweg (`ModeSwitch`,
+  auf beiden Ansichten), `MapExplorer` (Karte, Jahresregler; Linien nur mit
+  Ausgangsperson). Ohne Ausgangsperson im Modus Vorfahren ein Hinweis statt
+  Karte. Für Administratoren ein Hinweis auf Ortstexte ohne Koordinaten mit
+  Link nach `/admin/places`. Aufklappbare Zählregeln, Quellenangabe der
+  Geodaten, Rechenzeit.
+- **Lebensweg** (`LifePathPage` in derselben Datei): Überschrift
+  „Lebensweg“, Person mit „Andere Person …“, Umschalter
+  Person/Vaterlinie/Mutterlinie (Links, `aria-current`), `LifePathMap`;
+  ohne sichtbare Person ein Hinweis. Aufklappbar „Wie entsteht der Weg?“
+  mit Kontexthilfe (`lebensweg`).
 
 ### `/people` — `app/people/page.tsx`
 
@@ -411,10 +420,14 @@ Die Personenseite.
   `listSourceOptions`, `listDuplicatesOfPerson`, `getPersonOrigin` (Block
   „Herkunft“ und Chips an Ereignissen, weiteren Namen, Beziehungen und
   Belegen). Für alle: `getPersonRoots` (Standard 4. Generation, nach Land;
-  parallel zu `getPersonOrigin`).
+  parallel zu `getPersonOrigin`) und `lifePathEntry` (lohnt sich ein
+  Lebensweg? parallel dazu).
 - **Anzeige (Komponenten):** `DuplicateBanner` (nur Bearbeiter), Kopf mit
   `Avatar`, Lebensdaten samt abweichender Zweitangaben, Knöpfe
-  „Bearbeiten“, „Im Stammbaum zeigen“ (`/tree?focus=…`) und — nur
+  „Bearbeiten“, „Im Stammbaum zeigen“ (`/tree?focus=…`), „Lebensweg auf der
+  Karte“ (nur wenn der eigene Weg oder sonst die Vater- bzw. Mutterlinie
+  mindestens zwei Punkte auf der Karte hat; führt zu
+  `/map?person=…&mode=lebensweg` samt passender `art`) und — nur
   Bearbeiter — „Zusammenführen …“ (`MergeDialog`);
   `ReferencePanel` (Verwandtschaft zur Bezugsperson, „Das bin ich“, „Baum
   aus dieser Sicht“, „Wie sind wir verwandt?“); Notizen; `EventSection` (Ereignisse der Person und
@@ -756,7 +769,9 @@ Fehlercodes aus den Grundregeln.
   Personen mit Angaben, alle übrigen als anonyme Platzhalter. Wer keiner
   Familie angehört (und nicht Admin ist), bekommt eine leere Antwort — auch
   keine Platzhalter, deren Zahl und Verknüpfung ihn nichts angehen.
-- **`GET /api/map`**: Kartendaten wie `/map` über `loadMapView`.
+- **`GET /api/map`**: Kartendaten wie `/map` über `loadMapView`; mit
+  `mode=lifepath&kind=person|father|mother` (und `person`) der Lebensweg
+  über `loadLifePathView`.
   Suchparameter `person`, `mode` = `ancestors` oder `all` (anders als die
   Seite, die `vorfahren`/`alle` nimmt); ohne `person` gilt die
   Bezugsperson aus dem Cookie.
@@ -1091,6 +1106,7 @@ Dienste (`tests/*.db.test.ts`) und das Zusammenspiel im Browser
 | Anmeldung, Navigation, Rechte | `e2e/read/auth.spec.ts`, `navigation.spec.ts`, `permissions.spec.ts`, `mobile.spec.ts` |
 | Baum | `e2e/read/tree-focus.spec.ts`, `tree-whole.spec.ts`, `reference.spec.ts`; `e2e/write/reference.spec.ts` |
 | Karte, Orte | `e2e/read/map.spec.ts`; `e2e/write/places.spec.ts` |
+| Lebensweg | `e2e/read/lifepath.spec.ts`; Unit: `tests/life-path.test.ts`, `tests/life-path.db.test.ts` |
 | Personen | `e2e/read/people-list.spec.ts`, `person-families.spec.ts`, `dates.spec.ts`; `e2e/write/person-lifecycle.spec.ts`, `genealogy.spec.ts`, `dates.spec.ts` |
 | Statistik | `e2e/read/statistics.spec.ts`; Unit: `tests/statistics.test.ts`, `tests/statistics.db.test.ts` |
 | Startseite | `e2e/read/today.spec.ts`; Unit: `tests/today.test.ts`, `tests/today.db.test.ts` |

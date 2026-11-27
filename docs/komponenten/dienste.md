@@ -154,7 +154,7 @@ Grundsätze der Schicht (reine async-Funktionen, Scope, kein `next/*`,
 `loadGraph` und die Graph-Typen.
 
 **Regeln und Entscheidungen:** Nicht über den Sammel-Export erreichbar sind
-`map`, `places`, `export-selection`, `exchange-export`, `gedcom-export`,
+`map`, `life-path`, `places`, `export-selection`, `exchange-export`, `gedcom-export`,
 `gedcom-import`, `gedcom-photos`, `import-jobs`, `import-linking`,
 `import-suggestions` und `media`;
 sie werden mit ihrem Pfad importiert (z.B. `@/lib/services/map`). Warum
@@ -1410,6 +1410,63 @@ Administrator (`places.ts`).
 
 **Tests:** `tests/map.db.test.ts` (Regeln: `tests/map.test.ts`);
 `e2e/read/map.spec.ts`.
+
+### lib/services/life-path.ts
+
+**Zweck:** Betriebsart „Lebensweg“ der Karte: die Orte eines Lebens bzw. die
+Geburtsorte einer Vater- oder Mutterlinie als fertiger Weg für
+`LifePathMap` (Regeln der Reihenfolge, des Zusammenfassens und der
+Linienwahl in `lib/map/life-path.ts`).
+
+**Wichtige Funktionen:**
+- `loadLifePathView(scope, {person, cookie, kind})` — Ausgangsperson wie die
+  Karte (`resolveReference`: Adresse, Cookie, „das bin ich“; gesperrte
+  Kennung fällt still zurück), Art `person`/`father`/`mother`, Weg, Grund
+  des Linienendes, Laufzeit. Ohne sichtbare Person `person: null`, `path: null`.
+- `loadLifePath(scope, personId, kind)` — nur der Weg; null, wenn die
+  Person nicht sichtbar ist.
+- `lifePathEntry(scope, personId)` — für die Personenseite: `person`, wenn
+  der eigene Weg mindestens zwei Punkte auf der Karte hat, sonst `father`
+  bzw. `mother` (beide Linien in einem Durchgang), sonst null.
+
+**Regeln und Entscheidungen:**
+- Person: Stationen sind Geburts- und Sterbeort, Ort von Heirat/Scheidung
+  bzw. Beginn/Ende einer Partnerschaft und alle Ereignisse mit Ort der
+  Person und ihrer Partnerschaften (ohne Zweitangaben). Geburt hat die
+  Rolle „start“, Tod „end“ (Rang 0), Beerdigung/Einäscherung/
+  Testamentseröffnung (`POSTHUMOUS_EVENT_TYPES`) „end“ (Rang 1), alles
+  andere „middle“. Titel: Ereignisart (bzw. Bezeichnung), bei Ereignissen
+  einer Partnerschaft „(mit <Partner>)“; Zusatz ist der Wert (Beruf …).
+- Linien: Generation für Generation über `walkLines` (eine Abfrage der
+  leiblichen Eltern je Generation für beide Linien), höchstens 12
+  Generationen plus eine Abfrage, um „Grenze erreicht“ von „nicht erfasst“
+  zu unterscheiden. Station je Vorfahr: Geburtsort, sonst Taufort
+  (Taufe/Kindstaufe, früheste zuerst, wie „Wurzeln“); Datum der Geburt,
+  sonst der Taufe („geboren …“ bzw. „getauft …“); Zusatz ist die
+  Verwandtschaftsstufe (`ringRelationTerm`, „Ausgangsperson“ für die Person
+  selbst) und ggf. „Ort der Taufe“. Älteste Generation zuerst.
+- Orte: eine Abfrage der Tabelle `Place` für alle Ortstexte (`placeKey`);
+  „nicht zuordenbar“ bzw. ohne Koordinaten nicht auf der Karte, „unsicher“
+  gilt wie auf der Karte.
+- Leistung: nie eine Abfrage je Station, nie der ganze Graph, nie die
+  Kartendaten „alle“ (Person: drei Abfragen; Linie: höchstens 13 plus zwei).
+
+**Rechte/Datenschutz:** Ausgangsperson nur, wenn sichtbar. Heirat, Scheidung
+und Ereignisse einer Partnerschaft nur mit sichtbarem Partner (strenger als
+die Ereignisliste der Personenseite, die Ereignisse einer Ehe mit gesperrtem
+Partner zeigt; Ort und Datum der Ehe zeigt die Personenseite nur an der
+Karte eines sichtbaren Partners). Von nicht sichtbaren Eltern werden Daten
+nicht behalten; ihr Geschlecht fließt nicht in die Linienwahl ein. Ein nicht
+sichtbarer Vorfahr beendet die Linie mit `lineEnd: "restricted"` — ohne
+Kennung, Name, Ort oder Jahr in der Antwort.
+
+**Protokoll:** —
+
+**Benutzt von:** `app/map/page.tsx`, `app/api/map/route.ts`,
+`app/people/[id]/page.tsx` (`lifePathEntry`).
+
+**Tests:** `tests/life-path.db.test.ts` (Regeln: `tests/life-path.test.ts`);
+`e2e/read/lifepath.spec.ts`.
 
 ### lib/services/places.ts
 
