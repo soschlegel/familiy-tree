@@ -15,7 +15,8 @@ import type { KinshipCard, KinshipConnectionView, KinshipPathStep } from "@/lib/
  *
  * Jede Verbindung trägt ihre Bezeichnung als Text („Tochter“, „Ehefrau“);
  * die Linienart (durchgezogen, gestrichelt, doppelt) ist nur Zusatz. Die
- * Kette steht außerdem als Textliste für Screenreader da.
+ * Kette steht außerdem als Textliste für Screenreader da. Alle Karten sind
+ * sichtbare Personen — die Seite rechnet nur über sie (kinship-view.ts).
  */
 
 export type Roles = { a: string; b: string };
@@ -33,16 +34,6 @@ const STEM: Record<LinkStyle, string> = {
 };
 
 function PersonCard({ card, role }: { card: KinshipCard; role?: string }) {
-  if (card.restricted) {
-    return (
-      <div
-        className="kinship-restricted w-full max-w-[15rem] rounded-xl border border-dashed border-stone-400 px-3 py-2 text-center text-sm dark:border-stone-600"
-        data-testid="kinship-card-restricted"
-      >
-        <span className="rounded bg-surface px-1.5 py-0.5 text-stone-700 dark:text-stone-300">Nicht freigegeben</span>
-      </div>
-    );
-  }
   return (
     <Link
       href={`/people/${card.id}`}
@@ -91,7 +82,7 @@ function Column({ steps, roles }: { steps: Step[]; roles?: Map<number, string> }
   );
 }
 
-const cardText = (c: KinshipCard) => (c.restricted ? "nicht freigegebene Person" : `${c.name}${c.lifespan ? ` (${c.lifespan})` : ""}`);
+const cardText = (c: KinshipCard) => `${c.name}${c.lifespan ? ` (${c.lifespan})` : ""}`;
 
 function SrList({ items }: { items: string[] }) {
   return (
@@ -258,10 +249,6 @@ export function KinshipLegend({ partner }: { partner: boolean }) {
       {item("blood", "leibliche Eltern und Kinder")}
       {item("other", "Adoptiv-, Stief- oder Pflegeeltern")}
       {partner && item("partner", "Ehe oder Partnerschaft (⚭ = verheiratet)")}
-      <li className="flex items-center gap-2">
-        <span aria-hidden className="kinship-restricted inline-block h-4 w-6 rounded border border-dashed border-stone-400" />
-        nicht freigegebene Person
-      </li>
     </ul>
   );
 }

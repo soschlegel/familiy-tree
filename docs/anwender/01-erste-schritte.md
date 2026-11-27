@@ -38,7 +38,7 @@ Ganz links steht **Stammbaum** mit dem kleinen Baum-Zeichen — ein Tipp darauf 
 - **Karte** — wo die Vorfahren in einem Jahr lebten, siehe [Karte](05-karte.md).
 - **Personen** — alle Personen, die du sehen darfst, mit Suche (auch nach Orten).
 - **Recherche** — fehlende Angaben, Widersprüche und mögliche Dubletten.
-- **Statistik** — Diagramme über deinen Stammbaum: Geburtsorte, Namen, Lebensalter, Kinderzahl, siehe [Statistik](13-statistik.md).
+- **Statistik** — Diagramme über deinen Stammbaum: Geburtsorte, Namen, Lebensalter, Kinderzahl, siehe [Statistik](13-statistik.md). Von dort (und von der Startseite) erreichst du die [Rekorde](13-statistik.md#rekorde) — die Bestwerte mit Namen.
 - **Quellen** — Kirchenbücher, Urkunden, Grabsteine … siehe [Quellen und Belege](03-quellen-und-belege.md).
 - **Daten** — Export und Import, siehe [Import und Export](08-import-und-export.md).
 - **Verwaltung** — je nach Recht: KI-Zugang, Familien, Benutzer, Änderungen.

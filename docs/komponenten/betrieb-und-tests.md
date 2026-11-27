@@ -656,9 +656,10 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
 - **`kinship.test.ts`** — Verwandtschaftsbegriffe und Wegbeschreibung.
 - **`kinship-chain.test.ts`** — Verbindungen als Personenketten
   (`lib/kinship-chain.ts`) und Sicht der Seite „Wie sind wir verwandt?“:
-  beide Blickrichtungen, mehrere Verbindungen, Ahnenschwund, gesperrte
-  Zwischenpersonen, keine Verbindung, Abgleich mit `findBloodRelation`,
-  12 000 Personen.
+  beide Blickrichtungen, mehrere Verbindungen, Ahnenschwund, streng nur über
+  sichtbare Personen (Verbindung nur über gesperrte = keine, sichtbarer
+  Umweg), Übereinstimmung mit der Bezugsperson für jedes Paar, keine
+  Verbindung, Abgleich mit `findBloodRelation`, 12 000 Personen.
 - **`layout.test.ts`** — Generationen- und Zeitstrahl-Layout, auch mit
   Hochzeiten.
 - **`map.test.ts`** — Lebend- und Ortsregel der Karte, Auswertung eines
@@ -699,6 +700,13 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   http(s)-Adressen, Rückfall auf die Umgebungsvariable.
 - **`source-classify.test.ts`** — Einordnung importierter Quellen und Anzeige
   älterer Importe.
+- **`records.test.ts`** — Seite „Rekorde“ (`lib/records.ts`): Datumsregeln
+  (vollendete Jahre, „etwa“, zu weite Spannen), lebend/verstorben,
+  Rangfolge mit Gleichstand und Obergrenze, Datenfehler (Alter über 110,
+  Eltern- und Heiratsalter, Zukunft), Partnerschaftsdauer (Tod, Scheidung,
+  besteht noch, Offenes), Kinder/Paare, Nachkommen und Linie nur über
+  sichtbare Personen, Kreise, Vornamen je Jahrhundert, nicht sichtbare
+  Personen, Familienfilter, Leistung bei 12 000 Personen.
 - **`statistics.test.ts`** — Seite „Statistik“: Datumsregeln (Jahr und
   Alter bei ungenauen Daten), Namensregeln (Geburtsname vor Ehename, erster
   Vorname, Platzhalter), Kennzahlen, Sichtbarkeit (gesperrte Personen und
@@ -781,8 +789,10 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   „sicher“) und „Erst die Eltern, dann dieses Paar“ (nur vorgeschlagene
   Paare, kein schwacher Treffer, bei jedem Hindernis ändert sich nichts).
 - **`kinship-view.db.test.ts`** — „Wie sind wir verwandt?“ je Rolle:
-  Cousine nur über gesperrte Personen (Platzhalter ohne Kennung und Namen),
-  nicht sichtbare Auswahl gilt als nicht gefunden, angeheiratet, keine
+  Cousine nur über gesperrte Personen ergibt für den Bearbeiter keine
+  Verbindung (wie seine Personenseite, ohne Kennung und Namen der
+  Gesperrten), der Administrator sieht sie; Seite und Personenseite stimmen
+  für die eigene Person überein; nicht sichtbare Auswahl gilt als nicht gefunden, angeheiratet, keine
   Verbindung, dieselbe Person.
 - **`person-redirect.db.test.ts`** — alte Kennung als Umleitung: Anlegen,
   Kette, Sichtbarkeit, gelöschtes Ziel, Rückfüllung aus dem Audit (einzeln,
@@ -806,6 +816,11 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   Administratoren, Protokoll vorher → nachher samt Anzeige in der
   Änderungsübersicht; Routen `/api/settings…` (Fehlercodes, 403 für
   Nicht-Admins und fremde Herkunft).
+- **`records.db.test.ts`** — Rekorde je Rolle: Personenzahl wie die
+  Statistik, eingeschränkte Benutzer sehen weniger, genannt werden nur
+  sichtbare Personen (auch als Kind, Partner, Linienende), Familienfilter
+  (Admin mit Familie A = Betrachter; fremde Familie = „Alle“), Benutzer ohne
+  Familie (nur lesend).
 - **`statistics.db.test.ts`** — Statistik je Rolle (Zahlen wie
   `getStatistics`, eingeschränkte Benutzer sehen weniger), keine Kennungen
   und keine Namen aus gesperrten Familien, Familienfilter (fremde Familie =
@@ -895,9 +910,11 @@ Benutzer bekommt keinen gespeicherten Zustand.
   und fremden Feldern).
 - **`kinship.spec.ts`** — „Wie sind wir verwandt?“: Einstieg von
   Personenseite und Recherche, Auswahl über die Suche, Sätze in beide
-  Richtungen, Zeichnung mit verlinkten Karten, Platzhalter ohne Angaben im
-  Seitenquelltext, Tauschen, nicht sichtbare Auswahl, dieselbe Person,
-  keine Verbindung, 390 px und axe hell/dunkel.
+  Richtungen, Zeichnung mit verlinkten Karten, Verbindung nur über
+  gesperrte Personen: derselbe Hinweis wie auf der Personenseite, keine
+  Zeichnung, nichts Gesperrtes im Seitenquelltext, Kontexthilfe; Tauschen,
+  nicht sichtbare Auswahl, dieselbe Person, keine Verbindung, Administrator
+  sieht die Verbindung, 390 px und axe hell/dunkel.
 - **`navigation.spec.ts`** — Navigation und Untermenü „Verwaltung“ je Rolle
   und Breite.
 - **`people-list.spec.ts`** — Personenliste: Suche, Familienfilter,
@@ -925,6 +942,12 @@ Benutzer bekommt keinen gespeicherten Zustand.
   390 px ohne Querscrollen, axe.
 - **`sources-list.spec.ts`** — Quellenliste: eine Seite jenseits des Endes
   zeigt die letzte Seite mit Einträgen.
+- **`records.spec.ts`** — Seite „Rekorde“: Einstieg von der Startseite,
+  alle Karten mit Zählsatz und Grundlage, Bestwerte mit verlinkten
+  Personen, Hilfe-Link, Verweise Statistik ↔ Rekorde mit Familie, Filter in
+  der Adresse, Betrachter sieht nur sichtbare Personen (keine fremden
+  Namen, fremde Familie gibt nichts frei), ohne Familie nur Hinweis, 390 px
+  hell/dunkel ohne Querscrollen mit 44-px-Tippflächen, axe.
 - **`statistics.spec.ts`** — Seite „Statistik“: alle Karten mit Grundlage,
   Hilfe-Link, Umschalter Land/Region und Familienfilter in der Adresse,
   Betrachter sieht kleinere Zahlen (fremde Familie in der Adresse gibt

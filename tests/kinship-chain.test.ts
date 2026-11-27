@@ -3,13 +3,15 @@ import { describe, expect, it } from "vitest";
 import { buildGraphIndex, type GraphEdge } from "@/lib/graph";
 import { findBloodRelation, type Sex } from "@/lib/kinship";
 import { bloodConnections, lineUp } from "@/lib/kinship-chain";
+import { relationsFromReference } from "@/lib/reference";
 import type { GraphPerson, LoadedGraph } from "@/lib/services/graph-data";
 import { kinshipViewInGraph, parsePersonParam, type KinshipFound } from "@/lib/services/kinship-view";
 import { mockData, mockEdges } from "./helpers";
 
 /**
  * „Wie sind wir verwandt?“: Verbindungen als Personenketten (lib/kinship-chain.ts)
- * und die Sicht der Seite samt Maskierung (lib/services/kinship-view.ts).
+ * und die Sicht der Seite — streng wie der Baum nur über sichtbare Personen
+ * (lib/services/kinship-view.ts).
  */
 
 let n = 0;
@@ -220,7 +222,7 @@ describe("kinshipViewInGraph", () => {
     expect(main).toMatchObject({ up: 1, down: 3, pairSubtype: "MARRIED" });
     expect(main.lineB.map((s) => s.childLabel)).toEqual(["Sohn", "Sohn", "Sohn"]);
     expect(main.lineB.map((s) => s.parentLabel)).toEqual(["Vater", "Vater", "Vater"]);
-    expect(r.path[0].card).toMatchObject({ restricted: false, id: "GT", lifespan: "* 1900" });
+    expect(r.path[0].card).toEqual({ id: "GT", name: "Vorname-GT Beispiel", lifespan: "* 1900" });
   });
 
   it("angeheiratet: Ehe-Schritte im Weg", () => {
@@ -251,30 +253,43 @@ describe("kinshipViewInGraph", () => {
     expect(kinshipViewInGraph(g, "A", "unbekannt")).toBeNull();
   });
 
-  it("nicht sichtbare Zwischenperson: Platzhalter ohne Kennung, Namen, Daten und Seite", () => {
-    const g = cousins({ V: false, GV: false });
-    const r = found(g, "A", "B");
-    const main = r.connections[0];
-    expect(main.lineA[0].card).toEqual({ restricted: true });
-    expect(main.ancestors.filter((c) => c.restricted)).toHaveLength(1);
-    // Ohne sichtbaren Vater keine Seite und kein Geschlecht.
-    expect(r.bForA).toBe("Cousine 1. Grades");
-    expect(main.lineA[1].parentLabel).toBe("Elternteil");
-    // Zwischen zwei verborgenen Personen ist auch die Art neutral.
+  it("streng wie der Baum: Verbindung nur über nicht sichtbare Personen gilt als keine", () => {
+    // Der Vater V ist verborgen: A erreicht die Großeltern nur über ihn.
+    const g = cousins({ V: false });
+    const r = kinshipViewInGraph(g, "A", "B");
+    expect(r).toMatchObject({ status: "none" });
     const json = JSON.stringify(r);
-    for (const hidden of ["Vorname-V\"", "Vorname-GV", "\"V\"", "\"GV\""]) expect(json).not.toContain(hidden);
-    expect(json).not.toContain("väterlicherseits");
+    for (const hidden of ["Vorname-V\"", "\"V\"", "GV", "GM", "Vorname-T\""]) expect(json).not.toContain(hidden);
   });
 
-  it("Elternschaft zwischen zwei Verborgenen erscheint neutral", () => {
-    const g = cousins({ V: false, GV: false, GM: false });
-    // GV→V als Adoption: zwischen zwei verborgenen Personen nicht erkennbar.
-    g.relationships = g.relationships.map((e) => (e.from === "GV" && e.to === "V" ? { ...e, subtype: "ADOPTIVE" } : e));
-    g.index = buildGraphIndex(g.relationships);
+  it("sichtbarer Umweg bleibt: nur über sichtbare Personen gerechnet, ohne Platzhalter", () => {
+    // Großvater verborgen, Großmutter sichtbar: Cousine über die Großmutter allein.
+    const g = cousins({ GV: false });
     const r = found(g, "A", "B");
-    const step = r.connections[0].lineA[0];
-    expect(step.subtype).toBe("BIOLOGICAL");
-    expect(JSON.stringify(r)).not.toContain("ADOPTIVE");
+    const main = r.connections[0];
+    expect(main.ancestors.map((c) => c.id)).toEqual(["GM"]);
+    expect(main.lineA.map((s) => s.card.id)).toEqual(["V", "A"]);
+    expect(main.lineB.map((s) => s.card.id)).toEqual(["T", "B"]);
+    expect(JSON.stringify(r)).not.toContain("GV");
+  });
+
+  it("Seite und Bezugsperson (Baumkarte, Personenseite) sagen für jedes Paar dasselbe", () => {
+    for (const hidden of [{}, { GV: false }, { V: false }, { GV: false, TM: false }, { T: false, UM: false }]) {
+      const g = cousins(hidden);
+      const visibleIds = [...g.persons.values()].filter((p) => p.visible).map((p) => p.id);
+      const index = buildGraphIndex(g.relationships.filter((e) => g.persons.get(e.from)!.visible && g.persons.get(e.to)!.visible));
+      const sexOf = (id: string) => g.persons.get(id)!.gender;
+      for (const ref of visibleIds) {
+        const terms = relationsFromReference(index, sexOf, ref);
+        for (const other of visibleIds) {
+          if (other === ref) continue;
+          // Was `other` für `ref` ist: Personenseite/Baumkarte bzw. aForB der Seite (a = other, b = ref).
+          const r = kinshipViewInGraph(g, other, ref)!;
+          const page = r.status === "found" ? r.aForB : null;
+          expect(page, `${JSON.stringify(hidden)} ${ref} → ${other}`).toBe(terms.relatives.get(other)?.term ?? null);
+        }
+      }
+    }
   });
 });
 

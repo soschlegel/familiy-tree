@@ -12,7 +12,8 @@ Nicht freigegebene Personen tauchen **nirgends** auf — auch nicht versteckt:
 
 - nicht in der Suche, in Listen, Zahlen und Statistiken,
 - nicht auf der [Karte](05-karte.md), auch nicht als Zahl,
-- nicht im Verwandtschaftsgrad: Führt die Verbindung nur über eine nicht freigegebene Person, steht dort keine Angabe,
+- nicht im Verwandtschaftsgrad und nicht unter [Wie sind wir verwandt?](15-verwandtschaft.md#nicht-freigegebene-personen): Führt die Verbindung nur über eine nicht freigegebene Person, steht dort keine Angabe,
+- nicht in den [Rekorden](13-statistik.md#rekorde): Dort stehen nur Personen, die du sehen darfst,
 - nicht in Exporten,
 - nicht bei Quellen: Wird ein Kirchenbuch auch für sie zitiert, siehst du nur, **wie viele** weitere Belege es gibt,
 - nicht in der Änderungsgeschichte (dort steht „nicht freigegeben“),

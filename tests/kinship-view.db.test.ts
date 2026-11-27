@@ -1,14 +1,15 @@
 /**
  * „Wie sind wir verwandt?“ gegen die Mock-Datenbank (loadKinshipPage):
- * Rechte der Auswahl, Platzhalter für gesperrte Personen auf dem Weg ohne
- * jede Angabe, keine Verbindung, dieselbe Person, eigene Person. Rein
+ * Rechte der Auswahl, streng wie der Baum nur über sichtbare Personen
+ * (gleich der Personenseite), keine Verbindung, dieselbe Person, eigene
+ * Person. Rein
  * lesend; überspringt sich ohne Mock-Datenbank.
  */
 import { afterAll, describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/prisma";
 import type { Scope } from "@/lib/scope";
-import { scopeForEmail } from "@/lib/services";
+import { loadReferenceFor, scopeForEmail } from "@/lib/services";
 import { loadKinshipPage, type KinshipFound } from "@/lib/services/kinship-view";
 import { mockDbSkipReason } from "./db-ready";
 import { mockData } from "./helpers";
@@ -34,39 +35,54 @@ describe.skipIf(Boolean(skipReason))("Wie sind wir verwandt? (Mock-Datenbank)", 
     if (!skipReason) await prisma.$disconnect();
   });
 
-  it("Bearbeiter: Cousine nur über gesperrte Personen — Platzhalter ohne Angaben", async () => {
+  it("Bearbeiter: Cousine nur über gesperrte Personen — streng wie der Baum keine Verbindung", async () => {
     const editor = await scope("editor@example.test");
     const page = await loadKinshipPage(editor, L.selfEditor, L.kinshipHidden.cousin);
     expect(page.self?.id).toBe(L.selfEditor);
-    const r = page.result as KinshipFound;
-    expect(r.status).toBe("found");
-    expect(r.kind).toBe("blood");
-    expect(r.bForA).toMatch(/^Cousine 1\. Grades mütterlicherseits$/);
-    expect(r.aForB).toMatch(/^Cousin(e)? 1\. Grades$/); // Seite der Cousine läuft über eine Gesperrte
-    const main = r.connections[0];
-    expect(main.ancestors).toEqual([{ restricted: true }, { restricted: true }]);
-    expect(main.lineB[0].card).toEqual({ restricted: true });
-    expect(main.lineB[1].card).toMatchObject({ restricted: false, id: L.kinshipHidden.cousin });
+    expect(page.result?.status).toBe("none");
 
-    // Nichts über die gesperrten Personen: weder Kennung noch Name noch Daten.
-    const hidden = [L.kinshipHidden.aunt];
+    // Dasselbe wie Baumkarte und Personenseite: dort ebenfalls kein Begriff.
+    const ref = await loadReferenceFor(editor, { param: L.selfEditor }, L.kinshipHidden.cousin);
+    expect(ref.view?.relatives[L.kinshipHidden.cousin]?.term ?? null).toBeNull();
+
+    // Nichts über die gesperrten Personen: weder Kennung noch Name.
     const grandparents = d.relationships
       .filter((rel) => rel.type === "PARENT_OF" && rel.toPersonId === L.kinshipHidden.aunt)
       .map((rel) => rel.fromPersonId);
     const json = JSON.stringify(page);
-    for (const id of [...hidden, ...grandparents]) {
-      const p = byId.get(id)!;
+    for (const id of [L.kinshipHidden.aunt, ...grandparents]) {
       expect(json).not.toContain(id);
-      expect(json).not.toContain(p.givenName);
+      expect(json).not.toContain(byId.get(id)!.givenName);
     }
   });
 
-  it("Administrator sieht dieselbe Verbindung mit Namen", async () => {
+  it("Administrator sieht die Verbindung über dieselben Personen mit Namen", async () => {
     const admin = await scope("admin@example.test");
     const r = (await loadKinshipPage(admin, L.selfEditor, L.kinshipHidden.cousin)).result as KinshipFound;
-    expect(r.connections[0].ancestors.every((c) => !c.restricted)).toBe(true);
+    expect(r.status).toBe("found");
+    expect(r.kind).toBe("blood");
+    expect(r.bForA).toMatch(/^Cousine 1\. Grades mütterlicherseits$/);
     expect(r.connections[0].lineB[0].card).toMatchObject({ id: L.kinshipHidden.aunt });
     expect(r.aForB).toMatch(/mütterlicherseits$/);
+  });
+
+  it("Seite und Personenseite stimmen für die eigene Person mit den sichtbaren unter den ersten 80 Personen überein", async () => {
+    const editor = await scope("editor@example.test");
+    const ref = await loadReferenceFor(editor, { param: L.selfEditor }, L.selfEditor);
+    const graphIds = d.persons.map((p) => p.id);
+    let compared = 0;
+    for (const id of graphIds.slice(0, 80)) {
+      if (id === L.selfEditor) continue;
+      const page = await loadKinshipPage(editor, id, L.selfEditor);
+      if (page.a.state !== "ok") continue; // nicht sichtbar
+      const view = (await loadReferenceFor(editor, { param: L.selfEditor }, id)).view;
+      const expected = view?.relatives[id]?.term ?? null;
+      const got = page.result?.status === "found" ? page.result.aForB : null;
+      expect(got, id).toBe(expected);
+      compared++;
+    }
+    expect(ref.view?.id).toBe(L.selfEditor);
+    expect(compared).toBeGreaterThan(20);
   });
 
   it("Betrachter: nicht sichtbare Auswahl gilt als nicht gefunden", async () => {

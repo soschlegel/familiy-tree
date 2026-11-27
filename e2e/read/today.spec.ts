@@ -197,7 +197,7 @@ test.describe("Startseite auf dem Telefon", () => {
       await page.goto(url(MANY_BIRTHDAYS));
       await expect(page.getByTestId("soon-birthdays")).toBeVisible();
       await expectNoHorizontalOverflow(page);
-      for (const id of ["today-prev", "today-next", "start-tree", "start-statistics"]) {
+      for (const id of ["today-prev", "today-next", "start-tree", "start-statistics", "start-records"]) {
         const box = (await page.getByTestId(id).boundingBox())!;
         expect(box.height, id).toBeGreaterThanOrEqual(44);
       }
