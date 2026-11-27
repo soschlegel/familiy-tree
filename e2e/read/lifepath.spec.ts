@@ -33,7 +33,9 @@ test.describe("Lebensweg als Bearbeiter", () => {
     const stations = page.getByTestId("lifepath-station");
     await expect(stations.first()).toContainText("Geburt");
     await expect(stations.last()).toContainText("Beerdigung");
-    await expect(stations.first()).toContainText("(ungenau)");
+    // Ungenaue Geburt: „um …“ steht in der Angabe, kein Zusatz „(ungenau)“.
+    await expect(stations.first()).toContainText(/um \d{4}/);
+    await expect(page.getByTestId("lifepath-list")).not.toContainText("(ungenau)");
     await expect(page.getByTestId("lifepath-undated")).toContainText("Beruf");
     await expect(page.getByTestId("lifepath-point").first()).toBeAttached();
     // Geburt und Taufe am selben Ort: ein Punkt mit zwei Nummern (Tod am selben Ort steht mit dabei).

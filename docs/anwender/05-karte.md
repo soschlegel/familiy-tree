@@ -84,7 +84,7 @@ Oben wählst du die Art des Wegs:
 - **Vaterlinie**: der Vater, dessen Vater und so weiter hinauf, je mit Geburtsort — von der ältesten bekannten Generation bis zur Person. So siehst du, wie die Familie gewandert ist. Jede Station nennt Name und Geburtsjahr und führt zur Personenseite.
 - **Mutterlinie**: dasselbe über die Mutter, deren Mutter und so weiter.
 
-**Reihenfolge:** Die Geburt steht immer vorn, Tod und Beerdigung immer hinten — auch wenn ein Datum fehlt. Dazwischen ordnet die App nach Datum. Ungenaue Daten („um 1850“, nur das Jahr) ordnet sie mit ihrem Jahr ein und schreibt **(ungenau)** dahinter. Angaben **ohne Datum** stehen unten in der Liste unter **ohne Datum** und gehören nicht zum Weg. **Abweichende Angaben** zählen nicht.
+**Reihenfolge:** Die Geburt steht immer vorn, Tod und Beerdigung immer hinten — auch wenn ein Datum fehlt. Dazwischen ordnet die App nach Datum. Ungenaue Daten („um 1850“, nur das Jahr) ordnet sie mit ihrem Jahr ein. Einen eigenen Hinweis gibt es dafür nicht: Wie sicher ein Datum ist, steht in der Angabe selbst („um 1850“, „vor 1900“); ein reines Jahr wie „1858“ erscheint so, wie es erfasst ist. Angaben **ohne Datum** stehen unten in der Liste unter **ohne Datum** und gehören nicht zum Weg. **Abweichende Angaben** zählen nicht.
 
 Beispiel: Anna Muster wurde um 1850 in Musterstadt geboren und dort getauft, wanderte 1878 nach Neu-Erfunden aus und starb 1912 in Beispielhausen; ihr Beruf steht ohne Datum.
 

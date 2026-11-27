@@ -90,8 +90,7 @@ describe.skipIf(Boolean(skipReason))("Lebensweg (Mock-Datenbank)", () => {
     // Beruf ohne Datum: nur in der Liste, ohne Nummer und Punkt.
     const job = path.stations.find((s) => s.title === "Beruf")!;
     expect(job).toMatchObject({ n: null, point: null });
-    // Ungenaue Geburt („um …“) ist als solche beschriftet.
-    expect(line[0].approx).toBe(true);
+    // Ungenaue Geburt: die Unsicherheit steht in der Angabe selbst („um …“).
     expect(line[0].dateText).toMatch(/^um /);
     // Ortstext ohne Zuordnung: in der Liste, nicht auf der Karte.
     const unassigned = path.stations.find((s) => s.placeText === UNASSIGNED)!;

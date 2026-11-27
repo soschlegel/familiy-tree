@@ -67,8 +67,6 @@ export type PathStation = {
   dateText: string;
   /** Kurz für die Karte: „1850“, „um 1850“, „zw. 1850 u. 1855“. */
   yearText: string;
-  /** Ungenaues Datum (nicht tagesgenau oder mit Zusatz) — nur ungefähr eingeordnet. */
-  approx: boolean;
   placeText: string | null;
   placeStatus: PlaceStatus;
   /** Index des Punkts auf der Karte; null ohne Ort auf der Karte. */
@@ -95,9 +93,6 @@ export type LifePath = {
 };
 
 const PRECISION_RANK = { DAY: 0, MONTH: 1, YEAR: 2 } as const;
-
-/** Ungenaues Datum: nicht tagesgenau oder mit Zusatz („um“, „vor“, Bereich …). */
-export const isApproximate = (f: FuzzyDate) => f.precision !== "DAY" || f.qualifier !== "EXACT";
 
 /** Stationen ordnen: Linie (Geburt, datierte, Tod/Beerdigung) und „ohne Datum“. */
 export function orderStations(
@@ -164,7 +159,6 @@ export function buildLifePath(
     personId: s.personId ?? null,
     dateText: s.dateLabel ?? (s.date ? formatFuzzyDate(s.date) : ""),
     yearText: s.date ? formatFuzzyYear(s.date) : "",
-    approx: s.date ? isApproximate(s.date) : false,
     placeText: s.place?.trim() || null,
     placeStatus: status,
     point: null,

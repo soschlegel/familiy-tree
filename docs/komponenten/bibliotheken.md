@@ -2078,7 +2078,7 @@ nummerieren, Orte auflösen, gleiche Orte zusammenfassen, Teilstücke
 bilden; dazu die Wahl des nächsten Vorfahren einer Vater- bzw. Mutterlinie.
 
 **Wichtige Funktionen/Typen:** `orderStations`, `buildLifePath`,
-`pointNumbers` („3“, „1–3“, „2, 4“), `isApproximate`, `nextInLine`,
+`pointNumbers` („3“, „1–3“, „2, 4“), `nextInLine`,
 `walkLines`, `LINE_MAX_GENERATIONS` (12); `StationInput`, `PathStation`,
 `PathPoint`, `PathSegment`, `LifePath`, `PlaceLookup`, `LineParent`,
 `LineEnd` (`none`, `restricted`, `ambiguous`, `limit`).
@@ -2090,7 +2090,9 @@ bilden; dazu die Wahl des nächsten Vorfahren einer Vater- bzw. Mutterlinie.
   Jahr, ohne Zusatz vor mit Zusatz), sonst Eingabereihenfolge. „middle“ ohne
   Datum → „ohne Datum“ (ohne Nummer, nicht auf dem Weg). Linien (`fixed`)
   behalten die gegebene Reihenfolge.
-- **Ungenau** (`approx`): nicht tagesgenau oder mit Zusatz.
+- **Ungenaue Daten** bekommen kein eigenes Kennzeichen: Die Unsicherheit
+  steht im Datumstext selbst („um 1858“, „vor 1900“); reine Jahres- oder
+  Monatsangaben erscheinen ohne Zusatz.
 - **Karte:** nur Orte mit Koordinaten (`PlaceLookup` liefert Koordinaten,
   „unresolvable“ oder nichts → Status `map`, `unresolvable`, `unassigned`;
   ohne Ortstext `none`). Folgt eine Station auf der Karte mit gleichen

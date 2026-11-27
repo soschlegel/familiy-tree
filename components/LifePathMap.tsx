@@ -531,20 +531,15 @@ function StationText({
   kind: "person" | "father" | "mother";
   precision?: "PLACE" | "REGION" | "COUNTRY";
 }) {
-  // Ungenaues Datum („um“, nur Jahr …): mit seinem Jahr eingeordnet und so beschriftet.
-  const approx = s.approx ? (
-    <span className="font-normal muted" title="ungenaues Datum — ungefähr eingeordnet" data-testid="lifepath-approx">
-      {" "}
-      (ungenau)
-    </span>
-  ) : null;
+  // Ungenaue Daten tragen keinen eigenen Hinweis: Die Unsicherheit steht
+  // schon in der Angabe selbst („um 1858“, „vor 1900“); reine Jahres- oder
+  // Monatsangaben bleiben ohne Zusatz.
   return (
     <span className="min-w-0">
       <span className="block">
         {s.dateText && kind === "person" && (
           <span className="font-semibold tabular-nums">
-            {s.dateText}
-            {approx} ·{" "}
+            {s.dateText} ·{" "}
           </span>
         )}
         <span className="font-medium">{s.title}</span>
@@ -553,7 +548,6 @@ function StationText({
       {kind !== "person" && (
         <span className="block text-xs muted">
           {s.dateText || "Geburtsjahr unbekannt"}
-          {s.dateText && approx}
         </span>
       )}
       <span className="block text-xs">
