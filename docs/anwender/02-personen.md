@@ -73,6 +73,7 @@ Unter dem Text steht, etwas abgesetzt, die Zeile **In diese Lebenszeit fielen:**
 - **Welche Jahre zählen:** vom Geburtsjahr bis zum Todesjahr, bei lebenden Personen bis heute. Bei ungenauen Daten nimmt die App nur die sicheren Jahre („zwischen 1880 und 1885“ geboren → ab 1885).
 - **Keine Zeile** gibt es, wenn das Geburtsjahr fehlt oder zu ungenau ist („vor 1880“, „nach 1880“ oder eine Spanne von mehr als zehn Jahren), wenn die Person gestorben ist, das Todesjahr aber fehlt, oder wenn in die Lebenszeit kein Ereignis der Liste fällt.
 - **Die wichtigsten zuerst:** Es stehen höchstens vier Ereignisse da; gibt es mehr, klappt **… weitere Ereignisse** den Rest auf.
+- **von KI, ungeprüft** hinter einem Ereignis heißt: Der KI-Assistent hat es ergänzt, ein Administrator hat es noch nicht geprüft (siehe [Einträge der KI](12-einstellungen.md#eintraege-der-ki)).
 - Mit dem Kästchen **Zeitgeschichte** unter dem Abschnitt blendest du die Zeile aus und wieder ein. Die App merkt sich das in diesem Browser — der Schalter gilt auch für den Zeitstrahl im Stammbaum und die Zeitreise auf der Karte.
 
 Woher die Ereignisse kommen, steht unter [Zeitgeschichte](12-einstellungen.md#zeitgeschichte).

@@ -194,6 +194,7 @@ Dienst über den `Scope`.
 | `GET, POST /api/history-events` | Zeitgeschichte: Zustand der Verwaltung / eigenes Ereignis anlegen | `history:manage` |
 | `PATCH, DELETE /api/history-events/[id]` | Eigenes Ereignis ändern / löschen | `history:manage` |
 | `PATCH /api/history-events/builtin/[id]` | Mitgelieferten Eintrag aus- bzw. einblenden | `history:manage` |
+| `POST /api/history-events/confirm` | Einträge der KI bestätigen (einzeln oder alle sichtbaren) | `history:manage` |
 
 ---
 
@@ -847,9 +848,12 @@ Titel „Wie sind wir verwandt?“. Bedienung: Anwender-Hilfe
 - **Rechte:** `history:manage` (Admin), sonst `/tree?denied=1`; Menüpunkt
   „Zeitgeschichte“ im Untermenü „Verwaltung“ nur mit diesem Recht.
 - **Daten:** `historyAdminState` — mitgelieferte Einträge mit `hidden`,
-  alle eigenen.
+  alle eigenen samt Herkunft, Begründung/Quelle der KI und Bestätigung.
 - **Anzeige:** `HistoryAdmin` (nutzt `/api/history-events…`), Link zur
-  Anwender-Hilfe (`HelpLink`, Ziel `zeitgeschichteVerwalten`).
+  Anwender-Hilfe (`HelpLink`, Ziel `zeitgeschichteVerwalten`). Einträge der
+  KI („von KI“, „ungeprüft“, Begründung, Quelle) lassen sich filtern („Nur
+  unbestätigte“) und bestätigen — einzeln oder „Alle sichtbaren bestätigen“
+  mit Rückfrage.
 
 ### `/hilfe` und `/hilfe/[thema]` — `app/hilfe/page.tsx`, `app/hilfe/[thema]/page.tsx`
 
@@ -1254,14 +1258,21 @@ braucht keine Route — die Seiten laden sie serverseitig.
   unbekannt 404.
 - **`PATCH /api/history-events/builtin/[id]`** (`hidden`: boolean):
   mitgelieferten Eintrag aus- bzw. einblenden; unbekannte Kennung 404.
+- **`POST /api/history-events/confirm`** (`ids`: 1 bis 500 Kennungen, mit
+  oder ohne `c:`): Einträge der KI bestätigen (`confirmHistoryEvents`) →
+  `{ confirmed: n }` (nur unbestätigte KI-Einträge zählen); eine unbekannte
+  Kennung 404, leere Liste 400. Für die KI gibt es dafür kein MCP-Werkzeug.
+- Ein `PATCH` auf einen unbestätigten KI-Eintrag bestätigt ihn zugleich
+  (der Administrator hat ihn von Hand gespeichert).
 
 ## Tests
 
 Die Routen haben überwiegend keine eigenen Unit-Tests; geprüft werden die
 Dienste (`tests/*.db.test.ts`) und das Zusammenspiel im Browser
 (Playwright unter `e2e/`). Direkt auf Routen zielen `tests/health.test.ts`,
-`tests/mcp-http.db.test.ts`, `tests/settings.db.test.ts` und
-`tests/history.db.test.ts`.
+`tests/mcp-http.db.test.ts`, `tests/settings.db.test.ts`,
+`tests/history.db.test.ts` und `tests/history-ai.db.test.ts` (Route
+`confirm`).
 
 | Bereich | E2E-Tests |
 |---|---|
@@ -1280,4 +1291,4 @@ Dienste (`tests/*.db.test.ts`) und das Zusammenspiel im Browser
 | Export, Import | `e2e/read/export.spec.ts`, `gedcom-export-dialog.spec.ts`; `e2e/write/import.spec.ts`, `gedcom-import.spec.ts` |
 | Verwaltung, KI-Zugang, Änderungen, Einstellungen | `e2e/write/admin.spec.ts`, `ai-access.spec.ts`, `changelog.spec.ts`, `settings.spec.ts`; `e2e/read/mcp-http.spec.ts` |
 | Anwender-Hilfe, Kontexthilfe | `e2e/read/help.spec.ts`; Unit: `tests/help.test.ts` |
-| Zeitgeschichte (Zeitstrahl, Karte, Lebenslauf, Verwaltung) | `e2e/read/history.spec.ts`; `e2e/write/history.spec.ts`; Unit: `tests/history.test.ts`, `tests/history.db.test.ts` |
+| Zeitgeschichte (Zeitstrahl, Karte, Lebenslauf, Verwaltung) | `e2e/read/history.spec.ts`; `e2e/write/history.spec.ts` (auch KI-Einträge, Vermerk, Bestätigen); Unit: `tests/history.test.ts`, `tests/history-origin.test.ts`, `tests/history.db.test.ts`, `tests/history-ai.db.test.ts` |

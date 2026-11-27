@@ -15,5 +15,8 @@ export const historyRequestInput = z.object({
   region: z.string().max(1000).nullable().optional(),
 });
 
+/** KI-Einträge bestätigen (POST /api/history-events/confirm): eine oder mehrere Kennungen. */
+export const historyConfirmInput = z.object({ ids: z.array(z.string().min(1).max(64)).min(1).max(500) });
+
 /** Mitgelieferten Eintrag aus- bzw. einblenden (PATCH /api/history-events/builtin/[id]). */
 export const historyHiddenInput = z.object({ hidden: z.boolean() });

@@ -2702,13 +2702,14 @@ plausible Spanne, keine leeren Texte, Stichproben der Jahreszahlen).
 **Wichtige Funktionen/Typen:**
 - `HistoryEvent` (einheitlich für mitgelieferte und eigene: `id` — eigene
   mit Vorsatz `c:` —, `source`, `title`, `from`, `to`, `kind`,
-  `description`, `region`, `rank`), `HISTORY_KINDS` / `HISTORY_KIND_LABEL`
+  `description`, `region`, `rank`, bei unbestätigten KI-Einträgen
+  `aiUnconfirmed: true`), `HISTORY_KINDS` / `HISTORY_KIND_LABEL`
   (Krieg, Politik, Seuche/Not, Wanderung, Sonstiges).
 - `mergeHistory(builtin, custom, hiddenIds)` — ausgeblendete mitgelieferte
   fallen heraus, eigene werden vereinheitlicht (Leerraum, „bis“ gleich „von“
   → Einzeljahr, unbekannte Art → Sonstiges) und bekommen den Rang
   `CUSTOM_RANK` (1 — bewusst ergänzt, gilt als wichtig); nach der Zeit
-  sortiert.
+  sortiert. Herkunft und Bestätigung der Zeile ergeben `aiUnconfirmed`.
 - `eventsInYear`, `eventsInSpan` — Auswahl: Ein Ereignis berührt ein Jahr,
   wenn es in [von, bis] liegt (Ränder eingeschlossen).
 - `splitByRank(events, limit)` — die wichtigsten `limit` nach Rang und der
@@ -2744,9 +2745,43 @@ plausible Spanne, keine leeren Texte, Stichproben der Jahreszahlen).
 ### lib/history/input.ts
 **Zweck:** Form der Anfragen an `/api/history-events` (zod): nur grobe Form
 und Obergrenzen; die eigentliche Prüfung mit Meldungen je Feld macht
-`checkHistoryInput` im Dienst.
+`checkHistoryInput` im Dienst. `historyConfirmInput` für
+`POST /api/history-events/confirm` (1 bis 500 Kennungen).
 
-**Tests (alle Module):** `tests/history.test.ts`.
+### lib/history/origin.ts
+**Zweck:** Herkunft eigener Einträge („von Hand“ / „von KI“), Bestätigung
+und Dublettenschutz für die KI — reine Funktionen, auch im Browser
+(Verwaltung, Anzeigestellen).
+
+**Wichtige Funktionen/Typen:**
+- `HISTORY_ORIGINS` / `HISTORY_ORIGIN_LABEL` (`MANUAL` „von Hand“, `AI`
+  „von KI“, `AI_EDITED` „von KI geändert“); `AI_UNCONFIRMED_LABEL` („von KI,
+  ungeprüft“ — der Vermerk an den Anzeigestellen).
+- `isUnconfirmedAi` — Herkunft KI und keine Bestätigung.
+- `aiEditEffect(before, changedFields, reason)` — nach einer Änderung durch
+  die KI: ändert sich ein Inhaltsfeld (`HISTORY_CONTENT_FIELDS`), wird die
+  Bestätigung geleert, `MANUAL` → `AI_EDITED` (`originAfterAiEdit`), die
+  Begründung ersetzt; sonst `null`.
+- `confirmsOnManualSave` — Speichern von Hand bestätigt unbestätigte
+  KI-Einträge.
+- `checkAiReason(reason, url)` — Begründung mit Quelle 15 bis 1000 Zeichen
+  (`AI_REASON_LIMITS`), optionale Adresse nur `https://` ohne Zugangsdaten.
+- `normalizeHistoryTitle`, `similarHistoryTitles` (gleich, enthalten ab 5
+  Zeichen, Tippfehler ≥ 85 % gleich, gleiche Wörter ohne Füllwörter und mit
+  grober Grundform, Jaccard ≥ 0,6), `historyYearsOverlap`,
+  `historyRegionsCompatible` (eine Region fehlt oder eine enthält die
+  andere), `findHistoryDuplicate(candidate, existing, exceptId?)`,
+  `formatDuplicateHint` (Meldung mit Titel, Jahren, Kennung und dem Weg über
+  `update_history_event` bzw. „mitgeliefert — nichts anlegen“).
+
+**Benutzt von:** `lib/history/events.ts` (`mergeHistory`),
+`lib/services/history.ts`, `lib/services/changes.ts` (Herkunft in der
+Änderungsübersicht), `mcp/tools.ts`, `components/HistoryAdmin.tsx`,
+`components/HistoryAiNote.tsx`, `components/TimelineHistory.tsx`,
+`components/MapExplorer.tsx`.
+
+**Tests (alle Module):** `tests/history.test.ts`,
+`tests/history-origin.test.ts`.
 
 ---
 

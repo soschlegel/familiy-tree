@@ -96,6 +96,17 @@ import { DUPLICATE_VERDICTS, REVIEW_REASON_MAX, REVIEW_REASON_MIN } from "../lib
 import { listDuplicateCandidates, reviewDuplicate } from "../lib/services/duplicates";
 import type { DuplicateReviewDto } from "../lib/services/duplicate-reviews";
 import { previewPersonMerge } from "../lib/services/merge";
+// Zeitgeschichte (eigener Block am Dateiende).
+import {
+  aiCreateHistoryEvent,
+  aiDeleteHistoryEvent,
+  aiSetBuiltinHidden,
+  aiUpdateHistoryEvent,
+  listHistoryEventsForAi,
+  type HistoryAdminCustomDto,
+} from "../lib/services/history";
+import { HISTORY_KINDS, HISTORY_LIMITS } from "../lib/history/events";
+import { AI_REASON_LIMITS } from "../lib/history/origin";
 
 export type ToolContext = {
   /** Wer zugreift — nur für Meldungen (E-Mail bzw. Schlüssel-Präfix). */
@@ -1199,6 +1210,7 @@ export function registerReadTools(baseServer: McpServer, ctx: ToolContext): void
 
   registerPlaceReadTools(server, ctx);
   registerDuplicateReviewReadTools(server, ctx);
+  registerHistoryReadTools(server, ctx);
 }
 
 // ---------------------------------------------------------------------------
@@ -2012,6 +2024,7 @@ export function registerWriteTools(baseServer: McpServer, ctx: ToolContext): voi
 
   registerPlaceWriteTools(server, ctx);
   registerDuplicateReviewWriteTools(server, ctx);
+  registerHistoryWriteTools(server, ctx);
 }
 
 /** Für die Ressource familytree://person/{id}. */
@@ -2486,6 +2499,247 @@ function registerDuplicateReviewWriteTools(server: McpServer, ctx: ToolContext):
         merged: false as const,
         note: "Nur die Einschätzung wurde gespeichert. Zusammenführen kann nur ein Mensch in der App (Mögliche Dubletten).",
       };
+    }),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Zeitgeschichte (historischer Rahmen): lesen für jeden Lesezugang, pflegen nur
+// mit Schreibstufe UND Recht history:manage (Administrator) — wie assign_place.
+// Einträge der KI heißen „von KI“ und tragen bis zur Bestätigung durch einen
+// Administrator in der App den Vermerk „von KI, ungeprüft“. Bewusst KEIN
+// Werkzeug zum Bestätigen.
+// ---------------------------------------------------------------------------
+
+const HISTORY_NOTE =
+  "Zeitgeschichte is general history shown as background to every user (tree timeline, map time travel, biography) — " +
+  "never a statement about a person. Never put names of persons of the family tree into title, description or region.";
+
+const historyYear = z.number().int().min(HISTORY_LIMITS.minYear).max(9999);
+const historyKindInput = z
+  .enum(HISTORY_KINDS)
+  .describe("krieg = war, politik = politics, not = epidemic/famine/disaster, wanderung = migration, sonstiges = other.");
+const historyReasonInput = z
+  .string()
+  .min(1)
+  .max(AI_REASON_LIMITS.max)
+  .describe(
+    `German justification WITH the source of the year (reference work, chronicle, archive, website), at least ${AI_REASON_LIMITS.min} characters, ` +
+      "e.g. 'Stadtchronik Beispielstadt (1910), S. 45: Hochwasser im März 1882'. Shown to administrators.",
+  );
+const historySourceUrlInput = z.string().max(AI_REASON_LIMITS.url).optional().describe("Optional https:// link to the source.");
+const historyEventIdInput = z.string().min(1).max(80).describe("Event ID from list_history_events: own entries 'c:…'.");
+
+const historyEventOutput = z
+  .object({ id: z.string(), title: z.string(), yearFrom: z.number(), origin: z.string(), unconfirmed: z.boolean() })
+  .passthrough();
+
+function historyEventOut(e: HistoryAdminCustomDto) {
+  return {
+    id: `c:${e.id}`,
+    title: e.title,
+    yearFrom: e.yearFrom,
+    yearTo: e.yearTo,
+    kind: e.kind,
+    description: e.description,
+    region: e.region,
+    origin: e.origin,
+    unconfirmed: e.unconfirmed,
+    aiReason: e.aiReason,
+    aiSourceUrl: e.aiSourceUrl,
+  };
+}
+
+function registerHistoryReadTools(server: McpServer, ctx: ToolContext): void {
+  server.registerTool(
+    "list_history_events",
+    {
+      title: "Zeitgeschichte auflisten",
+      description:
+        "The app's 'Zeitgeschichte': general historical events shown as background in the tree timeline, the map time " +
+        "travel and the biography — the bundled list (source 'builtin', fixed, may be hidden by an administrator) and own " +
+        "entries (source 'custom', id 'c:…', optional `region`). Own entries have `origin` MANUAL (by hand), AI (added by an " +
+        "AI assistant) or AI_EDITED (by hand, later changed by an AI); `unconfirmed: true` = from an AI and not yet confirmed " +
+        "by an administrator (the app shows 'von KI, ungeprüft'). Filter by `year` (events touching that year) or " +
+        "`from_year`/`to_year`, by `region` text (own entries only), `source`, `include_hidden` (hidden builtin entries " +
+        "with hidden: true), `only_unconfirmed`. Call this before adding events to avoid duplicates. " +
+        HISTORY_NOTE,
+      inputSchema: {
+        year: z.number().int().optional().describe("Only events touching this year."),
+        from_year: z.number().int().optional().describe("Only events touching the span from this year (with to_year)."),
+        to_year: z.number().int().optional(),
+        region: z.string().max(200).optional().describe("Only own entries whose region contains this text."),
+        source: z.enum(["all", "custom", "builtin"]).optional().describe("all (default), custom = own entries, builtin = bundled list."),
+        include_hidden: z.boolean().optional().describe("Also list bundled entries an administrator hid. Default false."),
+        only_unconfirmed: z.boolean().optional().describe("Only AI entries not yet confirmed by an administrator."),
+        limit: z.number().int().min(1).max(500).optional().describe("Default 100."),
+        offset: z.number().int().min(0).optional(),
+      },
+      outputSchema: {
+        total: z.number(),
+        offset: z.number(),
+        hasMore: z.boolean(),
+        events: z.array(z.object({ id: z.string(), source: z.string(), title: z.string(), from: z.number() }).passthrough()),
+      },
+      annotations: { title: "Zeitgeschichte auflisten", ...READ_ONLY },
+    },
+    run(ctx, async (scope, a) => {
+      if (a.year !== undefined && (a.from_year !== undefined || a.to_year !== undefined)) {
+        throw validationError([{ path: "year", message: "Entweder year oder from_year/to_year angeben." }]);
+      }
+      return (await listHistoryEventsForAi(scope, {
+        year: a.year,
+        fromYear: a.from_year,
+        toYear: a.to_year,
+        region: a.region,
+        source: a.source,
+        includeHidden: a.include_hidden,
+        onlyUnconfirmed: a.only_unconfirmed,
+        limit: a.limit,
+        offset: a.offset,
+      })) as unknown as Data;
+    }),
+  );
+}
+
+function registerHistoryWriteTools(server: McpServer, ctx: ToolContext): void {
+  const adminNote =
+    "Administrators only (permission history:manage); other users get a refusal. Entries by the AI are visible to all " +
+    "users at once but marked 'von KI, ungeprüft' until an administrator confirms them in the app — you cannot confirm. ";
+
+  server.registerTool(
+    "add_history_event",
+    {
+      title: "Zeitgeschichte ergänzen",
+      description:
+        "Add an event to the Zeitgeschichte, e.g. a regional event (flood, town fire, epidemic, emigration wave) for the " +
+        "regions and times the ancestors lived in. Only well-established events with a verifiable year and a source; when " +
+        "in doubt, do not add. Set `region` for regional events. `reason` (required) names the source of the year. Call " +
+        "list_history_events first: an entry with the same or a very similar title and overlapping years (bundled or own) " +
+        "is refused with a hint to the existing one — change own entries with update_history_event instead. Stored with " +
+        "origin AI. " +
+        adminNote +
+        HISTORY_NOTE +
+        " " +
+        WRITE_NOTE,
+      inputSchema: {
+        change_set_id: changeSetIdInput,
+        title: z.string().min(1).max(HISTORY_LIMITS.title).describe(`German title, at most ${HISTORY_LIMITS.title} characters, e.g. 'Hochwasser an der Beispel'.`),
+        year_from: historyYear.describe("Whole year (from 1000, not in the future)."),
+        year_to: historyYear.optional().describe("Last year of a period (inclusive); omit for a single year."),
+        kind: historyKindInput,
+        description: z.string().max(HISTORY_LIMITS.description).optional().describe("One German sentence."),
+        region: z.string().max(HISTORY_LIMITS.region).optional().describe("Region or place the event applies to, e.g. 'Beispieltal'."),
+        reason: historyReasonInput,
+        source_url: historySourceUrlInput,
+      },
+      outputSchema: { event: historyEventOutput },
+      annotations: { title: "Zeitgeschichte ergänzen", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    runWrite(ctx, async (scope, a) => {
+      const e = await aiCreateHistoryEvent(scope, {
+        title: a.title,
+        yearFrom: a.year_from,
+        yearTo: a.year_to ?? null,
+        kind: a.kind,
+        description: a.description ?? null,
+        region: a.region ?? null,
+        reason: a.reason,
+        sourceUrl: a.source_url,
+      });
+      return { event: historyEventOut(e) };
+    }),
+  );
+
+  server.registerTool(
+    "update_history_event",
+    {
+      title: "Zeitgeschichte ändern",
+      description:
+        "Change an OWN Zeitgeschichte entry (id 'c:…'; bundled entries are fixed — hide them instead). Omitted fields stay, " +
+        "null clears year_to, description or region. `reason` (required) explains the change and names the source. Any " +
+        "change of title, years, kind, description or region makes the entry unconfirmed again; an entry added by hand " +
+        "becomes 'von KI geändert'. " +
+        adminNote +
+        HISTORY_NOTE +
+        " " +
+        WRITE_NOTE,
+      inputSchema: {
+        change_set_id: changeSetIdInput,
+        event_id: historyEventIdInput,
+        title: z.string().min(1).max(HISTORY_LIMITS.title).optional(),
+        year_from: historyYear.optional(),
+        year_to: historyYear.nullable().optional(),
+        kind: historyKindInput.optional(),
+        description: z.string().max(HISTORY_LIMITS.description).nullable().optional(),
+        region: z.string().max(HISTORY_LIMITS.region).nullable().optional(),
+        reason: historyReasonInput,
+        source_url: historySourceUrlInput,
+      },
+      outputSchema: { event: historyEventOutput, changed: z.array(z.string()) },
+      annotations: { title: "Zeitgeschichte ändern", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    runWrite(ctx, async (scope, a) => {
+      const r = await aiUpdateHistoryEvent(
+        scope,
+        a.event_id,
+        { title: a.title, yearFrom: a.year_from, yearTo: a.year_to, kind: a.kind, description: a.description, region: a.region },
+        { reason: a.reason, sourceUrl: a.source_url },
+      );
+      return { event: historyEventOut(r.event), changed: r.changed };
+    }),
+  );
+
+  server.registerTool(
+    "delete_history_event",
+    {
+      title: "Zeitgeschichte löschen",
+      description:
+        "Delete an OWN Zeitgeschichte entry (id 'c:…') that is wrong or a duplicate; prefer update_history_event for " +
+        "corrections. Bundled entries cannot be deleted — hide them with set_builtin_history_event_hidden. `reason` " +
+        "(required, German) is kept in the change history together with the deleted values. " +
+        adminNote +
+        WRITE_NOTE,
+      inputSchema: {
+        change_set_id: changeSetIdInput,
+        event_id: historyEventIdInput,
+        reason: z.string().min(1).max(AI_REASON_LIMITS.max).describe(`Why the entry goes, at least ${AI_REASON_LIMITS.min} characters.`),
+      },
+      outputSchema: { deleted: z.literal(true), eventId: z.string(), title: z.string() },
+      annotations: { title: "Zeitgeschichte löschen", readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+    },
+    runWrite(ctx, async (scope, a) => {
+      const r = await aiDeleteHistoryEvent(scope, a.event_id, a.reason);
+      return { deleted: true as const, eventId: a.event_id, title: r.title };
+    }),
+  );
+
+  server.registerTool(
+    "set_builtin_history_event_hidden",
+    {
+      title: "Mitgelieferte Zeitgeschichte aus-/einblenden",
+      description:
+        "Hide a bundled Zeitgeschichte entry (source 'builtin' in list_history_events) for all users, e.g. when it does " +
+        "not fit the family's region, or show it again with hidden=false. Nothing is deleted. " +
+        adminNote +
+        WRITE_NOTE,
+      inputSchema: {
+        change_set_id: changeSetIdInput,
+        builtin_id: z.string().min(1).max(80).describe("ID of a bundled entry from list_history_events (source 'builtin')."),
+        hidden: z.boolean().describe("true = hide, false = show again."),
+      },
+      outputSchema: { id: z.string(), title: z.string(), hidden: z.boolean() },
+      annotations: {
+        title: "Mitgelieferte Zeitgeschichte aus-/einblenden",
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    runWrite(ctx, async (scope, a) => {
+      const r = await aiSetBuiltinHidden(scope, a.builtin_id, a.hidden);
+      return { id: r.id, title: r.title, hidden: r.hidden };
     }),
   );
 }

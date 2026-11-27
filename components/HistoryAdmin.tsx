@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
 
 import { apiFetch, jsonBody } from "./api-client";
+import { HelpLink } from "./HelpLink";
 import {
   formatHistoryYears,
   HISTORY_KIND_LABEL,
@@ -11,6 +12,8 @@ import {
   HISTORY_LIMITS,
   isHistoryKind,
 } from "@/lib/history/events";
+import { HISTORY_ORIGIN_LABEL } from "@/lib/history/origin";
+import { safeHttpUrl } from "@/lib/source-classify";
 import type { HistoryAdminBuiltinDto, HistoryAdminCustomDto, HistoryAdminState } from "@/lib/services/history";
 
 type Send = (url: string, init: RequestInit, success: string) => Promise<{ ok: boolean; fields?: Record<string, string> }>;
@@ -38,6 +41,9 @@ const bodyOf = (d: Draft) => ({
 });
 
 const kindLabel = (k: string) => (isHistoryKind(k) ? HISTORY_KIND_LABEL[k] : k);
+
+/** „2026-11-27T…“ → „27.11.2026“ (UTC, gleich auf Server und im Browser). */
+const isoToGerman = (iso: string) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
 
 /**
  * Verwaltung der Zeitgeschichte (/admin/history): eigene Ereignisse anlegen,
@@ -69,6 +75,21 @@ export function HistoryAdmin({ state }: { state: HistoryAdminState }) {
   };
 
   const hiddenCount = state.builtin.filter((b) => b.hidden).length;
+  const [onlyUnconfirmed, setOnlyUnconfirmed] = useState(false);
+  const unconfirmedCount = state.custom.filter((c) => c.unconfirmed).length;
+  const shown = onlyUnconfirmed ? state.custom.filter((c) => c.unconfirmed) : state.custom;
+  const shownUnconfirmed = shown.filter((c) => c.unconfirmed);
+
+  async function confirmAll() {
+    const n = shownUnconfirmed.length;
+    if (n === 0) return;
+    if (!confirm(n === 1 ? "Den angezeigten KI-Eintrag als geprüft bestätigen?" : `Alle ${n} angezeigten KI-Einträge als geprüft bestätigen?`)) return;
+    await send(
+      "/api/history-events/confirm",
+      jsonBody("POST", { ids: shownUnconfirmed.map((c) => c.id) }),
+      n === 1 ? "1 Eintrag bestätigt." : `${n} Einträge bestätigt.`,
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -82,17 +103,53 @@ export function HistoryAdmin({ state }: { state: HistoryAdminState }) {
       </div>
 
       <section className="space-y-3" aria-labelledby="history-custom-title">
-        <h2 id="history-custom-title" className="section-title">
-          Eigene Ereignisse
-        </h2>
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 id="history-custom-title" className="section-title">
+            Eigene Ereignisse
+          </h2>
+          {unconfirmedCount > 0 && (
+            <span className="text-sm muted" data-testid="history-unconfirmed-count">
+              davon {unconfirmedCount} von KI, ungeprüft
+            </span>
+          )}
+        </div>
+        {(unconfirmedCount > 0 || onlyUnconfirmed) && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <label className="flex cursor-pointer items-center gap-2 text-sm max-md:min-h-11">
+              <input
+                type="checkbox"
+                checked={onlyUnconfirmed}
+                onChange={(e) => setOnlyUnconfirmed(e.target.checked)}
+                data-testid="history-filter-unconfirmed"
+              />
+              Nur unbestätigte
+            </label>
+            <HelpLink to="zeitgeschichteKi" compact label="Wie prüfe ich Einträge der KI?" className="self-center" />
+            {shownUnconfirmed.length > 0 && (
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={busy}
+                onClick={() => void confirmAll()}
+                data-testid="history-confirm-all"
+              >
+                Alle sichtbaren bestätigen ({shownUnconfirmed.length})
+              </button>
+            )}
+          </div>
+        )}
         {state.custom.length === 0 ? (
           <p className="text-sm muted" data-testid="history-custom-empty">
             Noch keine eigenen Ereignisse. Ergänze hier zum Beispiel ein Hochwasser, einen Stadtbrand oder eine Auswanderung
             aus deiner Gegend.
           </p>
+        ) : shown.length === 0 ? (
+          <p className="text-sm muted" data-testid="history-filter-empty">
+            Keine unbestätigten Einträge der KI.
+          </p>
         ) : (
           <ul className="space-y-3">
-            {state.custom.map((c) => (
+            {shown.map((c) => (
               <CustomCard key={c.id} event={c} busy={busy} send={send} />
             ))}
           </ul>
@@ -184,6 +241,11 @@ function CustomCard({ event: c, busy, send }: { event: HistoryAdminCustomDto; bu
 
   return (
     <li className="card space-y-2 p-4" data-testid="history-custom">
+      {editing && c.unconfirmed && (
+        <p className="text-sm muted" data-testid="history-edit-confirms">
+          Eintrag der KI: Mit <strong>Speichern</strong> gilt er als von dir geprüft und bestätigt.
+        </p>
+      )}
       {editing ? (
         <HistoryForm
           initial={draftOf(c)}
@@ -207,6 +269,16 @@ function CustomCard({ event: c, busy, send }: { event: HistoryAdminCustomDto; bu
               {c.title}
             </h3>
             <span className="badge">{kindLabel(c.kind)}</span>
+            {c.origin !== "MANUAL" && (
+              <span className="badge-alt" data-testid="history-custom-origin">
+                {HISTORY_ORIGIN_LABEL[c.origin]}
+              </span>
+            )}
+            {c.unconfirmed && (
+              <span className="badge border-dashed" data-testid="history-custom-unconfirmed">
+                ungeprüft
+              </span>
+            )}
           </div>
           {c.description && <p className="max-w-3xl text-sm">{c.description}</p>}
           {c.region && (
@@ -214,7 +286,47 @@ function CustomCard({ event: c, busy, send }: { event: HistoryAdminCustomDto; bu
               Gilt für: {c.region}
             </p>
           )}
+          {c.origin !== "MANUAL" && (c.aiReason || c.aiSourceUrl) && (
+            <div className="max-w-3xl space-y-0.5 border-l-2 border-stone-300 pl-3 text-sm dark:border-stone-600" data-testid="history-custom-reason">
+              {c.aiReason && (
+                <p>
+                  <span className="muted">Begründung der KI: </span>
+                  {c.aiReason}
+                </p>
+              )}
+              {c.aiSourceUrl && (
+                <p className="break-all">
+                  <span className="muted">Quelle: </span>
+                  <a
+                    href={safeHttpUrl(c.aiSourceUrl) ?? undefined}
+                    target="_blank"
+                    rel="noopener noreferrer nofollow"
+                    className="text-accent-700 underline-offset-2 hover:underline dark:text-accent-300"
+                  >
+                    {c.aiSourceUrl}
+                  </a>
+                </p>
+              )}
+            </div>
+          )}
+          {c.origin !== "MANUAL" && c.confirmedAt && (
+            <p className="text-xs muted" data-testid="history-custom-confirmed">
+              Bestätigt am {isoToGerman(c.confirmedAt)}
+              {c.confirmedBy ? ` von ${c.confirmedBy}` : ""}
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
+            {c.unconfirmed && (
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={busy}
+                onClick={() => void send("/api/history-events/confirm", jsonBody("POST", { ids: [c.id] }), `„${c.title}“ bestätigt.`)}
+                aria-label={`${c.title} bestätigen`}
+              >
+                Bestätigen
+              </button>
+            )}
             <button type="button" className="btn-secondary" disabled={busy} onClick={() => setEditing(true)} aria-label={`${c.title} ändern`}>
               Ändern
             </button>

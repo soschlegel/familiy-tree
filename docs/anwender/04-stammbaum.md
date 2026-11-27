@@ -24,6 +24,7 @@ Im **Zeitstrahl** stehen an der Jahresachse links dezente Marken für allgemeine
 - **Zeigst du auf eine Marke** oder tippst sie an, erscheint daneben, was es war: Titel, Jahre, Art und ein Satz Beschreibung. Liegen mehrere Ereignisse dicht beieinander, stehen sie zusammen in dieser Anzeige. Escape oder ein Tipp daneben schließt sie.
 - **Mit der Tastatur:** Die Marken lassen sich mit der Tab-Taste erreichen.
 - Die Marken sind nur **Hintergrund** — sie sagen nichts über die Personen im Baum.
+- Steht in der Anzeige hinter einem Ereignis **von KI, ungeprüft**, hat der KI-Assistent es ergänzt, und ein Administrator hat es noch nicht geprüft (siehe [Einträge der KI](12-einstellungen.md#eintraege-der-ki)).
 - Mit dem Kästchen **Zeitgeschichte** in der Werkzeugleiste (nur im Zeitstrahl) blendest du die Marken aus und wieder ein. Die App merkt sich das in diesem Browser; der Schalter gilt auch für die Karte und den Lebenslauf.
 
 Welche Ereignisse es gibt und wie ein Administrator eigene ergänzt, steht unter [Zeitgeschichte](12-einstellungen.md#zeitgeschichte).
