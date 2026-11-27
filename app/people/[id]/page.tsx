@@ -49,6 +49,8 @@ import { PersonFamilies } from "@/components/PersonFamilies";
 import { PersonChanges } from "@/components/PersonChanges";
 import { PersonOrigin } from "@/components/PersonOrigin";
 import { getPersonOrigin } from "@/lib/services/origin";
+import { getPersonRoots } from "@/lib/services/roots";
+import { PersonRoots } from "@/components/PersonRoots";
 import {
   RelationshipEditor,
   type RelationRow,
@@ -334,7 +336,12 @@ export default async function PersonPage({
 
   // Herkunft (Importe, Zusammenführungen, Chips an den Einträgen) — nur für
   // Bearbeiter; der Dienst prüft das Recht selbst noch einmal.
-  const origin = canEdit ? await getPersonOrigin(scope, id) : null;
+  // Wurzeln (Standard: 4. Generation, nach Land) gleich mitliefern; ohne
+  // leibliche Eltern entfällt der Abschnitt (components/PersonRoots.tsx).
+  const [origin, roots] = await Promise.all([
+    canEdit ? getPersonOrigin(scope, id) : null,
+    getPersonRoots(scope, id),
+  ]);
 
   // Lebensereignisse: die der Person und die ihrer Beziehungen in einer
   // Liste (eine Stelle zum Lesen und Bearbeiten), chronologisch.
@@ -728,6 +735,8 @@ export default async function PersonPage({
           </Group>
         </div>
       </section>
+
+      {roots && roots.parentCount > 0 && <PersonRoots personId={person.id} initial={roots} />}
 
       <CitationSection
         personId={person.id}

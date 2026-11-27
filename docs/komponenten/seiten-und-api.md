@@ -128,6 +128,7 @@ Dienst über den `Scope`.
 | `GET, PATCH, DELETE /api/persons/[id]` | Person lesen / ändern / löschen; alte Kennung: `GET` 308 auf die bleibende Person, `PATCH`/`DELETE` 409 mit `mergedInto` — beides nur, wenn die bleibende Person sichtbar ist, sonst 404 | Dienst |
 | `GET /api/persons/[id]/duplicates` | Mögliche Dubletten einer Person für den Dialog „Zusammenführen …“ (alle Klassen, Begründungssatz) | Bearbeiter beider Einträge (Dienst), sonst leer |
 | `GET /api/persons/[id]/changes` | Änderungsverlauf einer Person | Bearbeiter der Person (Dienst) |
+| `GET /api/persons/[id]/roots` | „Wurzeln“: Anteile der Länder/Regionen der Vorfahren | Person sichtbar (Dienst), sonst 404 |
 | `GET, POST /api/persons/[id]/events` | Ereignisse einer Person | Dienst |
 | `PUT /api/persons/[id]/families` | Familienzuordnung setzen | Dienst |
 | `GET, POST /api/persons/[id]/names` | Weitere Namen | Dienst |
@@ -374,7 +375,8 @@ Die Personenseite.
   Bearbeiter: `listPickablePersons` (nur sichtbare), `listFamilies`,
   `listSourceOptions`, `listDuplicatesOfPerson`, `getPersonOrigin` (Block
   „Herkunft“ und Chips an Ereignissen, weiteren Namen, Beziehungen und
-  Belegen).
+  Belegen). Für alle: `getPersonRoots` (Standard 4. Generation, nach Land;
+  parallel zu `getPersonOrigin`).
 - **Anzeige (Komponenten):** `DuplicateBanner` (nur Bearbeiter), Kopf mit
   `Avatar`, Lebensdaten samt abweichender Zweitangaben, Knöpfe
   „Bearbeiten“, „Im Stammbaum zeigen“ (`/tree?focus=…`) und — nur
@@ -385,6 +387,7 @@ Die Personenseite.
   Gruppen Eltern, Geschwister, Partner (mit Heirats-/Scheidungsorten,
   abweichenden Angaben und aufklappbaren Hochzeitsbildern über
   `MediaGallery`), Kinder — gesperrte Verwandte als Platzhalter;
+  `PersonRoots` („Wurzeln“, nur mit mindestens einem leiblichen Elternteil);
   `CitationSection` (Belege); Belegbilder (Scans an Ereignissen, Belegen,
   zitierten Quellen, Vorschaubild über `/api/media/<id>?variant=thumb`);
   `MediaGallery` (eigene Bilder). Nur Bearbeiter: `PersonOrigin`
@@ -667,6 +670,12 @@ Fehlercodes aus den Grundregeln.
   `lib/services/changes.ts`); dasselbe gilt für `GET /api/changes/[key]`.
   Enthält auch die Einträge der Personen, die in dieser aufgegangen sind
   (`fromMerged: true`, nach derselben Regel).
+- **`GET /api/persons/[id]/roots`**: `getPersonRoots` — Abschnitt „Wurzeln“
+  der Personenseite; Suchparameter `generations` (2…8, Standard 4) und
+  `level` (`country`/`region`, Standard `country`). Ungültige Angaben 400,
+  Person nicht sichtbar bzw. nicht vorhanden 404. Antwort nur mit
+  Gebietsnamen, Anteilen und Zählungen (keine Personen, keine Ortstexte).
+  Anfragegrenze `read`.
 - **`GET /api/persons/[id]/events`**: `listPersonEvents` (ohne die
   Ereignisse der Beziehungen); fehlt/unsichtbar → 404.
 - **`POST /api/persons/[id]/events`**: `createEvent` an dieser Person

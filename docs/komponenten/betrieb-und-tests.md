@@ -669,6 +669,10 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   Kennungen und Reihenfolge, Auswahl „seit zuletzt gesehen“; die echte
   Datei ist fehlerfrei, gleich dem eingebauten Text und ohne
   Commit-Kennungen oder Technikbegriffe.
+- **`roots.test.ts`** — „Wurzeln“: Anteile der Vorfahren (volle Belegung,
+  endende Linien, fehlender Elternteil, Ahnenschwund, Zyklus, nicht
+  sichtbarer Vorfahr, mehr als zwei Eltern), Zusammenfassen zu „Sonstige“,
+  Prozent-Rundung, Ort → Land/Region.
 - **`safe-fetch.test.ts`** — öffentliche Adressen, sicherer Abruf
   (Weiterleitungen, Größe, Typ, Zeit) und Nebenläufigkeitsgrenze.
 - **`scope.test.ts`** — Sicht- und Bearbeitungsrechte je Person/Beziehung,
@@ -750,6 +754,9 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   neueste Release gesehen.
 - **`research.db.test.ts`** — Verwandtschaft, Zeitleisten, Plausibilität,
   erweiterte Suche (nur lesend).
+- **`roots.db.test.ts`** — „Wurzeln“ je Rolle: gesperrte Großeltern nur als
+  „nicht freigegeben“, keine Kennungen oder Gebiete aus gesperrten Linien,
+  Stufe Region, Eingabeprüfung, Person ohne Eltern (nur lesend).
 - **`services.db.test.ts`** — die zentralen Dienste (Lesen mit Rechten,
   Anlegen/Ändern/Löschen eigener Personen).
 - **`settings.db.test.ts`** — Einstellungen: Vorrang App vor Umgebung,
@@ -847,6 +854,10 @@ Benutzer bekommt keinen gespeicherten Zustand.
 - **`reference.spec.ts`** — Bezugsperson und Ahnenlinien, keine
   Durchsickerung, Telefon.
 - **`research.spec.ts`** — Recherche-Seite als Admin und Betrachter.
+- **`roots.spec.ts`** — Abschnitt „Wurzeln“ der Personenseite: Legende und
+  Prozente, „Nicht freigegeben“, Umschalten Land/Region und Generation,
+  kein Abschnitt ohne Eltern, Schnittstelle (400/404, keine Kennungen),
+  390 px ohne Querscrollen, axe.
 - **`sources-list.spec.ts`** — Quellenliste: eine Seite jenseits des Endes
   zeigt die letzte Seite mit Einträgen.
 - **`tree-focus.spec.ts`** — Fokus-Ansicht ab fester Person, Startperson.

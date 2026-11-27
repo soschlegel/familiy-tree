@@ -88,6 +88,44 @@
   }
 }
 
+/* Ringdiagramme (components/DonutChart.tsx, z.B. „Wurzeln“ der
+   Personenseite): acht unterscheidbare Farben für Kategorien — die ersten
+   drei wie die Ahnenlinien (Okabe-Ito), alle mit mindestens 3:1 Kontrast
+   zur Kartenfläche —, dazu Grautöne für „Sonstige“, „Ort nicht
+   zugeordnet“, „Unbekannt“ und „Nicht freigegeben“. Nie allein: Legende
+   mit Bezeichnung und Prozent steht immer daneben. */
+:root {
+  --chart-1: #0072b2;
+  --chart-2: #00866a;
+  --chart-3: #c43c1e;
+  --chart-4: #976f2f;
+  --chart-5: #a8457f;
+  --chart-6: #6750a4;
+  --chart-7: #5b7a1e;
+  --chart-8: #1f7a8c;
+  --chart-other: #44403c;
+  --chart-unassigned: #78716c;
+  --chart-unknown: #a8a29e;
+  --chart-restricted: #d6d3d1;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --chart-1: #56b4e9;
+    --chart-2: #3ccb9a;
+    --chart-3: #f0846a;
+    --chart-4: #e2c389;
+    --chart-5: #e58fc0;
+    --chart-6: #b39ddb;
+    --chart-7: #a3c96a;
+    --chart-8: #5fc7d6;
+    --chart-other: #e7e5e4;
+    --chart-unassigned: #a8a29e;
+    --chart-unknown: #78716c;
+    --chart-restricted: #57534e;
+  }
+}
+
 /* Auch <html> in Papierfarbe: Was der Browser beim Überziehen des
    Bildlaufs oder beim Ein- und Ausblenden der Adressleiste außerhalb von
    <body> zeigt, ist dann kein schwarzer oder weißer Streifen. */
