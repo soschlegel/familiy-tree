@@ -114,6 +114,8 @@ beide). Ereignisse, Belege, Namen und Rohdaten folgen ihrem Träger.
 | `reference.ts` | Bezugsperson („das bin ich“), Verwandtschaft und Linien |
 | `map.ts` | Daten der Karte „Wurzeln nach Jahr“ |
 | `places.ts` | Ortstexte → Koordinaten (Ortszuordnung, nur Admin) |
+| `place-areas.ts` | Ortstexte → Land bzw. Region (eine Abfrage, für Auswertungen) |
+| `roots.ts` | „Wurzeln“ einer Person: Anteile der Länder/Regionen ihrer Vorfahren |
 | `changes.ts` | Änderungsgeschichte lesen (Personenverlauf, Paketübersicht) |
 | `ai-access.ts` | KI-Recht, persönliche Schlüssel, Prüfung je MCP-Aufruf |
 | `imports.ts` | Importläufe, Herkunft, Fremdkennungen, Rohdaten |
@@ -1523,6 +1525,73 @@ Einspielen werden nur Texte ohne vorhandene Zuordnung übernommen
 `lib/services/exchange-export.ts`.
 
 **Tests:** `tests/place-pages.db.test.ts`.
+
+### lib/services/place-areas.ts
+
+**Zweck:** Ortstexte auf Länder bzw. Regionen abbilden — gemeinsamer
+Baustein für Auswertungen (heute „Wurzeln“, vorgesehen für eine
+Statistik-Seite).
+
+**Wichtige Funktionen:** `placeAreasFor(texts, level)` — Ergebnis
+`placeKey` → Gebiet (`lib/places/area.ts`, `placeArea`). Eine Abfrage der
+Tabelle `Place` für alle Texte; das Ortsverzeichnis (`getGazetteer`) nur
+bei Stufe „Region“ und nur, wenn eine Zuordnung eine Verzeichniskennung
+hat (erster Aufruf rund 1 s, danach zwischengespeichert).
+
+**Rechte/Datenschutz:** Keine eigene Prüfung — der Aufrufer reicht nur
+Ortstexte von Angaben, die der Benutzer sehen darf. Heraus kommen nur
+Länder- bzw. Regionsnamen, keine Koordinaten, keine Notizen der Zuordnung.
+
+**Benutzt von:** `lib/services/roots.ts`.
+
+**Tests:** über `tests/roots.db.test.ts`; Regeln in `tests/roots.test.ts`.
+
+### lib/services/roots.ts
+
+**Zweck:** Abschnitt „Wurzeln“ der Personenseite: aus welchen Ländern bzw.
+Regionen die Vorfahren einer Person stammen, als Anteile (Rechnung:
+`lib/roots.ts`).
+
+**Wichtige Funktionen/Typen:** `getPersonRoots(scope, personId,
+{generations, level})` → `PersonRootsDto` (Generation, Stufe, Stücke mit
+Anteil, ganzen Prozent und Farbe, Plätze in Generation N und davon besetzte,
+Zahl der leiblichen Eltern) oder `null`; `parseRootsOptions` (Generation
+2…8, Standard 4; Stufe `country`/`region`, Standard `country`; sonst
+VALIDATION).
+
+**Regeln:**
+- **Eltern:** nur `PARENT_OF` mit Untertyp `BIOLOGICAL` — keine Adoptiv-,
+  Stief- oder Pflegeeltern. `getAncestors` (`research.ts`) wird bewusst
+  nicht benutzt: es lädt den ganzen Graphen, nimmt alle Elternarten und
+  besucht jede Person nur einmal (kein Ahnenschwund).
+- **Laden:** Generation für Generation eine Abfrage der Eltern der zuletzt
+  gefundenen sichtbaren Personen (höchstens N Abfragen mit je höchstens
+  2^g Kennungen; Ahnenschwund und Zyklen fragen nichts doppelt), dann eine
+  Abfrage der Taufen und eine der Ortszuordnungen. Nie eine Abfrage je
+  Vorfahr, nie der ganze Graph — gemessen auf den Mock-Daten 10–50 ms
+  (Stufe „Region“ beim ersten Aufruf zusätzlich das Laden des
+  Ortsverzeichnisses).
+- **Ort eines Vorfahren:** Geburtsort; fehlt er, der Ort der frühesten
+  Taufe (`BAPTISM`, `CHRISTENING`; Erwachsenentaufe zählt nicht), nie eine
+  Zweitangabe (`isAlternative`). Kein Ort → „Unbekannt“; Ort ohne
+  verwertbare Zuordnung → „Ort nicht zugeordnet“ (`lib/places/area.ts`).
+
+**Rechte/Datenschutz:** Ausgangsperson nicht sichtbar oder nicht vorhanden →
+`null` (API: 404). Von nicht sichtbaren Vorfahren wird der Geburtsort nicht
+behalten, keine Taufe gelesen und keine Eltern gesucht; ihr Anteil heißt
+„Nicht freigegeben“. Die Antwort enthält keine Personen, Namen oder
+Ortstexte — nur Gebietsnamen, Anteile und Zählungen. Die gezählten
+„Linien“ umfassen nur sichtbare Vorfahren. Dass es an einer Stelle einen
+nicht freigegebenen Vorfahren gibt, ist wie im Stammbaum (Platzhalter)
+erkennbar — mehr nicht.
+
+**Protokoll:** — (nur lesend).
+
+**Benutzt von:** `app/people/[id]/page.tsx` (Standard gleich mitgeliefert),
+`app/api/persons/[id]/roots/route.ts`.
+
+**Tests:** `tests/roots.db.test.ts` (Regeln: `tests/roots.test.ts`);
+`e2e/read/roots.spec.ts`.
 
 ---
 

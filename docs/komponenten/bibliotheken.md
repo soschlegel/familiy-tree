@@ -20,7 +20,7 @@ Test-Briefkasten).
 | Anmeldung, Rechte, Anfrage-Rahmen | `auth`, `dev-login`, `email-login`, `email-login-mail`, `authz`, `session`, `api`, `request-guard`, `csp`, `rate-limit`, `health-cache`, `scope`, `ai-tokens`, `prisma` |
 | Protokoll | `audit`, `change-sets`, `change-time` |
 | Daten und Regeln | `dates`, `date-fields`, `events`, `event-labels`, `validation`, `consistency`, `partner-labels`, `source-labels`, `source-classify` |
-| Graph und Verwandtschaft | `graph`, `kinship`, `reference` |
+| Graph und Verwandtschaft | `graph`, `kinship`, `reference`, `roots` |
 | Baumdarstellung | `tree-layout`, `layout-generations`, `focus-tree` |
 | Dubletten und Zusammenführen | `name-keys`, `duplicates`, `merge-rules`, `import-linking` |
 | Import/Export | `exchange`, `export-selection`, `import-fingerprint`, `gedcom/*`, `gedcom-import/*` |
@@ -884,6 +884,60 @@ an der Farbe hängt), `LINE_LABEL`, Cookie-Namen `REFERENCE_COOKIE`
 
 **Tests:** `tests/reference.test.ts`, `tests/reference.db.test.ts`,
 `tests/map.test.ts`.
+
+### lib/roots.ts
+**Zweck:** Rechnung des Abschnitts **„Wurzeln“** der Personenseite: wie
+sich eine Person rechnerisch auf die Herkunftsgebiete ihrer Vorfahren
+verteilt (Vorbild: Herkunfts-Torte der Ahnenportale, aber ohne DNA). Rein,
+auch im Browser nutzbar; Laden und Sichtbarkeit in `lib/services/roots.ts`.
+Name bewusst „roots“ — „Herkunft“/`origin` meint in der App die
+Import-Herkunft.
+
+**Wichtige Funktionen/Typen:** `ancestorShares` (Anteile je Vorfahr aus
+Eltern-Funktion und Sichtbarkeit; Ergebnis mit Plätzen 2^N, davon mit
+sichtbaren Vorfahren besetzten und Zahl der Eltern der Ausgangsperson),
+`rootsSlices` (Anteile → Stücke mit Bezeichnung, Prozent, Farbe),
+`roundPercentages`, `clampRootsGeneration`, `generationName` („Großeltern“,
+„Ururgroßeltern“, ab 5 „3× Urgroßeltern“), `ROOTS_LABELS`, `ROOTS_COLORS`,
+Grenzen `ROOTS_MIN_GENERATION` (2), `ROOTS_MAX_GENERATION` (8),
+`ROOTS_DEFAULT_GENERATION` (4), `ROOTS_MIN_SLICE` (2 %),
+`ROOTS_MAX_PLACE_SLICES` (8).
+
+**Regeln (Entscheidung des Eigentümers):**
+- Betrachtet wird Generation N (Eltern = 1); jeder Platz dort zählt 1/2^N.
+  Jeder Vorfahr gibt seinen Anteil zu gleichen Teilen an seine leiblichen
+  Eltern weiter.
+- **Linie endet vorher:** Der letzte bekannte Vorfahr steht für alle Plätze
+  dahinter (Anteil 1/2^seiner Generation). Kennt ein Vorfahr nur einen
+  Elternteil, geht die Hälfte an diesen, die andere bleibt beim Vorfahren.
+- **Fehlender Elternteil der Ausgangsperson:** dessen Hälfte ist
+  „Unbekannt“; ganz ohne Eltern alles (der Abschnitt entfällt dann).
+- **Mehr als zwei leibliche Eltern** (die App verhindert das beim Anlegen,
+  Altdaten könnten es haben): zu gleichen Teilen, kein „Unbekannt“.
+  Doppelte Kanten zählen einmal.
+- **Ahnenschwund:** derselbe Vorfahr über mehrere Linien zählt mehrfach
+  (Tiefensuche je Weg, kein globales „schon besucht“).
+- **Zyklen:** Ein Elternteil, der schon auf dem eigenen Weg zur
+  Ausgangsperson liegt (auch die Person selbst), gilt als nicht vorhanden —
+  die Rechnung endet immer.
+- **Nicht sichtbarer Vorfahr:** ganzer Anteil „Nicht freigegeben“, seine
+  Eltern werden nicht einmal abgefragt.
+- **Stücke:** Gebiete absteigend nach Anteil (gleich: Name), dann
+  „Sonstige“, „Ort nicht zugeordnet“, „Unbekannt“, „Nicht freigegeben“.
+  Gebiete unter 2 % oder jenseits des achten werden „Sonstige“ (mit Liste
+  der Gebiete) — aber nie ein einzelnes Gebiet allein: Das bleibt beim
+  Namen bzw. nimmt, wenn schon acht Farben vergeben sind, das kleinste
+  behaltene mit.
+- **Prozent:** ganze Zahlen nach dem Verfahren der größten Reste, Summe
+  genau 100 (gleich große Stücke können um 1 abweichen; Gleichstand:
+  Reihenfolge der Stücke).
+- **Farben:** CSS-Variablen `--chart-1` … `--chart-8` für Gebiete,
+  `--chart-other`, `--chart-unassigned`, `--chart-unknown`,
+  `--chart-restricted` (Grautöne) aus `app/globals.css`.
+
+**Benutzt von:** `lib/services/roots.ts`, `components/PersonRoots.tsx`.
+
+**Tests:** `tests/roots.test.ts`, `tests/roots.db.test.ts`.
 
 ---
 
@@ -1753,6 +1807,41 @@ Rangfolge, höchstens `MAX_OTHERS` = 9, für „A, B oder C“ in
 
 **Tests:** `tests/places.test.ts`.
 
+### lib/places/area.ts
+**Zweck:** Ort → **Land** bzw. **Region** aus der vorhandenen
+Ortszuordnung (Tabelle `Place`). Rein; das Ortsverzeichnis wird übergeben,
+nicht geladen (Laden: `lib/services/place-areas.ts`). Für „Wurzeln“ und
+künftige Auswertungen.
+
+**Wichtige Funktionen/Typen:** `countryName` (ISO-Code → deutscher Name über
+`Intl.DisplayNames`, unbekannte Codes bleiben stehen), `regionIndex(gaz,
+ids)` (Verzeichniskennung → Regionscode `cc.a1` und Name), `placeArea(row,
+level, regions)` → Gebiet (`key`, `label`, `countryCode`) oder
+`unassigned`; `AreaLevel`, `PlaceAreaRow`, `RegionInfo`, `PlaceArea`.
+
+**Regeln:**
+- **Land:** `countryCode` der Zuordnung; Schlüssel ist der Code, angezeigt
+  der deutsche Name.
+- **Region:** Region erster Ebene (Bundesland, Kanton, Woiwodschaft,
+  Provinz) über `gazetteerId` → Verzeichniseintrag (Ort oder Region) →
+  `a1` → Regionseintrag; Name: deutscher Name des Verzeichnisses, sonst der
+  heutige („Niederschlesien“ statt „Województwo dolnośląskie“). Bezeichnung
+  „Region, Land“. **Nicht** aus dem Anzeigenamen `label` gelesen: der nennt
+  die Region nur im deutschen Sprachraum, lässt sie bei Stadtstaaten weg
+  („Bremen, Deutschland“) und ist bei von Hand bestätigten bzw. eigenen
+  Orten frei formuliert.
+- Ohne verlässliche Region (eigene Koordinaten ohne Kennung, Zuordnung nur
+  auf ein Land, historische Landschaft, Kennung nicht mehr im Verzeichnis,
+  Region in einem anderen Land als `countryCode`): Land mit Zusatz „(ohne
+  Region)“, Schlüssel `cc.?`.
+- **Nicht zugeordnet:** keine Zeile in `Place` („offen“), „nicht
+  zuordenbar“ oder kein Ländercode. „Unsicher“ gesetzte Zuordnungen zählen
+  wie sichere.
+
+**Benutzt von:** `lib/services/place-areas.ts`.
+
+**Tests:** `tests/roots.test.ts`.
+
 ---
 
 ## Anwender-Hilfe
@@ -1786,7 +1875,7 @@ Entwicklung bei jedem Aufruf. Ins Standalone-Image kommen die Dateien über
 `outputFileTracingIncludes` in `next.config.mjs`.
 
 ### lib/help/links.ts
-**Zweck:** Ziele der Kontexthilfe (`HELP_LINKS`: Karte, Orte zuordnen,
+**Zweck:** Ziele der Kontexthilfe (`HELP_LINKS`: Karte, Wurzeln, Orte zuordnen,
 Linien, Bezugsperson, Dubletten, Dubletten-Klassen, KI-Vorprüfung der
 Dubletten, KI-Zugang, Einstellungen) an einer
 Stelle, damit der Test prüfen kann, dass Thema und Anker existieren.

@@ -24,7 +24,7 @@ Abschnitt 1). Seiten und API-Routen selbst stehen in
 - [Personen, Ereignisse, Quellen und Medien](#personen-ereignisse-quellen-und-medien)
   — `PersonForm`, `DateInput`, `EventSection`, `CitationSection`,
   `CitationLink`, `NameVariants`, `PersonFamilies`, `RelationshipEditor`,
-  `PersonChanges`, `PersonOrigin`, `PersonPicker`, `AttachedMedia`, `MediaGallery`,
+  `PersonChanges`, `PersonRoots`, `DonutChart` (mit `DonutLegend`), `PersonOrigin`, `PersonPicker`, `AttachedMedia`, `MediaGallery`,
   `DeletePersonButton`, `SelfPersonButton`, `SourceForm`, `DeleteSourceButton`
 - [Rahmen und Helfer](#rahmen-und-helfer) — `NavBar`, `PageLoading`,
   `AutoSubmit`, `api-client`, `useDismiss`, `ai-access-labels`,
@@ -395,10 +395,11 @@ Globale Styles plus wenige gemeinsame Bausteinklassen statt einer Komponentenbib
 
 - `--line-ff` (Blau, Großvater väterlicherseits), `--line-fm` (Grün), `--line-mf` (Rot), `--line-mm` (Gelb), angelehnt an die farbfehlsichtigen-freundliche Okabe-Ito-Palette; je `--line-*-fg` als Schriftfarbe auf der Linienfarbe. Nie allein verwendet — Kurzzeichen (und auf der Karte Muster) kommen immer hinzu.
 - Karte: `--map-sea`, `--map-land`, `--map-border`, `--map-neutral` (Personen ohne Ahnenlinie), `--map-ring` (gewählter Kreis).
+- Diagramme (`DonutChart`): `--chart-1` … `--chart-8` (unterscheidbare Kategorienfarben, die ersten drei wie die Ahnenlinien, hell mit mindestens 3:1 Kontrast zur Kartenfläche) und Grautöne `--chart-other` („Sonstige“), `--chart-unassigned`, `--chart-unknown`, `--chart-restricted`; im dunklen Schema hellere Töne. Nie allein — Legende mit Bezeichnung und Prozent.
 
 **Dunkles Schema**
 
-- Ausschließlich über `prefers-color-scheme: dark` (kein Umschalter): dunkle Werte für `--paper`, `--surface`, alle `--line-*` (hellere Töne, dunkle Schrift darauf) und `--map-*`; Fließtext hell. Die `accent`- und `brass`-Skalen haben keine dunklen Werte; Komponenten wählen im Dunklen über `dark:`-Klassen andere Stufen.
+- Ausschließlich über `prefers-color-scheme: dark` (kein Umschalter): dunkle Werte für `--paper`, `--surface`, alle `--line-*` (hellere Töne, dunkle Schrift darauf), `--map-*` und `--chart-*`; Fließtext hell. Die `accent`- und `brass`-Skalen haben keine dunklen Werte; Komponenten wählen im Dunklen über `dark:`-Klassen andere Stufen.
 - `color-scheme: light dark` auf `:root`, damit Browser-Bedienelemente mitziehen.
 
 **Tests:** `e2e/read/mobile.spec.ts` (Tippziele, 16-px-Feld, `dvh`-Mindesthöhe, kein Querscrollen), `e2e/read/quality.spec.ts` (axe auf Desktop- und Telefonbreite). Das dunkle Schema ist nicht gezielt getestet (unklar, ob axe im dunklen Modus läuft).
@@ -801,6 +802,71 @@ danach „Ältere Änderungen laden“ per Cursor (hängt an). Darstellung über
 vorher → nachher …“, Betrachter: „kein Abschnitt ‚Änderungen‘, API
 verweigert“). Unit (Dienst): `tests/changelog.test.ts`,
 `tests/changelog.db.test.ts`.
+
+### components/PersonRoots.tsx
+
+**Zweck:** Abschnitt „Wurzeln“ der Personenseite: aus welchen Ländern bzw.
+Regionen die Vorfahren stammen — Ring (`DonutChart`) und Legende
+(`DonutLegend`) mit Bezeichnung und ganzen Prozent. Nicht zu verwechseln
+mit „Herkunft“ (`PersonOrigin`, Import-Herkunft).
+
+**Wo eingesetzt:** `app/people/[id]/page.tsx`, nach „Familie“ — für jeden,
+der die Person sehen darf, aber nur, wenn sie mindestens einen leiblichen
+Elternteil hat (sonst entfällt der Abschnitt ganz, wie „Notizen“ ohne
+Notiz).
+
+**Props/Daten:** `personId`, `initial` (`PersonRootsDto` mit Standard
+4. Generation, nach Land — von der Seite gleich mitgeliefert, daher kein
+Ladeflackern und kein Hydration-Unterschied).
+
+**Verhalten:** Auswahl „Bis Generation“ (2–8, mit Namen und Platzzahl, z.B.
+„4 – Ururgroßeltern (16)“) und Umschalter „nach Land“/„nach Region“
+(`aria-pressed`) laden über die API nach; nur die letzte Anfrage zählt
+(schnelles Umschalten). Während des Ladens gedimmt mit `aria-busy` und
+unsichtbarer `aria-live`-Ansage; Fehler als `alert-error`. In der Mitte des
+Rings die Generation. Stücke unter einem halben Prozent heißen „unter 1 %“;
+„Sonstige“ nennt darunter die zusammengefassten Gebiete (höchstens vier,
+dann „und n weitere“). Darunter der Satz, was gezählt wurde („Gerechnet
+aus den Geburtsorten der Vorfahren (fehlt er, aus dem Ort der Taufe) bis
+zur 4. Generation (Ururgroßeltern); 4 von 16 Linien reichen bis dorthin“).
+Kontexthilfe „?“ (`HelpLink` `wurzeln`). Bei 390 px Ring über der Legende.
+
+**Server oder Client:** Client.
+
+**Ruft auf:** `GET /api/persons/<id>/roots?generations=…&level=…`.
+
+**Tests:** `e2e/read/roots.spec.ts` (Desktop und 390 px, axe). Dienst und
+Rechnung: `tests/roots.db.test.ts`, `tests/roots.test.ts`.
+
+### components/DonutChart.tsx
+
+**Zweck:** Allgemeines Ringdiagramm als eigenes Inline-SVG — keine
+Diagramm-Bibliothek, kein Skript, verträglich mit der
+Content-Security-Policy (`lib/csp.ts`; Farben über `fill`-Attribute bzw.
+`style`, die `style-src 'unsafe-inline'` erlaubt). Für „Wurzeln“ gebaut,
+für weitere Auswertungen (Statistik) gedacht.
+
+**Wo eingesetzt:** `components/PersonRoots.tsx`.
+
+**Props/Daten:** `DonutChart`: `slices` (je `key`, `label`, `value`,
+`color` als CSS-Farbe, optional `valueText`), `label` (Titel für
+Screenreader), `size`, `thickness` (Ringbreite als Anteil des Radius),
+`center` (Text in der Mitte), `testId`. `DonutLegend`: `items` (Farbe,
+Bezeichnung, optionale Zusatzzeile, Wert als Text), `caption`,
+`valueHeader`. Außerdem `ringSegmentPath` (Pfad eines Ringstücks).
+
+**Verhalten:** Anteile aus den Werten (Summe beliebig); Stück 0 entfällt,
+ein einziges Stück wird ein voller Ring, ohne Werte ein grauer Ring.
+Stücke beginnen oben und laufen im Uhrzeigersinn, getrennt durch eine
+dünne Linie in Flächenfarbe. Das SVG hat `role="img"` und ein
+`aria-label` mit allen Stücken und Werten, jedes Stück einen Tooltip;
+die Legende ist eine Tabelle (unsichtbare Überschrift und Spaltenköpfe),
+damit nichts nur über Farbe erkennbar ist. Keine Hooks — in Server- und
+Client-Komponenten nutzbar.
+
+**Server oder Client:** beides.
+
+**Tests:** über `e2e/read/roots.spec.ts`.
 
 ### components/PersonOrigin.tsx
 

@@ -1,6 +1,6 @@
 # Karte „Wurzeln nach Jahr“
 
-Wo lebten die Vorfahren in einem bestimmten Jahr? Wie die Karte zählt, was mit ungenauen Daten geschieht und woher die Koordinaten kommen.
+Wo lebten die Vorfahren in einem bestimmten Jahr? Wie die Karte zählt, was mit ungenauen Daten geschieht und woher die Koordinaten kommen — und wie der Ring „Wurzeln“ auf der Personenseite rechnet.
 
 ## Was die Karte zeigt
 
@@ -52,6 +52,37 @@ Orte, die nur als Region oder Land bekannt sind („Westfalen“, „Polen“), 
 Die Karte nennt Orte mit ihrem **heutigen** Namen, dahinter in Klammern den Namen, unter dem sie in den Daten stehen (bzw. den deutschen oder historischen Namen), wenn er anders ist: „Wrocław (Breslau), Polen“, „Gdańsk (Danzig), Polen“, „Kaliningrad (Königsberg), Russland“. Orte in Deutschland, Österreich und der Schweiz stehen ohne Klammer, dafür mit Bundesland bzw. Kanton: „Celle, Niedersachsen, Deutschland“.
 
 Die Ländergrenzen sind die **heutigen** — die Karte zeigt keine historischen Grenzen.
+
+## Wurzeln auf der Personenseite
+
+Auf jeder Personenseite mit bekannten leiblichen Eltern steht der Abschnitt **Wurzeln**: ein Ring, der zeigt, aus welchen Ländern die Vorfahren dieser Person stammen — wie die Herkunfts-Torte bei Ahnenportalen, aber ohne DNA, nur aus dem Stammbaum gerechnet. Daneben steht jedes Stück mit Namen und Prozent.
+
+- **Bis Generation**: welche Vorfahren-Ebene zählt — 2 sind die Großeltern, 3 die Urgroßeltern, 4 (Standard) die Ururgroßeltern, bis 8.
+- **nach Land** (Standard) oder **nach Region**: Region heißt Bundesland, Kanton, Woiwodschaft oder Provinz von heute.
+
+**So wird gezählt:** Jeder Platz der gewählten Generation zählt gleich viel — bei Generation 4 sind es 16 Plätze, jeder ein Sechzehntel. Beispiel: Sind von Lena Beispiel alle 16 Ururgroßeltern bekannt und 12 davon in Deutschland, 4 in Polen geboren, zeigt der Ring 75 % Deutschland und 25 % Polen.
+
+- **Endet eine Linie früher**, steht der letzte bekannte Vorfahr für alle Plätze dahinter. Ist von einem Großvater kein Elternteil bekannt, zählt sein Geburtsort also für vier von 16 Plätzen.
+- **Fehlt schon ein Elternteil** der Person selbst, ist diese Hälfte **Unbekannt**.
+- Kommt **derselbe Vorfahr über zwei Linien** vor (etwa wenn Cousin und Cousine geheiratet haben), zählt er zweimal — so wie er im Stammbaum zweimal steht.
+- Es zählen nur **leibliche** Eltern, keine Adoptiv-, Stief- oder Pflegeeltern.
+
+**Welcher Ort?** Der Geburtsort; fehlt er, der Ort der Taufe. **Abweichende Angaben** zählen nicht. Welches Land bzw. welche Region zu einem Ort gehört, steht in der Ortszuordnung (siehe [Woher kommen die Koordinaten?](05-karte.md#woher-kommen-die-koordinaten)) — es zählen also die **heutigen** Länder: Ein Vorfahr aus „Breslau“ zählt zu Polen.
+
+Die grauen Stücke:
+
+| Stück | bedeutet |
+|---|---|
+| **Ort nicht zugeordnet** | Ein Ort steht da, ist aber (noch) keinem Ort im Ortsverzeichnis zugeordnet. |
+| **Unbekannt** | Kein Geburts- und kein Taufort, oder ein Elternteil der Person fehlt. |
+| **Nicht freigegeben** | Der Vorfahr gehört zu einer Familie, die du nicht sehen darfst. Dahinter rechnet die App nicht weiter. |
+| **Sonstige** | Mehrere sehr kleine Stücke (unter 2 %) zusammen; darunter steht, welche. |
+
+Nach **Region** steht ein Land mit dem Zusatz **(ohne Region)**, wenn sich die Region nicht sicher bestimmen lässt — etwa wenn ein Ort nur als Land oder als alte Landschaft („Schlesien“) zugeordnet ist.
+
+Unter dem Ring steht, wie viele Linien bis zur gewählten Generation reichen („4 von 16 Linien reichen bis dorthin“). Die Prozente sind gerundet und ergeben zusammen immer 100; gleich große Stücke können deshalb um 1 % abweichen.
+
+> **Datenschutz:** Von Vorfahren, die du nicht sehen darfst, verrät der Ring weder Namen noch Orte — ihr Anteil heißt nur „Nicht freigegeben“.
 
 ## Ortsseiten
 

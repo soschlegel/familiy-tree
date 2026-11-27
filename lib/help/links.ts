@@ -6,6 +6,7 @@
  */
 export const HELP_LINKS = {
   karte: "/hilfe/karte#wie-wird-gezaehlt",
+  wurzeln: "/hilfe/karte#wurzeln-auf-der-personenseite",
   orteZuordnen: "/hilfe/orte-zuordnen",
   linien: "/hilfe/stammbaum#linienfarben",
   bezugsperson: "/hilfe/stammbaum#bezugsperson",
