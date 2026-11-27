@@ -171,6 +171,7 @@ Dienst über den `Scope`.
 | `GET /api/changes` | Änderungspakete | `audit:read` |
 | `GET /api/changes/[key]` | Einträge eines Pakets | `audit:read` |
 | `GET /api/export` | Export JSON/ZIP/GEDCOM | angemeldet (nur Sichtbares) |
+| `GET /api/export/count` | Zahlen der GEDCOM-Auswahl „Ab einer Person“ | angemeldet (nur Sichtbares; Person gesperrt → 404) |
 | `POST /api/import` | Austauschformat einspielen | `data:import` |
 | `POST /api/import/gedcom` | GEDCOM hochladen, Vorschau | `data:import` |
 | `GET, POST, DELETE /api/import/gedcom/[id]` | Vorschau lesen / neu berechnen / verwerfen | `data:import` |
@@ -494,7 +495,10 @@ Die Personenseite.
   ihrer Partnerschaften in einer Liste); `NameVariants`; Familie in
   Gruppen Eltern, Geschwister, Partner (mit Heirats-/Scheidungsorten,
   abweichenden Angaben und aufklappbaren Hochzeitsbildern über
-  `MediaGallery`), Kinder — gesperrte Verwandte als Platzhalter;
+  `MediaGallery`), Kinder — gesperrte Verwandte als Platzhalter; darunter
+  der Link „Vorfahren als GEDCOM exportieren …“ (`/admin/data?gedcomPerson=…`,
+  öffnet dort den Exportdialog „Ab einer Person“ — dieselben Rechte wie
+  `/admin/data`, also für jeden, der die Person sieht);
   `PersonRoots` („Wurzeln“, nur mit mindestens einem leiblichen Elternteil);
   `CitationSection` (Belege); Belegbilder (Scans an Ereignissen, Belegen,
   zitierten Quellen, Vorschaubild über `/api/media/<id>?variant=thumb`);
@@ -750,7 +754,10 @@ Titel „Wie sind wir verwandt?“. Bedienung: Anwender-Hilfe
   Importverlauf nur mit `data:import`, Link zu „Orte zuordnen“ nur mit
   `place:manage`.
 - **Daten:** `exportFamilyOverview` (Familien und Personenzahlen für den
-  GEDCOM-Exportdialog), für Admins `listFamilies`.
+  GEDCOM-Exportdialog), `exportStartPersonCard` für die Vorbelegung „Ab
+  einer Person“ (eigene Person über `storedSelfPersonId`; mit
+  `?gedcomPerson=<id>` von der Personenseite öffnet der Dialog gleich mit
+  dieser Person — nur, wenn sie sichtbar ist), für Admins `listFamilies`.
 - **Anzeige:** `DataTransfer` (Export, Austauschformat-Import),
   `GedcomImport`, `ImportHistory` (darin `ImportSources`: Importe
   benennen).
@@ -1135,8 +1142,18 @@ Fehlercodes aus den Grundregeln.
   - `gedcom`: GEDCOM 5.5.1 (`buildGedcomExport`);
   - `gedzip`: GEDCOM mit Bildern als ZIP (`buildGedcomZip`);
   - bei GEDCOM optional Familienauswahl `families=<id>,<id>` und
-    `withoutFamily=1` (`parseExportSelection`);
+    `withoutFamily=1` (`parseExportSelection`) **oder** „Ab einer Person“
+    `person=<id>` mit `partners=1`, `siblings=1`, `siblingFamilies=1`,
+    `descendants=1`, `allParents=1`, `generations=<n>`
+    (`parseExportRequest`; Person gesperrt oder unbekannt → 404, beides
+    zugleich oder ungültige Generationen → 400); Dateiname dann
+    `…_auswahl-ab-person-<Anzahl>-personen.ged|zip`;
   - anderes Format → 400.
+- **`GET /api/export/count`** (angemeldet): Zahlen der Auswahl „Ab einer
+  Person“ für den Exportdialog — dieselben Parameter wie oben, Antwort
+  `{ person, ancestors, descendants, siblings, partners, siblingFamilies,
+  total }`, keine Kennungen (`exportLineageCount`). Drosselung wie lesende
+  Anfragen.
 - **`POST /api/import`** (`data:import`; Formular `file` = JSON oder ZIP
   mit `stammbaum.json` und `media/`; Suchparameter `apply=true`): liest und
   prüft die Datei gegen das Austauschschema (Fehler → 400), berechnet einen

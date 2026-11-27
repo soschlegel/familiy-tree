@@ -1657,26 +1657,28 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 
 ### components/GedcomExportDialog.tsx
 
-- **Zweck:** Knöpfe „GEDCOM“ und „GEDCOM mit Bildern (ZIP)“ mit einem Dialog zur Familienauswahl vor dem Herunterladen.
+- **Zweck:** Knöpfe „GEDCOM“ und „GEDCOM mit Bildern (ZIP)“ mit einem Dialog zur Auswahl vor dem Herunterladen — „Nach Familien“ oder „Ab einer Person“.
 - **Wo eingesetzt:** nur in `DataTransfer`, also auf `/admin/data`.
-- **Props:** `overview` (`ExportFamilyOverview` aus `lib/export-selection`): die Familien des Benutzers, Personen je Familienkombination und die Zahl der Personen ohne Familie. Ist dieser Wert `null`, ist die Option „Personen ohne Familie“ nicht möglich.
+- **Props:** `overview` (`ExportFamilyOverview` aus `lib/export-selection`): die Familien des Benutzers, Personen je Familienkombination und die Zahl der Personen ohne Familie. Ist dieser Wert `null`, ist die Option „Personen ohne Familie“ nicht möglich. `self` (eigene Person „Das bin ich“, falls gesetzt und sichtbar) belegt „Ab einer Person“ vor; `initialPerson` (Einstieg von der Personenseite über `/admin/data?gedcomPerson=<id>`) öffnet den Dialog gleich „Ab einer Person“ mit dieser Person (Format GEDCOM).
 - **Verhalten:**
   - Echtes `<dialog>` mit `showModal`: Der Fokus bleibt im Dialog, Escape schließt, danach kehrt der Fokus zum auslösenden Knopf zurück. Ein Klick auf den abgedunkelten Hintergrund schließt ebenfalls.
   - Titel und Hinweis sind über `aria-labelledby` und `aria-describedby` verbunden.
-  - Kontrollkästchen je Familie mit Personenzahl, dazu „Personen ohne Familie“; Knöpfe „Alle auswählen“ und „Keine auswählen“.
-  - Eine Live-Zeile (`role="status"`) nennt die Personenzahl im Export. Bei voller Auswahl erklärt sie, dass derselbe Export wie bisher entsteht. Dann wird auch keine Auswahl an die URL gehängt.
-  - Ist nichts ausgewählt, ist „Herunterladen“ deaktiviert. Sonst ist es ein Link, damit der Browser auch große Dateien selbst herunterlädt.
+  - Oben ein Umschalter (zwei Optionsfelder als Segmente, je mindestens 44 px): „Nach Familien“ (Standard) und „Ab einer Person“. Es wird nur der Inhalt der gewählten Art gezeigt.
+  - Nach Familien: Kontrollkästchen je Familie mit Personenzahl, dazu „Personen ohne Familie“; Knöpfe „Alle auswählen“ und „Keine auswählen“. Die Zahl rechnet der Browser aus der Übersicht. Bei voller Auswahl erklärt die Live-Zeile, dass derselbe Export wie bisher entsteht; dann wird auch keine Auswahl an die URL gehängt.
+  - Ab einer Person: Personenwahl im Muster von `KinshipPersonField` (Suche über `/api/persons?q=`, „mich wählen“, gewählt mit Lebensdaten und „ändern“); Kästchen „Partner“, „Geschwister“, „Partner und Kinder der Geschwister“ (nur mit „Geschwister“ wählbar), „Nachkommen der Person“, „Auch Adoptiv-, Stief- und Pflegeeltern“, je mit erklärendem Halbsatz, alle aus; Feld „Generationen hinauf“ (leer = alle); unter dem Hinweis die Kontexthilfe „Wie funktioniert das?“ (`HelpLink` `gedcomAbPerson` → Anwender-Hilfe „GEDCOM ab einer Person“). Die Zahl holt der Dialog bei jeder Änderung entprellt (250 ms) von `GET /api/export/count` — nur Zahlen, aufgeschlüsselt nach Vorfahren, Nachkommen, Geschwistern, Partnern und Familien der Geschwister.
+  - Eine Live-Zeile (`role="status"`, `data-testid="export-count"`) nennt die Personenzahl im Export.
+  - Ist nichts ausgewählt (keine Familie bzw. keine Person, ungültige Generationenzahl, Person nicht verfügbar), ist „Herunterladen“ deaktiviert. Sonst ist es ein Link, damit der Browser auch große Dateien selbst herunterlädt.
   - Telefon: Breite und Höhe sind auf den Bildschirm begrenzt, die Liste scrollt, die Tippziele sind mindestens 44 px groß.
-  - Was tatsächlich exportiert werden darf, entscheidet der Server.
+  - Was tatsächlich exportiert werden darf, entscheidet der Server — „Ab einer Person“ schickt nur Person und Schalter, keine Liste von Personen.
 - **Server oder Client:** Client.
-- **Ruft auf:** `GET /api/export?format=gedcom|gedzip`, bei Teilauswahl mit Auswahlparametern aus `selectionQuery`.
-- **Tests:** `e2e/read/gedcom-export-dialog.spec.ts` (Tastatur, Escape, Fokus, Auswahl); `e2e/write/gedcom-import.spec.ts` (Export nach Import). Die Serverseite prüft `tests/gedcom-export-selection.db.test.ts`.
+- **Ruft auf:** `GET /api/export?format=gedcom|gedzip`, bei Teilauswahl mit Auswahlparametern aus `selectionQuery` bzw. `personSelectionParams`; `GET /api/export/count`; `GET /api/persons?q=`.
+- **Tests:** `e2e/read/gedcom-export-dialog.spec.ts` (Tastatur, Escape, Fokus, Auswahl, Umschalter, Person, Kästchen, Download, 390 px, Einstieg von der Personenseite); `e2e/write/gedcom-import.spec.ts` (Export nach Import). Die Serverseite prüft `tests/gedcom-export-selection.db.test.ts` und `tests/gedcom-export-person.db.test.ts`.
 
 ### components/DataTransfer.tsx
 
 - **Zweck:** Kasten „Export“ (eigenes JSON/ZIP-Format und GEDCOM) und Kasten „Import“ für eigene JSON- oder ZIP-Exportdateien.
 - **Wo eingesetzt:** `app/admin/data/page.tsx`.
-- **Props:** `canImport` (Recht `data:import`), `gedcomOverview` (wird an `GedcomExportDialog` weitergereicht).
+- **Props:** `canImport` (Recht `data:import`), `gedcomOverview`, `gedcomSelf`, `gedcomPerson` (werden an `GedcomExportDialog` als `overview`, `self`, `initialPerson` weitergereicht).
 - **Verhalten:**
   - Export steht allen offen: Links „ZIP mit Bildern“ und „Nur JSON“, darunter der GEDCOM-Dialog.
   - Import nur mit Recht, sonst steht dort ein Hinweis.

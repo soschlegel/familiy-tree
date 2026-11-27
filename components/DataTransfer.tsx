@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import type { ExportFamilyOverview } from "@/lib/export-selection";
+import type { ExportFamilyOverview, ExportPersonCard } from "@/lib/export-selection";
 
 import { apiFetch } from "./api-client";
 import { GedcomExportDialog } from "./GedcomExportDialog";
@@ -22,7 +22,19 @@ type Plan = {
 
 const box = "card p-5";
 
-export function DataTransfer({ canImport, gedcomOverview }: { canImport: boolean; gedcomOverview: ExportFamilyOverview }) {
+export function DataTransfer({
+  canImport,
+  gedcomOverview,
+  gedcomSelf = null,
+  gedcomPerson = null,
+}: {
+  canImport: boolean;
+  gedcomOverview: ExportFamilyOverview;
+  /** Eigene Person für die Vorbelegung „Ab einer Person“. */
+  gedcomSelf?: ExportPersonCard | null;
+  /** Einstieg von der Personenseite: Dialog gleich mit dieser Person öffnen. */
+  gedcomPerson?: ExportPersonCard | null;
+}) {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -96,9 +108,9 @@ export function DataTransfer({ canImport, gedcomOverview }: { canImport: boolean
         <p className="mt-4 text-sm muted">
           GEDCOM 5.5.1 für andere Stammbaumprogramme — mit Ereignissen, Namen, Quellen und Belegen; beim Import
           aufbewahrte Zusatzangaben (z.B. von MyHeritage) werden zurückgeschrieben. Vor dem Herunterladen lassen sich die
-          Familien wählen. Ob MyHeritage, Gramps oder Ancestry die Datei vollständig übernehmen, ist noch nicht ausprobiert.
+          Familien wählen — oder eine Person mit ihren Vorfahren. Ob MyHeritage, Gramps oder Ancestry die Datei vollständig übernehmen, ist noch nicht ausprobiert.
         </p>
-        <GedcomExportDialog overview={gedcomOverview} />
+        <GedcomExportDialog overview={gedcomOverview} self={gedcomSelf} initialPerson={gedcomPerson} />
       </section>
 
       <section className={box}>

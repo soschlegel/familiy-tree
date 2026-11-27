@@ -35,6 +35,7 @@ export const HELP_LINKS = {
   verwandtschaft: "/hilfe/verwandtschaft",
   verwandtschaftFreigabe: "/hilfe/verwandtschaft#nicht-freigegebene-personen",
   importVorschlaege: "/hilfe/import-und-export#vorschlaege-personen-die-es-schon-gibt",
+  gedcomAbPerson: "/hilfe/import-und-export#gedcom-ab-einer-person",
 } as const;
 
 export type HelpLinkKey = keyof typeof HELP_LINKS;

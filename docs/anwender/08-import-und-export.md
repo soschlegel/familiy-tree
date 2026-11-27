@@ -9,7 +9,29 @@ Exportieren darf jeder — aber immer nur, was er sehen darf. Nicht freigegebene
 - **ZIP mit Bildern** bzw. **Nur JSON**: das eigene Format der App, vollständig (Personen, Beziehungen, Ereignisse, Quellen, Belege, Bildzuordnungen). Das ZIP enthält zusätzlich die Bilddateien und eignet sich als Sicherung oder für einen Umzug.
 - **GEDCOM** bzw. **GEDCOM mit Bildern (ZIP)**: das Austauschformat der Stammbaumprogramme (MyHeritage, Ancestry, Gramps, Ahnenblatt …).
 
-Beim GEDCOM-Export fragt ein Dialog, **welche Familien** in die Datei sollen (alle sind vorausgewählt, mit „Alle“ und „Keine“). Er zeigt, wie viele Personen das sind. Eine Person mit mehreren Familien ist dabei, sobald eine davon gewählt ist; Beziehungen kommen nur mit, wenn beide Personen dabei sind.
+Beim GEDCOM-Export fragt ein Dialog, was in die Datei soll. Oben wählst du die Art: **Nach Familien** (so startet der Dialog) oder **Ab einer Person**.
+
+Nach Familien kreuzt du an, **welche Familien** in die Datei sollen (alle sind vorausgewählt, mit **Alle auswählen** und **Keine auswählen**). Der Dialog zeigt, wie viele Personen das sind. Eine Person mit mehreren Familien ist dabei, sobald eine davon gewählt ist; Beziehungen kommen nur mit, wenn beide Personen dabei sind.
+
+### GEDCOM ab einer Person
+
+Mit **Ab einer Person** kommt eine Person mit ihren Vorfahren in die Datei — Eltern, Großeltern, Urgroßeltern und so weiter, so weit sie erfasst sind. Vorbelegt ist deine eigene Person („Das bin ich“), wenn du sie festgelegt hast; mit **ändern** suchst du eine andere. Auf jeder Personenseite führt unter „Familie“ der Link **Vorfahren als GEDCOM exportieren …** direkt hierher, schon mit dieser Person.
+
+Ohne Häkchen sind nur die Person und ihre leiblichen Vorfahren dabei. Mit den Kästchen nimmst du mehr mit:
+
+| Kästchen | Was dazukommt |
+|---|---|
+| **Partner** | Ehe- und Lebenspartner der Person und aller Vorfahren, auch frühere, samt Hochzeit und Scheidung |
+| **Geschwister** | Brüder und Schwestern der Person und jedes Vorfahren, auch Halbgeschwister — also z.B. auch Onkel, Tanten, Großonkel |
+| **Partner und Kinder der Geschwister** | nur zusammen mit **Geschwister**: die Partner der Geschwister (Schwager und Schwägerin, angeheiratete Onkel und Tanten) und ihre Kinder (Neffen und Nichten, Cousins und Cousinen) — eine Stufe, nicht deren Kinder |
+| **Nachkommen der Person** | Kinder, Enkel und alle weiteren; mit **Partner** auch deren Partner |
+| **Auch Adoptiv-, Stief- und Pflegeeltern** | sonst nur leibliche Eltern; mit dem Häkchen auch diese Eltern und deren Vorfahren |
+
+**Generationen hinauf** begrenzt, wie weit es zurückgeht: 1 = nur die Eltern, 2 = bis zu den Großeltern. Leer lassen heißt: alle.
+
+Unten zeigt der Dialog vor dem Herunterladen, wie viele Personen in die Datei kommen — aufgeteilt nach Vorfahren, Geschwistern, Partnern usw. Ohne gewählte Person bleibt **Herunterladen** gesperrt. Der Dateiname nennt nur die Anzahl, keinen Namen.
+
+> Auch hier gilt: nur, was du sehen darfst. Ist ein Vorfahr für dich nicht freigegeben, endet die Linie dort — seine Eltern und Großeltern kommen nicht mit, selbst wenn du sie sonst sehen dürftest.
 
 Ob andere Programme den GEDCOM-Export vollständig übernehmen, ist noch nicht ausprobiert.
 
