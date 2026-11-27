@@ -7,6 +7,7 @@ import { REFERENCE_COOKIE } from "@/lib/reference";
 import { ReferenceChip } from "./ReferenceChip";
 import { SelfPersonButton } from "./SelfPersonButton";
 import { HelpLink } from "./HelpLink";
+import { kinshipHref } from "./kinship-url";
 
 /**
  * Bezugsperson auf der Personenseite (docs/fachlich/bezugsperson.md): was diese
@@ -94,6 +95,13 @@ export async function ReferencePanel({
             Baum aus dieser Sicht
           </Link>
         )}
+        <Link
+          href={kinshipHref(personId, view && !isRef ? view.id : null)}
+          data-testid="person-kinship-link"
+          className="btn-secondary"
+        >
+          Wie sind wir verwandt?
+        </Link>
         <HelpLink to="bezugsperson" compact label="Wie funktionieren Bezugsperson und Verwandtschaftsgrad?" className="self-center" />
       </div>
     </section>

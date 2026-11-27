@@ -27,6 +27,7 @@ export * from "./merge-followups";
 export * from "./redirects";
 export * from "./families";
 export * from "./kinship";
+export * from "./kinship-view";
 export * from "./reference";
 export * from "./timeline";
 export * from "./consistency";

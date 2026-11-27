@@ -241,6 +241,12 @@ export type MockLandmarks = {
    * Vorfahren gehört nur zu Familie D und ist für den Bearbeiter gesperrt.
    */
   selfEditor: string;
+  /**
+   * „Wie sind wir verwandt?“: Tante des Bearbeiters nur in Familie D (für ihn
+   * gesperrt) und ihre Tochter nur in Familie B (für ihn sichtbar) — die
+   * Cousine ist mit ihm nur über gesperrte Personen verbunden.
+   */
+  kinshipHidden: { aunt: string; cousin: string };
   /** Lebensereignisse und Namen (Erweiterung für GEDCOM-Daten). */
   genealogy: {
     /** Person mit Taufe, Beruf, Beerdigung (Stammvater A). */
@@ -1471,7 +1477,53 @@ export function generateMockData(seed: number = MOCK_SEED): MockData {
     },
   ];
 
+  // --- „Wie sind wir verwandt?“: Weg über gesperrte Personen ----------------
+  // Ganz am Ende und ohne Zufallszahlen angehängt, damit alles oben Erzeugte
+  // (IDs, Daten, Bilder) unverändert bleibt. Eine Schwester der Mutter des
+  // Bearbeiters nur in Familie D (für ihn gesperrt wie die Großeltern
+  // mütterlicherseits) und deren Tochter nur in Familie B (für ihn sichtbar):
+  // Die Cousine ist mit ihm nur über gesperrte Personen verbunden.
+  const selfMother = relationships
+    .filter((r) => r.type === "PARENT_OF" && r.subtype === "BIOLOGICAL" && r.toPersonId === selfEditor)
+    .map((r) => byId.get(r.fromPersonId)!)
+    .find((p) => p.gender === "FEMALE")!;
+  const maternalGrandparents = relationships
+    .filter((r) => r.type === "PARENT_OF" && r.subtype === "BIOLOGICAL" && r.toPersonId === selfMother.id)
+    .map((r) => byId.get(r.fromPersonId)!);
+  const motherYear = selfMother.birthDate ? selfMother.birthDate.getUTCFullYear() : 1950;
+  const hiddenAunt = add({
+    givenName: "Hiltrud",
+    familyName: maternalGrandparents.find((p) => p.gender === "MALE")?.familyName ?? familyName("D"),
+    birthName: null,
+    gender: "FEMALE",
+    birthDate: utc(motherYear + 3, 6, 14),
+    birthPlace: null,
+    deathDate: null,
+    deathPlace: null,
+    notes: null,
+    familyKeys: ["D"],
+    generation: selfMother.generation,
+    line: new Set(["D"]),
+  });
+  const hiddenCousin = add({
+    givenName: "Liselotte",
+    familyName: "Brandauer",
+    birthName: null,
+    gender: "FEMALE",
+    birthDate: utc(motherYear + 31, 9, 2),
+    birthPlace: null,
+    deathDate: null,
+    deathPlace: null,
+    notes: null,
+    familyKeys: ["B"],
+    generation: selfMother.generation + 1,
+    line: new Set(["B"]),
+  });
+  for (const gp of maternalGrandparents) parentOf(gp, hiddenAunt);
+  parentOf(hiddenAunt, hiddenCousin);
+
   const landmarks: MockLandmarks = {
+    kinshipHidden: { aunt: hiddenAunt.id, cousin: hiddenCousin.id },
     founders,
     crossMarriedIntoA: crossIntoA.wife.id,
     crossMarriedPartnerA: crossIntoA.husband.id,

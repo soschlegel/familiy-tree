@@ -98,6 +98,7 @@ Alle Seiten außer `/login`, `/login/email` und der Weiterleitung `/` sind
 | `/research/duplicates` | Alle möglichen Dubletten | angemeldet |
 | `/research/connect` | Importe verbinden | nur Admin (sonst 404) |
 | `/statistics` | Statistik: Diagramme über den sichtbaren Teil des Stammbaums | angemeldet |
+| `/kinship` | „Wie sind wir verwandt?“: Verwandtschaft zweier Personen in Worten und als Zeichnung | angemeldet; gewählte Personen müssen sichtbar sein |
 | `/sources` | Quellenliste | angemeldet |
 | `/sources/new` | Quelle anlegen | Bearbeiter in ≥ 1 Familie, sonst → `/sources` |
 | `/sources/[id]` | Quellenseite | Quelle sichtbar, sonst 404 |
@@ -392,7 +393,7 @@ Die Personenseite.
   „Bearbeiten“, „Im Stammbaum zeigen“ (`/tree?focus=…`) und — nur
   Bearbeiter — „Zusammenführen …“ (`MergeDialog`);
   `ReferencePanel` (Verwandtschaft zur Bezugsperson, „Das bin ich“, „Baum
-  aus dieser Sicht“); Notizen; `EventSection` (Ereignisse der Person und
+  aus dieser Sicht“, „Wie sind wir verwandt?“); Notizen; `EventSection` (Ereignisse der Person und
   ihrer Partnerschaften in einer Liste); `NameVariants`; Familie in
   Gruppen Eltern, Geschwister, Partner (mit Heirats-/Scheidungsorten,
   abweichenden Angaben und aufklappbaren Hochzeitsbildern über
@@ -431,7 +432,8 @@ Die Personenseite.
 - **Rechte:** angemeldet; alle Zahlen nur über sichtbare Personen.
 - **Daten:** `getStatistics`, `findDataGaps` (25 je Art),
   `listDuplicateCandidates` (20), `findInconsistencies` (200).
-- **Anzeige:** Kennzahlen (Personen, Beziehungen, Zeitraum, Bilder),
+- **Anzeige:** Zeile mit Knopf „Wie sind wir verwandt?“ (`/kinship`,
+  `research-kinship`); Kennzahlen (Personen, Beziehungen, Zeitraum, Bilder),
   Personen je Familie (Link `/people?family=…`), Datenlücken je Art
   aufklappbar (Beziehungslücken mit Link `/people/<id>?rel=<Beziehung>`),
   mögliche Dubletten (`DuplicateList`, Link „alle prüfen“), Widersprüche
@@ -471,6 +473,48 @@ Die Personenseite.
 - **Darstellung:** ohne Skript außer dem Familienfilter, ohne
   Diagramm-Bibliothek (Ring `DonutChart`, Balken und Tabellen aus
   `components/StatisticsCharts.tsx`); bei 390 px ohne waagerechtes Scrollen.
+
+### `/kinship` — `app/kinship/page.tsx`
+
+Titel „Wie sind wir verwandt?“. Bedienung: Anwender-Hilfe
+`docs/anwender/14-verwandtschaft.md` (`/hilfe/verwandtschaft`).
+
+- **Rechte:** angemeldet. Beide gewählten Personen müssen sichtbar sein,
+  sonst zeigt das Feld „Diese Person wurde nicht gefunden“ (ohne
+  Unterscheidung unbekannt/gesperrt) und es gibt kein Ergebnis. Gesperrte
+  Personen auf dem Weg erscheinen als Karte „Nicht freigegeben“ ohne
+  Namen, Daten und Link; Regel und Begründung bei
+  [`lib/services/kinship-view.ts`](dienste.md#libserviceskinship-viewts).
+- **Suchparameter:** `a` (erste Person), `b` (zweite Person) — die Adresse
+  ist teilbar, der Empfänger sieht sie mit seinen eigenen Rechten. Adressen
+  baut `kinshipHref` (`components/kinship-url.ts`).
+- **Einstiege:** „Wie sind wir verwandt?“ im Abschnitt Bezugsperson der
+  Personenseite (`ReferencePanel`, `a` = diese Person, `b` = wirksame
+  Bezugsperson, falls gesetzt und nicht dieselbe) und eine Zeile mit Knopf
+  oben auf `/research` (`research-kinship`). Kein eigener Menüpunkt (die
+  Hauptnavigation ist voll); „Recherche“ wird auf `/kinship` nicht als
+  aktiv markiert.
+- **Daten:** `loadKinshipPage` (ein `loadGraph`, eigene Person).
+- **Anzeige:** Kopf mit Kontexthilfe (`HelpLink` → `/hilfe/verwandtschaft`);
+  zwei `KinshipPersonField` mit „Tauschen“ dazwischen (Link mit vertauschten
+  Parametern, funktioniert ohne Skript); ohne zwei Personen ein Hinweis.
+  Ergebnis: dieselbe Person (`kinship-same`, `alert-info`), keine
+  Verbindung (`kinship-none`: „im Stammbaum keine Verbindung erfasst“, nie
+  „nicht verwandt“) oder die Ergebniskarte mit Art („Blutsverwandt“,
+  „Angeheiratet“, „Über Stief- oder Pflegeeltern verbunden“), zwei Sätzen
+  „A ist <Begriff> von B.“ in beide Richtungen, bei fehlendem Begriff der
+  Schrittkette, gemeinsamen Vorfahren und Generationen (Zählung wie in den
+  Begriffen: „Cousin n. Grades“, „eine Generation darüber“), ggf. dem
+  Begriff des kürzeren Wegs. Darunter „So seid ihr verbunden“ mit
+  `KinshipBloodDiagram` (nächste Blutsverwandtschaft) bzw.
+  `KinshipPathDiagram`, Zeichenerklärung und — bei gesperrten Personen —
+  Hinweis mit Kontexthilfe „Warum?“; „Weitere Verbindungen“ (bis zu drei,
+  je aufklappbar mit eigener Zeichnung).
+- **Bewusst ohne `loading.tsx`** und nicht unter `/research` (dessen
+  `loading.tsx` gälte sonst auch hier): Wechsel, die nur Suchparameter
+  ändern (Auswahl, Tauschen), blieben mit einer Ladeanzeige hängen.
+- **Darstellung:** ohne Diagramm-Bibliothek, Zeichnung als HTML/CSS; bei
+  390 px eine Spalte ohne waagerechtes Scrollen.
 
 ### `/research/duplicates` — `app/research/duplicates/page.tsx`
 
@@ -1025,6 +1069,7 @@ Dienste (`tests/*.db.test.ts`) und das Zusammenspiel im Browser
 | Karte, Orte | `e2e/read/map.spec.ts`; `e2e/write/places.spec.ts` |
 | Personen | `e2e/read/people-list.spec.ts`, `person-families.spec.ts`, `dates.spec.ts`; `e2e/write/person-lifecycle.spec.ts`, `genealogy.spec.ts`, `dates.spec.ts` |
 | Statistik | `e2e/read/statistics.spec.ts`; Unit: `tests/statistics.test.ts`, `tests/statistics.db.test.ts` |
+| Wie sind wir verwandt? | `e2e/read/kinship.spec.ts`; Unit: `tests/kinship-chain.test.ts`, `tests/kinship-view.db.test.ts` |
 | Recherche, Dubletten, Zusammenführen | `e2e/read/research.spec.ts`, `quality.spec.ts`, `duplicate-banner.spec.ts`; `e2e/write/merge.spec.ts`, `duplicate-banner.spec.ts`, `connect.spec.ts` |
 | Quellen, Bilder | `e2e/write/sources.spec.ts`, `import-sources.spec.ts`, `media.spec.ts`, `attached-media.spec.ts` |
 | Export, Import | `e2e/read/export.spec.ts`, `gedcom-export-dialog.spec.ts`; `e2e/write/import.spec.ts`, `gedcom-import.spec.ts` |

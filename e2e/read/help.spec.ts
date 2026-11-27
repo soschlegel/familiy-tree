@@ -20,6 +20,7 @@ const TOPICS = [
   "datenschutz",
   "einstellungen",
   "statistik",
+  "verwandtschaft",
 ];
 
 test.describe("Hilfe als Betrachter", () => {

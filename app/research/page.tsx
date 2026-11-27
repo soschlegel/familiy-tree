@@ -163,6 +163,13 @@ export default async function ResearchPage() {
             </p>
           )}
 
+          <p className="card flex flex-wrap items-center justify-between gap-3 p-4 text-sm" data-testid="research-kinship">
+            <span>Wie hängen zwei Personen zusammen? Die App nennt die Verwandtschaft und zeichnet den Weg.</span>
+            <Link href="/kinship" className="btn-secondary btn-sm">
+              Wie sind wir verwandt?
+            </Link>
+          </p>
+
           <section aria-label="Bestand" className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="research-stats">
             <Stat
               label="Personen"

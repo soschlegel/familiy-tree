@@ -86,7 +86,11 @@ sondern als JSON-Datei in `<Mock-Medienordner>/mail-outbox/`, z.B.
 Der Bearbeiter hat eine eigene Person (`landmarks.selfEditor`, in Familie A,
 alle vier Großeltern bekannt; die Großeltern mütterlicherseits gehören nur zu
 Familie D und sind für ihn gesperrt) — damit zeigt sein Baum gleich
-Verwandtschaftsgrade und Linien.
+Verwandtschaftsgrade und Linien. Für „Wie sind wir verwandt?“ hat seine
+Mutter eine Schwester nur in Familie D und diese eine Tochter nur in
+Familie B (`landmarks.kinshipHidden`, ganz am Ende und ohne Zufallszahlen
+erzeugt): Für den Bearbeiter ist die Cousine sichtbar, die Verbindung führt
+aber nur über gesperrte Personen.
 
 **Feste KI-Schlüssel** für Tests und Entwicklung, ebenfalls deterministisch
 (`npm run -s mcp:key <name>` gibt den Schlüssel aus, Standard `editor-read`):

@@ -53,6 +53,7 @@ Die **Bezugsperson** ist die Person, aus deren Sicht der Baum Verwandtschaften b
 
 - **Das bin ich**: Öffne deine eigene Personenseite und tippe auf „Das bin ich“. Ab dann ist sie deine Bezugsperson, auf jedem Gerät. (Alternativ kann dich der Administrator in der Benutzerverwaltung deiner Person zuordnen.) „Das bin ich nicht“ hebt das wieder auf.
 - **Baum aus dieser Sicht**: Auf jeder Personenseite schaltet dieser Knopf **vorübergehend** auf die Sicht einer anderen Person um — etwa, um deinem Sohn den Baum aus seiner Sicht zu zeigen. Oben steht dann deutlich „Sicht von: …“; mit „zurück zu mir“ kehrst du zu dir zurück. Dieses Gerät merkt sich die vorübergehende Sicht, bis du sie aufhebst.
+- **Wie sind wir verwandt?**: Dieser Knopf daneben erklärt die Verwandtschaft zwischen der Person und deiner Bezugsperson ausführlich und zeichnet den Weg — mehr dazu unter [Wie sind wir verwandt?](14-verwandtschaft.md).
 
 Die Bezugsperson ist im Baum gestrichelt umrandet und mit „Bezugsperson“ (bzw. „ich · Bezugsperson“) beschriftet. Ohne andere Wahl steht sie in der Fokus-Ansicht in der Mitte.
 

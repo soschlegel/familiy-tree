@@ -37,7 +37,11 @@ zurück. Vorrang: Adresse vor Cookie vor eigener Person.
   [app/globals.css](../../app/globals.css), je eigene Werte für das dunkle
   Farbschema.
 - **Personenseite** — „Für dich (…) ist X: Großonkel väterlicherseits“, dazu
-  „Das bin ich“ und „Baum aus dieser Sicht“.
+  „Das bin ich“, „Baum aus dieser Sicht“ und „Wie sind wir verwandt?“
+  (Seite `/kinship` mit dieser Person und der Bezugsperson; dort zählt —
+  wie bei `get_kinship` — auch ein Weg über gesperrte Personen, die als
+  „Nicht freigegeben“ erscheinen, siehe
+  [dienste.md](../komponenten/dienste.md#libserviceskinship-viewts)).
 
 **Berechnung** ([lib/reference.ts](../../lib/reference.ts)): ein Durchgang von der
 Bezugsperson aus statt einer Abfrage je Paar — erst ihre Vorfahren
