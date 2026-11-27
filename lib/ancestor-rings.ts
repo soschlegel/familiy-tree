@@ -313,9 +313,11 @@ export function ringLabelPlan(geometry: RingGeometry, pxPerUnit: number): RingLa
  * `ringLabelPlan` (die Vorfahren haben je Ring gleich breite Plätze, die
  * Nachfahren verschieden breite Bögen, lib/descendant-rings.ts).
  */
-export function arcLabelPlan(ring: Ring, fraction: number, pxPerUnit: number): RingLabelPlan {
+export function arcLabelPlan(ring: Ring, fraction: number, pxPerUnit: number, fontPx?: number): RingLabelPlan {
   const scale = pxPerUnit > 0 ? pxPerUnit : 1;
-  const fontSize = (ring.generation <= 2 ? 13 : 12) / scale;
+  // Schriftgröße in Bildpunkten: am Bildschirm innen 13, außen 12; die
+  // Druckansicht gibt eigene Größen nach dem Blattmaß vor (lib/rings-print.ts).
+  const fontSize = (fontPx ?? (ring.generation <= 2 ? 13 : 12)) / scale;
   const width = ring.outer - ring.inner;
   const mid = (ring.inner + ring.outer) / 2;
   // Bogen an der inneren Textzeile (kürzer als in der Mitte), etwas Rand.
@@ -374,6 +376,33 @@ export function fitYears(span: string, max: number): string {
   if (span.length <= max) return span;
   const tight = span.replace(/ – /g, "–");
   return tight.length <= max ? tight : "";
+}
+
+export type CenterLabelRow = { text: string; size: number; weight: number; y: number };
+
+/**
+ * Beschriftung der Mitte: Vorname, Nachname, Lebensjahre — mindestens
+ * `minPx` Bildpunkte groß (bei `pxPerUnit` Bildpunkten je viewBox-Einheit),
+ * sonst 22 Einheiten, höchstens so groß, dass drei Zeilen in den Kreis
+ * passen. Grundlinien so, dass der Block mittig steht (Zeilenhöhe 1,15).
+ */
+export function centerLabelRows(
+  person: { givenName: string; familyName: string | null; lifeSpan: string },
+  centerRadius: number,
+  center: number,
+  pxPerUnit: number,
+  minPx = 12,
+): CenterLabelRow[] {
+  const scale = pxPerUnit > 0 ? pxPerUnit : 1;
+  const font = Math.min(Math.max(minPx / scale, 22), centerRadius * 0.42);
+  const chars = Math.floor((centerRadius * 1.6) / (font * CHAR_WIDTH));
+  const rows = [
+    { text: truncate(person.givenName, chars), size: font, weight: 600 },
+    ...(person.familyName ? [{ text: truncate(person.familyName, chars), size: font, weight: 600 }] : []),
+    ...(person.lifeSpan ? [{ text: fitYears(person.lifeSpan, Math.floor(chars * 1.2)), size: font * 0.82, weight: 400 }] : []),
+  ].filter((r) => r.text);
+  const top = center - (rows.length * font * 1.15) / 2 + font * 0.85;
+  return rows.map((r, k) => ({ ...r, y: top + k * font * 1.15 }));
 }
 
 /**

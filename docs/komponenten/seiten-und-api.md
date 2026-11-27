@@ -340,7 +340,8 @@ Der Stammbaum in vier Ansichten (Fokus, Generationen, Zeitstrahl, Ringe). Bedien
   Mitte generationsweise, mit `richtung=nachfahren` stattdessen
   `loadDescendantRings` nur die Nachkommen; Mitte in derselben Reihenfolge
   wie die Fokus-Ansicht, zuletzt `defaultRingsRootId` bzw.
-  `defaultDescendantRingsRootId`; eine angefragte, aber fehlende oder
+  `defaultDescendantRingsRootId` (gemeinsam mit der Druckansicht in
+  `loadRingsView`, `lib/services/rings-view.ts`); eine angefragte, aber fehlende oder
   gesperrte Person ergibt „Person nicht gefunden“ (Link „Ringe öffnen“, in
   derselben Richtung). Ganzer Baum: `loadTree`. Verwandtschaftsgrade
   und Linien über `referenceView` — in der Fokus-Ansicht nur für die
@@ -354,6 +355,34 @@ Der Stammbaum in vier Ansichten (Fokus, Generationen, Zeitstrahl, Ringe). Bedien
   Hinweiskarte. Ringe: ohne Zählzeile, statt `FamilyTree` `AncestorRings`
   mit Daten und Färbung.
 - Die Seite füllt genau die Bildschirmhöhe zwischen Kopf- und Fußzeile.
+
+### `/tree/print` — `app/tree/print/page.tsx`
+
+„Ahnentafel zum Drucken“: die Ringe als Blatt bzw. Poster
+(`RingsPrintSheet`, Regeln in `lib/rings-print.ts`). Erreichbar über den
+Knopf „Drucken“ der Ringe-Ansicht.
+
+- **Rechte:** angemeldet (`requireScope`). Daten über dieselben Dienste und
+  dieselbe Wahl der Mitte wie die Ringe (`loadRingsView`): angefragte
+  Person (muss sichtbar sein), sonst gemerkte Person (`tree-focus`), sonst
+  Bezugsperson, sonst Startperson. Gesperrte Vorfahren bzw. Nachkommen nur
+  als „nicht freigegeben“ ohne Angaben; eine angefragte gesperrte oder
+  unbekannte Person ergibt „Person nicht gefunden“ (`print-missing`), ohne
+  freigegebene Familie „Nichts zu drucken“. Mehr als die Ringe-Ansicht ist
+  über diese Seite nicht zu sehen.
+- **Suchparameter:** wie die Ringe `focus`, `richtung`, `generationen`,
+  `farbe`; dazu `format` (`a4`…`a0`, Standard A4), `ausrichtung`
+  (`hoch`/`quer`, Standard hoch), `titel` (frei, höchstens 80 Zeichen),
+  `datum=0` (ohne Untertitel und Datum), `namen=0` (äußere Ringe ohne
+  Namen). Alte Kennung einer aufgegangenen Person in `focus`: 308 auf die
+  bleibende (`resolvePersonRedirect`).
+- **Anzeige:** ohne Kopf- und Fußzeile der App (`NavBar`/`MainContainer`
+  erkennen den Pfad, `app/globals.css` blendet die Fußzeile aus). Papier
+  und Ausrichtung setzt die Seite per `@page` in einem Inline-`<style>` —
+  ohne Skript, mit der vorhandenen CSP verträglich. Im Druck erscheint nur
+  das Blatt, genau eine Seite im gewählten Format.
+- **SVG-Download:** im Browser (Blob, `<a download>`), keine eigene
+  Route.
 
 ### `/map` — `app/map/page.tsx`
 

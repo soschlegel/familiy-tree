@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { RINGS_PRINT_PATH } from "@/lib/rings-print-path";
 import { useDismiss } from "./useDismiss";
 
 /** `group: "admin"` = im Untermenü „Verwaltung“ statt in der Hauptzeile. */
@@ -56,6 +57,9 @@ export function NavBar({
         ? "bg-accent-700 text-white dark:bg-accent-300 dark:text-stone-950"
         : "text-stone-600 hover:bg-stone-900/5 hover:text-stone-900 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-stone-50"
     }`;
+
+  // Druckansicht der Ringe: ein Blatt ohne Kopfzeile (app/tree/print).
+  if (pathname === RINGS_PRINT_PATH) return null;
 
   return (
     <header className="relative z-30 border-b border-stone-900/10 bg-surface/90 backdrop-blur dark:border-white/10">
@@ -231,6 +235,14 @@ export function BrandMark({ className = "h-7 w-7" }: { className?: string }) {
 export function MainContainer({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const wide = pathname === "/tree" || pathname.startsWith("/tree/");
+  // Druckansicht: ohne Innenabstand, das Blatt bestimmt den Rand.
+  if (pathname === RINGS_PRINT_PATH) {
+    return (
+      <main id="inhalt" className="w-full flex-1">
+        {children}
+      </main>
+    );
+  }
   return (
     <main
       id="inhalt"

@@ -1,6 +1,6 @@
 # Stammbaum
 
-Die vier Ansichten Fokus, Generationen, Zeitstrahl und Ringe (Vorfahren oder Nachfahren), die Bezugsperson („Das bin ich“), der Verwandtschaftsgrad an jeder Karte, die farbigen Großeltern-Linien, die Herkunft aus Importen und das Vollbild fürs Handy.
+Die vier Ansichten Fokus, Generationen, Zeitstrahl und Ringe (Vorfahren oder Nachfahren, auch zum Drucken als Poster), die Bezugsperson („Das bin ich“), der Verwandtschaftsgrad an jeder Karte, die farbigen Großeltern-Linien, die Herkunft aus Importen und das Vollbild fürs Handy.
 
 ## Die Ansichten
 
@@ -47,6 +47,30 @@ Mit **Vorfahren** und **Nachfahren** neben der Ansichtswahl drehst du den Kreis 
 - Ist jemand über zwei Linien Nachkomme (etwa wenn Cousin und Cousine geheiratet haben), steht er an beiden Stellen; die Angaben sagen das dazu.
 - **nach Linie** gibt jedem Kind der Person in der Mitte einen eigenen Farbton, nach außen heller; die Legende nennt die Kinder mit der Zahl ihrer Flächen. Bei mehr als acht Kindern wiederholen sich die Farben. **nach Wurzeln** färbt wie bei den Vorfahren nach dem Land des Geburtsorts.
 - Ein Nachkomme aus einer Familie, für die du keine Freigabe hast, erscheint als Fläche **„Nicht freigegeben“** — ohne Namen und Daten. Seine Kinder siehst du hier nicht.
+
+### Ringe drucken
+
+Die Ringe lassen sich als schönes Blatt ausdrucken oder als PDF speichern — vom A4-Blatt bis zum Poster, etwa als Geschenk für eine Familienfeier. Der Knopf **Drucken** unter der Legende öffnet eine eigene Druckseite mit derselben Person, Richtung, Zahl der Generationen und Färbung. Ihre Adresse kannst du auch weitergeben.
+
+Oben auf der Druckseite stellst du ein, wie das Blatt aussehen soll; darunter siehst du es als Vorschau:
+
+- **Papier** (A4, A3, A2, A1 oder A0) und **Hochformat** bzw. **Querformat**.
+- **Titel**: anfangs etwa „Vorfahren von Anna Beispiel“. Du kannst ihn frei ändern, zum Beispiel in „Unsere Familie zum 80. Geburtstag“. Ein leeres Feld nimmt wieder den Vorschlag.
+- **Untertitel und Datum**: die Zeile unter dem Titel und das Datum in der Fußzeile — zum Abschalten den Haken entfernen.
+- **nach Linie** bzw. **nach Wurzeln** und **Generationen** wie in der Ansicht selbst.
+- **Namen in den äußeren Ringen zeigen, soweit Platz**: Ab der 5. Generation stehen die Namen etwas kleiner, solange sie hineinpassen. Ohne Haken bleiben diese Ringe unbeschriftet und das Blatt wirkt ruhiger.
+
+Auf großem Papier passen mehr Namen und Lebensjahre in die Ringe als auf dem Bildschirm. Das Blatt ist immer hell, auch wenn deine App dunkel eingestellt ist. Damit man die Linien auch auf einem Schwarz-Weiß-Drucker unterscheiden kann, tragen manche Flächen zusätzlich Punkte, Striche oder ein Gitter. Wer „Nicht freigegeben“ ist, bleibt es auch auf dem Papier: Gedruckt wird genau das, was du in den Ringen siehst.
+
+**Jetzt drucken** öffnet den Druckdialog deines Browsers. Dort:
+
+- **Hintergrundgrafiken** einschalten (bei manchen Browsern unter „Weitere Einstellungen“) — sonst fehlen die Farben.
+- Als **Papierformat** dasselbe wie auf der Druckseite wählen, etwa A3 quer. Die Ränder sind schon im Blatt enthalten; „Ränder: Keine“ bzw. „Standard“ passt beides.
+- Als Ziel **Als PDF speichern** wählen, wenn du die Datei aufheben, verschicken oder in eine Druckerei geben willst.
+
+> Für ein Poster aus der **Druckerei**: Stell auf der Druckseite das gewünschte Format ein (etwa A1), speichere im Druckdialog als PDF und gib diese Datei ab. Sag dazu, dass sie in Originalgröße („100 %“) und ohne weißen Zusatzrand gedruckt werden soll. Manche Druckereien wünschen stattdessen eine Vektorgrafik: Dafür gibt es **Als Bild speichern (SVG)**. In der SVG-Datei stehen die Schriften nicht mit drin — die Druckerei ersetzt sie gegebenenfalls durch ähnliche. Im Zweifel ist das PDF die sichere Wahl.
+
+Mit **← Zurück** kommst du wieder zu den Ringen.
 
 ## Vollbild
 

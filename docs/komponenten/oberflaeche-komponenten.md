@@ -16,7 +16,7 @@ Abschnitt 1). Seiten und API-Routen selbst stehen in
 
 ## Inhalt
 
-- [Stammbaum und Karte](#stammbaum-und-karte) — `FamilyTree`, `AncestorRings`, `TreeViewSwitch`, `tree-url`, `useTreeFullscreen`, `PersonNode`,
+- [Stammbaum und Karte](#stammbaum-und-karte) — `FamilyTree`, `AncestorRings`, `RingsSlotLabel`, `RingsPrintSheet`, `TreeViewSwitch`, `tree-url`, `useTreeFullscreen`, `PersonNode`,
   `OriginChips`, `MarriageNode`, `MarriageEdge`, `ParentEdge`, `ReferenceLines`,
   `ReferenceChip`, `ReferencePanel`, `KinshipPersonField`, `KinshipDiagram`,
   `kinship-url`, `MapExplorer`, `MapPersonChooser`, `LifePathMap`, `Avatar`, `gender-style`
@@ -157,13 +157,45 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 - *Zusammenfassung* unter dem Kreis (`ringsSummary`): „23 von 62 Vorfahren bis zur 5. Generation bekannt“, ggf. „, davon 2 nicht freigegeben“; Nachfahren (`descendantsSummary`): „47 Nachkommen in 4 Generationen“ (tiefste Generation mit Nachkommen) bzw. „Keine Nachkommen erfasst“. Greift die Obergrenze der Flächen, steht darunter ein Hinweis (`rings-capped`, `descendantsCapNotice`): „… siehst du 5 statt 7 Generationen.“
 - *Adresse und Gedächtnis:* Mitte im Cookie `tree-focus` (wie die Fokus-Ansicht); hat der Server die Mitte selbst gewählt, ergänzt `replaceState` die Adresse. Richtung in `richtung=nachfahren` (Standard „vorfahren“ bleibt weg). Neue Mitte, Richtung oder Tiefe heben die Auswahl auf.
 - *Vollbild:* wie in `FamilyTree` (`useTreeFullscreen`, Hülle `tree-shell`, Knopf `tree-fullscreen` oben rechts über der Fläche, die Fläche selbst rollt auf dem Telefon senkrecht). „In die Mitte“ bleibt im Vollbild.
+- *Drucken:* unter der Legende ein Link „Drucken“ (`rings-print`) zur Druckansicht `app/tree/print` mit derselben Mitte, Richtung, Tiefe und Färbung (`ringsPrintUrl`, `lib/rings-print.ts`) — bewusst nicht in der Werkzeugleiste, die auf dem Telefon schon voll ist.
 - *Telefonbreite:* keine waagerechte Scrollleiste, Kreis in voller Breite, Bedienelemente ≥ 44 px.
+- *Gemeinsam mit dem Druck:* Flächen aus `lib/rings-segments.ts` (`ringSegments`), Beschriftung je Fläche über `components/RingsSlotLabel.tsx`, Mitte über `centerLabelRows`.
 
 **Server oder Client:** Client.
 
 **Ruft auf:** `GET /api/persons?q=…&limit=8` (Suche); Navigation über den Next-Router.
 
 **Tests:** `e2e/read/rings.spec.ts` (Ansicht wählbar, Namen und Begriffe, gesperrte Plätze ohne Angaben und ohne alles dahinter, Auswahl mit beiden Wegen, Tiefe, Färbung, Tastatur, Quelltext ohne fremde Namen und Kennungen, „Person nicht gefunden“, zurück zur Fokus-Ansicht, 390 px mit Tippflächen und Vollbild, axe; Nachfahren: Umschalter hin und zurück, Flächen und Begriffe, Auswahl, „In die Mitte“ mit Richtung, „Kind von …“, Färbung, Tiefe, Tastatur, gesperrter Nachkomme samt Quelltext, dunkel auf 390 px). Regeln: `tests/ancestor-rings.test.ts`, `tests/descendant-rings.test.ts`; Daten und Rechte: `tests/ancestor-rings.db.test.ts`, `tests/descendant-rings.db.test.ts`.
+
+### components/RingsSlotLabel.tsx
+
+**Zweck:** Beschriftung einer Fläche der Ringe nach einem `RingLabelPlan` — im Bogen (`textPath`, unten mit umgekehrtem Pfad) oder entlang des Radius, nie kopfüber; ein- oder zweizeilig (Name, Lebensjahre). Schriftfarbe `ink`: am Bildschirm `var(--rings-ink)`, im Druck eine feste Farbe.
+
+**Wo eingesetzt:** `AncestorRings` (Bildschirm) und `RingsPrintSheet` (Druck) — eine Zeichenregel für beide.
+
+**Server oder Client:** beides (reine Darstellung).
+
+**Tests:** indirekt über `e2e/read/rings.spec.ts` und `e2e/read/rings-print.spec.ts`.
+
+### components/RingsPrintSheet.tsx
+
+**Zweck:** Druckansicht der Ringe („Ahnentafel zum Drucken“): oben eine Einstellzeile, die nicht mitgedruckt wird, darunter das Blatt als Vorschau im richtigen Seitenverhältnis. Das Blatt ist ein einziges SVG in Millimetern (Regeln in `lib/rings-print.ts`): weißer Grund, Titel in der Antiqua der App, Untertitel, der Kreis groß und mittig, Legende, Fußzeile mit Zusammenfassung und Datum.
+
+**Wo eingesetzt:** `app/tree/print/page.tsx`.
+
+**Props/Daten:** `data` — dieselbe Dienst-Antwort wie bei `AncestorRings` (`AncestorRingsDto` bzw. `DescendantRingsDto`), `settings` (aus der Adresse, `parseRingsPrintParams`), `today` (Datum vom Server, damit Vorschau und Druck übereinstimmen).
+
+**Verhalten:**
+
+- *Einstellzeile* (`print-controls`, `print:hidden`, ab `md` oben angeheftet): „← Zurück“ zu den Ringe mit denselben Einstellungen, Überschrift „Drucken“, Papier A4–A0, Hoch-/Querformat (`aria-pressed`), Titel (leer = Vorgabe „Vorfahren von …“, höchstens 80 Zeichen), „nach Linie / nach Wurzeln“, Generationen (lädt neu über den Router, `aria-busy` an der Vorschau), „Untertitel und Datum“, „Namen in den äußeren Ringen zeigen, soweit Platz“, „Als Bild speichern (SVG)“, „Jetzt drucken“ (`window.print()`), Kontexthilfe (`HELP_LINKS.ringeDrucken`) und ein Tipp zum Druckdialog. Alles außer den Generationen wirkt ohne neues Laden; die Adresse wird per `replaceState` nachgeführt (teilbar).
+- *Papierformat:* ein `<style>` mit `@page { size: B mm H mm; margin: 0 }` und einer Druckregel, die das Blatt genau auf Blattgröße setzt — Inline-Stile erlaubt die CSP (`style-src 'unsafe-inline'`), Skripte braucht es dafür nicht. Am Bildschirm ist das Blatt höchstens so breit, dass es ganz in die Höhe des Fensters passt.
+- *Zeichnen:* Flächen aus `ringSegments`, Geometrie `ringGeometry`, Beschriftung `printLabelPlan` + `RingsSlotLabel`, Mitte `centerLabelRows` — wie am Bildschirm, nur mit den Maßen des Blatts. Feste Farben (`printTint`), Trennlinien weiß. Muster für Graustufen als echte Vektorlinien, beschnitten (`clipPath`) auf alle Flächen gleichen Musters — ein SVG-`<pattern>` gibt Chromium im PDF als grobe Rastergrafik aus. Leere Plätze der Vorfahren fast weiß mit feiner gestrichelter Kante. Keine Bedienung im Kreis (keine Rollen, kein Fokus) — das Blatt ist als Ganzes ein Bild (`role="img"` mit Beschreibung).
+- *Bild speichern:* das Blatt-SVG wird geklont (ohne die Vorschau-Größe, also mit `width`/`height` in mm), serialisiert und als `Blob` (`image/svg+xml`) über einen `<a download>` heruntergeladen; Dateiname `printFileName`. Keine Server-Route und keine Änderung der CSP: der Download ist eine Navigation, keine Abfrage, und fällt unter keine Fetch-Direktive. Die Datei enthält genau das gezeichnete Blatt, also nur, was der Benutzer ohnehin sieht. Schriften sind nicht eingebettet (Namen mit Ersatzschriften angegeben).
+- *Dunkles Schema:* Einstellzeile und Hintergrund folgen dem Schema, das Blatt bleibt weiß.
+
+**Server oder Client:** Client.
+
+**Tests:** `e2e/read/rings-print.spec.ts`; Regeln `tests/rings-print.test.ts`.
 
 ### components/TreeViewSwitch.tsx
 
@@ -1375,7 +1407,7 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 - **Exporte / Props:**
   - `NavBar`: `items` (Liste von `NavItem` = Ziel, Beschriftung, optional `group: "admin"`), `userLabel` (Anzeigename), `signOut` (fertiges Element, kommt vom Layout).
   - `BrandMark`: stilisiertes Stammbaum-Zeichen als SVG, Größe über `className`, für Screenreader ausgeblendet.
-  - `MainContainer`: `<main id="inhalt">` (Ziel des Sprunglinks im Layout); unter `/tree` volle Breite, sonst Lesebreite.
+  - `MainContainer`: `<main id="inhalt">` (Ziel des Sprunglinks im Layout); unter `/tree` volle Breite, sonst Lesebreite; auf der Druckansicht `/tree/print` (`RINGS_PRINT_PATH` aus `lib/rings-print-path.ts`) ohne Innenabstand. Dort zeigt `NavBar` gar nichts (das Blatt kommt ohne Kopfzeile aus); die Fußzeile des Layouts blendet `app/globals.css` über `body:has([data-print-page])` aus, im Druck alles außer `<main>`.
 - **Welche Punkte erscheinen** (entscheidet `app/layout.tsx`, nicht die Komponente): Baum, Karte, Personen, Recherche, Statistik, Quellen, Daten in der Hauptzeile; im Untermenü „Verwaltung“ KI-Zugang (nur bei KI-Recht oder noch nicht widerrufenen Schlüsseln), Familien, Benutzer, Änderungen, Einstellungen (je nach Rechten). Ohne Anmeldung ist die Liste leer.
 - **Verhalten:**
   - Aktiver Bereich: exakter Pfad oder Unterpfad, Link bekommt `aria-current="page"`. Der Knopf „Verwaltung“ trägt `data-active`, solange man in einem seiner Bereiche ist.

@@ -17,14 +17,12 @@ import {
 
 import {
   arcLabelPlan,
+  centerLabelRows,
   fitName,
   fitYears,
-  isLowerHalf,
-  labelArcPath,
   lineColorVar,
   lineTint,
   polar,
-  radialRotation,
   ringGeometry,
   RINGS_MAX_GENERATION,
   RINGS_MIN_GENERATION,
@@ -32,19 +30,18 @@ import {
   ringsSummary,
   sectorPath,
   slotAngles,
-  slotLine,
   truncate,
-  type RingLabelPlan,
   type RingsColoring,
   type RingsDirection,
 } from "@/lib/ancestor-rings";
-import { chartColor } from "@/lib/chart-slices";
 import { descendantsCapNotice, descendantsSummary } from "@/lib/descendant-rings";
 import { FOCUS_COOKIE, type TreeView } from "@/lib/focus-tree";
 import { LINE_CODE, LINE_KEYS, LINE_LABEL } from "@/lib/reference";
-import type { AncestorRingsDto, RingPersonDto } from "@/lib/services/ancestor-rings";
+import { personName, ringSegments, shownRingCount, slotKey, type RingSegment as Segment, type RingsData } from "@/lib/rings-segments";
+import { ringsPrintUrl } from "@/lib/rings-print";
 import type { DescendantRingsDto } from "@/lib/services/descendant-rings";
 import { HelpLink } from "./HelpLink";
+import { RingsSlotLabel as SlotLabel } from "./RingsSlotLabel";
 import { treeUrl } from "./tree-url";
 import { FULLSCREEN_BUTTON_CLASS, FullscreenIcon, TreeViewSwitch } from "./TreeViewSwitch";
 import { useDismiss } from "./useDismiss";
@@ -91,40 +88,9 @@ const DIRECTIONS: { value: RingsDirection; label: string; title: string }[] = [
   { value: "nachfahren", label: "Nachfahren", title: "Kinder, Enkel … von innen nach außen" },
 ];
 
-type RingsData = AncestorRingsDto | DescendantRingsDto;
-
-/** Eine Fläche, wie sie gezeichnet wird — gleich für beide Richtungen. */
-type Segment = {
-  key: string;
-  generation: number;
-  start: number;
-  end: number;
-  kind: "person" | "restricted";
-  personId: string | null;
-  term: string;
-  /** Färbung „nach Wurzeln“: Schlüssel des Legendeneintrags. */
-  area: string | null;
-  /** Nachfahren: Fläche des Elternteils und ob adoptiert. */
-  parentKey: string | null;
-  adopted: boolean;
-  /** Farbe für „nach Linie“ (ungemischt; die Stärke kommt aus lineTint). */
-  lineColor: string;
-};
-
-/** Schlüssel eines Platzes; die Mitte heißt „root“. */
-const slotKey = (generation: number, index: number) => `${generation}:${index}`;
-
-const personName = (p: Pick<RingPersonDto, "givenName" | "familyName">) =>
-  [p.givenName, p.familyName].filter(Boolean).join(" ");
-
 /** Mischung einer Farbe mit der Kartenfläche (Anteil in Prozent, im dunklen Schema gedämpft). */
 const tint = (color: string, percent: number) =>
   `color-mix(in srgb, ${color} calc(${percent}% * var(--rings-strength)), rgb(var(--surface)))`;
-
-const PARENT_COLORS = [
-  `color-mix(in srgb, ${lineColorVar("FF")}, ${lineColorVar("FM")})`,
-  `color-mix(in srgb, ${lineColorVar("MF")}, ${lineColorVar("MM")})`,
-];
 
 const ROOT_KEY = "root";
 
@@ -243,44 +209,11 @@ export function AncestorRings({
 
   // Gezeigte Ringe: bei den Nachfahren nur so viele, wie es Generationen
   // gibt (mindestens drei) — sonst blieben außen leere Ringe stehen.
-  const ringCount = desc ? Math.max(RINGS_MIN_GENERATION, Math.min(desc.shownGenerations, desc.deepest)) : n;
+  const ringCount = shownRingCount(data, RINGS_MIN_GENERATION);
   const geometry = useMemo(() => ringGeometry(ringCount), [ringCount]);
 
-  // Beide Richtungen als dieselben Flächen.
-  const segments = useMemo<Segment[]>(() => {
-    if (data.direction === "nachfahren") {
-      return data.segments.map((s) => ({
-        key: s.key,
-        generation: s.generation,
-        start: s.start,
-        end: s.end,
-        kind: s.kind,
-        personId: s.kind === "person" ? s.personId : null,
-        term: s.term,
-        area: s.kind === "person" ? s.area : null,
-        parentKey: s.parentKey,
-        adopted: s.kind === "person" && s.adopted,
-        lineColor: chartColor(s.line),
-      }));
-    }
-    return data.slots.map((s) => {
-      const { start, end } = slotAngles(s.generation, s.index);
-      const line = slotLine(s.generation, s.index);
-      return {
-        key: slotKey(s.generation, s.index),
-        generation: s.generation,
-        start,
-        end,
-        kind: s.kind,
-        personId: s.kind === "person" ? s.personId : null,
-        term: s.term,
-        area: s.kind === "person" ? s.area : null,
-        parentKey: null,
-        adopted: false,
-        lineColor: line ? lineColorVar(line) : (PARENT_COLORS[s.index] ?? PARENT_COLORS[0]),
-      };
-    });
-  }, [data]);
+  // Beide Richtungen als dieselben Flächen (lib/rings-segments.ts).
+  const segments = useMemo<Segment[]>(() => ringSegments(data), [data]);
 
   const segmentByKey = useMemo(() => new Map(segments.map((s) => [s.key, s])), [segments]);
 
@@ -449,17 +382,7 @@ export function AncestorRings({
   const rootName = personName(rootPerson);
   // Mitte: Vorname, Nachname, Lebensjahre — mindestens 12 px groß, höchstens
   // so groß, dass drei Zeilen in den Kreis passen.
-  const centerFont = Math.min(Math.max(12 / (size / RINGS_VIEWBOX), 22), geometry.centerRadius * 0.42);
-  const centerChars = Math.floor((geometry.centerRadius * 1.6) / (centerFont * 0.58));
-  const centerRows = [
-    { text: truncate(rootPerson.givenName, centerChars), size: centerFont, weight: 600 },
-    ...(rootPerson.familyName ? [{ text: truncate(rootPerson.familyName, centerChars), size: centerFont, weight: 600 }] : []),
-    ...(rootPerson.lifeSpan
-      ? [{ text: fitYears(rootPerson.lifeSpan, Math.floor(centerChars * 1.2)), size: centerFont * 0.82, weight: 400 }]
-      : []),
-  ].filter((r) => r.text);
-  // Grundlinien so, dass der Block mittig steht (Zeilenhöhe 1,15).
-  const centerTop = C - (centerRows.length * centerFont * 1.15) / 2 + centerFont * 0.85;
+  const centerRows = centerLabelRows(rootPerson, geometry.centerRadius, C, pxPerUnit);
 
   const summary =
     data.direction === "nachfahren"
@@ -615,7 +538,7 @@ export function AncestorRings({
                   <text
                     key={k}
                     x={C}
-                    y={centerTop + k * centerFont * 1.15}
+                    y={row.y}
                     textAnchor="middle"
                     fontSize={row.size}
                     fontWeight={row.weight}
@@ -652,6 +575,16 @@ export function AncestorRings({
               {panel}
             </div>
             <Legend data={data} coloring={coloring} uid={uid} />
+            {/* Druckansicht mit denselben Einstellungen (app/tree/print). */}
+            <Link
+              href={ringsPrintUrl({ focus: rootId, direction, generations: n, coloring })}
+              title="Als Blatt oder Poster drucken bzw. als PDF speichern"
+              data-testid="rings-print"
+              className="btn-secondary justify-center font-normal max-md:min-h-11"
+            >
+              <PrinterIcon />
+              Drucken
+            </Link>
           </aside>
         </div>
         </div>
@@ -704,84 +637,6 @@ export function AncestorRings({
         )}
       </div>
     </div>
-  );
-}
-
-/** Beschriftung eines Platzes: im Bogen oder entlang des Radius, nie auf dem Kopf. */
-function SlotLabel({
-  uid,
-  slotId,
-  plan,
-  center,
-  inner,
-  outer,
-  start,
-  end,
-  mid,
-  lines,
-  restricted,
-}: {
-  uid: string;
-  slotId: string;
-  plan: RingLabelPlan;
-  center: number;
-  inner: number;
-  outer: number;
-  start: number;
-  end: number;
-  mid: number;
-  lines: string[];
-  restricted: boolean;
-}) {
-  const fs = plan.fontSize;
-  const two = plan.lines > 1 && Boolean(lines[1]);
-  const rMid = (inner + outer) / 2;
-  const textStyle = { fill: "var(--rings-ink)" };
-  // Versatz „nach oben“ (zur Oberkante der Schrift) je Zeile: Grundlinie so,
-  // dass die Zeile(n) mittig im Ring stehen.
-  const rows = two
-    ? [
-        { text: lines[0], up: 0.22 * fs, size: fs, weight: restricted ? 400 : 600 },
-        { text: lines[1], up: -0.88 * fs, size: fs * 0.88, weight: 400 },
-      ]
-    : [{ text: lines[0], up: -0.35 * fs, size: fs, weight: restricted ? 400 : 600 }];
-
-  if (plan.mode === "arc") {
-    const lower = isLowerHalf(mid);
-    return (
-      <g>
-        {rows.map((row, k) => {
-          // Oben zeigt die Schrift nach außen, unten (umgekehrter Pfad) nach innen.
-          const r = lower ? rMid - row.up : rMid + row.up;
-          const pad = ((fs * 0.5) / r) * (180 / Math.PI);
-          const id = `${uid}-t-${slotId.replace(":", "-")}-${k}`;
-          return (
-            <g key={k}>
-              <defs>
-                <path id={id} d={labelArcPath(center, r, start + pad, end - pad)} />
-              </defs>
-              <text fontSize={row.size} fontWeight={row.weight} style={textStyle}>
-                <textPath href={`#${id}`} startOffset="50%" textAnchor="middle">
-                  {row.text}
-                </textPath>
-              </text>
-            </g>
-          );
-        })}
-      </g>
-    );
-  }
-
-  const p = polar(center, rMid, mid);
-  const rot = radialRotation(mid);
-  return (
-    <g transform={`rotate(${rot} ${p.x} ${p.y})`}>
-      {rows.map((row, k) => (
-        <text key={k} x={p.x} y={p.y - row.up} fontSize={row.size} fontWeight={row.weight} textAnchor="middle" style={textStyle}>
-          {row.text}
-        </text>
-      ))}
-    </g>
   );
 }
 
@@ -981,6 +836,16 @@ function DescendantLegend({
         </p>
       )}
     </div>
+  );
+}
+
+function PrinterIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden className="shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 9V3h12v6" />
+      <rect x="3" y="9" width="18" height="8" rx="2" />
+      <path d="M7 14h10v7H7z" />
+    </svg>
   );
 }
 

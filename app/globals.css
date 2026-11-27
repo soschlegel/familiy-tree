@@ -170,6 +170,33 @@
   }
 }
 
+/* Druckansicht der Ringe (app/tree/print, components/RingsPrintSheet.tsx):
+   ohne Fußzeile der App; im Druck nur das Blatt — weiß, ohne Rand, Flächen
+   werden mitgedruckt (print-color-adjust). Papierformat und Blattgröße
+   setzt die Seite selbst per <style> (@page, lib/rings-print.ts). */
+body:has([data-print-page]) > footer {
+  display: none;
+}
+
+[data-print-sheet] {
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+@media print {
+  html:has([data-print-page]),
+  body:has([data-print-page]) {
+    background: #ffffff;
+    min-height: 0;
+  }
+  body:has([data-print-page]) > :not(main) {
+    display: none !important;
+  }
+  [data-print-page] {
+    min-height: 0 !important;
+  }
+}
+
 /* Auch <html> in Papierfarbe:Was der Browser beim Überziehen des
    Bildlaufs oder beim Ein- und Ausblenden der Adressleiste außerhalb von
    <body> zeigt, ist dann kein schwarzer oder weißer Streifen. */

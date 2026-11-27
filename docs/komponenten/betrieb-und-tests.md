@@ -692,6 +692,12 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   Kennungen und Reihenfolge, Auswahl „seit zuletzt gesehen“; die echte
   Datei ist fehlerfrei, gleich dem eingebauten Text und ohne
   Commit-Kennungen oder Technikbegriffe.
+- **`rings-print.test.ts`** — Druckansicht der Ringe (`lib/rings-print.ts`):
+  Blattmaße A4–A0 hoch/quer, `@page`, Adresse hin und zurück, Titel und
+  Dateiname, Umbruch, Aufteilung des Blatts je Format (nichts über den
+  Rand, Legende neben bzw. unter dem Kreis), Schrift nach Blattmaß (auf
+  großem Papier mehr ganze Namen), Druckfarben gleich `globals.css`,
+  Kontrast ≥ 4,5, Muster für Graustufen.
 - **`roots.test.ts`** — „Wurzeln“: Anteile der Vorfahren (volle Belegung,
   endende Linien, fehlender Elternteil, Ahnenschwund, Zyklus, nicht
   sichtbarer Vorfahr, mehr als zwei Eltern), Zusammenfassen zu „Sonstige“,
@@ -815,6 +821,10 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   neueste Release gesehen.
 - **`research.db.test.ts`** — Verwandtschaft, Zeitleisten, Plausibilität,
   erweiterte Suche (nur lesend).
+- **`rings-view.db.test.ts`** — Mitte und Daten der Ringe für Baumseite und
+  Druck (`loadRingsView`): gleiche Daten wie der Dienst, gesperrte oder
+  unbekannte angefragte Person „nicht gefunden“ ohne Ausweichen, Kandidaten,
+  Startperson, gesperrte Vorfahren ohne Kennung und Namen (nur lesend).
 - **`roots.db.test.ts`** — „Wurzeln“ je Rolle: gesperrte Großeltern nur als
   „nicht freigegeben“, keine Kennungen oder Gebiete aus gesperrten Linien,
   Stufe Region, Eingabeprüfung, Person ohne Eltern (nur lesend).
@@ -949,6 +959,13 @@ Benutzer bekommt keinen gespeicherten Zustand.
   „Nachfahren“: Umschalter hin und zurück, Flächen und Begriffe, Auswahl,
   „In die Mitte“ mit Richtung, Färbung, Tiefe, Tastatur, gesperrter
   Nachkomme samt Quelltext, dunkel auf 390 px.
+- **`rings-print.spec.ts`** — Druckansicht der Ringe: Knopf „Drucken“ mit
+  denselben Einstellungen, Seite ohne Navigation und Fußzeile, Einstellungen
+  ändern Vorschau und Adresse, Druck-Medienemulation (Einstellzeile weg,
+  Blatt weiß, auch im dunklen Schema), PDF mit genau einer Seite im
+  gewählten Format, SVG-Download unter der CSP, Betrachter mit „nicht
+  freigegeben“ ohne fremde Namen und Kennungen, gesperrte Mitte, nicht
+  angemeldet, 390 px, axe.
 - **`roots.spec.ts`** — Abschnitt „Wurzeln“ der Personenseite: Legende und
   Prozente, „Nicht freigegeben“, Umschalten Land/Region und Generation,
   kein Abschnitt ohne Eltern, Schnittstelle (400/404, keine Kennungen),
