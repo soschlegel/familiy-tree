@@ -20,7 +20,7 @@ export default async function EmailLinkPage({
   searchParams: Promise<{ token?: string | string[]; email?: string | string[] }>;
 }) {
   const session = await auth();
-  if (session?.user) redirect("/tree");
+  if (session?.user) redirect("/");
 
   const { token, email } = await searchParams;
   const enabled = emailLoginMode() !== null;

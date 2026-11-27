@@ -3,7 +3,7 @@ import path from "node:path";
 
 import type { Browser, BrowserContextOptions, Page } from "@playwright/test";
 
-import { test, expect, expectNoA11yViolations, expectNoHorizontalOverflow, watchPage } from "../support/fixtures";
+import { test, expect, expectNoA11yViolations, expectNoHorizontalOverflow, waitForStartPage, watchPage } from "../support/fixtures";
 import { apiAs, uniq } from "../support/api";
 import { USERS } from "../support/mock";
 
@@ -99,8 +99,7 @@ test("eingeladene Adresse: Link anfordern, bestätigen, angemeldet — der Link 
   await expect(page.getByText(invited)).toBeVisible();
   await expectNoA11yViolations(page);
   await page.getByRole("button", { name: "Jetzt anmelden" }).click();
-  await page.waitForURL(/\/tree/);
-  await expect(page.getByRole("heading", { name: "Stammbaum", level: 1 })).toBeVisible();
+  await waitForStartPage(page);
   await context.close();
 
   // Derselbe Link ein zweites Mal: abgelehnt, mit Weg zu einem neuen Link.

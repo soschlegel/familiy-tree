@@ -3,7 +3,7 @@ import path from "node:path";
 
 import type { Page } from "@playwright/test";
 
-import { test, expect, devLogin, expectNoA11yViolations, expectNoHorizontalOverflow } from "../support/fixtures";
+import { test, expect, devLogin, expectNoA11yViolations, expectNoHorizontalOverflow, waitForStartPage } from "../support/fixtures";
 import { apiAs, uniq } from "../support/api";
 import { parseReleaseNotes, WHATS_NEW_LIMIT } from "../../lib/release-notes";
 
@@ -40,7 +40,7 @@ test.afterAll(async () => {
 
 async function login(page: Page) {
   await devLogin(page, email);
-  await page.waitForURL(/\/tree/);
+  await waitForStartPage(page);
 }
 
 /** Lesemarke des angemeldeten Benutzers setzen (wie „Gelesen“, nur mit beliebigem Release). */

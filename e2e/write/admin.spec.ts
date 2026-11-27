@@ -1,4 +1,4 @@
-import { test, expect, authFile, acceptDialogs, devLogin, httpError } from "../support/fixtures";
+import { test, expect, authFile, acceptDialogs, devLogin, httpError, waitForStartPage } from "../support/fixtures";
 import { apiAs, uniq } from "../support/api";
 import { familyName, mock, visibleFor } from "../support/mock";
 
@@ -72,8 +72,8 @@ test("Familie anlegen, Zugriff vergeben — der Benutzer sieht danach mehr", asy
   // Als eingeladener Benutzer anmelden: noch keine Familie.
   const { page: user } = await loginAs(null);
   await devLogin(user, email);
-  await user.waitForURL(/\/tree/);
-  await expect(user.getByTestId("tree-empty")).toContainText("Noch keine Familie freigegeben");
+  await waitForStartPage(user);
+  await expect(user.getByTestId("today-no-family")).toContainText("Noch keine Familie freigegeben");
 
   // Admin legt eine Familie an …
   await page.goto("/admin/families");
@@ -124,7 +124,7 @@ test("Familie anlegen, Zugriff vergeben — der Benutzer sieht danach mehr", asy
 test("Benutzer sperren: Sitzung endet, Anmeldung scheitert", async ({ page, loginAs }) => {
   const { page: user } = await loginAs(null);
   await devLogin(user, email);
-  await user.waitForURL(/\/tree/);
+  await waitForStartPage(user);
 
   acceptDialogs(page);
   await page.goto("/admin/users");
@@ -200,7 +200,7 @@ test("Benutzer löschen: Rückfrage nennt die Folgen, nicht für den eigenen Zug
   // Der eingeladene und inzwischen angemeldete Testbenutzer: Sitzung läuft.
   const { page: user } = await loginAs(null);
   await devLogin(user, email);
-  await user.waitForURL(/\/tree/);
+  await waitForStartPage(user);
 
   let question = "";
   page.once("dialog", (d) => {

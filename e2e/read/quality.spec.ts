@@ -16,6 +16,7 @@ import { L, mock } from "../support/mock";
 test.use({ storageState: authFile("admin") });
 
 const PAGES = [
+  "/",
   "/tree",
   "/tree?view=generations",
   "/tree?view=timeline",

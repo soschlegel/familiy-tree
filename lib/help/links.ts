@@ -5,6 +5,7 @@
  * Test fehl, statt dass ein Link still ins Leere zeigt.
  */
 export const HELP_LINKS = {
+  startseite: "/hilfe/startseite#wie-wird-gezaehlt",
   karte: "/hilfe/karte#wie-wird-gezaehlt",
   wurzeln: "/hilfe/karte#wurzeln-auf-der-personenseite",
   orteZuordnen: "/hilfe/orte-zuordnen",

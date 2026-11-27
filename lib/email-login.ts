@@ -34,8 +34,8 @@ export const EMAIL_LINK_MINUTES = EMAIL_LINK_MAX_AGE_SECONDS / 60;
 /** Kennung des Auth.js-Anbieters (Pfad /api/auth/callback/<id>). */
 export const EMAIL_PROVIDER_ID = "nodemailer";
 
-/** Wohin nach erfolgreicher Anmeldung. */
-export const EMAIL_LOGIN_REDIRECT = "/tree";
+/** Wohin nach erfolgreicher Anmeldung: die Startseite „Heute in der Familie“. */
+export const EMAIL_LOGIN_REDIRECT = "/";
 
 // ---------------------------------------------------------------------------
 // Einrichtung

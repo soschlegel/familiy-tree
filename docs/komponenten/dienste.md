@@ -118,6 +118,7 @@ beide). Ereignisse, Belege, Namen und Rohdaten folgen ihrem Träger.
 | `roots.ts` | „Wurzeln“ einer Person: Anteile der Länder/Regionen ihrer Vorfahren |
 | `ancestor-rings.ts` | Ansicht „Ringe“: Vorfahren einer Person auf festen Plätzen, generationsweise geladen |
 | `statistics.ts` | Seite „Statistik“: sichtbaren Teil des Stammbaums schlank laden und auswerten, Familienfilter |
+| `today.ts` | Startseite „Heute in der Familie“: Jahrestage, Geburtstage und runde Jahrestage aus sichtbaren, tagesgenauen Daten |
 | `changes.ts` | Änderungsgeschichte lesen (Personenverlauf, Paketübersicht) |
 | `ai-access.ts` | KI-Recht, persönliche Schlüssel, Prüfung je MCP-Aufruf |
 | `imports.ts` | Importläufe, Herkunft, Fremdkennungen, Rohdaten |
@@ -1693,6 +1694,39 @@ nutzt weiter `getStatistics` aus `research.ts`).
 
 **Tests:** `tests/statistics.db.test.ts` (Regeln: `tests/statistics.test.ts`);
 `e2e/read/statistics.spec.ts`.
+
+### lib/services/today.ts
+
+**Zweck:** Daten der Startseite „Heute in der Familie“ (`/`): Kandidaten
+für Jahrestage schlank laden und mit `computeToday` (`lib/today.ts`)
+auswerten.
+
+**Wichtige Funktionen:** `getToday(scope, { day?, now? })` → `TodayResult`.
+Ohne `day` gilt der heutige Tag nach Europe/Berlin (`calendarDayIn(now)`);
+`now` ist für Tests einspeisbar.
+
+**Laden:** drei Abfragen gleichzeitig, nie eine je Person, schon in der
+Datenbank auf sichtbare Personen (`personVisibilityFilter`) und
+tagesgenaue, sichere Daten (Genauigkeit Tag, Zusatz „genau“) eingegrenzt:
+Personen mit solchem Geburts- oder Sterbedatum (nur Name, Daten,
+Sterbeangabe, Familien); Partnerschaften der gezählten Unterarten mit
+solchem Beginn, beide Partner sichtbar, samt Name und Familien beider
+Partner; Lebensereignisse der gezählten Arten mit solchem Datum, ohne
+Zweitangaben, samt Name und Familien der Person. Bei rund 12 000 Personen
+bleibt das eine Handvoll schlanker Abfragen; die Auswertung läuft in einem
+Durchgang im Speicher.
+
+**Rechte:** zusätzlich je Person `canViewPerson` (zweite Sicherung neben dem
+Datenbankfilter); eine Partnerschaft nur, wenn beide Partner sichtbar sind.
+Nicht sichtbare Personen erscheinen nirgends, auch nicht als Zahl. Ohne
+Familie ist alles leer.
+
+**Protokoll:** — (nur lesend).
+
+**Benutzt von:** `app/page.tsx`. Kein MCP-Werkzeug.
+
+**Tests:** `tests/today.db.test.ts` (Regeln: `tests/today.test.ts`);
+`e2e/read/today.spec.ts`.
 
 ---
 

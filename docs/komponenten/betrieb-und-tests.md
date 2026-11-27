@@ -693,6 +693,12 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   ihre Kinder/Partner zählen nicht), Geburtsorte, Geburten je Zeitraum,
   Lebensalter mit kleiner Grundlage, Kinderzahl, Heiratsalter,
   Geburtsmonate, `groupAreaSlices`.
+- **`today.test.ts`** — Startseite „Heute in der Familie“ (`lib/today.ts`):
+  Tag nach Europe/Berlin statt UTC, strenges `?datum=`, 29. Februar,
+  nur tagesgenaue sichere Daten (auch keine Zweitangaben, keine
+  Dauerereignisse), lebend/vermutlich verstorben, Sätze, runde Jahrestage
+  und Jubiläen, geschiedene Ehen, nicht sichtbare Personen und Partner,
+  Fenster „Demnächst“ über den Jahreswechsel, nächster Jahrestag.
 - **`storage.test.ts`** — Schlüsselprüfung gegen Pfad-Ausbrüche, atomares
   Schreiben, Lesen, Löschen, Ordnerprüfung (in eigenem Temp-Ordner).
 - **`validation.test.ts`** — Datumsprüfungen, Beziehungsregeln,
@@ -782,6 +788,10 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   `getStatistics`, eingeschränkte Benutzer sehen weniger), keine Kennungen
   und keine Namen aus gesperrten Familien, Familienfilter (fremde Familie =
   „Alle“), Stufe Region, Benutzer ohne Familie (nur lesend).
+- **`today.db.test.ts`** — Startseite je Rolle an einem festen Tag: Ergebnis
+  von `getToday` gleich der reinen Rechnung über den Mock-Datensatz
+  (Admin alle, Betrachter/Bearbeiter nur ihre Familien), ohne Familie
+  leer, ohne Tag gilt heute nach Europe/Berlin (nur lesend).
 - **`sources.db.test.ts`** — Quellen, Belege und ungenaue Daten.
 
 ---
@@ -799,8 +809,8 @@ ausgenommen).
 ### `e2e/global.setup.ts` (Projekt `setup`)
 
 Nacheinander: Mock-Daten neu aufbauen (`scripts/mock.mjs seed`), je Rolle
-(Admin, Bearbeiter, Betrachter, ohne Familie) per Dev-Login anmelden und den
-Zustand speichern, dann — nur gegen den Dev-Server (`E2E_SERVER=dev`) — als
+(Admin, Bearbeiter, Betrachter, ohne Familie) per Dev-Login anmelden (Ziel:
+Startseite `/`, `waitForStartPage`) und den Zustand speichern, dann — nur gegen den Dev-Server (`E2E_SERVER=dev`) — als
 Admin die wichtigsten Seiten und API-Routen einmal aufrufen, damit er sie
 vorab übersetzt; gegen den Build entfällt dieser Schritt. Der gesperrte
 Benutzer bekommt keinen gespeicherten Zustand.
@@ -888,6 +898,12 @@ Benutzer bekommt keinen gespeicherten Zustand.
   Betrachter sieht kleinere Zahlen (fremde Familie in der Adresse gibt
   nichts frei), ohne Familie nur Hinweis, 390 px hell/dunkel ohne
   Querscrollen, axe.
+- **`today.spec.ts`** — Startseite „Heute in der Familie“, unabhängig vom
+  echten Datum (Tag per `?datum=`, Erwartung mit `lib/today.ts` über den
+  Mock-Datensatz): Sätze, verlinkte Personen, runde Einträge, „Weitere …
+  anzeigen“, Tag blättern und zurück zu heute, Einstieg und Logo,
+  Betrachter ohne fremde Namen, leerer Tag mit nächstem Jahrestag, ohne
+  Familie nur Hinweis, 390 px hell/dunkel mit Tippflächen, axe.
 - **`tree-focus.spec.ts`** — Fokus-Ansicht ab fester Person, Startperson.
 - **`tree-whole.spec.ts`** — Gesamtansichten Generationen und Zeitstrahl.
 

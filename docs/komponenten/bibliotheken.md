@@ -21,7 +21,7 @@ Test-Briefkasten).
 | Protokoll | `audit`, `change-sets`, `change-time` |
 | Daten und Regeln | `dates`, `date-fields`, `events`, `event-labels`, `validation`, `consistency`, `partner-labels`, `source-labels`, `source-classify` |
 | Graph und Verwandtschaft | `graph`, `kinship`, `reference`, `roots` |
-| Auswertungen | `statistics`, `chart-slices` |
+| Auswertungen | `statistics`, `chart-slices`, `today` |
 | Baumdarstellung | `tree-layout`, `layout-generations`, `focus-tree`, `ancestor-rings` |
 | Dubletten und Zusammenführen | `name-keys`, `duplicates`, `merge-rules`, `import-linking` |
 | Import/Export | `exchange`, `export-selection`, `import-fingerprint`, `gedcom/*`, `gedcom-import/*` |
@@ -1037,6 +1037,72 @@ Durchschnittszeilen (`AverageRow`).
 `components/StatisticsCharts.tsx` (Typen).
 
 **Tests:** `tests/statistics.test.ts`, `tests/statistics.db.test.ts`.
+
+### lib/today.ts
+**Zweck:** Rechnung der Startseite **„Heute in der Familie“** (`/`):
+Jahrestage eines Tages, Geburtstage und runde Jahrestage der folgenden
+Wochen, dazu die Sätze in Anwendersprache. Rein; Laden und Rechte in
+`lib/services/today.ts`.
+
+**Wichtige Funktionen/Typen:** `computeToday` (Eingabe: gewählter Tag,
+wirklicher heutiger Tag, Personen mit Name, `visible`, Geburt, Tod,
+Sterbeangabe ohne Datum; Partnerschaften mit Unterart, beiden Partnern und
+Beginn; Lebensereignisse mit Art, Titel, Datum, `isAlternative`) →
+`TodayResult` (`today`, `birthdays`, `upcoming`, `next`, `isRealToday`) aus
+`Anniversary`-Einträgen (Art, Personen mit `living`, Jahre, `round`,
+`birthday`, `jubilee`, Tag des Begehens, Abstand in Tagen).
+Kalenderhilfen `calendarDayIn` (Tag in Europe/Berlin), `parseIsoDay`,
+`formatIsoDay`, `formatDayMonth`, `formatLongDay`, `addDays`,
+`daysBetween`, `observedDay`; Regeln `preciseDay`, `isLiving`; Sätze
+`anniversarySentence` (Teile aus Text und Person, die Oberfläche verlinkt
+die Personen), `sentenceText`, `whenText`, `roundLabel`. Grenzen
+`UPCOMING_DAYS` (30), `SECTION_LIMIT` (10), `ROUND_ANNIVERSARY` (25),
+`ROUND_BIRTHDAY` (10), `NEXT_SEARCH_DAYS` (366); Listen
+`ANNIVERSARY_EVENT_TYPES`, `ANNIVERSARY_PARTNER_SUBTYPES`.
+
+**Regeln:**
+- **Nur sichere Tagesdaten:** Genauigkeit Tag, Zusatz „genau“, kein Bereich
+  (`isPreciseDate` aus `lib/dates.ts`); „um“, „vor“, „nach“, Zeiträume,
+  geschätzte und errechnete Angaben und Zweitangaben fallen heraus.
+- **Was zählt:** Geburt und Tod sichtbarer Personen; Beginn von
+  Partnerschaften der Unterarten verheiratet, unverheiratet und „Ehestand
+  unbekannt“ (geschiedene Ehen nicht) — nur wenn **beide** Partner sichtbar
+  sind; Lebensereignisse an einem Tag (Taufe, Konfirmation, Erstkommunion,
+  Bar/Bat Mizwa, Segnung, Weihe, Abschluss, Ruhestand, Aus-/Einwanderung,
+  Einbürgerung, Adoption, sonstiges Ereignis). Dauerzustände (Beruf,
+  Wohnort …) und Beerdigung/Einäscherung zählen nicht.
+- **Tag:** Kalendertag, „heute“ nach Europe/Berlin (`calendarDayIn`). Ein
+  29. Februar wird in Nicht-Schaltjahren am 28. Februar begangen. Jahrestage
+  erst ab dem ersten Jahr (kein „vor 0 Jahren“).
+- **Lebend:** ohne Sterbedatum, ohne Sterbeangabe und nicht über
+  `PRESUMED_LIFESPAN` (100) Jahre laut spätestem möglichem Geburtstag — wie
+  `lib/statistics.ts`. Geburten Lebender sind Geburtstage („Anna Beispiel
+  wird heute 34“), sonst „Heute vor 120 Jahren wurde … geboren“.
+- **Rund:** Jahrestage bei Vielfachen von 25, Geburtstage Lebender bei
+  Vielfachen von 10. Leben beide Partner, trägt die Hochzeit den Namen des
+  Jubiläums (25 Silberne, 50 Goldene, 60 Diamantene, 65 Eiserne,
+  70 Gnaden-, 75 Kronjuwelenhochzeit) und gilt als rund.
+- **Abschnitte:** `today` = alles am gewählten Tag, runde zuerst, dann
+  jüngere Jahrestage, Art, Name. `birthdays` = Geburtstage Lebender in den
+  nächsten 30 Tagen (ohne den Tag selbst), nach Datum. `upcoming` = runde
+  Jahrestage von Geburten Verstorbener, Todestagen und Partnerschaften in
+  den nächsten 30 Tagen (keine Lebensereignisse), nach Datum. `next` nur
+  bei leerem Tag: der nächste Jahrestag überhaupt bis ein Jahr voraus.
+- **Sätze:** „Heute“/„Morgen“ nur, wenn der gewählte Tag der wirkliche
+  heutige ist, sonst „Am 14. März“; Einträge des gewählten Tages selbst
+  ohne Zeitangabe („Vor 75 Jahren starb …“, „… wird 50“), weil die
+  Überschrift den Tag nennt. Geburtstage: „Anna Beispiel wird heute 34“,
+  „Morgen wird … 36“, „Am 2. Januar wird … 40“. Verben für Geburt, Tod, Hochzeit,
+  Partnerschaft, Taufe, Adoption, Einbürgerung, Aus- und Einwanderung,
+  sonst „{Titel} von {Person}“.
+- **Datenschutz:** Nur Personen mit `visible` gehen ein; die Funktion
+  filtert selbst, auch wenn der Dienst schon nur sichtbare liefert.
+
+**Benutzt von:** `lib/services/today.ts`, `app/page.tsx`,
+`components/TodayList.tsx`.
+
+**Tests:** `tests/today.test.ts`, `tests/today.db.test.ts`,
+`e2e/read/today.spec.ts`.
 
 ---
 

@@ -20,7 +20,7 @@ async function attemptSignIn(
   options: Record<string, unknown>,
 ) {
   try {
-    await signIn(provider, { redirectTo: "/tree", ...options });
+    await signIn(provider, { redirectTo: "/", ...options });
   } catch (error) {
     if (error instanceof AuthError) {
       redirect(`/login?error=${error.type}`);
@@ -57,7 +57,7 @@ export default async function LoginPage({
   searchParams: Promise<{ error?: string; link?: string }>;
 }) {
   const session = await auth();
-  if (session?.user) redirect("/tree");
+  if (session?.user) redirect("/");
 
   const { error, link } = await searchParams;
   const devLogin = process.env.ENABLE_DEV_LOGIN === "true";

@@ -7,6 +7,7 @@ import {
   devLogin,
   expectNoA11yViolations,
   expectNoHorizontalOverflow,
+  waitForStartPage,
 } from "../support/fixtures";
 import { apiAs, uniq } from "../support/api";
 import { openAdminMenu } from "../support/nav";
@@ -42,7 +43,7 @@ const historyToggle = (page: Page) => page.getByRole("checkbox", { name: "Widerr
 async function asUser(loginAs: (role: null) => Promise<{ page: Page }>) {
   const { page } = await loginAs(null);
   await devLogin(page, email);
-  await page.waitForURL(/\/tree/);
+  await waitForStartPage(page);
   return page;
 }
 
