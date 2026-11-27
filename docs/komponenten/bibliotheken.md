@@ -22,7 +22,7 @@ Test-Briefkasten).
 | Daten und Regeln | `dates`, `date-fields`, `events`, `event-labels`, `validation`, `consistency`, `partner-labels`, `source-labels`, `source-classify` |
 | Graph und Verwandtschaft | `graph`, `kinship`, `kinship-chain`, `reference`, `roots` |
 | Auswertungen | `statistics`, `records`, `research-progress`, `chart-slices`, `today` |
-| Baumdarstellung | `tree-layout`, `layout-generations`, `focus-tree`, `ancestor-rings` |
+| Baumdarstellung | `tree-layout`, `layout-generations`, `focus-tree`, `ancestor-rings`, `descendant-rings`, `rings-segments`, `rings-print` |
 | Dubletten und Zusammenführen | `name-keys`, `duplicates`, `merge-rules`, `import-linking` |
 | Import/Export | `exchange`, `export-selection`, `import-fingerprint`, `gedcom/*`, `gedcom-import/*` |
 | Medien | `storage`, `media-processing`, `media-scope`, `safe-fetch` |
@@ -1491,7 +1491,9 @@ Standard je Richtung als zweitem Wert), `parseRingsColoring`,
 Geometrie `RINGS_VIEWBOX`, `ringGeometry`, `slotAngles`, `polar`,
 `sectorPath`, `isLowerHalf`, `labelArcPath`, `radialRotation`; Beschriftung
 `ringLabelPlan`, `arcLabelPlan` (eine Fläche mit beliebigem Anteil am
-Vollkreis — auch für die Nachfahren), `truncate`, `fitName`, `fitYears`, `ringsSummary`; Farben
+Vollkreis — auch für die Nachfahren; optional mit eigener Schriftgröße in
+Bildpunkten, die nutzt der Druck), `centerLabelRows` (Mitte: Vorname,
+Nachname, Lebensjahre, Mindestgröße wählbar), `truncate`, `fitName`, `fitYears`, `ringsSummary`; Farben
 `lineTint`, `lineColorVar`.
 
 **Regeln (Entscheidungen des Eigentümers):**
@@ -1601,6 +1603,91 @@ Partnerschaftsschlüssel).
 Kinder, Reihenfolge, Gruppen und Lücken, Mindestbreite, Mehrfach-Nachkomme,
 Zyklus, nicht sichtbarer Nachkomme, Obergrenze, Adoption, Begriffe,
 Zusammenfassung, Adresse), `tests/descendant-rings.db.test.ts`.
+
+### lib/rings-segments.ts
+**Zweck:** Beide Richtungen der Ringe als dieselben Flächen
+(`RingSegment`: Schlüssel, Generation, Winkel, Art, Person, Begriff,
+Gebiet, Elternfläche, Adoption, Linienfarbe als CSS-Variable,
+Liniennummer) — gemeinsam für Bildschirm (`components/AncestorRings.tsx`)
+und Druck (`components/RingsPrintSheet.tsx`), damit beide genau dasselbe
+zeichnen. Rein; was ankommt, hat der Dienst schon nach Rechten gefiltert.
+
+**Wichtige Funktionen/Typen:** `ringSegments(data)`, `shownRingCount`
+(Nachfahren: nur so viele Ringe, wie es Generationen gibt, mindestens 3),
+`slotKey`, `personName`, `PARENT_COLORS` (Vater/Mutter in der Mischfarbe
+ihrer Seite), Typ `RingsData`.
+
+**Regeln:** Liniennummer der Vorfahren: Großeltern-Linie 0–3 (VV, VM, MV,
+MM), Vater 0, Mutter 2; Nachfahren: Nummer des Kindes der Mitte. Der Druck
+wählt danach sein Muster (Graustufen).
+
+**Benutzt von:** `components/AncestorRings.tsx`,
+`components/RingsPrintSheet.tsx`.
+
+**Tests:** indirekt über `e2e/read/rings.spec.ts` und
+`e2e/read/rings-print.spec.ts`.
+
+### lib/rings-print.ts
+**Zweck:** „Ahnentafel zum Drucken“ — die Ringe als Blatt vom A4-Ausdruck
+bis zum Poster (Seite `app/tree/print`, Zeichnung
+`components/RingsPrintSheet.tsx`). Rein: Adresse, Blattmaße,
+`@page`-Regel, Aufteilung des Blatts, Schriftgrößen nach Blattmaß, feste
+Druckfarben und Muster, Titelvorgabe, Dateiname. Die Pfad-Konstante steht
+zusätzlich allein in `lib/rings-print-path.ts`, damit die Kopfzeile sie
+kennt, ohne die Drucklogik in jede Seite zu laden.
+
+**Wichtige Funktionen/Typen:** `PAPER_FORMATS` (A4–A0), `sheetSize`,
+`pageRule`; `RingsPrintSettings`, `parseRingsPrintParams`, `ringsPrintUrl`
+(Parameter der Ringe `focus`, `richtung`, `generationen`, `farbe` plus
+`format`, `ausrichtung` `hoch|quer`, `titel`, `datum=0`, `namen=0`;
+Vorgaben bleiben weg), `cleanPrintTitle` (ohne Steuerzeichen, höchstens 80
+Zeichen); `defaultPrintTitle`, `printSubtitle`, `formatPrintDate`,
+`printFileName`, `wrapText`; `sheetLayout` (→ `SheetLayout` in mm);
+`printLabelFontPx`, `printLabelPlan`, `printPxPerUnit`,
+`RINGS_PRINT_OUTER_GENERATION` (5); `PRINT_COLORS`, `printColor`,
+`printTint`, `mixHex`, `luminance`, `contrast`, `printPattern`.
+
+**Regeln:**
+- **Ein SVG in Millimetern:** Das Blatt (viewBox = Blattmaß, `width`/`height`
+  in mm) enthält Titel, Kreis, Legende und Fußzeile. Am Bildschirm wird es
+  per CSS verkleinert, im Druck in Blattgröße gesetzt; die Seitenränder
+  (10 mm · Maßstab + 2 mm) liegen im Blatt, `@page` hat Rand 0 — so ergibt
+  der Druck genau eine Seite im gewählten Format. Dasselbe SVG ist der
+  Download.
+- **Aufteilung:** Maßstab = kurze Seite / 210 mm; alle Schriften und
+  Abstände wachsen damit. Titel oben mittig (wird schmaler, statt
+  überzulaufen), Kreis so groß wie möglich und mittig; Legende hochkant
+  unter dem Kreis (ab vier Einträgen zweispaltig, Block mittig), quer
+  links neben ihm; Einträge umbrechen auf bis zu drei Zeilen, was nicht
+  passt, zählt „… und n weitere“. Fußzeile unten mittig.
+- **Beschriftung nach Blattmaß:** dieselbe Regel wie am Bildschirm
+  (`arcLabelPlan`, jetzt mit wählbarer Schriftgröße), mit den Bildpunkten je
+  Einheit des gedruckten Kreises. Schrift auf A4 innen 3,4 mm, weiter außen
+  3,1 mm; größeres Papier innen mit Maßstab^0,65, außen (ab Generation 5,
+  bis 2,5 mm · √Maßstab hinunter) langsamer — so passen auf Postern mehr
+  Namen. In den äußeren Ringen zuerst die größere Schrift, die kleinere
+  nur, wenn sonst nicht einmal „Vorname N.“ passt. Schalter „Namen in den
+  äußeren Ringen“ aus: dort keine Schrift.
+- **Feste helle Farben:** Werte des hellen Schemas (Test gleicht sie mit
+  `app/globals.css` ab), Mischungen mit Weiß schon gerechnet
+  (`printTint`, Anteile wie am Bildschirm, `lineTint`), keine
+  CSS-Variablen und kein `color-mix` — das Blatt bleibt im dunklen Schema
+  hell, und die SVG-Datei zeigt außerhalb des Browsers dieselben Farben.
+  `printTint` nimmt die Farbe zurück, bis die Schrift mindestens 4,5 : 1
+  Kontrast hat.
+- **Graustufen:** Muster je Linie bzw. Legendeneintrag (`printPattern`:
+  ohne, Punkte, waagerechte Striche, Gitter, danach von vorn); „nicht
+  freigegeben“ hat die Schrägschraffur — die anderen Muster haben bewusst
+  keine Schrägen.
+
+**Benutzt von:** `app/tree/print/page.tsx`, `components/RingsPrintSheet.tsx`,
+`components/AncestorRings.tsx` (Knopf „Drucken“), `components/NavBar.tsx`
+(nur `lib/rings-print-path.ts`).
+
+**Tests:** `tests/rings-print.test.ts` (Blattmaße, `@page`, Adresse hin und
+zurück, Titel, Dateiname, Umbruch, Aufteilung je Format und Ausrichtung,
+Schrift nach Blattmaß, Druckfarben gleich `globals.css`, Kontrast,
+Graustufen), `e2e/read/rings-print.spec.ts`.
 
 ---
 

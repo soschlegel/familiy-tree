@@ -119,6 +119,7 @@ beide). Ereignisse, Belege, Namen und Rohdaten folgen ihrem Träger.
 | `roots.ts` | „Wurzeln“ einer Person: Anteile der Länder/Regionen ihrer Vorfahren |
 | `ancestor-rings.ts` | Ansicht „Ringe“: Vorfahren einer Person auf festen Plätzen, generationsweise geladen; gemeinsame Personenangaben und Legende „nach Wurzeln“ für beide Richtungen |
 | `descendant-rings.ts` | Ansicht „Ringe“, Richtung „Nachfahren“: Nachkommen einer Person, Vollkreis nach Teilbaumgröße, generationsweise geladen |
+| `rings-view.ts` | Mitte und Daten der Ringe — gemeinsam für Baumseite und Druckansicht |
 | `statistics.ts` | Seite „Statistik“: sichtbaren Teil des Stammbaums schlank laden und auswerten, Familienfilter (`familyFilter`, auch für die Rekorde) |
 | `records.ts` | Seite „Rekorde“: sichtbaren Teil des Stammbaums schlank laden, Bestwerte mit Namen berechnen, Familienfilter |
 | `research-progress.ts` | Seite „Forschungs-Fortschritt“: Vorfahren der Ausgangsperson generationsweise laden, Belege in einer Abfrage, Vollständigkeit, Qualität und Vorschläge |
@@ -1815,7 +1816,7 @@ Begriff neutral: „Großelternteil“), seine Eltern werden nicht gesucht.
 
 **Protokoll:** — (nur lesend).
 
-**Benutzt von:** `app/tree/page.tsx` (`view=rings`).
+**Benutzt von:** `lib/services/rings-view.ts` für `app/tree/page.tsx` (`view=rings`) und die Druckansicht `app/tree/print/page.tsx`.
 
 **Tests:** `tests/ancestor-rings.db.test.ts` (Plätze, Begriffe, Rechte,
 Tiefe, Startperson; Regeln: `tests/ancestor-rings.test.ts`);
@@ -1877,12 +1878,39 @@ der Flächen; Partner nur, wenn sichtbar.
 
 **Protokoll:** — (nur lesend).
 
-**Benutzt von:** `app/tree/page.tsx` (`view=rings&richtung=nachfahren`).
+**Benutzt von:** `lib/services/rings-view.ts` für `app/tree/page.tsx` (`view=rings&richtung=nachfahren`) und die Druckansicht.
 
 **Tests:** `tests/descendant-rings.db.test.ts` (Flächen, Begriffe,
 Adoption, keine Stief-/Pflegekinder, Partner, Rechte, Tiefe, Obergrenze,
 Startperson; Regeln: `tests/descendant-rings.test.ts`);
 `e2e/read/rings.spec.ts`.
+
+### lib/services/rings-view.ts
+
+**Zweck:** Mitte und Daten der Ansicht „Ringe“ — gemeinsam für die
+Stammbaum-Seite (`app/tree/page.tsx`) und die Druckansicht
+(`app/tree/print/page.tsx`), damit beide genau dieselben Personen nach
+denselben Regeln zeigen.
+
+**Wichtige Funktionen/Typen:** `loadRingsView(scope, { direction,
+generations, requested, candidates })` → `{ data, notFound }`.
+
+**Regeln:** Angefragte Person zuerst — fehlt sie oder ist sie gesperrt,
+`notFound` (beides gleich, kein Ausweichen auf andere Personen, damit sich
+die Existenz gesperrter Personen nicht abfragen lässt). Ohne Anfrage der
+erste Kandidat, für den der Dienst Daten liefert (Baumseite: `bezug`,
+gemerkte Person, Bezugsperson; Druck: gemerkte Person, Bezugsperson),
+zuletzt die Startperson (`defaultRingsRootId` bzw.
+`defaultDescendantRingsRootId`). Rechte prüfen `loadAncestorRings` bzw.
+`loadDescendantRings`.
+
+**Protokoll:** — (nur lesend).
+
+**Benutzt von:** `app/tree/page.tsx`, `app/tree/print/page.tsx`.
+
+**Tests:** `tests/rings-view.db.test.ts` (gleiche Daten wie der Dienst,
+gesperrte/unbekannte angefragte Person, Kandidaten, Startperson, gesperrte
+Vorfahren ohne Kennung und Namen); `e2e/read/rings-print.spec.ts`.
 
 ### lib/services/statistics.ts
 

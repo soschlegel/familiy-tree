@@ -13,6 +13,7 @@ export const HELP_LINKS = {
   orteZuordnen: "/hilfe/orte-zuordnen",
   linien: "/hilfe/stammbaum#linienfarben",
   ringe: "/hilfe/stammbaum#ringe",
+  ringeDrucken: "/hilfe/stammbaum#ringe-drucken",
   bezugsperson: "/hilfe/stammbaum#bezugsperson",
   herkunft: "/hilfe/stammbaum#herkunft",
   herkunftPerson: "/hilfe/personen#herkunft",

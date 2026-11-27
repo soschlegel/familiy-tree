@@ -29,8 +29,7 @@ import {
   RINGS_DIRECTION_PARAM,
   RINGS_GENERATION_PARAM,
 } from "@/lib/ancestor-rings";
-import { defaultRingsRootId, loadAncestorRings } from "@/lib/services/ancestor-rings";
-import { defaultDescendantRingsRootId, loadDescendantRings } from "@/lib/services/descendant-rings";
+import { loadRingsView } from "@/lib/services/rings-view";
 import { AncestorRings } from "@/components/AncestorRings";
 import { FamilyTree } from "@/components/FamilyTree";
 import { BrandMark } from "@/components/NavBar";
@@ -144,26 +143,19 @@ async function TreeContent({
   if (!noAccess && rings) {
     const direction = parseRingsDirection(params[RINGS_DIRECTION_PARAM]);
     const generations = parseRingsGeneration(params[RINGS_GENERATION_PARAM], ringsDefaultGeneration(direction));
-    const load = (id: string) =>
-      direction === "nachfahren" ? loadDescendantRings(scope, id, generations) : loadAncestorRings(scope, id, generations);
     const remembered = jar.get(FOCUS_COOKIE)?.value;
     // Wie die Fokus-Ansicht: angefragte Person → `bezug` → gemerkte Person →
     // Bezugsperson → Startperson. Eine angefragte Person muss sichtbar sein.
-    let data = requested ? await load(requested) : null;
-    if (requested && !data) {
+    const { data, notFound } = await loadRingsView(scope, {
+      direction,
+      generations,
+      requested,
+      candidates: [bezugParam, remembered && ID_PATTERN.test(remembered) ? remembered : null, choice.id],
+    });
+    if (notFound) {
       content = <NotFound rings={direction} />;
-    } else {
-      for (const id of [bezugParam, remembered && ID_PATTERN.test(remembered) ? remembered : null, choice.id]) {
-        if (data) break;
-        if (id) data = await load(id);
-      }
-      if (!data) {
-        const start = direction === "nachfahren" ? await defaultDescendantRingsRootId(scope) : await defaultRingsRootId(scope);
-        data = start ? await load(start) : null;
-      }
-      if (data) {
-        content = <AncestorRings data={data} initialColoring={parseRingsColoring(params[RINGS_COLORING_PARAM])} />;
-      }
+    } else if (data) {
+      content = <AncestorRings data={data} initialColoring={parseRingsColoring(params[RINGS_COLORING_PARAM])} />;
     }
   } else if (!noAccess && view === "focus") {
     const remembered = jar.get(FOCUS_COOKIE)?.value;
