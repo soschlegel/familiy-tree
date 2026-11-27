@@ -21,7 +21,7 @@ Test-Briefkasten).
 | Protokoll | `audit`, `change-sets`, `change-time` |
 | Daten und Regeln | `dates`, `date-fields`, `events`, `event-labels`, `validation`, `consistency`, `partner-labels`, `source-labels`, `source-classify` |
 | Graph und Verwandtschaft | `graph`, `kinship`, `kinship-chain`, `reference`, `roots` |
-| Auswertungen | `statistics`, `records`, `chart-slices`, `today` |
+| Auswertungen | `statistics`, `records`, `research-progress`, `chart-slices`, `today` |
 | Baumdarstellung | `tree-layout`, `layout-generations`, `focus-tree`, `ancestor-rings` |
 | Dubletten und Zusammenführen | `name-keys`, `duplicates`, `merge-rules`, `import-linking` |
 | Import/Export | `exchange`, `export-selection`, `import-fingerprint`, `gedcom/*`, `gedcom-import/*` |
@@ -1172,6 +1172,67 @@ Beziehungen in rund 0,4 s (`tests/records.test.ts`).
 für die Zählsätze), `components/RecordCards.tsx` (Typen).
 
 **Tests:** `tests/records.test.ts`, `tests/records.db.test.ts`.
+
+### lib/research-progress.ts
+**Zweck:** Rechnung der Seite **„Forschungs-Fortschritt“** (`/progress`):
+wie vollständig die Vorfahren einer Person erforscht sind — je Generation
+und je Großeltern-Linie —, Qualitätspunkte je Person und eine geordnete
+Liste von Vorschlägen. Rein; Laden und Rechte in
+`lib/services/research-progress.ts`.
+
+**Wichtige Funktionen:** `computeProgress(input)` → `ProgressResult`
+(Gesamtzahlen, Qualität, Zeilen je Generation und je Linie, Vorschläge);
+`personQuality(person, ctx)`; `compareSuggestions`; `parseProgressGeneration`
+(4…10, Standard 6); `birthSummary` („\* um 1850 in Musterdorf“),
+`lineContext`; Konstanten `QUALITY_POINTS`, `SUGGESTION_ORDER`,
+`PROGRESS_SHOWN_SUGGESTIONS` (20), `PROGRESS_MAX_SUGGESTIONS` (200).
+
+**Regeln:**
+- **Plätze** über `assignRingSlots` (`lib/ancestor-rings.ts`), also genau
+  wie die Ringe: Generation g hat 2^g Plätze, Ahnenschwund zählt je Platz
+  (`distinct` nennt die verschiedenen Personen), ein Zyklus lässt den Platz
+  leer. Jeder Platz ist „gefunden“, „nicht freigegeben“ oder „fehlt“; hinter
+  einem nicht freigegebenen Platz ist alles „nicht freigegeben“ (weder
+  gefunden noch fehlend), hinter einem fehlenden alles „fehlt“.
+- **Linien:** Plätze ab Generation 2, aufgeteilt nach `slotLine` (VV, VM,
+  MV, MM — Platz, nicht Geschlecht: bei unbekanntem Geschlecht entscheidet
+  wie bei den Ringen die stabile Reihenfolge); je Linie 2^(n−1) − 1 Plätze.
+- **Verstorben:** Sterbedatum, Wortlaut oder Sterbeort. **Vermutlich
+  verstorben:** spätester möglicher Geburtszeitpunkt mehr als 100 Jahre
+  (`PRESUMED_LIFESPAN`) zurück — eigener oder der eines Nachkommen auf dem
+  Weg zur Ausgangsperson (wer ein vor über 100 Jahren geborenes Kind hat,
+  ist selbst älter). „nach 1900“ und offene Bereiche zählen nie.
+- **Punkte je Person:** Geburtsdatum 2 (Tag ohne Zusatz) / 1 (ungenau oder
+  nur Wortlaut) / 0; Geburtsort 1; beide Eltern erfasst 1 (ein gesperrter
+  Elternteil gilt als erfasst); Geburt belegt 1; nur bei (vermutlich)
+  Verstorbenen zusätzlich Sterbedatum 1, Sterbeort 1, Tod belegt 1. Höchstens
+  5 bzw. 8. **Daten vollständig:** Geburtsdatum (auch ungenau), Geburtsort,
+  beide Eltern, bei Verstorbenen Sterbedatum und -ort. **Mit Beleg:** Geburt
+  und bei Verstorbenen Tod „unabhängig“ belegt (fremder Stammbaum zählt
+  nicht). Gruppen zählen jede Person einmal.
+- **Vorschläge** je sichtbarer Person an ihrer nächsten Stelle (Generation
+  0 = Ausgangsperson bis n): fehlende Eltern („Eltern … fehlen“, „Mutter …
+  fehlt“ nur, wenn der vorhandene Elternteil sichtbar und männlich ist,
+  sonst „Ein Elternteil …“; mit Linie und Zahl der dahinter fehlenden
+  Plätze bis zur Tiefe), Geburtsdatum fehlt, Sterbedatum fehlt (nur
+  Verstorbene), Geburt nur durch fremden Stammbaum belegt, Geburtsort fehlt,
+  Tod nur durch fremden Stammbaum belegt, Geburt bzw. Tod nicht belegt,
+  Sterbeort fehlt. Lebende bekommen keine Vorschläge zum Tod.
+- **Reihenfolge (`compareSuggestions`):** nähere Generation zuerst; darin
+  nach Art (`SUGGESTION_ORDER`: fehlende Eltern — sie schneiden eine Linie
+  ab —, dann Daten, dann Belege); bei fehlenden Eltern mehr abgeschnittene
+  Plätze zuerst; dann Aussicht (Geburtsjahr und Geburtsort bekannt, je 1);
+  zuletzt Name.
+
+**Rechte/Datenschutz:** Die Funktion bekommt nur Angaben sichtbarer
+Personen; nicht sichtbare stehen als Platz ohne Kennung im Ergebnis, ohne
+Vorschläge und ohne Zählung dahinter.
+
+**Benutzt von:** `lib/services/research-progress.ts`,
+`app/progress/page.tsx` (Konstanten, Typen).
+
+**Tests:** `tests/research-progress.test.ts`,
+`tests/research-progress.db.test.ts`.
 
 ### lib/today.ts
 **Zweck:** Rechnung der Startseite **„Heute in der Familie“** (`/`):

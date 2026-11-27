@@ -163,6 +163,22 @@ export default async function ResearchPage() {
             </p>
           )}
 
+          <div
+            className="card flex flex-wrap items-center justify-between gap-3 border-accent-300 p-4 dark:border-accent-700"
+            data-testid="research-progress"
+          >
+            <span className="min-w-0 flex-1 basis-64">
+              <span className="block font-serif text-lg font-semibold">Forschungs-Fortschritt</span>
+              <span className="block text-sm muted">
+                Wie vollständig sind deine Vorfahren erforscht — je Generation und je Linie? Mit Vorschlägen, wo
+                sich das Weitersuchen am meisten lohnt.
+              </span>
+            </span>
+            <Link href="/progress" className="btn-primary" data-testid="research-progress-link">
+              Fortschritt ansehen
+            </Link>
+          </div>
+
           <p className="card flex flex-wrap items-center justify-between gap-3 p-4 text-sm" data-testid="research-kinship">
             <span>Wie hängen zwei Personen zusammen? Die App nennt die Verwandtschaft und zeichnet den Weg.</span>
             <Link href="/kinship" className="btn-secondary btn-sm">

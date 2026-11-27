@@ -99,6 +99,7 @@ Alle Seiten außer `/login`, `/login/email` und der Weiterleitung `/` sind
 | `/research/connect` | Importe verbinden | nur Admin (sonst 404) |
 | `/statistics` | Statistik: Diagramme über den sichtbaren Teil des Stammbaums | angemeldet |
 | `/records` | Rekorde: Bestwerte des sichtbaren Stammbaums mit Namen | angemeldet |
+| `/progress` | Forschungs-Fortschritt: Vollständigkeit der Vorfahren je Generation und Linie, Vorschläge zum Weitersuchen | angemeldet; Ausgangsperson muss sichtbar sein |
 | `/kinship` | „Wie sind wir verwandt?“: Verwandtschaft zweier Personen in Worten und als Zeichnung | angemeldet; gewählte Personen müssen sichtbar sein |
 | `/sources` | Quellenliste | angemeldet |
 | `/sources/new` | Quelle anlegen | Bearbeiter in ≥ 1 Familie, sonst → `/sources` |
@@ -251,8 +252,9 @@ bewusst nicht (die Kopfzeile ist voll; das Logo genügt).
   `components/TodayList.tsx`, höchstens zehn, der Rest hinter „Weitere …
   anzeigen“); leer: freundlicher Hinweis und der nächste Jahrestag mit
   „Diesen Tag ansehen“. Karte **Demnächst** (30 Tage) mit „Geburtstage“ und
-  „Runde Jahrestage“. Daneben (Telefon: darunter) **Einstieg** mit fünf
-  Kacheln: Stammbaum, Karte, Personen, Statistik, Rekorde.
+  „Runde Jahrestage“. Daneben (Telefon: darunter) **Einstieg** mit sechs
+  Kacheln: Stammbaum, Karte, Personen, Statistik, Rekorde,
+  Forschungs-Fortschritt (`start-progress`).
 - **Daten:** `getToday` (`lib/services/today.ts`), Regeln in `lib/today.ts`.
 - **Tests:** `e2e/read/today.spec.ts`; `tests/today.test.ts`,
   `tests/today.db.test.ts`.
@@ -475,8 +477,10 @@ Die Personenseite.
 - **Rechte:** angemeldet; alle Zahlen nur über sichtbare Personen.
 - **Daten:** `getStatistics`, `findDataGaps` (25 je Art),
   `listDuplicateCandidates` (20), `findInconsistencies` (200).
-- **Anzeige:** Zeile mit Knopf „Wie sind wir verwandt?“ (`/kinship`,
-  `research-kinship`); Kennzahlen (Personen, Beziehungen, Zeitraum, Bilder),
+- **Anzeige:** hervorgehobene Karte „Forschungs-Fortschritt“ mit Knopf
+  „Fortschritt ansehen“ (`/progress`, `research-progress`,
+  `research-progress-link`); Zeile mit Knopf „Wie sind wir verwandt?“
+  (`/kinship`, `research-kinship`); Kennzahlen (Personen, Beziehungen, Zeitraum, Bilder),
   Personen je Familie (Link `/people?family=…`), Datenlücken je Art
   aufklappbar (Beziehungslücken mit Link `/people/<id>?rel=<Beziehung>`),
   mögliche Dubletten (`DuplicateList`, Link „alle prüfen“), Widersprüche
@@ -542,6 +546,50 @@ Die Personenseite.
 - **Darstellung:** ohne Skript außer dem Familienfilter; zwei Spalten ab
   `lg`, bei 390 px eine Spalte ohne waagerechtes Scrollen; Namen mit 44 px
   Tippfläche auf dem Telefon.
+
+### `/progress` — `app/progress/page.tsx`
+
+- **Rechte:** angemeldet, kein Admin-Recht nötig. Gezählt und genannt
+  werden nur sichtbare Personen; nicht sichtbare Vorfahren erscheinen nur
+  als Zahl „nicht freigegeben“. Die Seite verlinkt nur auf Personenseiten,
+  bearbeitet wird dort.
+- **Einbindung:** kein Menüpunkt; erreichbar über die hervorgehobene Karte
+  auf `/research` (`research-progress-link`) und die Kachel
+  „Forschungs-Fortschritt“ der Startseite (`start-progress`); zurück über
+  „← Recherche“ (`progress-to-research`).
+- **Parameter:** `person` (Ausgangsperson; ohne Angabe die Bezugsperson:
+  Cookie „Baum aus dieser Sicht“, sonst „Das bin ich“ — `resolveReference`;
+  `ich` übergeht das Cookie), `generationen` (4…10, Standard 6). Die
+  Adresse ist teilbar; der Empfänger sieht dieselbe Auswahl mit seinen
+  Rechten. Eine unbekannte oder nicht sichtbare Person meldet „nicht
+  gefunden“ (`progress-notfound`) und fällt auf die Bezugsperson zurück.
+- **Daten:** `getResearchProgress` (`lib/services/research-progress.ts`),
+  Regeln in `lib/research-progress.ts`.
+- **Anzeige:** Kopf mit Kontexthilfe (`HelpLink` →
+  `/hilfe/statistik#forschungs-fortschritt`); Bedienzeile
+  (`progress-controls`) mit Ausgangsperson (Link, „ich“ bzw.
+  „Bezugsperson“), „Andere Person …“ (`MapPersonChooser` mit `target`,
+  `progress-choose-person`), „zurück zur Bezugsperson“ (`progress-back`,
+  nur bei gewählter Person) und den Tiefen 4…10 als Links mit
+  `aria-current` (`progress-depth-<n>`). Ohne Ausgangsperson nur ein
+  freundlicher Hinweis (`progress-no-root`) mit „Person wählen …“. Sonst:
+  vier Kennzahlen (`KeyFigure`: Vorfahren gefunden, Daten vollständig, Mit
+  Beleg, Nicht freigegeben), Karte „Vollständigkeit je Generation“
+  (`progress-generation-row`: „X von 2^n“, Balken gefunden/nicht
+  freigegeben, fehlend und Ahnenschwund als Text, Qualität), Karte „Die vier
+  Großeltern-Linien“ (`progress-line-row`, Kurzzeichen `LineCode` und Farbe
+  wie im Baum, Großelternteil verlinkt), „Hier lohnt sich die Suche“
+  (`progress-suggestion`: 20 sichtbar, der Rest in `<details>`
+  `progress-more`) und „Wie wird gezählt?“ (`progress-rules`, Punkte-Tabelle
+  aus `QUALITY_POINTS`).
+- **Route und `loading.tsx`:** bewusst eine eigene Route oben und nicht
+  unter `/research` — dort liegt `loading.tsx`, und mit einer Ladeanzeige
+  bliebe der Wechsel der Tiefe oder Person (nur andere Suchparameter)
+  hängen (wie bei `/statistics`).
+- **Darstellung:** ohne Skript außer der Personensuche; Balken nur Zierde
+  (`aria-hidden`, Breite als `style`-Attribut, CSP-konform), jede Zahl als
+  Text; bei 390 px eine Spalte ohne waagerechtes Scrollen, Tiefen-Knöpfe und
+  Vorschläge mit 44 px Tippfläche.
 
 ### `/kinship` — `app/kinship/page.tsx`
 
@@ -1145,6 +1193,7 @@ Dienste (`tests/*.db.test.ts`) und das Zusammenspiel im Browser
 | Personen | `e2e/read/people-list.spec.ts`, `person-families.spec.ts`, `dates.spec.ts`; `e2e/write/person-lifecycle.spec.ts`, `genealogy.spec.ts`, `dates.spec.ts` |
 | Statistik | `e2e/read/statistics.spec.ts`; Unit: `tests/statistics.test.ts`, `tests/statistics.db.test.ts` |
 | Rekorde | `e2e/read/records.spec.ts`; Unit: `tests/records.test.ts`, `tests/records.db.test.ts` |
+| Forschungs-Fortschritt | `e2e/read/progress.spec.ts`; Unit: `tests/research-progress.test.ts`, `tests/research-progress.db.test.ts` |
 | Startseite | `e2e/read/today.spec.ts`; Unit: `tests/today.test.ts`, `tests/today.db.test.ts` |
 | Wie sind wir verwandt? | `e2e/read/kinship.spec.ts`; Unit: `tests/kinship-chain.test.ts`, `tests/kinship-view.db.test.ts` |
 | Recherche, Dubletten, Zusammenführen | `e2e/read/research.spec.ts`, `quality.spec.ts`, `duplicate-banner.spec.ts`; `e2e/write/merge.spec.ts`, `duplicate-banner.spec.ts`, `connect.spec.ts` |

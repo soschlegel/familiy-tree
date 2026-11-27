@@ -13,8 +13,28 @@ const year = (iso: string | null) => (iso ? iso.slice(0, 4) : "");
  * Ausgangsperson der Karte wählen: Suchfeld über die sichtbaren Personen
  * (/api/persons?q=), Auswahl führt zu /map?person=<id>&mode=…(&art=… beim
  * Lebensweg). Ändert die Bezugsperson des Baums nicht.
+ *
+ * Auch für andere Seiten mit Ausgangsperson in der Adresse (z.B.
+ * „Forschungs-Fortschritt“): `target` ist dann der Pfad samt übrigen
+ * Suchparametern, an den `person=<id>` angehängt wird.
  */
-export function MapPersonChooser({ mode, art }: { mode: "vorfahren" | "alle" | "lebensweg"; art?: string }) {
+export function MapPersonChooser({
+  mode,
+  art,
+  target,
+  label = "Andere Person …",
+  testId = "map-choose-person",
+}: {
+  mode?: "vorfahren" | "alle" | "lebensweg";
+  art?: string;
+  target?: string;
+  label?: string;
+  testId?: string;
+}) {
+  const hrefFor = (id: string) =>
+    target
+      ? `${target}${target.includes("?") ? "&" : "?"}person=${encodeURIComponent(id)}`
+      : `/map?person=${encodeURIComponent(id)}&mode=${mode ?? "vorfahren"}${art ? `&art=${encodeURIComponent(art)}` : ""}`;
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -63,9 +83,9 @@ export function MapPersonChooser({ mode, art }: { mode: "vorfahren" | "alle" | "
         aria-expanded={open}
         aria-controls={`${ids}-box`}
         onClick={() => setOpen((o) => !o)}
-        data-testid="map-choose-person"
+        data-testid={testId}
       >
-        Andere Person …
+        {label}
       </button>
       {open && (
         <div
@@ -90,10 +110,10 @@ export function MapPersonChooser({ mode, art }: { mode: "vorfahren" | "alle" | "
               <li key={h.id}>
                 <button
                   type="button"
-                  className="w-full rounded-lg px-2 py-2 text-left text-sm hover:bg-stone-900/5 dark:hover:bg-white/10"
+                  className="w-full rounded-lg px-2 py-2 text-left text-sm hover:bg-stone-900/5 max-md:min-h-11 dark:hover:bg-white/10"
                   onClick={() => {
                     setOpen(false);
-                    router.push(`/map?person=${encodeURIComponent(h.id)}&mode=${mode}${art ? `&art=${encodeURIComponent(art)}` : ""}`);
+                    router.push(hrefFor(h.id));
                   }}
                 >
                   <span className="font-medium">{[h.givenName, h.familyName].filter(Boolean).join(" ")}</span>

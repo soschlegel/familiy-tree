@@ -23,6 +23,7 @@ export const HELP_LINKS = {
   einstellungen: "/hilfe/einstellungen",
   statistik: "/hilfe/statistik",
   rekorde: "/hilfe/statistik#rekorde",
+  fortschritt: "/hilfe/statistik#forschungs-fortschritt",
   verwandtschaft: "/hilfe/verwandtschaft",
   verwandtschaftFreigabe: "/hilfe/verwandtschaft#nicht-freigegebene-personen",
   importVorschlaege: "/hilfe/import-und-export#vorschlaege-personen-die-es-schon-gibt",

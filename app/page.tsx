@@ -18,6 +18,12 @@ const ENTRIES = [
   { href: "/people", title: "Personen", text: "Alle Personen mit Suche nach Namen und Orten", testId: "start-people" },
   { href: "/statistics", title: "Statistik", text: "Namen, Orte, Lebensalter und Kinderzahl in Zahlen", testId: "start-statistics" },
   { href: "/records", title: "Rekorde", text: "Die Ältesten, die längste Ehe, die meisten Nachkommen — mit Namen", testId: "start-records" },
+  {
+    href: "/progress",
+    title: "Forschungs-Fortschritt",
+    text: "Wie vollständig deine Vorfahren erforscht sind — und wo sich Weitersuchen lohnt",
+    testId: "start-progress",
+  },
 ] as const;
 
 /** Adresse eines Tages: der wirkliche heutige Tag ohne Parameter. */

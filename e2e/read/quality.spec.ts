@@ -34,6 +34,7 @@ const PAGES = [
   "/research",
   "/statistics",
   "/records",
+  `/progress?person=${L.selfEditor}`,
   "/admin/data",
   "/ai-access",
   "/admin/users",
