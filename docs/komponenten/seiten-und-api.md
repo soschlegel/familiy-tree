@@ -425,8 +425,10 @@ Die Personenseite.
   `listSourceOptions`, `listDuplicatesOfPerson`, `getPersonOrigin` (Block
   „Herkunft“ und Chips an Ereignissen, weiteren Namen, Beziehungen und
   Belegen). Für alle: `getPersonRoots` (Standard 4. Generation, nach Land;
-  parallel zu `getPersonOrigin`) und `lifePathEntry` (lohnt sich ein
-  Lebensweg? parallel dazu).
+  parallel zu `getPersonOrigin`), `lifePathEntry` (lohnt sich ein
+  Lebensweg? parallel dazu) und `getPersonBiography` (Text „Lebenslauf“
+  aus den schon geladenen Daten, dazu höchstens eine Abfrage der
+  Eltern-Kind-Kanten; parallel dazu).
 - **Anzeige (Komponenten):** `DuplicateBanner` (nur Bearbeiter), Kopf mit
   `Avatar`, Lebensdaten samt abweichender Zweitangaben, Knöpfe
   „Bearbeiten“, „Im Stammbaum zeigen“ (`/tree?focus=…`), „Lebensweg auf der
@@ -434,7 +436,8 @@ Die Personenseite.
   mindestens zwei Punkte auf der Karte hat; führt zu
   `/map?person=…&mode=lebensweg` samt passender `art`) und — nur
   Bearbeiter — „Zusammenführen …“ (`MergeDialog`);
-  `ReferencePanel` (Verwandtschaft zur Bezugsperson, „Das bin ich“, „Baum
+  `PersonBiography` („Lebenslauf“ direkt nach dem Kopf, entfällt ohne
+  genug Daten); `ReferencePanel` (Verwandtschaft zur Bezugsperson, „Das bin ich“, „Baum
   aus dieser Sicht“, „Wie sind wir verwandt?“); Notizen; `EventSection` (Ereignisse der Person und
   ihrer Partnerschaften in einer Liste); `NameVariants`; Familie in
   Gruppen Eltern, Geschwister, Partner (mit Heirats-/Scheidungsorten,

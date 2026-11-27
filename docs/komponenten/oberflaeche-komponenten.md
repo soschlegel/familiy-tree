@@ -24,7 +24,7 @@ Abschnitt 1). Seiten und API-Routen selbst stehen in
 - [Personen, Ereignisse, Quellen und Medien](#personen-ereignisse-quellen-und-medien)
   — `PersonForm`, `DateInput`, `EventSection`, `CitationSection`,
   `CitationLink`, `NameVariants`, `PersonFamilies`, `RelationshipEditor`,
-  `PersonChanges`, `PersonRoots`, `DonutChart` (mit `DonutLegend`), `StatisticsCharts`, `TodayList`, `PersonOrigin`, `PersonPicker`, `AttachedMedia`, `MediaGallery`,
+  `PersonChanges`, `PersonRoots`, `PersonBiography`, `DonutChart` (mit `DonutLegend`), `StatisticsCharts`, `TodayList`, `PersonOrigin`, `PersonPicker`, `AttachedMedia`, `MediaGallery`,
   `DeletePersonButton`, `SelfPersonButton`, `SourceForm`, `DeleteSourceButton`
 - [Rahmen und Helfer](#rahmen-und-helfer) — `NavBar`, `PageLoading`,
   `AutoSubmit`, `api-client`, `useDismiss`, `ai-access-labels`,
@@ -954,6 +954,36 @@ Kontexthilfe „?“ (`HelpLink` `wurzeln`). Bei 390 px Ring über der Legende.
 
 **Tests:** `e2e/read/roots.spec.ts` (Desktop und 390 px, axe). Dienst und
 Rechnung: `tests/roots.db.test.ts`, `tests/roots.test.ts`.
+
+### components/PersonBiography.tsx
+
+**Zweck:** Abschnitt „Lebenslauf“ der Personenseite: der aus den erfassten
+Daten gebaute Text in ganzen Sätzen (`lib/biography.ts`).
+
+**Wo eingesetzt:** `app/people/[id]/page.tsx`, direkt nach dem Kopf (vor
+Bezugsperson, Notizen und den Detailabschnitten) — für jeden, der die
+Person sehen darf; ohne Satz über den Namen hinaus entfällt er.
+
+**Props/Daten:** `biography` (`Biography`: Absätze aus Textstücken, Namen
+anderer Personen mit `personId`; reiner Text) — fertig vom Server, nur
+Sichtbares.
+
+**Verhalten:** Absätze in Serifenschrift, Namen als Links auf die
+Personenseiten. Knopf „Text kopieren“ legt den reinen Text (ohne Links,
+Absätze durch Leerzeilen getrennt) in die Zwischenablage und meldet „Text
+kopiert.“ (`role="status"`); ohne Zwischenablage-Recht wird der Text
+markiert und ein Hinweis auf Strg+C gezeigt. Darunter dezent „Automatisch
+aus den erfassten Daten erstellt.“ mit Kontexthilfe „Wie entsteht der
+Text?“ (`HelpLink` `lebenslauf`). Hell/dunkel über die üblichen Klassen;
+bei 390 px bricht der Knopf unter die Überschrift.
+
+**Server oder Client:** Client (wegen „Text kopieren“).
+
+**Ruft auf:** —
+
+**Tests:** `e2e/read/biography.spec.ts` (Abschnitt, Links, Kopieren,
+eingeschränkter Benutzer, 390 px, axe). Text und Rechte:
+`tests/biography.test.ts`, `tests/biography.db.test.ts`.
 
 ### components/DonutChart.tsx
 

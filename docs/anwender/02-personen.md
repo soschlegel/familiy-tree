@@ -1,6 +1,6 @@
 # Personen anlegen und bearbeiten
 
-Wie du Personen erfasst: Namen, ungenaue Daten wie „um 1850“, Lebensereignisse, Beziehungen und Bilder. Dafür brauchst du Bearbeitungsrechte.
+Wie du Personen erfasst: Namen, ungenaue Daten wie „um 1850“, Lebensereignisse, Beziehungen und Bilder. Dafür brauchst du Bearbeitungsrechte. Dazu, wie der „Lebenslauf“ auf der Personenseite entsteht.
 
 ## Eine Person anlegen
 
@@ -47,6 +47,23 @@ Widerspricht eine zweite Quelle einer Geburt, einem Tod oder einer Heirat (z.B. 
 ## Weitere Namen
 
 Ehenamen, Schreibvarianten („Mayer“/„Meier“), Ordensnamen oder „auch bekannt als“ trägst du in der Karte **Weitere Namen** mit **Namen hinzufügen** ein. Die Personensuche findet die Person dann auch unter diesen Namen.
+
+## Lebenslauf
+
+Oben auf der Personenseite, gleich unter Name und Lebensdaten, steht der Abschnitt **Lebenslauf**: ein kurzer Text in ganzen Sätzen, den die App **automatisch aus den erfassten Daten** schreibt — ohne KI und nach festen Regeln. Ein Beispiel (erfunden):
+
+> Anna Beispiel, geb. Muster, wurde am 12. März 1850 in Musterdorf als drittes von sieben Kindern von Karl Muster und Erna Muster geboren. Am 20. März 1850 wurde sie dort getauft. Sie heiratete 1874 in Musterstadt Otto Beispiel. Aus der Ehe gingen zwei Söhne und eine Tochter hervor: Paul, Marie und Fritz. Am 3. Mai 1921 starb sie im Alter von 71 Jahren in Neustadt.
+
+Was du darüber wissen solltest:
+
+- **Nur, was erfasst ist.** Der Text erzählt Geburt, Eltern, Partnerschaften, Kinder, Lebensereignisse (Taufe, Beruf, Wohnort, Auswanderung …) und den Tod. Fehlt etwas, fehlt es auch im Text. **Notizen** und **Quellen** erzählt er nicht nach, **abweichende Angaben** nimmt er nicht.
+- **Unsicheres bleibt unsicher.** Steht ein Datum als „um 1850“ oder „vor 1900“ da, steht es auch im Text so. Ist nur das Jahr bekannt, sagt der Text beim Alter zum Beispiel „im Alter von 70 oder 71 Jahren“.
+- **„Als drittes von sieben Kindern“** steht nur da, wenn die App die Reihenfolge sicher kennt: beide Eltern und alle ihre gemeinsamen Kinder sind erfasst, und die Geburtsdaten lassen keinen Zweifel. Sonst heißt es „als eines von sieben Kindern“ oder nur „als Tochter von …“.
+- **Lebende Personen** stehen in der Gegenwart („Sie ist mit Paul Beispiel verheiratet“), ohne Sterbesatz.
+- **Nur, was du sehen darfst.** Personen aus Familien ohne Freigabe für dich nennt der Text nicht und zählt sie auch nicht mit.
+- Namen anderer Personen sind Links zu deren Seite. Mit **Text kopieren** legst du den Text (ohne Links) in die Zwischenablage, etwa für einen Brief oder eine Chronik.
+
+Stimmt etwas im Text nicht, liegt es an den erfassten Daten: Berichtige dort die Angabe (z.B. das Geburtsdatum oder die Art der Beziehung) — der Lebenslauf passt sich beim nächsten Öffnen der Seite an.
 
 ## Beziehungen: Eltern, Kinder, Partner
 

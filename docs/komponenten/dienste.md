@@ -1720,6 +1720,36 @@ erkennbar — mehr nicht.
 **Tests:** `tests/roots.db.test.ts` (Regeln: `tests/roots.test.ts`);
 `e2e/read/roots.spec.ts`.
 
+### lib/services/biography.ts
+
+**Zweck:** Abschnitt „Lebenslauf“ der Personenseite: der Text aus den
+erfassten Daten (Satzbildung: `lib/biography.ts`, Eingabe:
+`lib/biography-input.ts`).
+
+**Wichtige Funktionen/Typen:** `getPersonBiography(detail, now?)` →
+`Biography` oder `null` (zu wenig Daten).
+
+**Regeln:**
+- **Laden:** nimmt das `PersonDetail`, das die Seite ohnehin lädt; dazu
+  höchstens EINE Abfrage `PARENT_OF` (Kinder der beiden sichtbaren
+  leiblichen Eltern — für die Geschwisterstellung — und Eltern der
+  sichtbaren Kinder — für die Zuordnung zur Partnerschaft; nur Kennungen
+  und Untertyp). Keine Abfrage je Geschwister oder Kind. „Heute“ nach
+  `calendarDayIn` (Europe/Berlin) für „lebt noch“.
+
+**Rechte/Datenschutz:** Die Rechte stecken in `getPersonDetail` (nicht
+sichtbare Person → die Seite ruft gar nicht erst auf; nicht sichtbare
+Verwandte sind Platzhalter). Die Eingabe verwirft Platzhalter; die Kanten
+enthalten Kennungen auch nicht sichtbarer Personen, die aber nie in den
+Text gelangen. Antwort und Seitenquelltext nennen nur Sichtbares.
+
+**Protokoll:** — (nur lesend).
+
+**Benutzt von:** `app/people/[id]/page.tsx`.
+
+**Tests:** `tests/biography.db.test.ts` (Regeln: `tests/biography.test.ts`);
+`e2e/read/biography.spec.ts`.
+
 ### lib/services/ancestor-rings.ts
 
 **Zweck:** Daten der Ansicht „Ringe“ der Baumseite: die Vorfahren einer

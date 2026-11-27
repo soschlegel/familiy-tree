@@ -16,6 +16,7 @@ export const HELP_LINKS = {
   bezugsperson: "/hilfe/stammbaum#bezugsperson",
   herkunft: "/hilfe/stammbaum#herkunft",
   herkunftPerson: "/hilfe/personen#herkunft",
+  lebenslauf: "/hilfe/personen#lebenslauf",
   dubletten: "/hilfe/dubletten",
   dublettenKlassen: "/hilfe/dubletten#was-bedeuten-sicher-wahrscheinlich-und-unklar",
   dublettenKi: "/hilfe/dubletten#von-der-ki-vorgepruefte-paare",
