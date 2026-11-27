@@ -25,6 +25,7 @@ Querverweise: Datumslogik `lib/dates.ts`, Rechte `lib/scope.ts` und
 | Audit und Änderungsgeschichte | `AuditLog`, `ChangeSet` | `AuditChannel` |
 | Orte (Karte) | `Place` | `PlaceSource`, `PlacePrecision` |
 | Einstellungen | `AppSetting` | — |
+| Zeitgeschichte | `HistoryEvent`, `HistoryHiddenBuiltin` | — |
 
 Allgemeine Konventionen:
 
@@ -600,8 +601,10 @@ Audit rollen die eigentliche Änderung nicht zurück (`audit` fängt Fehler ab).
 - `userId`, `action` (Text: `CREATE`, `UPDATE`, `DELETE`, `MERGE`,
   `CONNECT`), `entityType` (Text, z.B. `Person`, `Relationship`,
   `MediaAsset`, `User`, `Family`, `Source`, `Citation`, `ApiToken`, `Event`,
-  `PersonName`, `ImportBatch`, `ImportRawRecord`, `Place`, `Setting`),
-  `entityId` (bei `Setting` der Schlüssel der Einstellung).
+  `PersonName`, `ImportBatch`, `ImportRawRecord`, `Place`, `Setting`,
+  `HistoryEvent`), `entityId` (bei `Setting` der Schlüssel der Einstellung, bei
+  `HistoryEvent` die Kennung des eigenen Ereignisses bzw. die Kennung des
+  mitgelieferten Eintrags aus `lib/history/builtin.ts`).
 - `diff` (JSON): bei `UPDATE` seit dem Changelog
   `{ changes: { feld: { from, to } } }` (Datumsspalten zu einem Feld in
   Anzeigeform zusammengefasst, `fieldChanges`); ältere Einträge enthalten
@@ -702,6 +705,34 @@ Umgebungsvariable. Nur für Werte, die keine Geheimnisse sind.
 Verzeichnis nicht (mehr) kennt, werden ignoriert. Änderungen stehen im
 `AuditLog` (`Setting`).
 
+### `HistoryEvent`
+**Bedeutung:** Eigenes Ereignis der Zeitgeschichte („historischer Rahmen“),
+von einem Administrator auf `/admin/history` gepflegt
+(`lib/services/history.ts`, Recht `history:manage`) — zusätzlich zur
+mitgelieferten Liste, die im Code steht (`lib/history/builtin.ts`), nicht in
+der Datenbank. Allgemeines Wissen, für alle angemeldeten Benutzer gleich
+sichtbar; nennt keine Personen des Stammbaums.
+
+**Felder:** `title`, `yearFrom` (ganzes Jahr), `yearTo` (optional,
+einschließlich, nie vor `yearFrom`; gleich `yearFrom` wird als leer
+gespeichert), `kind` (Text: `krieg`, `politik`, `not`, `wanderung`,
+`sonstiges` — geprüft im Dienst, kein Enum), `description` (optional, ein
+Satz), `region` („gilt für Region/Ort“, freier Text, nur Zusatz in der
+Anzeige — kein Abgleich mit Wohnorten), `createdAt`, `updatedAt`.
+
+**Indizes:** `yearFrom` (Sortierung).
+
+### `HistoryHiddenBuiltin`
+**Bedeutung:** Ausgeblendeter Eintrag der mitgelieferten Zeitgeschichte. Eine
+Zeile = ausgeblendet (für alle Benutzer); wieder einblenden löscht die Zeile.
+
+**Felder:** `builtinId` (Primärschlüssel, stabile Kennung aus
+`lib/history/builtin.ts`), `createdAt`.
+
+**Besonderheit:** Bewusst ohne Fremdschlüssel — die Liste steht im Code.
+Eine Kennung, die die Liste nicht mehr kennt, stört nicht. Änderungen an
+beiden Tabellen stehen im `AuditLog` (`HistoryEvent`).
+
 ## Migrationen (`prisma/migrations/`)
 
 | Ordner | Inhalt |
@@ -723,6 +754,7 @@ Verzeichnis nicht (mehr) kennt, werden ignoriert. Änderungen stehen im
 | `20261125000002_import_anzeigename` | Tabelle `ImportSource` (Anzeigename je Quell-Baum) — nur `CREATE TABLE`, keine Rückfüllung. |
 | `20261126000000_einstellungen` | Tabelle `AppSetting` (Einstellungen der Installation, Schlüssel → Wert) — nur `CREATE TABLE`, keine Daten; ohne Zeile gilt weiter die Umgebungsvariable. |
 | `20261126000100_audit_personenfamilien` | Im `AuditLog` `subjectFamilyIds` (Liste, Standard leer) und `subjectFamiliesKnown` (Standard `false`) — rein ergänzend, **ohne Rückfüllung**: Ältere Einträge bleiben „nicht erfasst“ (Begründung bei `lib/services/changes.ts` in [dienste.md](dienste.md)). |
+| `20261127000100_zeitgeschichte` | Tabellen `HistoryEvent` (eigene Ereignisse der Zeitgeschichte, Index auf `yearFrom`) und `HistoryHiddenBuiltin` (ausgeblendete mitgelieferte Einträge) — nur `CREATE TABLE`/`CREATE INDEX`, keine Daten; ohne Zeilen gilt die mitgelieferte Liste. |
 
 `migration_lock.toml` legt den Anbieter (PostgreSQL) fest.
 

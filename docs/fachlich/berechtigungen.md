@@ -41,6 +41,7 @@ Familie bearbeiten und in einer anderen nur lesen.
 | Personen ohne Familienzuordnung sehen | | | ✓ |
 | KI-Zugang vergeben, fremde KI-Schlüssel widerrufen | | | ✓ |
 | Einstellungen der Installation pflegen | | | ✓ |
+| Zeitgeschichte pflegen (eigene Ereignisse, mitgelieferte ausblenden) | | | ✓ |
 
 Der **KI-Zugang** liegt quer dazu: Der Administrator gibt ihn je Benutzer
 (kein Zugang, lesen, lesen und schreiben), auch sich selbst ausdrücklich. Mit
@@ -88,3 +89,14 @@ Umgebungsvariable, nach dem Entfernen ebenso. Die Seite zeigt je Schlüssel
 den wirksamen Wert und seine Herkunft. Jede Änderung steht im
 Änderungsprotokoll. **Nur für Werte, die keine Geheimnisse sind** —
 Zugangsdaten bleiben im Stack.
+
+## Zeitgeschichte
+
+Auf `/admin/history` (Menü *Verwaltung → Zeitgeschichte*, Recht
+`history:manage`, nur Administratoren) pflegt der Administrator die
+allgemeinen Ereignisse, die die App im Zeitstrahl, in der Zeitreise der
+Karte und im Lebenslauf zeigt: eigene anlegen, ändern, löschen und
+mitgelieferte ausblenden. Sehen dürfen die Ereignisse alle angemeldeten
+Benutzer gleich — sie enthalten keine Personendaten und dürfen keine
+Personen des Stammbaums nennen. Jede Änderung steht im Änderungsprotokoll
+(nur für Administratoren sichtbar).

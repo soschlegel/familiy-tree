@@ -17,6 +17,17 @@ Weitere Werkzeuge: **Suche** (stellt den Treffer in die Mitte), **Ehen zeigen** 
 
 Von jeder Personenseite führt **Im Stammbaum zeigen** zurück in die Fokus-Ansicht.
 
+### Zeitgeschichte im Zeitstrahl
+
+Im **Zeitstrahl** stehen an der Jahresachse links dezente Marken für allgemeine Ereignisse der Zeit: ein schmales Band für einen Zeitraum (etwa einen Krieg), ein Punkt für ein einzelnes Jahr (etwa die Reichsgründung). Überschneiden sich Ereignisse, stehen ihre Bänder nebeneinander.
+
+- **Zeigst du auf eine Marke** oder tippst sie an, erscheint daneben, was es war: Titel, Jahre, Art und ein Satz Beschreibung. Liegen mehrere Ereignisse dicht beieinander, stehen sie zusammen in dieser Anzeige. Escape oder ein Tipp daneben schließt sie.
+- **Mit der Tastatur:** Die Marken lassen sich mit der Tab-Taste erreichen.
+- Die Marken sind nur **Hintergrund** — sie sagen nichts über die Personen im Baum.
+- Mit dem Kästchen **Zeitgeschichte** in der Werkzeugleiste (nur im Zeitstrahl) blendest du die Marken aus und wieder ein. Die App merkt sich das in diesem Browser; der Schalter gilt auch für die Karte und den Lebenslauf.
+
+Welche Ereignisse es gibt und wie ein Administrator eigene ergänzt, steht unter [Zeitgeschichte](12-einstellungen.md#zeitgeschichte).
+
 ## Ringe
 
 Die Ansicht **Ringe** zeigt die Vorfahren einer Person als Kreis — oder, mit dem Umschalter **Nachfahren**, ihre Kinder, Enkel und Urenkel (siehe unten). Zuerst zu den Vorfahren: In der Mitte steht die Person selbst. Im ersten Ring drumherum stehen Vater und Mutter, jeder auf einer Hälfte des Kreises. Im nächsten Ring folgen die vier Großeltern mit je einem Viertel, dann die acht Urgroßeltern — und so weiter: Jeder Bogen teilt sich für die beiden Eltern dieser Person in zwei gleiche Hälften.

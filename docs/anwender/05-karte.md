@@ -72,6 +72,14 @@ Darüber steht die Zeile **In diesem Jahr**: wie viele Geburten, Hochzeiten und 
 
 > **Datenschutz:** Liste, Zahlen und die Zeile „In diesem Jahr“ enthalten nur Personen, die du sehen darfst. Eine Hochzeit erscheint nur, wenn du beide Partner sehen darfst.
 
+### Zeitgeschichte in der Zeitreise
+
+Unter den Zahlen steht die Zeile **Zeitgeschichte 1848:** mit den allgemeinen Ereignissen, die das gewählte Jahr berühren — zum Beispiel „Revolution 1848/49 (1848–1849)“. Ein Zeitraum zählt in jedem seiner Jahre, ein einzelnes Ereignis nur in seinem Jahr. Fällt nichts aus der Liste in das Jahr, steht dort „kein Ereignis aus der Liste“.
+
+Am Zeitstrahl über dem Regler zeigen feine Striche, wo solche Ereignisse liegen, damit du beim Ziehen siehst, wann etwas geschah. Die Zeile ist nur **Hintergrund** — sie sagt nichts über die Personen auf der Karte.
+
+Mit dem Kästchen **Zeitgeschichte** neben **Tempo** blendest du Zeile und Striche aus und wieder ein. Die App merkt sich das in diesem Browser; der Schalter gilt auch für den Zeitstrahl im Stammbaum und den Lebenslauf. Welche Ereignisse es gibt, steht unter [Zeitgeschichte](12-einstellungen.md#zeitgeschichte).
+
 ## Lebensweg
 
 Die dritte Auswahl auf der Karte, **Lebensweg**, zeigt die Orte eines Lebens als Weg: nummerierte Punkte, verbunden durch eine Linie mit Pfeilen in Wegrichtung, am Punkt das Jahr. Daneben (auf dem Telefon darunter) steht die Liste der **Stationen** mit Jahr, Ereignis und Ort. Tippst du eine Station in der Liste an, wird ihr Punkt auf der Karte hervorgehoben — und umgekehrt. **Ganzer Weg** passt den Ausschnitt wieder an den Weg an.

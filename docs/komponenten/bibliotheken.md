@@ -220,16 +220,17 @@ wäre eine zweite, widersprüchliche Quelle.
 
 **Wichtige Funktionen/Typen:** `Action` (`user:read`, `user:manage`,
 `audit:read`, `data:import`, `family:manage`, `place:manage`,
-`setting:manage`), `can`, `assertCan`, `ForbiddenError`.
+`setting:manage`, `history:manage`), `can`, `assertCan`, `ForbiddenError`.
 
 **Regeln:** Alle Aktionen sind nur für `ADMIN`; `EDITOR` und `VIEWER`
 haben keine globalen Rechte. Begründungen im Code: Import verändert den
 ganzen Bestand, Familienverwaltung ist Rechtevergabe, Ortszuordnung zeigt
-Ortstexte auch gesperrter Personen, Einstellungen gelten für die ganze
-Installation.
+Ortstexte auch gesperrter Personen, Einstellungen und Zeitgeschichte gelten
+für die ganze Installation bzw. alle Benutzer.
 
 **Benutzt von:** `lib/api.ts`, `lib/session.ts`, `app/layout.tsx`,
-`app/admin/data/page.tsx`, `app/admin/settings/page.tsx`.
+`app/admin/data/page.tsx`, `app/admin/settings/page.tsx`,
+`app/admin/history/page.tsx`.
 
 **Tests:** keine eigenen.
 
@@ -425,8 +426,10 @@ welchem Paket, welche Personen und Familien betroffen.
 - `auditRefs` — Momentaufnahme der betroffenen Personen und Familien.
 - `defaultChangeSetTitle` — Paket-Titel aus dem ersten Eintrag („Person
   geändert“, beim Zusammenführen „Personen zusammengeführt“).
-- Typen `AuditInput`, `AuditEntityType` (inkl. `Place` und `Setting` —
-  Einstellungen, `entityId` = Schlüssel, ohne Personen/Familien), `FieldChange`.
+- Typen `AuditInput`, `AuditEntityType` (inkl. `Place`, `Setting` —
+  Einstellungen, `entityId` = Schlüssel — und `HistoryEvent` — Zeitgeschichte,
+  `entityId` = eigenes Ereignis bzw. Kennung des mitgelieferten Eintrags;
+  beide ohne Personen/Familien), `FieldChange`.
 
 **Regeln:** Betroffene Personen werden je Art abgeleitet: Beziehung → beide
 Personen; Ereignis/Name/Beleg → Träger; Bild → alle Träger (Personen,
@@ -2666,6 +2669,84 @@ passendes Eingabefeld in `components/SettingsAdmin.tsx`.
 **Benutzt von:** `lib/services/settings.ts`.
 
 **Tests:** `tests/settings.test.ts`.
+
+---
+
+## Zeitgeschichte
+
+Allgemeine Ereignisse der Zeit als Hintergrund im Zeitstrahl, in der
+Zeitreise der Karte und im Lebenslauf. Laden, Rechte und Protokoll:
+`lib/services/history.ts` (dienste.md, „Zeitgeschichte“).
+
+### lib/history/builtin.ts
+**Zweck:** Die mitgelieferte Liste `BUILTIN_HISTORY`: etwa 30 allgemein
+bekannte, neutral benannte Ereignisse für den deutschsprachigen Raum und
+Europa, 17. bis 20. Jahrhundert (Kriege, Seuchen/Not, Auswanderungswellen,
+politische Einschnitte). Steht als Daten im Code, nicht in der Datenbank.
+
+**Regeln:** Je Eintrag `id` (stabil, Kleinbuchstaben mit Bindestrich — über
+sie blenden Administratoren aus; nie umbenennen oder neu vergeben), `title`,
+`from`, `to` (nur bei Zeiträumen, größer als `from`), `kind`, `rank` (1 =
+großer Einschnitt, 2 = bedeutend, 3 = Ergänzung) und ein Satz
+`description`. Nur gesicherte, unstrittige Jahreszahlen; im Zweifel kein
+Eintrag. Keine Wertung, keine Personen. Ein gestrichener Eintrag darf
+einfach verschwinden — eine verwaiste Ausblendung stört nicht.
+
+**Tests:** `tests/history.test.ts` (eindeutige Kennungen, von ≤ bis,
+plausible Spanne, keine leeren Texte, Stichproben der Jahreszahlen).
+
+### lib/history/events.ts
+**Zweck:** Reine Funktionen ohne Datenbank, auch im Browser benutzt
+(Zeitstrahl, Karte, Verwaltung).
+
+**Wichtige Funktionen/Typen:**
+- `HistoryEvent` (einheitlich für mitgelieferte und eigene: `id` — eigene
+  mit Vorsatz `c:` —, `source`, `title`, `from`, `to`, `kind`,
+  `description`, `region`, `rank`), `HISTORY_KINDS` / `HISTORY_KIND_LABEL`
+  (Krieg, Politik, Seuche/Not, Wanderung, Sonstiges).
+- `mergeHistory(builtin, custom, hiddenIds)` — ausgeblendete mitgelieferte
+  fallen heraus, eigene werden vereinheitlicht (Leerraum, „bis“ gleich „von“
+  → Einzeljahr, unbekannte Art → Sonstiges) und bekommen den Rang
+  `CUSTOM_RANK` (1 — bewusst ergänzt, gilt als wichtig); nach der Zeit
+  sortiert.
+- `eventsInYear`, `eventsInSpan` — Auswahl: Ein Ereignis berührt ein Jahr,
+  wenn es in [von, bis] liegt (Ränder eingeschlossen).
+- `splitByRank(events, limit)` — die wichtigsten `limit` nach Rang und der
+  Rest, beide nach der Zeit sortiert.
+- `historyLanes(events)` — Bahnen für überschneidende Zeiträume (gierig nach
+  Beginn, deterministisch).
+- `checkHistoryInput(input, currentYear)` — Prüfung eigener Einträge mit
+  Meldung je Feld (Titel Pflicht, höchstens 120 Zeichen; ganze Jahre von 1000
+  bis zum laufenden Jahr; „bis“ nicht vor „von“; Art aus der Liste;
+  Beschreibung höchstens 500, Region höchstens 120 Zeichen).
+- `HISTORY_COOKIE` (`zeitgeschichte`), `historyEnabled(cookie)` (Standard an,
+  nur `"0"` heißt aus), `historyCookie(on)`, `formatHistoryYears`.
+
+### lib/history/lifetime.ts
+**Zweck:** Welche Ereignisse fielen in die Lebenszeit einer Person
+(`lifetimeYears`, `lifetimeHistory`)?
+
+**Regeln (bewusst vorsichtig):**
+- Ohne **brauchbares Geburtsjahr** keine Zeile: Die Angabe muss nach beiden
+  Seiten begrenzt sein (nicht „vor“, „nach“, „bis“, kein offener Zeitraum)
+  und darf höchstens `MAX_SPREAD` (10) Jahre umfassen; es zählt das späteste
+  mögliche Geburtsjahr (ohne die Toleranz von „um“).
+- Mit Sterbedatum dieselbe Prüfung, es zählt das früheste mögliche
+  Sterbejahr; nicht brauchbar → keine Zeile. Verstorben ohne Sterbedatum →
+  keine Zeile (Ende unbekannt).
+- Lebend: bis zum laufenden Jahr, aber nur bis `PRESUMED_LIFESPAN` Jahre
+  nach der Geburt (wie „lebend“ überall in der App).
+- Ergebnis: Spanne, `living`, die wichtigsten `LIFETIME_LIMIT` (4)
+  Ereignisse und der Rest; `null`, wenn nichts in die Spanne fällt.
+
+**Benutzt von:** `lib/services/history.ts` (`getLifetimeHistory`).
+
+### lib/history/input.ts
+**Zweck:** Form der Anfragen an `/api/history-events` (zod): nur grobe Form
+und Obergrenzen; die eigentliche Prüfung mit Meldungen je Feld macht
+`checkHistoryInput` im Dienst.
+
+**Tests (alle Module):** `tests/history.test.ts`.
 
 ---
 

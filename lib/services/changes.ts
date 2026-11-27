@@ -9,6 +9,7 @@ import { PARTNER_SUBTYPE_LABEL } from "../partner-labels";
 import { forbiddenError, notFoundError, validationError } from "./errors";
 import { plural } from "../plural";
 import { VERDICT_LABEL, type DuplicateVerdict } from "../duplicate-verdicts";
+import { HISTORY_KIND_LABEL } from "../history/events";
 import { ensurePersonRedirectBackfill } from "./redirects";
 
 /**
@@ -82,6 +83,7 @@ const ENTITY: Record<string, [string, string]> = {
   ImportRawRecord: ["Rohdaten", "Rohdaten"],
   Place: ["Ortszuordnung", "Ortszuordnungen"],
   Setting: ["Einstellung", "Einstellungen"],
+  HistoryEvent: ["Zeitgeschichte", "Zeitgeschichte"],
 };
 
 const SECTION_NOUN: Record<string, [string, string]> = {
@@ -225,6 +227,17 @@ const FIELDS: Record<string, Record<string, string>> = {
   },
   // Einstellungen (lib/services/settings.ts): nur der Wert; `label` steht in der Beschreibung.
   Setting: { value: "Wert" },
+  // Zeitgeschichte (lib/services/history.ts): eigene Ereignisse; bei
+  // mitgelieferten nur „Ausgeblendet“.
+  HistoryEvent: {
+    title: "Titel",
+    yearFrom: "Jahr von",
+    yearTo: "Jahr bis",
+    kind: "Art",
+    description: "Beschreibung",
+    region: "Region/Ort",
+    hidden: "Ausgeblendet",
+  },
 };
 
 const DATE_KEYS: readonly FuzzyKey[] = ["birthDate", "deathDate", "startDate", "endDate", "date"];
@@ -402,6 +415,7 @@ function enumLabel(entityType: string, field: string, v: string): string {
     if (entityType === "Event") return (EVENT_TYPE_LABEL as Record<string, string>)[v] ?? v;
     if (entityType === "PersonName") return (PERSON_NAME_TYPE_LABEL as Record<string, string>)[v] ?? v;
   }
+  if (entityType === "HistoryEvent" && field === "kind") return (HISTORY_KIND_LABEL as Record<string, string>)[v] ?? v;
   if (field === "fact") return (CITATION_FACT_LABEL as Record<string, string>)[v] ?? v;
   if (field === "confidence") return (CONFIDENCE_LABEL as Record<string, string>)[v] ?? v;
   if (field === "kind") return (SOURCE_KIND_LABEL as Record<string, string>)[v] ?? v;
@@ -640,6 +654,15 @@ function describe(ctx: Ctx, row: Row): { what: string; note: string | null } {
       if (row.action === "DELETE") return { what: `Einstellung „${label}“ entfernt`, note: null };
       if (row.action === "CREATE") return { what: `Einstellung „${label}“ gesetzt`, note: null };
       return { what: `Einstellung „${label}“ ${act}`, note: null };
+    }
+    case "HistoryEvent": {
+      // Zeitgeschichte (lib/services/history.ts) — nur in /admin/changes sichtbar.
+      const title = shorten(strOf(d.title) ?? row.entityId);
+      if (d.builtin === true) {
+        const hidden = obj(obj(d.changes).hidden).to === true;
+        return { what: `Zeitgeschichte „${title}“ ${hidden ? "ausgeblendet" : "wieder eingeblendet"}`, note: null };
+      }
+      return { what: `Zeitgeschichte „${title}“ ${act}`, note: null };
     }
     default:
       return { what: `${ENTITY[row.entityType]?.[0] ?? row.entityType} ${act}`, note: null };

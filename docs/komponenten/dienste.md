@@ -139,6 +139,7 @@ beide). Ereignisse, Belege, Namen und Rohdaten folgen ihrem Träger.
 | `export-selection.ts` | Familienauswahl für den GEDCOM-Export |
 | `release-notes.ts` | Neuigkeiten: zuletzt gesehenes Release je Benutzer merken |
 | `settings.ts` | Einstellungen der Installation: wirksamen Wert lesen (App vor Umgebung), pflegen (nur Admin) |
+| `history.ts` | Zeitgeschichte: mitgelieferte Liste plus eigene Ereignisse lesen (alle), Zeile für den Lebenslauf, pflegen und mitgelieferte ausblenden (nur Admin) |
 
 ---
 
@@ -2113,7 +2114,7 @@ Paket und Momentaufnahme der betroffenen Personen und Familien.
 **Regeln und Entscheidungen:**
 - Je Eintrag: Kurzbeschreibung („Ereignis „Taufe“ geändert“, „Zusammengeführt:
   … in …“, „Beim Import angelegt: …“, „Ort zugeordnet: …“, „Einstellung „…“
-  geändert“), Benutzer, Kanal,
+  geändert“, „Zeitgeschichte „…“ ausgeblendet“), Benutzer, Kanal,
   Schlüsselname, Paket und je Feld vorher → nachher mit deutschen Feldnamen;
   Kennungen werden nie als Feld angezeigt, lange Texte gekürzt.
 - Ältere Einträge (vor dem Changelog) ohne Paket und Momentaufnahme: Der
@@ -2388,6 +2389,76 @@ Personen- und Familienbezug, daher nur für Administratoren sichtbar.
 **Tests:** `tests/settings.db.test.ts` (Vorrang, Rückfall, Prüfung, Rechte,
 Protokoll, Routen), `tests/settings.test.ts` (Verzeichnis und Prüfung);
 `e2e/write/settings.spec.ts`.
+
+---
+
+## Zeitgeschichte
+
+### lib/services/history.ts
+
+**Zweck:** Zeitgeschichte („historischer Rahmen“, Oberfläche
+„Zeitgeschichte“): allgemeine Ereignisse der Zeit — Kriege, Seuchen,
+Auswanderungswellen, politische Einschnitte — als dezenter Hintergrund im
+Zeitstrahl des Baums, in der Zeitreise der Karte und im Lebenslauf. Quelle
+ist die mitgelieferte Liste im Code (`lib/history/builtin.ts`) plus eigene
+Einträge der Administratoren (Tabelle `HistoryEvent`); mitgelieferte lassen
+sich einzeln ausblenden (Tabelle `HistoryHiddenBuiltin`). Die reinen Regeln
+stehen in `lib/history/events.ts` und `lib/history/lifetime.ts`
+(bibliotheken.md).
+
+**Wichtige Funktionen:**
+- `listHistoryEvents()` — alle sichtbaren Ereignisse (mitgeliefert ohne
+  ausgeblendete, plus eigene), vereinheitlicht und nach der Zeit sortiert
+  (`mergeHistory`). Zwei kleine Abfragen, kein Zwischenspeicher.
+- `getLifetimeHistory(detail, events?, now?)` — Zeile „In diese Lebenszeit
+  fielen“ einer Person: Geburt, Tod und „verstorben“ aus denselben Daten wie
+  der Lebenslauf (`biographyInputOf`, `isDeceased`), dann `lifetimeHistory`;
+  `null` ohne brauchbare Lebenszeit oder ohne Ereignis darin.
+- `historyAdminState(scope)` — Verwaltungsseite: mitgelieferte Einträge mit
+  `hidden` und alle eigenen.
+- `createHistoryEvent`, `updateHistoryEvent`, `deleteHistoryEvent` — eigene
+  Ereignisse; `setBuiltinHidden(scope, id, hidden)` — mitgelieferten Eintrag
+  aus- bzw. einblenden.
+
+**Regeln und Entscheidungen:**
+- Ereignisse sind allgemeines Wissen bzw. vom Administrator eingegeben,
+  **für alle angemeldeten Benutzer gleich** und nennen keine Personen des
+  Stammbaums (Hinweis im Formular; technisch nicht prüfbar). Nirgends eine
+  Aussage, eine Person sei betroffen gewesen.
+- Eingaben laufen durch `checkHistoryInput` (Titel Pflicht, ganze Jahre ab
+  1000 bis zum laufenden Jahr, „bis“ nicht vor „von“, Art aus der Liste,
+  Höchstlängen) — Fehler als `VALIDATION` mit Pfad je Feld. „bis“ gleich
+  „von“ wird als Einzeljahr gespeichert. Ändern setzt alle Felder neu; ohne
+  Unterschied wird nichts geschrieben (auch kein Protokoll).
+- Ändern/Löschen unbekannter eigener Ereignisse und Ausblenden unbekannter
+  mitgelieferter Kennungen → `NOT_FOUND`. Ausblenden eines schon
+  ausgeblendeten (bzw. Einblenden eines sichtbaren) bleibt ohne Wirkung.
+- „Gilt für Region/Ort“ ist nur ein Zusatz in der Anzeige; einen Abgleich
+  mit Wohnorten gibt es bewusst nicht.
+
+**Rechte/Datenschutz:** Lesen (`listHistoryEvents`, `getLifetimeHistory`)
+ohne Rechteprüfung — keine Personendaten außer der übergebenen, schon
+geprüften Personenansicht. Pflegen nur Administratoren (`FORBIDDEN`); die
+Routen prüfen zusätzlich `history:manage`.
+
+**Protokoll:** Audit-Art `HistoryEvent`: eigene Ereignisse mit ihrer
+Kennung — `CREATE` (alle Felder), `UPDATE` (`title`, `changes` vorher →
+nachher), `DELETE` (bisherige Felder); mitgelieferte mit ihrer Kennung aus
+`builtin.ts` — `UPDATE` mit `builtin: true` und `changes.hidden`. In der
+Änderungsübersicht (`changes.ts`) als „Zeitgeschichte „…“ angelegt /
+geändert / gelöscht / ausgeblendet / wieder eingeblendet“ mit deutschen
+Feldnamen (Art als „Seuche/Not“ usw.); ohne Personen- und Familienbezug,
+daher nur für Administratoren sichtbar.
+
+**Benutzt von:** `app/admin/history/page.tsx`,
+`app/api/history-events/route.ts`, `app/api/history-events/[id]/route.ts`,
+`app/api/history-events/builtin/[id]/route.ts`; `listHistoryEvents` in
+`app/tree/page.tsx` (ganzer Baum) und `app/map/page.tsx`;
+`getLifetimeHistory` in `app/people/[id]/page.tsx`.
+
+**Tests:** `tests/history.db.test.ts` (Dienst, Rechte, Protokoll, Routen),
+`tests/history.test.ts` (reine Logik, mitgelieferte Liste);
+`e2e/write/history.spec.ts`, `e2e/read/history.spec.ts`.
 
 ---
 

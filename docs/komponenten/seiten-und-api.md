@@ -112,6 +112,7 @@ Alle Seiten außer `/login`, `/login/email` und der Weiterleitung `/` sind
 | `/admin/changes` | Änderungsübersicht | `audit:read` (Admin) |
 | `/admin/places` | Orte zuordnen | `place:manage` (Admin) |
 | `/admin/settings` | Einstellungen der Installation (Schlüssel → Wert) | `setting:manage` (Admin) |
+| `/admin/history` | Zeitgeschichte: eigene Ereignisse, mitgelieferte aus-/einblenden | `history:manage` (Admin) |
 | `/neuigkeiten` | Neuigkeiten: alle Releases aus `CHANGELOG.md` | angemeldet |
 | `/hilfe` | Anwender-Hilfe: Themenliste | angemeldet |
 | `/hilfe/[thema]` | Ein Hilfethema aus `docs/anwender/` | angemeldet; unbekanntes Thema 404 |
@@ -190,6 +191,9 @@ Dienst über den `Scope`.
 | `POST /api/places/choose` | Ort im Ortsfeld auswählen | wer den Eintrag bearbeiten darf |
 | `GET, POST /api/settings` | Einstellungen mit Zustand / Eintrag anlegen | `setting:manage` |
 | `PATCH, DELETE /api/settings/[key]` | Wert ändern / entfernen (Rückfall auf die Umgebung) | `setting:manage` |
+| `GET, POST /api/history-events` | Zeitgeschichte: Zustand der Verwaltung / eigenes Ereignis anlegen | `history:manage` |
+| `PATCH, DELETE /api/history-events/[id]` | Eigenes Ereignis ändern / löschen | `history:manage` |
+| `PATCH /api/history-events/builtin/[id]` | Mitgelieferten Eintrag aus- bzw. einblenden | `history:manage` |
 
 ---
 
@@ -330,7 +334,8 @@ Der Stammbaum in vier Ansichten (Fokus, Generationen, Zeitstrahl, Ringe). Bedien
     Die Färbung schaltet der Browser um; der Server liefert beides.
   - `denied` — Hinweis nach einer Umleitung wegen fehlender Rechte.
 - **Cookies:** `tree-focus` (zuletzt fokussierte Person), `tree-bezug`
-  (Bezugsperson), `tree-lines` (Großeltern-Linien an/aus).
+  (Bezugsperson), `tree-lines` (Großeltern-Linien an/aus), `zeitgeschichte`
+  (`0` = Zeitgeschichte aus; gilt auch für Karte und Lebenslauf).
 - **Daten:** `loadGraph` (ein Graph für Baum und Bezugsperson),
   `resolveReference` (Vorrang Adresse vor Cookie vor eigener Person; nur
   sichtbare Personen), `listFamilies`. Fokus-Ansicht: `loadFocusTree` mit
@@ -345,7 +350,9 @@ Der Stammbaum in vier Ansichten (Fokus, Generationen, Zeitstrahl, Ringe). Bedien
   `defaultDescendantRingsRootId` (gemeinsam mit der Druckansicht in
   `loadRingsView`, `lib/services/rings-view.ts`); eine angefragte, aber fehlende oder
   gesperrte Person ergibt „Person nicht gefunden“ (Link „Ringe öffnen“, in
-  derselben Richtung). Ganzer Baum: `loadTree`. Verwandtschaftsgrade
+  derselben Richtung). Ganzer Baum: `loadTree` und `listHistoryEvents`
+  (Zeitgeschichte für den Zeitstrahl — auch in „Generationen“ geladen, weil
+  der Wechsel zum Zeitstrahl ohne Neuladen geschieht). Verwandtschaftsgrade
   und Linien über `referenceView` — in der Fokus-Ansicht nur für die
   Personen im Ausschnitt. Nur mit `herkunft=1` (und Recht):
   `loadTreeOrigin`, ebenfalls auf den Ausschnitt begrenzt; sonst wird keine
@@ -398,11 +405,14 @@ Karte „Wurzeln nach Jahr“ ([karte-und-orte.md](../fachlich/karte-und-orte.md
 - **Daten:** `loadMapView` (aus `lib/services/map.ts`) mit Person, Cookie
   der Bezugsperson und Modus; beim Lebensweg stattdessen nur
   `loadLifePathView` (`lib/services/life-path.ts`) — die Kartendaten der
-  anderen Betriebsarten werden dann nicht geladen.
+  anderen Betriebsarten werden dann nicht geladen. Außer beim Lebensweg
+  zusätzlich `listHistoryEvents` (Zeitgeschichte) und das Cookie
+  `zeitgeschichte`.
 - **Anzeige:** Ausgangsperson mit Link („ich“ bzw. „Bezugsperson“),
   `MapPersonChooser`, Umschalter Vorfahren/alle/Lebensweg (`ModeSwitch`,
   auf beiden Ansichten), `MapExplorer` (Karte, Zeitstrahl-Regler mit
-  Abspielen, Liste „Wer lebte …?“, Zeile „In diesem Jahr“; Linien nur mit
+  Abspielen, Liste „Wer lebte …?“, Zeile „In diesem Jahr“, Zeile
+  „Zeitgeschichte <Jahr>“ mit Marken am Zeitstrahl; Linien nur mit
   Ausgangsperson). Ohne Ausgangsperson im Modus Vorfahren ein Hinweis statt
   Karte. Für Administratoren ein Hinweis auf Ortstexte ohne Koordinaten mit
   Link nach `/admin/places`. Aufklappbare Zählregeln (auch Alter und „In
@@ -460,7 +470,9 @@ Die Personenseite.
   parallel zu `getPersonOrigin`), `lifePathEntry` (lohnt sich ein
   Lebensweg? parallel dazu) und `getPersonBiography` (Text „Lebenslauf“
   aus den schon geladenen Daten, dazu höchstens eine Abfrage der
-  Eltern-Kind-Kanten; parallel dazu).
+  Eltern-Kind-Kanten; parallel dazu) und `getLifetimeHistory`
+  (Zeitgeschichte der Lebenszeit; parallel dazu), dazu das Cookie
+  `zeitgeschichte`.
 - **Anzeige (Komponenten):** `DuplicateBanner` (nur Bearbeiter), Kopf mit
   `Avatar`, Lebensdaten samt abweichender Zweitangaben, Knöpfe
   „Bearbeiten“, „Im Stammbaum zeigen“ (`/tree?focus=…`), „Lebensweg auf der
@@ -469,7 +481,7 @@ Die Personenseite.
   `/map?person=…&mode=lebensweg` samt passender `art`) und — nur
   Bearbeiter — „Zusammenführen …“ (`MergeDialog`);
   `PersonBiography` („Lebenslauf“ direkt nach dem Kopf, entfällt ohne
-  genug Daten); `ReferencePanel` (Verwandtschaft zur Bezugsperson, „Das bin ich“, „Baum
+  genug Daten; darunter abgesetzt „In diese Lebenszeit fielen: …“); `ReferencePanel` (Verwandtschaft zur Bezugsperson, „Das bin ich“, „Baum
   aus dieser Sicht“, „Wie sind wir verwandt?“); Notizen; `EventSection` (Ereignisse der Person und
   ihrer Partnerschaften in einer Liste); `NameVariants`; Familie in
   Gruppen Eltern, Geschwister, Partner (mit Heirats-/Scheidungsorten,
@@ -826,6 +838,19 @@ Titel „Wie sind wir verwandt?“. Bedienung: Anwender-Hilfe
 - **Anzeige:** `SettingsAdmin` (nutzt `/api/settings…`), Link zur
   Anwender-Hilfe „Einstellungen“ (`HelpLink`, Ziel `einstellungen`).
 
+### `/admin/history` — `app/admin/history/page.tsx`
+
+- **Zweck:** Zeitgeschichte pflegen: eigene Ereignisse anlegen, ändern,
+  löschen; mitgelieferte Einträge (`lib/history/builtin.ts`) einzeln aus-
+  und wieder einblenden. Angezeigt werden die Ereignisse im Zeitstrahl des
+  Baums, in der Zeitreise der Karte und im Lebenslauf.
+- **Rechte:** `history:manage` (Admin), sonst `/tree?denied=1`; Menüpunkt
+  „Zeitgeschichte“ im Untermenü „Verwaltung“ nur mit diesem Recht.
+- **Daten:** `historyAdminState` — mitgelieferte Einträge mit `hidden`,
+  alle eigenen.
+- **Anzeige:** `HistoryAdmin` (nutzt `/api/history-events…`), Link zur
+  Anwender-Hilfe (`HelpLink`, Ziel `zeitgeschichteVerwalten`).
+
 ### `/hilfe` und `/hilfe/[thema]` — `app/hilfe/page.tsx`, `app/hilfe/[thema]/page.tsx`
 
 - **Zweck:** Anwender-Hilfe für Familienmitglieder; Inhalt ausschließlich
@@ -846,8 +871,10 @@ Titel „Wie sind wir verwandt?“. Bedienung: Anwender-Hilfe
 - **Kontexthilfe** in anderen Seiten: `HelpLink` (siehe
   oberflaeche-komponenten.md) auf `/map` („Wie wird gezählt?“ und
   Admin-Hinweis „Orte zuordnen“), `/admin/data` (Orte zuordnen),
-  `/research/duplicates`, `/ai-access`, `/admin/settings`, Personenseite (Bezugsperson,
-  Dubletten-Hinweis) und Legende der Baumlinien.
+  `/research/duplicates`, `/ai-access`, `/admin/settings`, `/admin/history`,
+  Personenseite (Bezugsperson, Dubletten-Hinweis, Zeitgeschichte im
+  Lebenslauf), Zeile „Zeitgeschichte“ der Karte und Legende der Baumlinien
+  bzw. der Zeitgeschichte im Zeitstrahl.
 
 ---
 
@@ -1209,12 +1236,32 @@ Schlüssels (`SettingStateDto`: Bezeichnung, Erklärung, `appValue`,
 - **`DELETE /api/settings/[key]`**: in der App gesetzten Wert entfernen —
   danach gilt wieder die Umgebungsvariable; nicht gesetzt 404.
 
+### Zeitgeschichte
+
+Alle mit `route("history:manage", …)` (nur Administratoren,
+Herkunftsprüfung für schreibende Anfragen, Anfragegrenzen wie üblich);
+grobe Form per zod (`lib/history/input.ts`), Prüfung je Feld und Protokoll
+im Dienst (dienste.md, „Zeitgeschichte“). Die Anzeige der Ereignisse
+braucht keine Route — die Seiten laden sie serverseitig.
+
+- **`GET /api/history-events`**: `historyAdminState` — mitgelieferte
+  Einträge mit `hidden`, eigene Ereignisse.
+- **`POST /api/history-events`** (`title`, `yearFrom`, `yearTo`, `kind`,
+  `description`, `region`; Jahre als Zahl oder Text): eigenes Ereignis
+  anlegen → 201; ungültig 400 (`issues` mit Pfad je Feld).
+- **`PATCH /api/history-events/[id]`** (dieselben Felder): ändern;
+  unbekannt 404, ungültig 400. **`DELETE`**: löschen → `{ ok: true }`;
+  unbekannt 404.
+- **`PATCH /api/history-events/builtin/[id]`** (`hidden`: boolean):
+  mitgelieferten Eintrag aus- bzw. einblenden; unbekannte Kennung 404.
+
 ## Tests
 
 Die Routen haben überwiegend keine eigenen Unit-Tests; geprüft werden die
 Dienste (`tests/*.db.test.ts`) und das Zusammenspiel im Browser
 (Playwright unter `e2e/`). Direkt auf Routen zielen `tests/health.test.ts`,
-`tests/mcp-http.db.test.ts` und `tests/settings.db.test.ts`.
+`tests/mcp-http.db.test.ts`, `tests/settings.db.test.ts` und
+`tests/history.db.test.ts`.
 
 | Bereich | E2E-Tests |
 |---|---|
@@ -1233,3 +1280,4 @@ Dienste (`tests/*.db.test.ts`) und das Zusammenspiel im Browser
 | Export, Import | `e2e/read/export.spec.ts`, `gedcom-export-dialog.spec.ts`; `e2e/write/import.spec.ts`, `gedcom-import.spec.ts` |
 | Verwaltung, KI-Zugang, Änderungen, Einstellungen | `e2e/write/admin.spec.ts`, `ai-access.spec.ts`, `changelog.spec.ts`, `settings.spec.ts`; `e2e/read/mcp-http.spec.ts` |
 | Anwender-Hilfe, Kontexthilfe | `e2e/read/help.spec.ts`; Unit: `tests/help.test.ts` |
+| Zeitgeschichte (Zeitstrahl, Karte, Lebenslauf, Verwaltung) | `e2e/read/history.spec.ts`; `e2e/write/history.spec.ts`; Unit: `tests/history.test.ts`, `tests/history.db.test.ts` |

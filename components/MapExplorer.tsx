@@ -25,6 +25,15 @@ import {
 import { loadCountries, type Country } from "@/lib/map/countries";
 import { HelpLink } from "./HelpLink";
 import { LineCode } from "./ReferenceLines";
+import { HistoryToggle, useHistoryToggle } from "./HistoryToggle";
+import {
+  eventsInYear as historyInYear,
+  formatHistoryYears,
+  HISTORY_KIND_LABEL,
+  historyLanes,
+  lastYear,
+  type HistoryEvent,
+} from "@/lib/history/events";
 
 /**
  * Karte „Wurzeln nach Jahr“ (docs/fachlich/karte-und-orte.md): eigene SVG-Karte
@@ -81,11 +90,17 @@ export function MapExplorer({
   initialYear,
   grandparents,
   showLines,
+  history = [],
+  initialHistory = true,
 }: {
   payload: MapPayload;
   initialYear: number;
   grandparents: Record<LineKey, { id: string; name: string } | null> | null;
   showLines: boolean;
+  /** Zeitgeschichte (lib/services/history.ts) — Zeile zum Jahr und Marken am Zeitstrahl. */
+  history?: HistoryEvent[];
+  /** Schalter „Zeitgeschichte“ beim Laden (Cookie, Standard an). */
+  initialHistory?: boolean;
 }) {
   const { yearMin, yearMax } = payload;
   const [year, setYearState] = useState(() => clampYear(initialYear, yearMin, yearMax));
@@ -202,6 +217,9 @@ export function MapExplorer({
   const listYear = useDeferredValue(year);
   const lived = useMemo(() => livedInYear(payload, listYear), [payload, listYear]);
   const yearEvents = useMemo(() => eventsInYear(payload, listYear), [payload, listYear]);
+  // Zeitgeschichte: Zeile zum Jahr und feine Marken am Zeitstrahl (Schalter im Cookie).
+  const [historyOn, setHistoryOn] = useHistoryToggle(initialHistory);
+  const historyYear = useMemo(() => historyInYear(history, listYear), [history, listYear]);
 
   const togglePlay = () => {
     if (reducedMotion) return;
@@ -428,6 +446,7 @@ export function MapExplorer({
               </label>
             </>
           )}
+          {history.length > 0 && <HistoryToggle on={historyOn} onChange={setHistoryOn} testId="map-history-toggle" className="text-sm" />}
           <form
             className="flex items-center gap-2 text-sm sm:ml-auto"
             // Außerhalb der Spanne nicht blockieren, sondern begrenzen (commitYearDraft).
@@ -468,6 +487,7 @@ export function MapExplorer({
           </span>
           <div className="min-w-0 flex-1">
             <Timeline counts={timeline} index={year - yearMin} />
+            {historyOn && history.length > 0 && <HistoryMarks events={history} yearMin={yearMin} yearMax={yearMax} />}
             <input
               id={`${ids}-year`}
               type="range"
@@ -541,6 +561,8 @@ export function MapExplorer({
         )}
         {payload.undated > 0 && <span className="muted"> · {payload.undated} ohne Lebensdaten (nicht auf der Karte)</span>}
       </p>
+
+      {historyOn && history.length > 0 && <HistoryYearLine year={listYear} events={historyYear} />}
 
       <YearEventsLine year={listYear} events={yearEvents} persons={payload.persons} />
 
@@ -865,6 +887,65 @@ function Timeline({ counts, index }: { counts: number[]; index: number }) {
         )}
       </svg>
     </div>
+  );
+}
+
+/**
+ * Zeitgeschichte am Zeitstrahl: feine Marken unter den Balken — Zeiträume als
+ * Band, Einzeljahre als schmaler Strich; überschneidende Ereignisse in
+ * eigenen Bahnen. Nur Schmuck — die Zeile „Zeitgeschichte <Jahr>“ nennt die
+ * Ereignisse des gewählten Jahres.
+ */
+function HistoryMarks({ events, yearMin, yearMax }: { events: HistoryEvent[]; yearMin: number; yearMax: number }) {
+  const n = Math.max(1, yearMax - yearMin + 1);
+  const lanes = historyLanes(events.filter((e) => e.from <= yearMax && lastYear(e) >= yearMin));
+  if (lanes.length === 0) return null;
+  const laneCount = Math.max(...lanes.map((l) => l.lane)) + 1;
+  const LANE = 2;
+  const H = laneCount * LANE + (laneCount - 1);
+  return (
+    <div aria-hidden className="px-2" data-testid="map-history-marks">
+      <svg viewBox={`0 0 ${n} ${H}`} preserveAspectRatio="none" className="block w-full" style={{ height: `${laneCount * 3 + 1}px` }}>
+        {lanes.map(({ event: e, lane }) => {
+          const from = Math.max(e.from, yearMin) - yearMin;
+          const to = Math.min(lastYear(e), yearMax) - yearMin + 1;
+          return (
+            <rect
+              key={e.id}
+              x={from}
+              y={lane * (LANE + 1)}
+              width={to - from}
+              height={LANE}
+              className="fill-amber-600/70 dark:fill-amber-400/70"
+            >
+              <title>{`${e.title} (${formatHistoryYears(e)})`}</title>
+            </rect>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+/** Zeile „Zeitgeschichte <Jahr>: …“ — Ereignisse, die das gewählte Jahr berühren. Hintergrund, keine Aussage über Personen. */
+function HistoryYearLine({ year, events }: { year: number; events: HistoryEvent[] }) {
+  return (
+    <p className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 text-sm" data-testid="map-history">
+      <span className="font-medium text-amber-800 dark:text-amber-300">Zeitgeschichte {year}:</span>
+      {events.length === 0 ? (
+        <span className="muted" data-testid="map-history-none">
+          kein Ereignis aus der Liste
+        </span>
+      ) : (
+        events.map((e, i) => (
+          <span key={e.id} data-testid="map-history-item" title={[HISTORY_KIND_LABEL[e.kind], e.region ? `gilt für ${e.region}` : null, e.description].filter(Boolean).join(" · ")}>
+            {e.title} <span className="whitespace-nowrap tabular-nums muted">({formatHistoryYears(e)})</span>
+            {i < events.length - 1 && <span aria-hidden className="muted"> ·</span>}
+          </span>
+        ))
+      )}
+      <HelpLink to="zeitgeschichteKarte" compact label="Was zeigt die Zeitgeschichte?" className="ml-1 self-center" />
+    </p>
   );
 }
 

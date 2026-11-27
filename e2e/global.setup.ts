@@ -65,6 +65,7 @@ setup("Routen vorwärmen", async ({ browser }) => {
     "/map",
     "/admin/places",
     "/admin/settings",
+    "/admin/history",
     "/neuigkeiten",
     "/people/gibt-es-nicht",
   ];
@@ -100,6 +101,9 @@ setup("Routen vorwärmen", async ({ browser }) => {
     "/api/families/x/members",
     "/api/settings",
     "/api/settings/x",
+    "/api/history-events",
+    "/api/history-events/x",
+    "/api/history-events/builtin/x",
     // Neuigkeiten: PUT-Route (GET → 405, kompiliert sie trotzdem).
     "/api/me/release-seen",
   ];
