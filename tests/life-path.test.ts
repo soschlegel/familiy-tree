@@ -139,7 +139,7 @@ describe("buildLifePath", () => {
     expect(path.segments).toEqual([]);
   });
 
-  it("ungenaue Daten werden beschriftet; ohne Datum ohne Nummer und ohne Punkt", () => {
+  it("ungenaue Daten: Unsicherheit steht in der Angabe, kein eigener Hinweis; ohne Datum ohne Nummer und ohne Punkt", () => {
     const path = buildLifePath(
       [
         st("geburt", "start", year(1850, "ABOUT"), "Musterstadt"),
@@ -149,8 +149,13 @@ describe("buildLifePath", () => {
       lookup,
     );
     const [birth, death, job] = path.stations;
-    expect(birth).toMatchObject({ n: 1, dateText: "um 1850", yearText: "um 1850", approx: true });
-    expect(death).toMatchObject({ n: 2, dateText: "04.03.1912", yearText: "1912", approx: false });
+    expect(birth).toMatchObject({ n: 1, dateText: "um 1850", yearText: "um 1850" });
+    expect(death).toMatchObject({ n: 2, dateText: "04.03.1912", yearText: "1912" });
+    // Kein Feld „ungenau“ mehr — die Anzeige braucht es nicht.
+    expect(birth).not.toHaveProperty("approx");
+    // Reine Jahresangabe: ohne Zusatz, wie sie ist.
+    const plain = buildLifePath([st("geburt", "start", year(1858), "Musterstadt")], lookup);
+    expect(plain.stations[0]).toMatchObject({ dateText: "1858", yearText: "1858" });
     expect(job).toMatchObject({ key: "beruf", n: null, point: null, dateText: "", detail: "Bäcker", placeStatus: "map" });
     expect(path.points).toHaveLength(2);
   });

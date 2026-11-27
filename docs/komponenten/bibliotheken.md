@@ -987,6 +987,89 @@ Grenzen `ROOTS_MIN_GENERATION` (2), `ROOTS_MAX_GENERATION` (8),
 **Benutzt von:** `lib/services/roots.ts`, `components/PersonRoots.tsx`.
 
 **Tests:** `tests/roots.test.ts`, `tests/roots.db.test.ts`.
+
+### lib/biography.ts
+**Zweck:** Text des Abschnitts **„Lebenslauf“** der Personenseite: aus den
+erfassten Daten einer Person ein kurzer Text in ganzen Sätzen — nach festen
+Regeln, ohne KI, ohne etwas zu erfinden. Rein; Eingabe aus
+`lib/biography-input.ts`, Laden in `lib/services/biography.ts`.
+
+**Wichtige Funktionen/Typen:** `buildBiography(input)` → `Biography`
+(`paragraphs`: Absätze aus Textstücken, Namen anderer Personen mit
+`personId` als Link; `text`: derselbe Text ohne Links zum Kopieren) oder
+`null`; `BiographyInput` (Person, weitere Namen, sichtbare Eltern mit Art,
+`siblingRank`, Partnerschaften mit Ereignissen und zugeordneten Kindern,
+übrige Kinder, Lebensereignisse, heutiger Tag), `BioRef`, `BioEvent`,
+`BioPartnership`; Hilfen `dateInText` (Datum als Satzglied), `inPlace` /
+`toPlace` (Präposition beim Ort), `ageAtDeath`, `numberWord`, `isDeceased`,
+`CHILD_NAMES_MAX` (4).
+
+**Regeln:**
+- **Was erzählt wird:** Name (Titel, Zusatz, „geb.“, „genannt …“),
+  Geburt mit Ort und leiblichen Eltern (Mutter mit Geburtsname), Stellung
+  unter den Geschwistern („als drittes von sieben Kindern“, „als älteres
+  von zwei Kindern“, ohne sichere Reihenfolge „als eines von …“), Adoptiv-,
+  Stief- und Pflegeeltern, weitere Namen (je Art ein Satz), Lebensereignisse
+  (Taufe, Konfirmation, Abschluss, Ausbildung, Beruf, Wohnort, Volkszählung,
+  Aus-/Einwanderung, Einbürgerung, Militär, Testament, sonstiges Ereignis,
+  Merkmale wie Religion als „Als Religion ist „…“ erfasst.“), Partnerschaften
+  (Verlobung, Aufgebot …, Heirat bzw. Beginn, Kinder daraus — bis vier mit
+  Namen, sonst nur gezählt; „zwei Söhne und eine Tochter“ nur bei bekanntem
+  Geschlecht aller —, Scheidung bzw. Ende), Tod des Partners („Ihr Mann
+  starb 1899.“ — nur ohne Scheidung/Ende und wenn er sicher vorher starb),
+  übrige Kinder, Tod mit erreichtem Alter, Beerdigung, Todesursache.
+- **Was bewusst nicht:** Notizen, Quellen, Zweitangaben (`isAlternative`),
+  Kennnummern, Beschreibungen, „Zahl der Kinder/Ehen“ (würde Nicht-Sichtbares
+  verraten), Anschriften, Schlüsse und Wertungen, „einziges Kind“.
+- **Unsicheres:** Daten in ihrer Genauigkeit und mit Zusatz („am 12. März
+  1850“, „im März 1850“, „1850“, „um 1850“, „vor dem 3. Mai 1900“,
+  „zwischen 1850 und 1855“, „von 1901 bis 1910“ nur bei Andauerndem, sonst
+  „frühestens“/„spätestens“); nur ein Wortlaut → „(Datum: „…“)“. Alter:
+  genau, „70 oder 71“ (nur Jahre), „etwa 71“ (bei „um“/geschätzt/
+  errechnet), „68 bis 71“ (kleiner Spielraum), unter einem Jahr in Monaten
+  bzw. Tagen; offene Angaben oder großer Spielraum → kein Alter. Die
+  Geschwisterstellung nur, wenn jedes Geschwister sicher vor oder nach der
+  Person geboren ist (`certainlyBefore`).
+- **Lebend / verstorben:** verstorben bei Sterbedatum, -ort, -wortlaut,
+  -ursache oder Beerdigung/Einäscherung/Testamentseröffnung. Lebend nur mit
+  Geburtsdatum innerhalb `PRESUMED_LIFESPAN` (wie `isLiving` in
+  `lib/today.ts`): dann Präsens („Sie ist mit … verheiratet; die Hochzeit
+  war …“, „Er hat einen Sohn …“, „Als Beruf ist … erfasst.“), kein
+  Sterbesatz. Sonst Vergangenheit, aber ohne erfundenen Tod.
+- **Sprache:** Pronomen nach Geschlecht, bei unbekanntem bzw. anderem der
+  Vorname; Zahlwörter bis zwölf; Länder und Landschaften mit Artikel („in
+  der Schweiz“, „in die USA“, „im Elsass“) nach dem ersten Teil der
+  Ortsangabe; derselbe Ort wie im vorigen Satz desselben Absatzes heißt
+  „dort“ (Sterbeort nie). Datierte Sätze wechseln fest zwischen „Datum
+  vorn“ und „Person vorn“ — gleiche Eingabe, gleicher Text.
+- **Aufbau:** drei Absätze — Herkunft (Geburt, Eltern, frühe Ereignisse,
+  Namen), Leben (undatierte Angaben, dann Ereignisse und Partnerschaften
+  nach Datum, Partnertod an seiner Stelle, undatierte Partnerschaften,
+  übrige Kinder), Lebensende. Ohne Satz über den Namen hinaus → `null`.
+
+**Benutzt von:** `lib/services/biography.ts`, `components/PersonBiography.tsx` (Typen).
+
+**Tests:** `tests/biography.test.ts`, `tests/biography.db.test.ts`.
+
+### lib/biography-input.ts
+**Zweck:** Eingabe des Lebenslaufs aus den Daten der Personenseite
+(`PersonDetail`) und den Eltern-Kind-Kanten rund um Eltern und Kinder. Rein.
+
+**Wichtige Funktionen/Typen:** `biographyInputOf(detail, edges, today)`,
+`siblingRankOf(detail, edges)`, `ParentEdge`.
+
+**Regeln (Datenschutz):** Platzhalter nicht sichtbarer Verwandter werden
+verworfen — weder genannt noch gezählt, auch ihre Partnerschaftsereignisse
+nicht. Ein Kind gehört zu einer Partnerschaft, wenn es leibliches Kind der
+Person und des (sichtbaren) Partners ist; sonst steht es bei den übrigen
+Kindern. Die Stellung unter den Geschwistern nur bei genau zwei leiblichen,
+sichtbaren Eltern und nur, wenn jedes gemeinsame leibliche Kind sichtbar
+ist (Adoptivkinder und Halbgeschwister zählen nicht mit). Die Kanten
+liefern nur Kennungen.
+
+**Benutzt von:** `lib/services/biography.ts`.
+
+**Tests:** `tests/biography.test.ts`.
 ---
 
 ## Auswertungen
@@ -2171,7 +2254,7 @@ nummerieren, Orte auflösen, gleiche Orte zusammenfassen, Teilstücke
 bilden; dazu die Wahl des nächsten Vorfahren einer Vater- bzw. Mutterlinie.
 
 **Wichtige Funktionen/Typen:** `orderStations`, `buildLifePath`,
-`pointNumbers` („3“, „1–3“, „2, 4“), `isApproximate`, `nextInLine`,
+`pointNumbers` („3“, „1–3“, „2, 4“), `nextInLine`,
 `walkLines`, `LINE_MAX_GENERATIONS` (12); `StationInput`, `PathStation`,
 `PathPoint`, `PathSegment`, `LifePath`, `PlaceLookup`, `LineParent`,
 `LineEnd` (`none`, `restricted`, `ambiguous`, `limit`).
@@ -2183,7 +2266,9 @@ bilden; dazu die Wahl des nächsten Vorfahren einer Vater- bzw. Mutterlinie.
   Jahr, ohne Zusatz vor mit Zusatz), sonst Eingabereihenfolge. „middle“ ohne
   Datum → „ohne Datum“ (ohne Nummer, nicht auf dem Weg). Linien (`fixed`)
   behalten die gegebene Reihenfolge.
-- **Ungenau** (`approx`): nicht tagesgenau oder mit Zusatz.
+- **Ungenaue Daten** bekommen kein eigenes Kennzeichen: Die Unsicherheit
+  steht im Datumstext selbst („um 1858“, „vor 1900“); reine Jahres- oder
+  Monatsangaben erscheinen ohne Zusatz.
 - **Karte:** nur Orte mit Koordinaten (`PlaceLookup` liefert Koordinaten,
   „unresolvable“ oder nichts → Status `map`, `unresolvable`, `unassigned`;
   ohne Ortstext `none`). Folgt eine Station auf der Karte mit gleichen

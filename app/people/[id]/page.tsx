@@ -52,6 +52,8 @@ import { getPersonOrigin } from "@/lib/services/origin";
 import { getPersonRoots } from "@/lib/services/roots";
 import { lifePathEntry } from "@/lib/services/life-path";
 import { PersonRoots } from "@/components/PersonRoots";
+import { PersonBiography } from "@/components/PersonBiography";
+import { getPersonBiography } from "@/lib/services/biography";
 import {
   RelationshipEditor,
   type RelationRow,
@@ -341,10 +343,13 @@ export default async function PersonPage({
   // leibliche Eltern entfällt der Abschnitt (components/PersonRoots.tsx).
   // Einstieg „Lebensweg auf der Karte“ nur, wenn der Weg mindestens zwei
   // Punkte hat (eigene Stationen, sonst Vater- bzw. Mutterlinie).
-  const [origin, roots, lifePath] = await Promise.all([
+  // Lebenslauf: Text aus den schon geladenen Daten (nur Sichtbares), dazu
+  // eine Abfrage der Eltern-Kind-Kanten (lib/services/biography.ts).
+  const [origin, roots, lifePath, biography] = await Promise.all([
     canEdit ? getPersonOrigin(scope, id) : null,
     getPersonRoots(scope, id),
     lifePathEntry(scope, id),
+    getPersonBiography(detail),
   ]);
 
   // Lebensereignisse: die der Person und die ihrer Beziehungen in einer
@@ -625,6 +630,8 @@ export default async function PersonPage({
           </div>
         </dl>
       </header>
+
+      {biography && <PersonBiography biography={biography} />}
 
       <ReferencePanel scope={scope} personId={person.id} personName={name(person)} bezug={bezug} />
 

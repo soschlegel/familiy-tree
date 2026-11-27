@@ -592,6 +592,11 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   Ahnenschwund, Zyklus, nicht sichtbarer Vorfahr), Geometrie, Text nie
   kopfüber, Beschriftungsplan und Kürzen, Verwandtschaftsstufe,
   Zusammenfassung, Adressparameter.
+- **`biography.test.ts`** — „Lebenslauf“: Daten, Orte und Alter im
+  Fließtext, Sätze für Mann/Frau/unbekannt, lebend/verstorben, ungenaue
+  Daten, fehlende Teile, mehrere Ehen, Geschwisterstellung nur bei sicherer
+  Grundlage, nicht sichtbare Angehörige, sehr wenig Daten, gleiche Eingabe →
+  gleicher Text.
 - **`build-info.test.ts`** — Build-Angabe der Fußzeile, Rückfall „Build
   lokal“, ohne Anmeldung kein Commit.
 - **`changelog.test.ts`** — Feldänderungen und Paket-Titel des Changelogs.
@@ -731,6 +736,10 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
 - **`ancestor-rings.db.test.ts`** — „Ringe“: Plätze und Begriffe, gesperrte
   Großeltern nur als „nicht freigegeben“ ohne Kennungen oder Namen dahinter,
   Tiefe 3…7, unsichtbare Mitte, Startperson (nur lesend).
+- **`biography.db.test.ts`** — „Lebenslauf“: Text einer reich erfassten
+  Person; Betrachter nur der Familie A: kein Name und keine Kennung einer
+  nicht sichtbaren Person, gesperrte Eltern weder genannt noch für die
+  Geschwisterstellung gezählt (nur lesend).
 - **`changelog.db.test.ts`** — Pakete, Momentaufnahmen, Verlauf je Person mit
   Rechten und Maskierung, Admin-Übersicht, Bündeln über den KI-Zugang.
 - **`changelog-subject.db.test.ts`** — Verlauf zu gelöschten und
@@ -882,6 +891,10 @@ Benutzer bekommt keinen gespeicherten Zustand.
 
 - **`auth.spec.ts`** — Anmeldung über den Dev-Login ohne gespeicherten
   Zustand.
+- **`biography.spec.ts`** — Abschnitt „Lebenslauf“ der Personenseite: Lage
+  nach dem Kopf, Namen als Links, „Text kopieren“ (Zwischenablage), Hinweis
+  mit Kontexthilfe; Betrachter ohne Namen gesperrter Verwandter im
+  Seitenquelltext; 390 px ohne Querscrollen, axe.
 - **`csp.spec.ts`** — Content-Security-Policy: Seite mit Nonce, jedes
   Skript trägt sie, jede Antwort eine neue; feste Richtlinie der API; ein
   eingeschleuster Inline-Handler wird blockiert und gemeldet (prüft den

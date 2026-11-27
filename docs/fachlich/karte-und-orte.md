@@ -87,7 +87,9 @@ der Stationen; Liste und Karte wählen gegenseitig.
   dazwischen nach dem Anker des Datums (wie [ungenaue Daten](ungenaue-daten.md)
   sortieren), bei gleichem Anker die genauere Angabe zuerst. Mittlere
   Stationen ohne Datum stehen unter „ohne Datum“ und gehören nicht zur Linie.
-  Ungenaue Daten sind mit „(ungenau)“ beschriftet.
+  Ungenaue Daten tragen keinen eigenen Hinweis — die Unsicherheit steht in
+  der Datumsangabe selbst („um 1858“, „vor 1900“); reine Jahres- oder
+  Monatsangaben erscheinen ohne Zusatz.
 - **Vater-/Mutterlinie** — je Generation unter den leiblichen Eltern der
   sichtbare mit Geschlecht MALE bzw. FEMALE. Genau einer → weiter; mehrere
   oder (wenn keiner passt) ein sichtbarer mit unbekanntem/anderem Geschlecht

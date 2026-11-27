@@ -24,7 +24,7 @@ Abschnitt 1). Seiten und API-Routen selbst stehen in
 - [Personen, Ereignisse, Quellen und Medien](#personen-ereignisse-quellen-und-medien)
   — `PersonForm`, `DateInput`, `EventSection`, `CitationSection`,
   `CitationLink`, `NameVariants`, `PersonFamilies`, `RelationshipEditor`,
-  `PersonChanges`, `PersonRoots`, `DonutChart` (mit `DonutLegend`), `StatisticsCharts`, `RecordCards`, `TodayList`, `PersonOrigin`, `PersonPicker`, `AttachedMedia`, `MediaGallery`,
+  `PersonChanges`, `PersonRoots`, `PersonBiography`, `DonutChart` (mit `DonutLegend`), `StatisticsCharts`, `RecordCards`, `TodayList`, `PersonOrigin`, `PersonPicker`, `AttachedMedia`, `MediaGallery`,
   `DeletePersonButton`, `SelfPersonButton`, `SourceForm`, `DeleteSourceButton`
 - [Rahmen und Helfer](#rahmen-und-helfer) — `NavBar`, `PageLoading`,
   `AutoSubmit`, `api-client`, `useDismiss`, `ai-access-labels`,
@@ -428,14 +428,14 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 **Wo eingesetzt:** `app/map/page.tsx` (`?mode=lebensweg`, nur mit sichtbarer Person).
 
-**Props/Daten:** fertiger Weg vom Server (`LifePath`: Stationen mit Nummer, Titel, Zusatz, Datumstext, Kurzjahr, „ungenau“, Ortstext, Ortsstatus, Punkt; Punkte mit Koordinaten, Bezeichnung, Genauigkeit und ihren Stationen; Teilstücke mit „übersprungen“), Art (`person`, `father`, `mother`) und bei Linien der Grund des Endes.
+**Props/Daten:** fertiger Weg vom Server (`LifePath`: Stationen mit Nummer, Titel, Zusatz, Datumstext, Kurzjahr, Ortstext, Ortsstatus, Punkt; Punkte mit Koordinaten, Bezeichnung, Genauigkeit und ihren Stationen; Teilstücke mit „übersprungen“), Art (`person`, `father`, `mother`) und bei Linien der Grund des Endes.
 
 **Verhalten:**
 
 - *Karte:* dieselbe Technik wie `MapExplorer` (Grenzen über `loadCountries`, Projektion `lib/map/projection.ts`, Verschieben/Zoomen mit Maus, Finger, Rad, Knöpfen +/− und Pfeiltasten — eigener, schlanker Code, `MapExplorer` bleibt unverändert). Ausschnitt „Ganzer Weg“ passt sich dem Weg an (Standard; rechts bleibt geschätzt Platz für die Beschriftungen, höchstens 45 % der Breite; ein einzelner Punkt mit etwas Umgebung, ohne Punkte Europa); bis zum ersten Verschieben bleibt der Weg bei Größenänderungen eingepasst.
 - *Weg:* Teilstücke als Linie mit heller/dunkler Kontur und Pfeil in der Mitte (nur bei genug Länge), gestrichelt, wenn dazwischen Stationen ohne Ort auf der Karte liegen. Hin und zurück zwischen denselben Orten: beide Teilstücke leicht nach rechts (in Wegrichtung) versetzt, damit Linien und Pfeile sich nicht decken. Punkte als Pillen mit den Nummern („3“, „1–2“, „2, 4“), daneben die Beschriftung (Person: Jahr bzw. Jahresspanne; Linie: Name und Jahr). Punkte mit gleichen Koordinaten (Rückkehr an einen früheren Ort) zeichnet die Komponente als eine Marke mit allen Nummern („1–2, 5–6“) und allen Beschriftungen; Antippen geht deren Stationen reihum durch. Unsichtbare Tippfläche 44 px. Gezeichnet erst nach dem Einhängen (Gleitkomma).
 - *Auswahl:* Station in der Liste antippen hebt sie und ihren Punkt hervor (`aria-pressed`, Ring), erneut antippen hebt auf; Punkt antippen wählt seine erste Station (bei zusammengefassten Punkten reihum) und scrollt sie ohne Animation in Sicht. Ein Klick nach echtem Ziehen wählt nichts.
-- *Liste:* „Stationen“ bzw. „Generationen“ als nummerierte Liste (Knöpfe mindestens 44 px); Nummernkreis gestrichelt, wenn die Station nicht auf der Karte ist; Hinweise „(ungenau)“ hinter ungenauen Daten (Tooltip „ungenaues Datum — ungefähr eingeordnet“), „Ort nicht zugeordnet“, „Ort nicht zuordenbar“, „nur die Region/das Land bekannt“; bei Linien daneben der Link „Personenseite“ und oben der Grund des Endes („Weiter hinauf nicht freigegeben.“ …). Darunter „ohne Datum“ (ohne Nummer, nicht Teil des Wegs).
+- *Liste:* „Stationen“ bzw. „Generationen“ als nummerierte Liste (Knöpfe mindestens 44 px); Nummernkreis gestrichelt, wenn die Station nicht auf der Karte ist; ungenaue Daten ohne eigenen Hinweis (die Unsicherheit steht in der Angabe selbst: „um 1858“, „vor 1900“; reine Jahres- oder Monatsangaben ohne Zusatz); Hinweise „Ort nicht zugeordnet“, „Ort nicht zuordenbar“, „nur die Region/das Land bekannt“; bei Linien daneben der Link „Personenseite“ und oben der Grund des Endes („Weiter hinauf nicht freigegeben.“ …). Darunter „ohne Datum“ (ohne Nummer, nicht Teil des Wegs).
 - *Barrierefreiheit:* nichts nur über Farbe (Nummern, Liste, Legendensatz zu Pfeilen und Strichelung); SVG mit `role="img"` und `aria-label`; Liste als gleichwertige Alternative.
 - *Telefonbreite:* Karte oben, Liste darunter (zweispaltig ab `lg`).
 - Farben über `--path-*` (hell/dunkel, `app/globals.css`) und `--map-*`. Kein „Abspielen“.
@@ -954,6 +954,36 @@ Kontexthilfe „?“ (`HelpLink` `wurzeln`). Bei 390 px Ring über der Legende.
 
 **Tests:** `e2e/read/roots.spec.ts` (Desktop und 390 px, axe). Dienst und
 Rechnung: `tests/roots.db.test.ts`, `tests/roots.test.ts`.
+
+### components/PersonBiography.tsx
+
+**Zweck:** Abschnitt „Lebenslauf“ der Personenseite: der aus den erfassten
+Daten gebaute Text in ganzen Sätzen (`lib/biography.ts`).
+
+**Wo eingesetzt:** `app/people/[id]/page.tsx`, direkt nach dem Kopf (vor
+Bezugsperson, Notizen und den Detailabschnitten) — für jeden, der die
+Person sehen darf; ohne Satz über den Namen hinaus entfällt er.
+
+**Props/Daten:** `biography` (`Biography`: Absätze aus Textstücken, Namen
+anderer Personen mit `personId`; reiner Text) — fertig vom Server, nur
+Sichtbares.
+
+**Verhalten:** Absätze in Serifenschrift, Namen als Links auf die
+Personenseiten. Knopf „Text kopieren“ legt den reinen Text (ohne Links,
+Absätze durch Leerzeilen getrennt) in die Zwischenablage und meldet „Text
+kopiert.“ (`role="status"`); ohne Zwischenablage-Recht wird der Text
+markiert und ein Hinweis auf Strg+C gezeigt. Darunter dezent „Automatisch
+aus den erfassten Daten erstellt.“ mit Kontexthilfe „Wie entsteht der
+Text?“ (`HelpLink` `lebenslauf`). Hell/dunkel über die üblichen Klassen;
+bei 390 px bricht der Knopf unter die Überschrift.
+
+**Server oder Client:** Client (wegen „Text kopieren“).
+
+**Ruft auf:** —
+
+**Tests:** `e2e/read/biography.spec.ts` (Abschnitt, Links, Kopieren,
+eingeschränkter Benutzer, 390 px, axe). Text und Rechte:
+`tests/biography.test.ts`, `tests/biography.db.test.ts`.
 
 ### components/DonutChart.tsx
 
