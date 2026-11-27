@@ -24,6 +24,7 @@ Im **Zeitstrahl** stehen an der Jahresachse links dezente Marken für allgemeine
 - **Zeigst du auf eine Marke** oder tippst sie an, erscheint daneben, was es war: Titel, Jahre, Art und ein Satz Beschreibung. Liegen mehrere Ereignisse dicht beieinander, stehen sie zusammen in dieser Anzeige. Escape oder ein Tipp daneben schließt sie.
 - **Mit der Tastatur:** Die Marken lassen sich mit der Tab-Taste erreichen.
 - Die Marken sind nur **Hintergrund** — sie sagen nichts über die Personen im Baum.
+- **Andere Gegenden blasser:** Gilt ein Ereignis nur für Gebiete, in denen keine der Personen lebte, die du sehen darfst (zum Beispiel die Französische Revolution in einem Baum ohne Orte in Frankreich), ist seine Marke blasser, und in der Anzeige steht es hinten mit dem Vermerk **andere Gegend**. Dafür zählen Geburts-, Sterbe-, Heirats- und Scheidungsorte, die einem Ort auf der Karte zugeordnet sind.
 - Steht in der Anzeige hinter einem Ereignis **von KI, ungeprüft**, hat der KI-Assistent es ergänzt, und ein Administrator hat es noch nicht geprüft (siehe [Einträge der KI](12-einstellungen.md#eintraege-der-ki)).
 - Mit dem Kästchen **Zeitgeschichte** in der Werkzeugleiste (nur im Zeitstrahl) blendest du die Marken aus und wieder ein. Die App merkt sich das in diesem Browser; der Schalter gilt auch für die Karte und den Lebenslauf.
 

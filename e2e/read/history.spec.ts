@@ -10,8 +10,9 @@ import {
   waitForTree,
 } from "../support/fixtures";
 import { mock } from "../support/mock";
+import type { FamilyKey } from "../../prisma/mock-data";
 import { BUILTIN_HISTORY } from "../../lib/history/builtin";
-import { formatHistoryYears, mergeHistory } from "../../lib/history/events";
+import { mergeHistory } from "../../lib/history/events";
 import { lifetimeHistory } from "../../lib/history/lifetime";
 import { fuzzyField } from "../../lib/dates";
 
@@ -24,11 +25,37 @@ import { fuzzyField } from "../../lib/dates";
  *
  * Grundlage ist die mitgelieferte Liste ohne eigene oder ausgeblendete
  * Einträge — e2e/write/history.spec.ts räumt hinter sich auf.
+ *
+ * Regionaler Bezug (lib/history/areas.ts): Lebenslauf zweier Personen aus
+ * verschiedenen Gegenden (Familie B: Sachsen/Sachsen-Anhalt, Familie C:
+ * Bayern) — dieselben Ereignisse, andere Reihenfolge. Eigene Ereignisse mit
+ * Bereich: e2e/write/history.spec.ts (Block „Geltungsbereich“).
  */
 test.use({ storageState: authFile("viewer") });
 
 const events = mergeHistory(BUILTIN_HISTORY, [], []);
 const now = new Date().getUTCFullYear();
+
+/** Ortstexte der Mock-Familien B (Ostdeutschland) und C (Bayern). */
+const EAST = new Set(["Leipzig", "Halle (Saale)", "Dresden", "Chemnitz"]);
+const BAVARIA = new Set(["Bamberg", "Würzburg", "Nürnberg", "Erlangen"]);
+
+/**
+ * Person der Familie mit genauem Geburtsdatum, lebend über 1955–1991, deren
+ * Orte (Geburt, Tod, Partnerschaften, Ereignisse) alle in der Gegend liegen.
+ */
+function regionalSubject(family: FamilyKey, places: Set<string>) {
+  return mock.persons.find((p) => {
+    if (!p.familyKeys.includes(family) || !p.birthDate || p.birthDatePrecision !== "DAY" || !p.birthPlace) return false;
+    const by = p.birthDate.getUTCFullYear();
+    if (by > 1950 || (p.deathDate ? p.deathDate.getUTCFullYear() < 1991 || p.deathDatePrecision !== "DAY" : by < 1930)) return false;
+    const rels = mock.relationships.filter((r) => r.type === "PARTNER_OF" && (r.fromPersonId === p.id || r.toPersonId === p.id));
+    const relIds = new Set(rels.map((r) => r.id));
+    const texts = [p.birthPlace, p.deathPlace, ...rels.flatMap((r) => [r.startPlace, r.endPlace])];
+    for (const e of mock.events) if (e.personId === p.id || (e.relationshipId && relIds.has(e.relationshipId))) texts.push(e.place);
+    return texts.every((t) => !t || places.has(t));
+  });
+}
 
 /** Für den Betrachter (Familie A) sichtbare, verstorbene Person mit genauen Daten über den Ersten Weltkrieg. */
 const subject = mock.persons.find((p) => {
@@ -162,14 +189,20 @@ test.describe("Lebenslauf", () => {
     const line = page.getByTestId("biography-history");
     await expect(line).toBeVisible();
     await expect(line).toContainText("In diese Lebenszeit fielen:");
-    await expect(line).toContainText(`Allgemeine Zeitgeschichte ${expected.from}–${expected.to}, keine Angabe über die Person.`);
+    // Die Reihenfolge hängt vom regionalen Bezug ab (eigene Tests unten) —
+    // hier zählt: dieselben Ereignisse der Lebenszeit, höchstens vier vorn.
+    await expect(line).toContainText(`Allgemeine Zeitgeschichte ${expected.from}–${expected.to}, keine Angabe über die Person`);
     const shown = line.locator(':scope > p [data-testid="biography-history-item"]');
-    await expect(shown).toHaveText(expected.top.map((e) => `${e.title} (${formatHistoryYears(e)})`));
-    if (expected.rest.length > 0) {
+    await expect(shown.first()).toBeVisible();
+    expect(await shown.count()).toBeLessThanOrEqual(4);
+    const total = expected.top.length + expected.rest.length;
+    if (total > (await shown.count())) {
       const more = page.getByTestId("biography-history-more");
       await more.locator("summary").click();
-      await expect(more.getByTestId("biography-history-item")).toHaveCount(expected.rest.length);
+      await expect(more.getByTestId("biography-history-item")).toHaveCount(total - (await shown.count()));
     }
+    const titles = (await line.getByTestId("biography-history-item").allTextContents()).map((t) => t.replace(/\s*\(.*$/, "").trim());
+    expect(titles.sort()).toEqual([...expected.top, ...expected.rest].map((e) => e.title).sort());
     await expect(line.getByTestId("help-link")).toHaveAttribute("href", "/hilfe/personen#zeitgeschichte-im-lebenslauf");
 
     // Nicht Teil des Lebenslauf-Texts — und keine Behauptung über die Person.
@@ -184,6 +217,46 @@ test.describe("Lebenslauf", () => {
     for (const e of expected.top) expect(copied).not.toContain(e.title);
 
     await expectNoA11yViolations(page);
+  });
+});
+
+test.describe("Lebenslauf mit regionalem Bezug", () => {
+  test.use({ storageState: authFile("admin") });
+
+  const east = regionalSubject("B", EAST);
+  const bavaria = regionalSubject("C", BAVARIA);
+
+  const item = (page: Page, title: string) =>
+    page.getByTestId("biography-history").getByTestId("biography-history-item").filter({ hasText: title });
+
+  test("Person aus Ostdeutschland: Mauerfall vorn mit Region, Anwerbung unter „Andere Gegenden“", async ({ page }) => {
+    expect(east, "Mock-Daten: Person der Familie B mit Orten nur in Sachsen/Sachsen-Anhalt").toBeTruthy();
+    await page.goto(`/people/${east!.id}`);
+    const line = page.getByTestId("biography-history");
+    await expect(line).toContainText("Ereignisse aus der Gegend der erfassten Orte zuerst.");
+    const top = line.locator(':scope > p [data-testid="biography-history-item"]');
+    await expect(top.filter({ hasText: "Fall der Berliner Mauer" })).toHaveCount(1);
+    await expect(top.filter({ hasText: "Fall der Berliner Mauer" }).getByTestId("biography-history-near")).toHaveText(/· Sachsen(-Anhalt)?$/);
+    await expect(top.filter({ hasText: "Anwerbung" })).toHaveCount(0);
+    const more = page.getByTestId("biography-history-more");
+    await more.locator("summary").click();
+    await expect(page.getByTestId("biography-history-other")).toContainText("Andere Gegenden:");
+    await expect(page.getByTestId("biography-history-other").getByTestId("biography-history-item").filter({ hasText: "Anwerbung" })).toBeVisible();
+    // Keine Behauptung über die Person.
+    await expect(line).not.toContainText(/erlebte|betroffen war|dabei war/);
+    await expectNoA11yViolations(page);
+  });
+
+  test("Person aus Bayern: Anwerbung vorn mit Region, Mauerfall ohne Region (nur das Land passt)", async ({ page }) => {
+    expect(bavaria, "Mock-Daten: Person der Familie C mit Orten nur in Bayern").toBeTruthy();
+    await page.goto(`/people/${bavaria!.id}`);
+    const top = page.getByTestId("biography-history").locator(':scope > p [data-testid="biography-history-item"]');
+    await expect(top.filter({ hasText: "Anwerbung" }).getByTestId("biography-history-near")).toHaveText("· Bayern");
+    const more = page.getByTestId("biography-history-more");
+    if ((await more.count()) > 0) await more.locator("summary").click();
+    await expect(item(page, "Fall der Berliner Mauer")).toBeVisible();
+    await expect(item(page, "Fall der Berliner Mauer").getByTestId("biography-history-near")).toHaveCount(0);
+    await expect(page.getByTestId("biography-history-other").getByTestId("biography-history-item").filter({ hasText: "Berliner Mauer" })).toHaveCount(0);
   });
 });
 

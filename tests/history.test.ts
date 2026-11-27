@@ -31,10 +31,10 @@ const fuzzy = (text: string): FuzzyDate => {
 };
 
 const B: BuiltinHistoryEvent[] = [
-  { id: "a", title: "Krieg A", from: 1914, to: 1918, kind: "krieg", rank: 1, description: "…" },
-  { id: "b", title: "Seuche B", from: 1918, to: 1920, kind: "not", rank: 2, description: "…" },
-  { id: "c", title: "Zäsur C", from: 1923, to: null, kind: "politik", rank: 3, description: "…" },
-  { id: "d", title: "Wende D", from: 1871, to: null, kind: "politik", rank: 1, description: "…" },
+  { id: "a", title: "Krieg A", from: 1914, to: 1918, kind: "krieg", rank: 1, description: "…", areas: [] },
+  { id: "b", title: "Seuche B", from: 1918, to: 1920, kind: "not", rank: 2, description: "…", areas: [] },
+  { id: "c", title: "Zäsur C", from: 1923, to: null, kind: "politik", rank: 3, description: "…", areas: [] },
+  { id: "d", title: "Wende D", from: 1871, to: null, kind: "politik", rank: 1, description: "…", areas: [] },
 ];
 const C: CustomHistoryEvent[] = [
   { id: "x1", title: "Hochwasser", yearFrom: 1920, yearTo: null, kind: "not", description: " Fluss trat über ", region: " Talort " },
@@ -215,7 +215,7 @@ describe("Eingaben prüfen", () => {
   it("vereinheitlicht: Leerraum, leeres „bis“, leere Beschreibung", () => {
     expect(checkHistoryInput(ok, 2026)).toEqual({
       ok: true,
-      value: { title: "Großer Stadtbrand", yearFrom: 1842, yearTo: null, kind: "not", description: null, region: "Beispielstadt" },
+      value: { title: "Großer Stadtbrand", yearFrom: 1842, yearTo: null, kind: "not", description: null, region: "Beispielstadt", areas: [] },
     });
     expect(checkHistoryInput({ ...ok, yearFrom: 1900, yearTo: 1900 }, 2026)).toMatchObject({ ok: true, value: { yearTo: null } });
     expect(checkHistoryInput({ ...ok, yearTo: "1845" }, 2026)).toMatchObject({ ok: true, value: { yearTo: 1845 } });

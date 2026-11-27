@@ -314,6 +314,65 @@ describe.skipIf(Boolean(skipReason))("Zeitgeschichte über MCP (Mock-Datenbank)"
     const entry = (await listChangeSetEntries(admin, rows[0].changeSetId!)).items.find((i) => i.id === rows[0].id)!;
     expect(entry.what).toMatch(/^Zeitgeschichte „.*“ bestätigt$/);
   });
+
+  it("Geltungsbereich: Schlüssel über list_history_areas, anlegen und ändern mit areas, ungültige abgelehnt", async () => {
+    expect(INSTRUCTIONS).toMatch(/"areas"/);
+    expect(INSTRUCTIONS).toMatch(/list_history_areas/);
+    expect(INSTRUCTIONS).toMatch(/add nothing for areas where nobody of the tree lived/);
+
+    // Lesend: Gruppen und Regionen eines Landes.
+    const reader = await connect(secretOf("editor-read"));
+    expect(await reader.tools()).toContain("list_history_areas");
+    const groups = await reader.call("list_history_areas", {});
+    expect(groups.isError, groups.text).toBe(false);
+    expect(groups.data.groups.find((g: { key: string }) => g.key === "group:ostdeutschland")).toMatchObject({
+      label: "Ostdeutschland (Gebiet der DDR)",
+      areas: ["DE.11", "DE.12", "DE.13", "DE.14", "DE.15", "DE.16"],
+    });
+    expect(groups.data.country).toBeUndefined();
+    const de = await reader.call("list_history_areas", { country: "de" });
+    expect(de.data.country).toMatchObject({ key: "DE", name: "Deutschland" });
+    expect(de.data.country.regions).toContainEqual({ key: "DE.13", name: "Sachsen" });
+    expect(de.data.country.regions).toHaveLength(16);
+    const unknown = await reader.call("list_history_areas", { country: "QQ" });
+    expect(unknown.isError).toBe(true);
+    expect(unknown.text).toMatch(/Unbekanntes Land/);
+
+    // Mitgelieferte nennen ihren Bereich, Gruppen zusammengefasst.
+    const y1989 = await reader.call("list_history_events", { year: 1989 });
+    expect(y1989.data.events.find((e: { id: string }) => e.id === "mauerfall").areas).toEqual(["group:ostdeutschland", "DE"]);
+
+    // Schreibend: Gruppe + Schlüssel, aufgelöst gespeichert, zusammengefasst ausgegeben.
+    const s = await connect(secretOf("admin-write"));
+    const cs = await changeSet(s, "Zeitgeschichte Beispieltal ergänzt");
+    const bad = await s.call("add_history_event", { ...FLOOD, areas: ["DE.99"], change_set_id: cs });
+    expect(bad.isError).toBe(true);
+    expect(bad.text).toMatch(/Unbekanntes Gebiet: DE\.99/);
+    const bad2 = await s.call("add_history_event", { ...FLOOD, areas: ["Sachsen"], change_set_id: cs });
+    expect(bad2.isError).toBe(true);
+    expect(await prisma.historyEvent.count()).toBe(0);
+
+    const add = await s.call("add_history_event", { ...FLOOD, areas: ["group:ostdeutschland", "de.02"], change_set_id: cs });
+    expect(add.isError, add.text).toBe(false);
+    expect(add.data.event.areas).toEqual(["group:ostdeutschland", "DE.02"]);
+    const id = add.data.event.id.slice(2);
+    expect((await prisma.historyEvent.findUniqueOrThrow({ where: { id } })).areas).toEqual(["DE.02", "DE.11", "DE.12", "DE.13", "DE.14", "DE.15", "DE.16"]);
+    expect((await listHistoryEvents()).find((e) => e.id === `c:${id}`)!.areas).toContain("DE.13");
+
+    // Bestätigen, dann Bereich ändern: wieder unbestätigt, im Protokoll.
+    await confirmHistoryEvents(await scope("admin@example.test"), [id]);
+    const upd = await s.call("update_history_event", { event_id: `c:${id}`, areas: ["DE.13"], reason: REASON, change_set_id: cs });
+    expect(upd.isError, upd.text).toBe(false);
+    expect(upd.data.changed).toEqual(["areas"]);
+    expect(upd.data.event).toMatchObject({ areas: ["DE.13"], unconfirmed: true });
+    // null = überall; weggelassen = unverändert.
+    const keep = await s.call("update_history_event", { event_id: `c:${id}`, description: "Der Fluss trat über die Ufer.", reason: REASON, change_set_id: cs });
+    expect(keep.data.event.areas).toEqual(["DE.13"]);
+    const everywhere = await s.call("update_history_event", { event_id: `c:${id}`, areas: null, reason: REASON, change_set_id: cs });
+    expect(everywhere.data.event.areas).toEqual([]);
+    const audit = await prisma.auditLog.findMany({ where: { entityType: "HistoryEvent", entityId: id, action: "UPDATE" }, orderBy: { createdAt: "asc" } });
+    expect(audit.some((a) => JSON.stringify(a.diff).includes('"areas"'))).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

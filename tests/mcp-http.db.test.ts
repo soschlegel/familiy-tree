@@ -56,6 +56,7 @@ const READ_TOOLS = [
   "list_duplicate_candidates",
   "list_events",
   "list_families",
+  "list_history_areas",
   "list_history_events",
   "list_places",
   "preview_person_merge",

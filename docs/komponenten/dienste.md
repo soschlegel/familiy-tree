@@ -1417,7 +1417,12 @@ gekennzeichnet. Koordinaten kommen aus der Tabelle `Place` (nur zugeordnete,
 nicht „nicht zuordenbar“). Für die Zeitreise zusätzlich eine Abfrage der
 Taufen (Taufe, Kindstaufe, Erwachsenentaufe; mit Datum, auch ohne Ort, keine
 Zweitangaben; je Person die früheste) und die Hochzeiten aus dem schon
-geladenen Graphen (`pickMarriages`).
+geladenen Graphen (`pickMarriages`). Je Ort der Karte kommt das Gebiet mit
+(`MapPlace.ar`: Region bzw. Land aus `countryCode` und Verzeichniskennung,
+schlank über `lib/places/region-codes.ts`, ohne weitere Abfrage) — damit
+ordnet die Zeitreise die Zeitgeschichte nach den Orten der Lebenden. Bei
+12 000 Personen und rund 800 Orten sind das rund 10 KB mehr (Leistungstest
+in `tests/map.test.ts`).
 
 **Rechte/Datenschutz:** Grundlage sind nur sichtbare Personen; Vorfahren und
 Linien auf dem Graphen der sichtbaren Personen (`visibleIndex`). Gesperrte
@@ -2413,9 +2418,21 @@ stehen in `lib/history/events.ts` und `lib/history/lifetime.ts`
 - `getLifetimeHistory(detail, events?, now?)` — Zeile „In diese Lebenszeit
   fielen“ einer Person: Geburt, Tod und „verstorben“ aus denselben Daten wie
   der Lebenslauf (`biographyInputOf`, `isDeceased`), dann `lifetimeHistory`;
-  `null` ohne brauchbare Lebenszeit oder ohne Ereignis darin.
+  `null` ohne brauchbare Lebenszeit oder ohne Ereignis darin. Für den
+  regionalen Bezug die Stationen aus denselben Daten — Geburt, Tod,
+  Ereignisse mit Ort (Beerdigung u.ä. als Ende), Heirat und Scheidung sowie
+  Ereignisse der Partnerschaften, nur mit sichtbarem Partner — und ihre
+  Gebiete in **einer** Abfrage der Ortszuordnung (`placeAreasOf`).
+- `markHistoryForPlaces(events, texts)` / `listHistoryEventsForTree(graph)` —
+  Zeitstrahl des ganzen Baums: `foreign: true` an Ereignissen, deren
+  Geltungsbereich zu keinem zugeordneten Ort passt. Gezählt werden nur
+  Geburts- und Sterbeorte sichtbarer Personen und Heirats-/Scheidungsorte,
+  wenn beide Partner sichtbar sind; eine Abfrage der Ortszuordnung. Ohne
+  zugeordneten Ort bleibt alles unverändert.
 - `historyAdminState(scope)` — Verwaltungsseite: mitgelieferte Einträge mit
-  `hidden` und alle eigenen.
+  `hidden` und alle eigenen, dazu `areaCatalog` (alle Länder mit deutschem
+  Namen und die Namen aller Schlüssel aus Gruppen und vorhandenen Bereichen)
+  für die Auswahl des Geltungsbereichs.
 - `createHistoryEvent`, `updateHistoryEvent`, `deleteHistoryEvent` — eigene
   Ereignisse; `setBuiltinHidden(scope, id, hidden)` — mitgelieferten Eintrag
   aus- bzw. einblenden.
@@ -2446,13 +2463,21 @@ stehen in `lib/history/events.ts` und `lib/history/lifetime.ts`
 - Ändern/Löschen unbekannter eigener Ereignisse und Ausblenden unbekannter
   mitgelieferter Kennungen → `NOT_FOUND`. Ausblenden eines schon
   ausgeblendeten (bzw. Einblenden eines sichtbaren) bleibt ohne Wirkung.
-- „Gilt für Region/Ort“ ist nur ein Zusatz in der Anzeige; einen Abgleich
-  mit Wohnorten gibt es bewusst nicht.
+- **Geltungsbereich** (`areas`, Regeln in `lib/history/areas.ts`): Liste
+  von Länder- bzw. Regionsschlüsseln, leer = überall; Gruppen werden beim
+  Speichern aufgelöst. Jeder Schlüssel muss im Ortsverzeichnis stehen
+  (`knownAreaCheck`), sonst `VALIDATION` am Feld `areas`. Fehlt `areas` beim
+  Ändern von Hand, bleibt der Bereich (ältere Aufrufer); die KI ändert ihn
+  nur, wenn sie ihn angibt (`null` = überall). Er bestimmt die Reihenfolge
+  an allen drei Anzeigestellen; ausgeblendet wird nichts.
+- „Gilt für Region/Ort“ ist nur ein angezeigter Zusatz (feiner als eine
+  Region, z.B. ein Tal); für die Reihenfolge zählt allein der
+  Geltungsbereich.
 - **Von KI und bestätigt** (Regeln in `lib/history/origin.ts`): Einträge der
   KI (`origin` `AI`) sind sofort in allen Anzeigen, tragen aber bis zur
   Bestätigung den Vermerk „von KI, ungeprüft“ (`aiUnconfirmed` in der
   Anzeigeliste). Ändert die KI ein Inhaltsfeld (Titel, Jahre, Art,
-  Beschreibung, Region), ist der Eintrag wieder unbestätigt; ein von Hand
+  Beschreibung, Region, Geltungsbereich), ist der Eintrag wieder unbestätigt; ein von Hand
   angelegter wird `AI_EDITED`. Speichert ein Administrator einen
   unbestätigten KI-Eintrag von Hand, gilt er als bestätigt — auch ohne
   Inhaltsänderung. Die Herkunft bleibt dabei erhalten („von KI“ bzw. „von KI
@@ -2472,14 +2497,19 @@ stehen in `lib/history/events.ts` und `lib/history/lifetime.ts`
 
 **Rechte/Datenschutz:** Lesen (`listHistoryEvents`, `getLifetimeHistory`)
 ohne Rechteprüfung — keine Personendaten außer der übergebenen, schon
-geprüften Personenansicht. Pflegen und Bestätigen nur Administratoren
+geprüften Personenansicht. Die Ereignisse sind für alle gleich; nur ihre
+Reihenfolge hängt von Orten ab, und dafür zählen ausschließlich Orte, die der
+Benutzer sehen darf (Lebenslauf: die Personenansicht ohne Partnerschaften
+mit gesperrtem Partner; Zeitstrahl: sichtbare Personen; Karte: deren
+Auswahl). So lässt sich aus der Reihenfolge nichts über gesperrte Personen
+ablesen. Pflegen und Bestätigen nur Administratoren
 (`FORBIDDEN`; für die KI mit dem Zusatz „nur Administratoren, Recht
 history:manage“); die Routen prüfen zusätzlich `history:manage`. Die
 KI-Funktionen laufen nur mit Schreibstufe (MCP `runWrite`).
 
 **Protokoll:** Audit-Art `HistoryEvent`: eigene Ereignisse mit ihrer
 Kennung — `CREATE` (alle Felder), `UPDATE` (`title`, `changes` vorher →
-nachher), `DELETE` (bisherige Felder); mitgelieferte mit ihrer Kennung aus
+nachher), `DELETE` (bisherige Felder, auch `areas`); mitgelieferte mit ihrer Kennung aus
 `builtin.ts` — `UPDATE` mit `builtin: true` und `changes.hidden`. Über MCP
 zusätzlich Kanal und Schlüssel; beim Anlegen `origin`, `aiReason`,
 `aiSourceUrl`, beim Ändern durch die KI `changes.origin` und
@@ -2495,15 +2525,47 @@ Personen- und Familienbezug, daher nur für Administratoren sichtbar.
 `app/api/history-events/builtin/[id]/route.ts`,
 `app/api/history-events/confirm/route.ts`; `listHistoryEvents` in
 `app/tree/page.tsx` (ganzer Baum) und `app/map/page.tsx`;
+`listHistoryEventsForTree` in `app/tree/page.tsx`;
 `getLifetimeHistory` in `app/people/[id]/page.tsx`; die `ai…`-Funktionen und
 `listHistoryEventsForAi` in `mcp/tools.ts`.
 
 **Tests:** `tests/history.db.test.ts` (Dienst, Rechte, Protokoll, Routen),
 `tests/history-ai.db.test.ts` (MCP-Werkzeuge, Herkunft, Bestätigen, Route
 `confirm`), `tests/history.test.ts` (reine Logik, mitgelieferte Liste),
-`tests/history-origin.test.ts` (Herkunft, Begründung, Dubletten);
+`tests/history-origin.test.ts` (Herkunft, Begründung, Dubletten),
+`tests/history-areas.test.ts` (Passung, Reihenfolge, mitgelieferte
+Bereiche), `tests/history-areas.db.test.ts` (Bereich anlegen/ändern,
+Lebenslauf und Zeitstrahl für eingeschränkte Benutzer);
 `e2e/write/history.spec.ts` (mit Block „Einträge der KI“),
-`e2e/read/history.spec.ts`.
+`e2e/write/history.spec.ts` (Block „Geltungsbereich“), `e2e/read/history.spec.ts`.
+
+### lib/services/history-areas.ts
+
+**Zweck:** Daten für den Geltungsbereich der Zeitgeschichte aus Ortszuordnung
+und Ortsverzeichnis (Regeln: `lib/history/areas.ts`).
+
+**Wichtige Funktionen:**
+- `placeAreasOf(texts)` — Ortstexte → Gebiet (Land, Region samt Name) in
+  **einer** Abfrage der Tabelle `Place`; die Region kommt schlank aus
+  `lib/places/region-codes.ts` (nicht aus dem großen Ortsverzeichnis).
+  Offene, nicht zuordenbare und Zuordnungen ohne Land fehlen; eine Region aus
+  einem anderen Land als `countryCode` zählt nicht (wie `placeArea`).
+- `knownAreaCheck()` — Prüffunktion für `checkHistoryInput`.
+- `historyAreaLegend(country?)` — benannte Gruppen (`group:…`, Name,
+  Erläuterung, Schlüssel) und zu einem Land dessen Regionen mit Schlüsseln;
+  unbekanntes Land → `VALIDATION`. Für die KI (`list_history_areas`) und die
+  Verwaltung (`GET /api/history-events/areas`).
+- `historyAreaAdminCatalog(usedKeys)` — Länderliste und Namen der Schlüssel
+  für die Verwaltungsseite.
+
+**Rechte/Datenschutz:** kein Rechte-Check — Aufrufer reichen nur Ortstexte,
+die der Benutzer sehen darf; heraus kommen nur Länder- und
+Regionsschlüssel.
+
+**Benutzt von:** `lib/services/history.ts`, `mcp/tools.ts`,
+`app/api/history-events/areas/route.ts`.
+
+**Tests:** `tests/history-areas.db.test.ts`, `tests/history-ai.db.test.ts`.
 
 ---
 

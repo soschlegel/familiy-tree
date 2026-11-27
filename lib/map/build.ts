@@ -43,6 +43,11 @@ export type MapPlace = {
   lat: number;
   lon: number;
   precision: "PLACE" | "REGION" | "COUNTRY";
+  /**
+   * Gebiet für die Zeitgeschichte (lib/history/areas.ts): Region erster Ebene
+   * („DE.13“), ohne bekannte Region das Land („DE“); fehlt ohne Land.
+   */
+  ar?: string;
 };
 
 /** Kurze Schlüssel: die Liste kann bei großen Beständen einige tausend Einträge haben. */

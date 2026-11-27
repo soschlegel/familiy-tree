@@ -76,6 +76,8 @@ Darüber steht die Zeile **In diesem Jahr**: wie viele Geburten, Hochzeiten und 
 
 Unter den Zahlen steht die Zeile **Zeitgeschichte 1848:** mit den allgemeinen Ereignissen, die das gewählte Jahr berühren — zum Beispiel „Revolution 1848/49 (1848–1849)“. Ein Zeitraum zählt in jedem seiner Jahre, ein einzelnes Ereignis nur in seinem Jahr. Fällt nichts aus der Liste in das Jahr, steht dort „kein Ereignis aus der Liste“. Steht hinter einem Ereignis **von KI, ungeprüft**, hat der KI-Assistent es ergänzt, und ein Administrator hat es noch nicht geprüft (siehe [Einträge der KI](12-einstellungen.md#eintraege-der-ki)).
 
+**Aus der Gegend zuerst:** Vorn stehen Ereignisse, die zu den Orten passen, an denen im gewählten Jahr Personen deiner Auswahl lebten — zum Beispiel 1961 in einer Familie aus Sachsen der Bau der Berliner Mauer. Danach kommen die überall geltenden Ereignisse. Ereignisse, die nur andere Gegenden betrafen, stehen eingeklappt unter **… Ereignisse anderer Gegenden** und lassen sich aufklappen. Es zählen nur Personen, die du sehen darfst, und nur Orte, die auf der Karte stehen. Die Gebiete richten sich nach heutigen Grenzen (siehe [Geltungsbereich](12-einstellungen.md#geltungsbereich)).
+
 Am Zeitstrahl über dem Regler zeigen feine Striche, wo solche Ereignisse liegen, damit du beim Ziehen siehst, wann etwas geschah. Die Zeile ist nur **Hintergrund** — sie sagt nichts über die Personen auf der Karte.
 
 Mit dem Kästchen **Zeitgeschichte** neben **Tempo** blendest du Zeile und Striche aus und wieder ein. Die App merkt sich das in diesem Browser; der Schalter gilt auch für den Zeitstrahl im Stammbaum und den Lebenslauf. Welche Ereignisse es gibt, steht unter [Zeitgeschichte](12-einstellungen.md#zeitgeschichte).

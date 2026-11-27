@@ -9,7 +9,7 @@
  * - Einträge der KI sind sofort für alle sichtbar, tragen aber den Vermerk
  *   „von KI, ungeprüft“, bis ein Administrator sie bestätigt.
  * - Ändert die KI einen Eintrag inhaltlich (Titel, Jahre, Art,
- *   Beschreibung, Region), ist er wieder unbestätigt; ein von Hand
+ *   Beschreibung, Region, Geltungsbereich), ist er wieder unbestätigt; ein von Hand
  *   angelegter wird dabei „von KI geändert“. Die KI kann nichts bestätigen.
  * - Speichert ein Administrator einen unbestätigten KI-Eintrag von Hand,
  *   gilt er als bestätigt.
@@ -32,7 +32,7 @@ export const HISTORY_ORIGIN_LABEL: Record<HistoryOrigin, string> = {
 export const AI_UNCONFIRMED_LABEL = "von KI, ungeprüft";
 
 /** Felder, deren Änderung durch die KI die Bestätigung aufhebt. */
-export const HISTORY_CONTENT_FIELDS = ["title", "yearFrom", "yearTo", "kind", "description", "region"] as const;
+export const HISTORY_CONTENT_FIELDS = ["title", "yearFrom", "yearTo", "kind", "description", "region", "areas"] as const;
 
 /** Grenzen der Begründung bzw. Quelle der KI. */
 export const AI_REASON_LIMITS = { min: 15, max: 1000, url: 500 } as const;

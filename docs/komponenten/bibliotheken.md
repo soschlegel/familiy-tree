@@ -2321,7 +2321,9 @@ TOO_LARGE, TIMEOUT, NETWORK), `defaultResolver`, `httpsTransport`,
 und Koordinaten — einmal je Ausgangsperson auf dem Server gerechnet.
 
 **Wichtige Funktionen/Typen:** `buildMapData`, `factYear` (geschätztes
-Lebensende mit `PRESUMED_LIFESPAN` aus `lib/consistency.ts`), `LINE_BIT`, `linesFromBits`, `MapPlace`, `MapPerson` (kurze
+Lebensende mit `PRESUMED_LIFESPAN` aus `lib/consistency.ts`), `LINE_BIT`, `linesFromBits`, `MapPlace` (mit `ar`: Gebiet
+des Orts für die Zeitgeschichte, Region „DE.13“ bzw. nur das Land „DE“; fehlt
+ohne Land), `MapPerson` (kurze
 Schlüssel: Name, Lebensdaten, Beginn, Ende, geschätzt, Linien-Bits,
 Stationen als Jahr/Ortsindex-Paare; für die Zeitreise nur bei Bedarf
 `b` Geburtsjahr fürs Alter, wenn ≠ Beginn, `ba` ungenau, `bt` aus der Taufe,
@@ -2596,9 +2598,29 @@ level, regions)` → Gebiet (`key`, `label`, `countryCode`) oder
   zuordenbar“ oder kein Ländercode. „Unsicher“ gesetzte Zuordnungen zählen
   wie sichere.
 
-**Benutzt von:** `lib/services/place-areas.ts`.
+**Benutzt von:** `lib/services/place-areas.ts`; dieselben Schlüssel nutzt
+der Geltungsbereich der Zeitgeschichte (`lib/history/areas.ts`).
 
 **Tests:** `tests/roots.test.ts`.
+
+### lib/places/region-codes.ts
+**Zweck:** Regionen erster Ebene aus dem mitgelieferten Ortsverzeichnis —
+schlank, nur Server, für die Zeitgeschichte auf viel besuchten Seiten
+(Personenseite, Karte, Baum). Anders als `lib/places/gazetteer-file.ts`
+(rund 1 s, gut 100 MB) liest es die Datei nur zeilenweise (rund 50 ms) und
+behält den Katalog der Länder und Regionen (einige tausend Namen) sowie je
+angefragter Verzeichniskennung den Regionsschlüssel bzw. „keine Region“
+(höchstens so viele wie Zeilen in `Place`). Neue Kennungen lösen einen
+weiteren Durchlauf aus; parallele Aufrufe warten aufeinander.
+
+**Wichtige Funktionen:** `areaCatalog()` (Länder mit deutschem Namen,
+Regionen mit Namen, Regionen je Land), `regionKeysOf(gazetteerIds)`
+(Kennung → „DE.13“; Regeln wie `regionIndex` in `lib/places/area.ts`),
+`isKnownAreaKey`, `areaKeyLabel` („Sachsen (Deutschland)“).
+
+**Benutzt von:** `lib/services/history-areas.ts`, `lib/services/map.ts`.
+
+**Tests:** über `tests/history-areas.db.test.ts`, `tests/history-ai.db.test.ts`.
 
 ---
 
@@ -2706,8 +2728,61 @@ großer Einschnitt, 2 = bedeutend, 3 = Ergänzung) und ein Satz
 Eintrag. Keine Wertung, keine Personen. Ein gestrichener Eintrag darf
 einfach verschwinden — eine verwaiste Ausblendung stört nicht.
 
+**Geltungsbereich (`areas`):** jeder Eintrag hat einen, zurückhaltend nach
+heutigen Ländern bzw. Regionen gefasst (`lib/history/areas.ts`, im Code als
+Schlüssel und Gruppen geschrieben und beim Laden aufgelöst; eine unbekannte
+Gruppe bricht das Laden ab). Weltweite Ereignisse (Spanische Grippe,
+Weltwirtschaftskrise) gelten überall; die Weltkriege für Europa plus die
+klassischen Auswanderungsländer in Übersee; deutsche Ereignisse für
+Deutschland; Bau und Fall der Mauer für „Ostdeutschland“ **und**
+Deutschland (Kern- und weiterer Bereich: dort „Ort“, sonst „Land“); die
+Anwerbung von Arbeitskräften für Westdeutschland mit Berlin; Wien 1683 für
+Österreich; die Französische Revolution nur für Frankreich. Die Tabelle aller
+Einträge steht im Code; Änderungen dort mit dem Eigentümer abstimmen.
+
 **Tests:** `tests/history.test.ts` (eindeutige Kennungen, von ≤ bis,
-plausible Spanne, keine leeren Texte, Stichproben der Jahreszahlen).
+plausible Spanne, keine leeren Texte, Stichproben der Jahreszahlen),
+`tests/history-areas.test.ts` (jeder Bereich gültig, jeder Schlüssel im
+Ortsverzeichnis, Stichproben der Bereiche).
+
+### lib/history/areas.ts
+**Zweck:** Geltungsbereich der Zeitgeschichte und die Passung zu den Orten
+einer Person — reine Funktionen, auch im Browser (Karte, Zeitstrahl,
+Verwaltung).
+
+**Regeln:**
+- **Gebiete** sind dieselben Schlüssel wie in `lib/places/area.ts`: Land
+  (ISO-Code wie `Place.countryCode`, „DE“) oder Region erster Ebene aus dem
+  Ortsverzeichnis („DE.13“ = Sachsen). Leer heißt „überall“. So vergleicht
+  die App ohne Textvergleich mit den Ortszuordnungen.
+- **Benannte Gruppen** (`HISTORY_AREA_GROUPS`) drücken frühere Staaten durch
+  heutige Länder/Regionen aus: Ostdeutschland (Gebiet der DDR: die fünf
+  östlichen Länder und Berlin), Westdeutschland, Deutschland/Österreich/
+  Schweiz, deutsche Staaten, Preußen (um 1900), Habsburgermonarchie,
+  Ostmitteleuropa mit den früheren Ostgebieten, Mitteleuropa, Europa — je mit
+  einer Erläuterung der Vereinfachung. Eingabe als `group:<kennung>`;
+  gespeichert werden immer die einzelnen Schlüssel (`expandAreaInput`),
+  angezeigt werden vollständige Gruppen wieder zusammengefasst
+  (`compactAreas`, größte zuerst).
+- **Passung** (`matchArea`, über mehrere Orte `bestMatch`): „place“ — der
+  Bereich nennt genau die Region der Person; „country“ — er nennt ihr Land
+  als Ganzes (eine andere Region desselben Landes zählt nicht); „neutral“ —
+  Ereignis überall, oder von der Person ist nur das Land bekannt und der
+  Bereich nennt nur Regionen dieses Landes (unklar); „foreign“ — passt nicht.
+  Ohne Orte ist alles neutral.
+- **Ort zur Zeit des Ereignisses** (`areasAtTime`): die letzte Station bis
+  einschließlich Beginn des Ereignisses und jede Station im Zeitraum (Umzug);
+  gibt es vorher keine, die früheste bekannte.
+- `areaOfKey` macht aus dem kurzen Schlüssel der Karte („DE.13“ bzw. „DE“)
+  ein Gebiet.
+
+**Tests:** `tests/history-areas.test.ts`.
+
+**Benutzt von:** `lib/history/events.ts`, `lib/history/lifetime.ts`,
+`lib/history/builtin.ts`, `lib/services/history.ts`,
+`lib/services/history-areas.ts`, `components/MapExplorer.tsx`,
+`components/HistoryAreaPicker.tsx`, `components/HistoryAdmin.tsx`,
+`mcp/tools.ts`.
 
 ### lib/history/events.ts
 **Zweck:** Reine Funktionen ohne Datenbank, auch im Browser benutzt
@@ -2716,8 +2791,11 @@ plausible Spanne, keine leeren Texte, Stichproben der Jahreszahlen).
 **Wichtige Funktionen/Typen:**
 - `HistoryEvent` (einheitlich für mitgelieferte und eigene: `id` — eigene
   mit Vorsatz `c:` —, `source`, `title`, `from`, `to`, `kind`,
-  `description`, `region`, `rank`, bei unbestätigten KI-Einträgen
-  `aiUnconfirmed: true`), `HISTORY_KINDS` / `HISTORY_KIND_LABEL`
+  `description`, `region`, `areas` — Geltungsbereich, leer = überall —,
+  `rank`, bei unbestätigten KI-Einträgen `aiUnconfirmed: true`; für die
+  Anzeige optional `foreign` — Zeitstrahl, keine Passung zu den Orten der
+  sichtbaren Personen — und `near` — Lebenslauf, Name der getroffenen Region
+  bei Treffer „Ort“), `HISTORY_KINDS` / `HISTORY_KIND_LABEL`
   (Krieg, Politik, Seuche/Not, Wanderung, Sonstiges).
 - `mergeHistory(builtin, custom, hiddenIds)` — ausgeblendete mitgelieferte
   fallen heraus, eigene werden vereinheitlicht (Leerraum, „bis“ gleich „von“
@@ -2729,12 +2807,20 @@ plausible Spanne, keine leeren Texte, Stichproben der Jahreszahlen).
   wenn es in [von, bis] liegt (Ränder eingeschlossen).
 - `splitByRank(events, limit)` — die wichtigsten `limit` nach Rang und der
   Rest, beide nach der Zeit sortiert.
+- `byAreaThenRank(matchOf)` — Reihenfolge mit Geltungsbereich: Passung (Ort
+  vor Land vor überall vor passt nicht), darin Rang (also auch
+  `UNCONFIRMED_AI_RANK`), dann Zeit. `partitionByArea(events, matchOf)` —
+  für die Zeitreise: passende vorn (Ort vor Land), dann „überall“, unpassende getrennt.
 - `historyLanes(events)` — Bahnen für überschneidende Zeiträume (gierig nach
   Beginn, deterministisch).
-- `checkHistoryInput(input, currentYear)` — Prüfung eigener Einträge mit
-  Meldung je Feld (Titel Pflicht, höchstens 120 Zeichen; ganze Jahre von 1000
-  bis zum laufenden Jahr; „bis“ nicht vor „von“; Art aus der Liste;
-  Beschreibung höchstens 500, Region höchstens 120 Zeichen).
+- `checkHistoryInput(input, currentYear, isKnownArea?)` — Prüfung eigener
+  Einträge mit Meldung je Feld (Titel Pflicht, höchstens 120 Zeichen; ganze
+  Jahre von 1000 bis zum laufenden Jahr; „bis“ nicht vor „von“; Art aus der
+  Liste; Beschreibung höchstens 500, Region höchstens 120 Zeichen;
+  Geltungsbereich optional als Liste von Schlüsseln bzw. Gruppen, aufgelöst
+  und sortiert, höchstens `MAX_AREA_KEYS`; `isKnownArea` — auf dem Server
+  das Ortsverzeichnis — lehnt unbekannte Schlüssel ab: „Unbekanntes Gebiet:
+  …“).
 - `HISTORY_COOKIE` (`zeitgeschichte`), `historyEnabled(cookie)` (Standard an,
   nur `"0"` heißt aus), `historyCookie(on)`, `formatHistoryYears`.
 
@@ -2754,12 +2840,24 @@ plausible Spanne, keine leeren Texte, Stichproben der Jahreszahlen).
   nach der Geburt (wie „lebend“ überall in der App).
 - Ergebnis: Spanne, `living`, die wichtigsten `LIFETIME_LIMIT` (4)
   Ereignisse und der Rest; `null`, wenn nichts in die Spanne fällt.
+- **Regionaler Bezug** (Entscheidungen des Eigentümers): Mit Stationen
+  (`timedAreas` — Geburt ohne Datum vorn, Tod/Beerdigung ohne Datum hinten,
+  andere Stationen ohne Datum zählen nicht, Orte ohne Zuordnung auch nicht;
+  Jahr wie auf der Karte, „zwischen“ mit der Mitte) bekommt jedes Ereignis
+  seine Passung zum Ort zur Zeit des Ereignisses (`areasAtTime`,
+  `bestMatch`). Die wichtigsten kommen nur aus passenden bzw. „überall“
+  geltenden Ereignissen (`byAreaThenRank`), der Rest unter `rest`,
+  unpassende getrennt unter `other` — ausgeblendet wird nichts. Bei Treffer
+  „Ort“ trägt das Ereignis `near` (Name der Region); beim Treffer „Land“
+  nicht (stünde fast immer „Deutschland“). Ohne
+  Stationen bleibt die bisherige Reihenfolge (`regional: false`, `other`
+  leer).
 
 **Benutzt von:** `lib/services/history.ts` (`getLifetimeHistory`).
 
 ### lib/history/input.ts
-**Zweck:** Form der Anfragen an `/api/history-events` (zod): nur grobe Form
-und Obergrenzen; die eigentliche Prüfung mit Meldungen je Feld macht
+**Zweck:** Form der Anfragen an `/api/history-events` (zod, mit `areas` als
+Liste von Schlüsseln/Gruppen): nur grobe Form und Obergrenzen; die eigentliche Prüfung mit Meldungen je Feld macht
 `checkHistoryInput` im Dienst. `historyConfirmInput` für
 `POST /api/history-events/confirm` (1 bis 500 Kennungen).
 

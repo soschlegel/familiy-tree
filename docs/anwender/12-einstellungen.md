@@ -45,7 +45,7 @@ Die App zeigt neben der Familiengeschichte, was in der Zeit allgemein geschah �
 
 ### Woher die Ereignisse kommen
 
-- **Mitgeliefert:** eine kurze Liste allgemein bekannter Ereignisse für den deutschsprachigen Raum und Europa, vom Dreißigjährigen Krieg bis zur Wiedervereinigung — nur mit gesicherten Jahreszahlen.
+- **Mitgeliefert:** eine kurze Liste allgemein bekannter Ereignisse für den deutschsprachigen Raum und Europa, vom Dreißigjährigen Krieg bis zur Wiedervereinigung — nur mit gesicherten Jahreszahlen und jeweils mit einem [Geltungsbereich](#geltungsbereich).
 - **Eigene Einträge:** Ereignisse, die ein Administrator ergänzt, zum Beispiel ein Hochwasser oder ein Stadtbrand in der Gegend, aus der die Familie stammt.
 - **Von der KI ergänzt:** Ein Administrator kann auch den [KI-Assistenten](10-ki-zugang.md#zeitgeschichte-ergaenzen-lassen) bitten, Ereignisse aus den Gegenden und Zeiten der Vorfahren zu ergänzen (siehe [Einträge der KI](#eintraege-der-ki)).
 
@@ -55,14 +55,28 @@ Alle Benutzer sehen dieselben Ereignisse. Hat die KI einen Eintrag ergänzt und 
 
 Unter **Verwaltung → Zeitgeschichte** pflegt ein **Administrator** die Liste. Andere Benutzer sehen den Menüpunkt nicht.
 
-1. **Eigenes Ereignis anlegen:** Unter **Ereignis hinzufügen** den **Titel**, das **Jahr von**, bei einem Zeitraum das **Jahr bis**, die **Art** (Krieg, Politik, Seuche/Not, Wanderung, Sonstiges) und, wenn du magst, eine **Beschreibung** in einem Satz eintragen. Unter **Gilt für Region/Ort** kannst du festhalten, wo das Ereignis spielte (z.B. „Beispieltal“) — das steht dann als Zusatz dabei. Mit Wohnorten der Personen vergleicht die App das nicht. **Anlegen** speichert. Passt etwas nicht (Jahr in der Zukunft, „bis“ vor „von“), steht der Hinweis direkt am Feld.
+1. **Eigenes Ereignis anlegen:** Unter **Ereignis hinzufügen** den **Titel**, das **Jahr von**, bei einem Zeitraum das **Jahr bis**, die **Art** (Krieg, Politik, Seuche/Not, Wanderung, Sonstiges) und, wenn du magst, eine **Beschreibung** in einem Satz eintragen. Unter **Geltungsbereich** wählst du, wo das Ereignis gilt — **Überall** oder **Bestimmte Gebiete** (siehe [Geltungsbereich](#geltungsbereich)). Unter **Gilt für Region/Ort** kannst du zusätzlich festhalten, wo genau es spielte (z.B. „Beispieltal“) — das steht dann als Zusatz dabei; für die Reihenfolge zählt nur der Geltungsbereich. **Anlegen** speichert. Passt etwas nicht (Jahr in der Zukunft, „bis“ vor „von“), steht der Hinweis direkt am Feld.
 2. **Ändern** öffnet das Ereignis zum Bearbeiten, **Speichern** übernimmt die Änderung.
 3. **Löschen** entfernt ein eigenes Ereignis nach einer Rückfrage.
-4. **Mitgelieferte Ereignisse** lassen sich nicht ändern oder löschen, aber **ausblenden** — etwa, wenn ein Ereignis nicht zu deiner Familie passt. Es verschwindet dann für alle Benutzer; **Einblenden** holt es zurück.
+4. **Mitgelieferte Ereignisse** zeigen unter **Gilt für**, für welche Gebiete sie gelten. Sie lassen sich nicht ändern oder löschen, aber **ausblenden** — etwa, wenn ein Ereignis nicht zu deiner Familie passt. Es verschwindet dann für alle Benutzer; **Einblenden** holt es zurück.
 
 > **Keine Namen aus dem Stammbaum:** Trage hier nur allgemeine Geschichte ein, die jeder sehen darf — nicht „Onkel Karl wandert aus“. Solche Angaben gehören als Lebensereignis zur Person.
 
 Jede Änderung steht in der [Änderungsgeschichte](09-aenderungen.md) unter **Verwaltung → Änderungen**.
+
+### Geltungsbereich
+
+Jedes Ereignis gilt **überall** oder für **bestimmte Gebiete**. Damit ordnet die App die Zeitgeschichte: Im Lebenslauf stehen Ereignisse vorn, die zu dem Ort passen, an dem die Person damals lebte; auf der Karte die, die zu den Orten der Personen im gewählten Jahr passen; im Zeitstrahl werden Ereignisse anderer Gegenden blasser. Ausgeblendet wird dabei nichts.
+
+So wählst du die Gebiete beim Anlegen oder Ändern:
+
+1. **Bestimmte Gebiete** anklicken.
+2. Ein **Land** wählen. Unter **Region** kannst du ein Bundesland, eine Woiwodschaft, einen Kanton usw. wählen — oder es bei **Ganzes Land** lassen. **Hinzufügen** übernimmt das Gebiet; es steht dann als Feld mit **×** zum Entfernen darüber.
+3. Für frühere Staaten gibt es die **Schnellwahl**, zum Beispiel **Ostdeutschland (Gebiet der DDR)**, **Preußen (um 1900)** oder **Habsburgermonarchie (Österreich-Ungarn)**. Sie fügt die passenden heutigen Länder bzw. Regionen auf einmal hinzu; zeigst du auf den Knopf, steht dort, was dazugehört.
+
+Wie gut ein Ereignis passt, hat drei Stufen: Nennt der Bereich die **Region** der Person (etwa Sachsen), passt es am besten; nennt er ihr **Land** als Ganzes, passt es auch; ein Ereignis, das **überall** gilt, kommt danach. Eine andere Region desselben Landes zählt nicht — ein Ereignis nur für Bayern passt nicht zu einer Person aus Sachsen. Darum stehen beim Mauerfall Ostdeutschland **und** Deutschland: In Ostdeutschland passt er zur Region, im übrigen Deutschland zum Land.
+
+> **Heutige Grenzen:** Die Gebiete sind die heutigen Länder und Regionen. Frühere Staaten wie Preußen oder die DDR lassen sich damit nur ungefähr nachzeichnen — das ist eine bewusste Vereinfachung.
 
 ### Einträge der KI
 

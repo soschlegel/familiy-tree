@@ -1,4 +1,15 @@
+import { expandAreaInput } from "./areas";
 import type { BuiltinHistoryEvent } from "./events";
+
+/** Geltungsbereich aus Schlüsseln und Gruppen (lib/history/areas.ts) — aufgelöst und sortiert. */
+function area(list: readonly string[]): readonly string[] {
+  const { keys, invalid } = expandAreaInput(list);
+  if (invalid.length) throw new Error(`Unbekanntes Gebiet in der Zeitgeschichte: ${invalid.join(", ")}`);
+  return Object.freeze(keys);
+}
+
+/** Weltkriege: neben Europa die Länder in Übersee, in die viele Auswanderer gingen. */
+const OVERSEAS = ["US", "CA", "AU", "NZ"];
 
 /**
  * Mitgelieferte Zeitgeschichte (Oberfläche „Zeitgeschichte“): eine kurze,
@@ -16,6 +27,12 @@ import type { BuiltinHistoryEvent } from "./events";
  *   was der Lebenslauf zuerst nennt.
  * - Kein Text nennt Personen eines Stammbaums; die Ereignisse sind
  *   Hintergrund, keine Aussage über eine Person.
+ * - `areas`: Geltungsbereich nach heutigen Ländern bzw. Regionen
+ *   (lib/history/areas.ts), zurückhaltend gefasst — im Zweifel enger. Leer =
+ *   überall (weltweite Ereignisse). Nennt ein Bereich Regionen UND ihr Land
+ *   (Mauerbau: Ostdeutschland und Deutschland), trifft er dort „den Ort“ und
+ *   im übrigen Land „das Land“. Jeder Schlüssel muss im Ortsverzeichnis
+ *   stehen (tests/history-areas.test.ts).
  */
 export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
   {
@@ -26,6 +43,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "krieg",
     rank: 1,
     description: "Krieg in Mitteleuropa, der weite Teile des Heiligen Römischen Reichs verwüstete; beendet durch den Westfälischen Frieden.",
+    areas: area(["DE", "AT", "CZ"]),
   },
   {
     id: "belagerung-wien-1683",
@@ -35,6 +53,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "krieg",
     rank: 3,
     description: "Ein osmanisches Heer belagerte Wien; die Stadt wurde von einem Entsatzheer befreit.",
+    areas: area(["AT"]),
   },
   {
     id: "siebenjaehriger-krieg",
@@ -44,6 +63,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "krieg",
     rank: 2,
     description: "Krieg der europäischen Großmächte, in Mitteleuropa vor allem zwischen Preußen und Österreich.",
+    areas: area(["DE", "AT", "CZ", "PL.72", "PL.79", "PL.83"]),
   },
   {
     id: "franzoesische-revolution",
@@ -53,6 +73,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "politik",
     rank: 2,
     description: "Umsturz der Monarchie in Frankreich, mit großer Wirkung auf ganz Europa.",
+    areas: area(["FR"]),
   },
   {
     id: "koalitionskriege",
@@ -62,6 +83,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "krieg",
     rank: 1,
     description: "Kriege zwischen Frankreich und wechselnden Bündnissen europäischer Staaten, bis zur Niederlage Napoleons.",
+    areas: area(["group:europa"]),
   },
   {
     id: "ende-heiliges-roemisches-reich",
@@ -71,6 +93,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "politik",
     rank: 2,
     description: "Der Kaiser legte die Krone des Reichs nieder; das Heilige Römische Reich Deutscher Nation endete.",
+    areas: area(["group:deutsche-staaten"]),
   },
   {
     id: "hungerjahr-1816",
@@ -80,6 +103,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "not",
     rank: 2,
     description: "Nach einem großen Vulkanausbruch kühles, nasses Wetter, Missernten und Hunger in weiten Teilen Europas.",
+    areas: area(["group:europa"]),
   },
   {
     id: "cholera-1831",
@@ -89,6 +113,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "not",
     rank: 3,
     description: "Die Cholera erreichte erstmals Mitteleuropa und forderte in vielen Städten zahlreiche Opfer.",
+    areas: area(["group:mitteleuropa"]),
   },
   {
     id: "erste-eisenbahn",
@@ -98,6 +123,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "sonstiges",
     rank: 3,
     description: "Zwischen Nürnberg und Fürth fuhr die erste Eisenbahn mit Dampflokomotive in Deutschland.",
+    areas: area(["DE.02", "DE"]),
   },
   {
     id: "auswanderung-1846",
@@ -107,6 +133,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "wanderung",
     rank: 2,
     description: "Hunderttausende verließen die deutschen Staaten, die meisten in Richtung Vereinigte Staaten.",
+    areas: area(["DE"]),
   },
   {
     id: "hungerkrise-1846",
@@ -116,6 +143,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "not",
     rank: 3,
     description: "Missernten und Kartoffelfäule führten zu Teuerung und Hunger in Mitteleuropa.",
+    areas: area(["group:mitteleuropa"]),
   },
   {
     id: "revolution-1848",
@@ -125,6 +153,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "politik",
     rank: 1,
     description: "Erhebungen in den deutschen Staaten und in Österreich für Freiheitsrechte und einen gemeinsamen Staat; die Nationalversammlung tagte in Frankfurt.",
+    areas: area(["DE", "AT"]),
   },
   {
     id: "auswanderung-1864",
@@ -134,6 +163,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "wanderung",
     rank: 2,
     description: "Erneut wanderten viele Menschen aus den deutschen Staaten aus, vor allem nach Nordamerika.",
+    areas: area(["DE"]),
   },
   {
     id: "deutscher-krieg-1866",
@@ -143,6 +173,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "krieg",
     rank: 3,
     description: "Krieg zwischen Preußen und Österreich mit ihren Verbündeten; danach endete der Deutsche Bund.",
+    areas: area(["DE", "AT", "CZ"]),
   },
   {
     id: "deutsch-franzoesischer-krieg",
@@ -152,6 +183,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "krieg",
     rank: 2,
     description: "Krieg zwischen Frankreich und den deutschen Staaten unter Führung Preußens.",
+    areas: area(["DE", "FR"]),
   },
   {
     id: "reichsgruendung",
@@ -161,6 +193,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "politik",
     rank: 1,
     description: "Unter Führung Preußens und ohne Österreich entstand das Deutsche Reich als Kaiserreich.",
+    areas: area(["DE"]),
   },
   {
     id: "auswanderung-1880",
@@ -170,6 +203,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "wanderung",
     rank: 2,
     description: "Die stärkste Auswanderungswelle aus Deutschland, wieder vor allem in die Vereinigten Staaten.",
+    areas: area(["DE"]),
   },
   {
     id: "erster-weltkrieg",
@@ -179,6 +213,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "krieg",
     rank: 1,
     description: "Weltweiter Krieg, in Europa vor allem zwischen den Mittelmächten und der Entente.",
+    areas: area(["group:europa", ...OVERSEAS]),
   },
   {
     id: "novemberrevolution",
@@ -188,6 +223,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "politik",
     rank: 2,
     description: "Am Ende des Ersten Weltkriegs endeten die Monarchien in Deutschland und Österreich; beide wurden Republiken.",
+    areas: area(["DE", "AT"]),
   },
   {
     id: "spanische-grippe",
@@ -197,6 +233,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "not",
     rank: 2,
     description: "Weltweite Grippe-Pandemie in mehreren Wellen mit sehr vielen Todesopfern.",
+    areas: area([]),
   },
   {
     id: "inflation-1923",
@@ -206,6 +243,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "not",
     rank: 2,
     description: "Das Geld verlor in Deutschland fast völlig seinen Wert; Ersparnisse wurden wertlos.",
+    areas: area(["DE"]),
   },
   {
     id: "weltwirtschaftskrise",
@@ -215,6 +253,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "not",
     rank: 2,
     description: "Nach einem Börsenkrach in New York folgten weltweit Firmenzusammenbrüche und Massenarbeitslosigkeit.",
+    areas: area([]),
   },
   {
     id: "ns-diktatur",
@@ -224,6 +263,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "politik",
     rank: 1,
     description: "Diktatur in Deutschland, ab 1938 auch in Österreich, mit Verfolgung und Völkermord.",
+    areas: area(["DE", "AT"]),
   },
   {
     id: "zweiter-weltkrieg",
@@ -233,6 +273,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "krieg",
     rank: 1,
     description: "Von Deutschland begonnener Krieg in Europa, der sich zum Weltkrieg ausweitete.",
+    areas: area(["group:europa", ...OVERSEAS]),
   },
   {
     id: "flucht-vertreibung",
@@ -242,6 +283,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "wanderung",
     rank: 1,
     description: "Millionen Deutsche flohen aus den Ostgebieten und aus Ostmitteleuropa oder wurden vertrieben.",
+    areas: area(["DE", "group:ostmitteleuropa"]),
   },
   {
     id: "hungerwinter-1946",
@@ -251,6 +293,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "not",
     rank: 3,
     description: "Ein sehr kalter Winter mit Mangel an Lebensmitteln und Brennstoff im zerstörten Nachkriegsdeutschland.",
+    areas: area(["DE"]),
   },
   {
     id: "waehrungsreform-1948",
@@ -260,6 +303,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "sonstiges",
     rank: 3,
     description: "Neues Geld in den Besatzungszonen: die D-Mark im Westen, kurz darauf eine eigene Mark im Osten.",
+    areas: area(["DE"]),
   },
   {
     id: "deutsche-teilung",
@@ -269,6 +313,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "politik",
     rank: 1,
     description: "Mit der Gründung zweier deutscher Staaten begann die Teilung Deutschlands.",
+    areas: area(["DE"]),
   },
   {
     id: "anwerbung-gastarbeiter",
@@ -278,6 +323,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "wanderung",
     rank: 3,
     description: "Die Bundesrepublik warb mit Abkommen Arbeitskräfte aus mehreren Ländern des Mittelmeerraums an, bis zum Anwerbestopp.",
+    areas: area(["group:westdeutschland", "DE.16"]),
   },
   {
     id: "mauerbau",
@@ -287,6 +333,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "politik",
     rank: 1,
     description: "Die DDR riegelte West-Berlin ab; die Grenze zwischen beiden deutschen Staaten wurde fast undurchlässig.",
+    areas: area(["group:ostdeutschland", "DE"]),
   },
   {
     id: "mauerfall",
@@ -296,6 +343,7 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "politik",
     rank: 1,
     description: "Nach friedlichen Protesten in der DDR wurde die Grenze geöffnet.",
+    areas: area(["group:ostdeutschland", "DE"]),
   },
   {
     id: "wiedervereinigung",
@@ -305,5 +353,6 @@ export const BUILTIN_HISTORY: readonly BuiltinHistoryEvent[] = [
     kind: "politik",
     rank: 1,
     description: "Die DDR trat der Bundesrepublik bei; Deutschland war wieder ein Staat.",
+    areas: area(["DE"]),
   },
 ];

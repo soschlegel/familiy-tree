@@ -13,6 +13,9 @@ import {
 import { AI_UNCONFIRMED_LABEL } from "@/lib/history/origin";
 import { HistoryAiNote } from "./HistoryAiNote";
 
+/** Vermerk an Ereignissen ohne Bezug zu den Orten der gezeigten Personen. */
+const FOREIGN_LABEL = "andere Gegend";
+
 /** Mindesthöhe einer Tippfläche (px). */
 const TAP = 44;
 /** Abstand der Bahnen (px) — Bänder überschneidender Ereignisse stehen nebeneinander. */
@@ -34,6 +37,11 @@ type Group = { key: string; events: HistoryEvent[]; y0: number; y1: number };
  * Fokussieren oder Antippen zeigt Titel, Jahre, Art und Beschreibung daneben.
  * Escape bzw. ein Klick daneben schließt. Liegen die Schaltflächen bei
  * kleinem Zoom übereinander, werden ihre Gruppen zusammengefasst.
+ *
+ * Regionaler Bezug: Ereignisse, deren Geltungsbereich zu keinem
+ * zugeordneten Ort der sichtbaren Personen passt (`foreign`, vom Server
+ * gesetzt), sind blasser und stehen in der Anzeige hinten mit dem Vermerk
+ * „andere Gegend“.
  *
  * Leistung: wie die Achse liest die Komponente nur die Verschiebung aus
  * React Flow; der Baum selbst rendert dadurch nicht neu. Es sind höchstens
@@ -111,7 +119,12 @@ export function TimelineHistory({ events, axis }: { events: readonly HistoryEven
   const label = (g: Group) => {
     const from = Math.min(...g.events.map((e) => e.from));
     const to = Math.max(...g.events.map(lastYear));
-    const titles = g.events.map((e) => (e.aiUnconfirmed ? `${e.title} (${AI_UNCONFIRMED_LABEL})` : e.title));
+    const titles = [...g.events]
+      .sort((a, b) => Number(Boolean(a.foreign)) - Number(Boolean(b.foreign)))
+      .map((e) => {
+        const notes = [e.aiUnconfirmed ? AI_UNCONFIRMED_LABEL : null, e.foreign ? FOREIGN_LABEL : null].filter(Boolean);
+        return notes.length ? `${e.title} (${notes.join(", ")})` : e.title;
+      });
     return `Zeitgeschichte ${formatHistoryYears({ from, to: to === from ? null : to })}: ${titles.join(", ")}`;
   };
 
@@ -125,11 +138,18 @@ export function TimelineHistory({ events, axis }: { events: readonly HistoryEven
           if (bottom < -20 || top > height + 20) return null;
           const left = 3 + p.lane * LANE_GAP;
           const highlighted = activeGroup?.events.some((e) => e.id === p.event.id);
-          const color = highlighted ? "bg-amber-600 dark:bg-amber-300" : "bg-amber-600/55 dark:bg-amber-400/55";
+          const color = highlighted
+            ? p.event.foreign
+              ? "bg-amber-600/60 dark:bg-amber-300/60"
+              : "bg-amber-600 dark:bg-amber-300"
+            : p.event.foreign
+              ? "bg-amber-600/20 dark:bg-amber-400/20"
+              : "bg-amber-600/55 dark:bg-amber-400/55";
           return p.single ? (
             <span
               key={p.event.id}
               data-testid="tree-history-mark"
+              data-foreign={p.event.foreign || undefined}
               className={`absolute h-[7px] w-[7px] -translate-y-1/2 rounded-full ${color}`}
               style={{ left: left - 1, top: (top + bottom) / 2 }}
             />
@@ -137,6 +157,7 @@ export function TimelineHistory({ events, axis }: { events: readonly HistoryEven
             <span
               key={p.event.id}
               data-testid="tree-history-band"
+              data-foreign={p.event.foreign || undefined}
               className={`absolute w-[4px] rounded-full ${color}`}
               style={{ left, top, height: Math.max(bottom - top, 4) }}
             />
@@ -177,7 +198,10 @@ function HistoryTip({ group, height }: { group: Group; height: number }) {
   // In der unteren Hälfte nach oben aufklappen, damit die Anzeige im Bild bleibt;
   // oben Abstand zum Knopf „Vollbild“ (rechts oben, auf dem Telefon breit).
   const style = mid > height / 2 ? { bottom: Math.max(8, height - mid - 22) } : { top: Math.max(56, mid - 22) };
-  const events = [...group.events].sort((a, b) => a.from - b.from || lastYear(a) - lastYear(b));
+  // Passende bzw. „überall“ geltende zuerst, Ereignisse anderer Gegenden dahinter.
+  const events = [...group.events].sort(
+    (a, b) => Number(Boolean(a.foreign)) - Number(Boolean(b.foreign)) || a.from - b.from || lastYear(a) - lastYear(b),
+  );
   return (
     <div
       id="tree-history-tip"
@@ -195,10 +219,11 @@ function HistoryTip({ group, height }: { group: Group; height: number }) {
         aria-label="Ereignisse"
       >
         {events.map((e) => (
-          <li key={e.id}>
+          <li key={e.id} data-testid="tree-history-tip-item" data-foreign={e.foreign || undefined}>
             <p className="font-medium text-stone-900 dark:text-stone-100">
               {e.title} <span className="font-normal tabular-nums muted">{formatHistoryYears(e)}</span>
               {e.aiUnconfirmed && <HistoryAiNote testId="tree-history-ai" className="ml-1" />}
+              {e.foreign && <span className="ml-1 font-normal muted" data-testid="tree-history-foreign">· {FOREIGN_LABEL}</span>}
             </p>
             <p className="muted">
               {HISTORY_KIND_LABEL[e.kind]}

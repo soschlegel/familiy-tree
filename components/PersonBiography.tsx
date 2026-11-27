@@ -104,10 +104,21 @@ export function PersonBiography({
 }
 
 function EventItem({ event: e }: { event: HistoryEvent }) {
-  const detail = [HISTORY_KIND_LABEL[e.kind], e.region ? `gilt für ${e.region}` : null, e.description].filter(Boolean).join(" · ");
+  const detail = [
+    HISTORY_KIND_LABEL[e.kind],
+    e.region ? `gilt für ${e.region}` : null,
+    e.near ? `Bezug: ${e.near}` : null,
+    e.description,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return (
-    <span title={detail} data-testid="biography-history-item">
-      {e.title} <span className="whitespace-nowrap tabular-nums muted">({formatHistoryYears(e)})</span>
+    <span title={detail} data-testid="biography-history-item" data-near={e.near || undefined}>
+      {e.title}{" "}
+      <span className="whitespace-nowrap tabular-nums muted">
+        ({formatHistoryYears(e)}
+        {e.near && <span data-testid="biography-history-near"> · {e.near}</span>})
+      </span>
       {e.aiUnconfirmed && <HistoryAiNote testId="biography-history-ai" className="ml-1" />}
     </span>
   );
@@ -121,28 +132,48 @@ const joined = (events: HistoryEvent[]) =>
     </span>
   ));
 
-/** Abgesetzte Zeile unter dem Text: Ereignisse zwischen Geburts- und Sterbejahr (bei Lebenden bis heute). */
+/**
+ * Abgesetzte Zeile unter dem Text: Ereignisse zwischen Geburts- und
+ * Sterbejahr (bei Lebenden bis heute). Mit regionalem Bezug stehen
+ * Ereignisse aus der Gegend der Person vorn; solche anderer Gegenden nur
+ * unter „weitere Ereignisse“ (lib/history/lifetime.ts).
+ */
 function LifetimeHistoryLine({ history }: { history: LifetimeHistory }) {
+  const more = history.rest.length + history.other.length;
   return (
     <aside
       aria-label="Zeitgeschichte"
       className="space-y-1 border-l-2 border-amber-300 pl-3 text-sm dark:border-amber-700"
       data-testid="biography-history"
     >
-      <p>
-        <span className="font-medium text-amber-800 dark:text-amber-300">In diese Lebenszeit fielen:</span> {joined(history.top)}
-      </p>
-      {history.rest.length > 0 && (
+      {history.top.length > 0 ? (
+        <p>
+          <span className="font-medium text-amber-800 dark:text-amber-300">In diese Lebenszeit fielen:</span> {joined(history.top)}
+        </p>
+      ) : (
+        <p data-testid="biography-history-none-near">
+          <span className="font-medium text-amber-800 dark:text-amber-300">In diese Lebenszeit fielen</span> keine Ereignisse
+          aus der Gegend der erfassten Orte.
+        </p>
+      )}
+      {more > 0 && (
         <details data-testid="biography-history-more">
           <summary className="cursor-pointer text-accent-700 max-md:py-2.5 dark:text-accent-300">
-            {history.rest.length === 1 ? "1 weiteres Ereignis" : `${history.rest.length} weitere Ereignisse`}
+            {more === 1 ? "1 weiteres Ereignis" : `${more} weitere Ereignisse`}
           </summary>
-          <p className="mt-1">{joined(history.rest)}</p>
+          {history.rest.length > 0 && <p className="mt-1">{joined(history.rest)}</p>}
+          {history.other.length > 0 && (
+            <p className="mt-1" data-testid="biography-history-other">
+              <span className="muted">Andere Gegenden: </span>
+              {joined(history.other)}
+            </p>
+          )}
         </details>
       )}
       <p className="flex flex-wrap items-center gap-x-2 text-xs muted">
         <span>
-          Allgemeine Zeitgeschichte {history.from}–{history.living ? "heute" : history.to}, keine Angabe über die Person.
+          Allgemeine Zeitgeschichte {history.from}–{history.living ? "heute" : history.to}, keine Angabe über die Person
+          {history.regional ? " — Ereignisse aus der Gegend der erfassten Orte zuerst." : "."}
         </span>
         <HelpLink to="zeitgeschichteLebenslauf" compact label="Was zeigt die Zeitgeschichte im Lebenslauf?" />
       </p>

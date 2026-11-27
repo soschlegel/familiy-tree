@@ -22,7 +22,8 @@ import { mainNav, openAdminMenu } from "../support/nav";
  * Karte; Einträge in der Änderungsübersicht. Nicht-Administratoren kommen
  * weder über die Seite noch über die API hinein. Am Ende: Einträge der KI
  * (Vermerk, Filter, Bestätigen; eigener Block). Telefonbreite, dunkles
- * Farbschema, axe.
+ * Farbschema, axe. Zuletzt der Block „Geltungsbereich“ (Gebiete wählen,
+ * Wirkung auf Zeitreise und Lebenslauf).
  *
  * Aufräumen vor und nach der Datei: eigene Einträge „E2E …“ löschen, die
  * hier ausgeblendeten mitgelieferten wieder einblenden — die lesenden Tests
@@ -383,5 +384,168 @@ test.describe("Einträge der KI", () => {
   test("nach dem Bestätigen ist der Vermerk überall weg", async ({ loginAs }) => {
     const { page } = await loginAs("viewer");
     await expectNoteEverywhere(page, false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Geltungsbereich (lib/history/areas.ts): Administrator wählt in der
+// Verwaltung Gebiete ohne Kenntnis von Schlüsseln (Land, dann Region;
+// Schnellwahl einer historischen Gruppe; entfernen), Wirkung auf die Zeitreise
+// der Karte (passendes vorn, anderes eingeklappt) und den Lebenslauf
+// (passendes vorn mit Region, anderes unter „Andere Gegenden“). In dieser
+// seriellen Datei, weil die Änderungsübersicht oben nach Position prüft.
+// Eigene Titel „Gebietstest …“ ohne „E2E“; räumt vor und nach dem Block auf.
+// ---------------------------------------------------------------------------
+
+const AREA_PREFIX = "Gebietstest ";
+const AREA_NEAR = `${AREA_PREFIX}Hochwasser an der Leine`;
+const AREA_FAR = `${AREA_PREFIX}Stadtbrand in Frankreich`;
+const AREA_YEAR = 1916;
+
+/** Ortstexte in Niedersachsen (Mock-Familie A und weitere Orte). */
+const LOWER_SAXONY = new Set(["Hannover", "Celle", "Hildesheim", "Peine", "Braunschweig", "Göttingen", "Lüneburg"]);
+
+/** Person der Familie A mit genauen Daten, lebend 1916, deren Orte alle in Niedersachsen liegen. */
+const areaSubject = mock.persons.find((p) => {
+  if (!p.familyKeys.includes("A") || !p.birthDate || p.birthDatePrecision !== "DAY" || !p.birthPlace) return false;
+  if (p.birthDate.getUTCFullYear() > 1915 || !p.deathDate || p.deathDatePrecision !== "DAY" || p.deathDate.getUTCFullYear() < 1920) return false;
+  const rels = mock.relationships.filter((r) => r.type === "PARTNER_OF" && (r.fromPersonId === p.id || r.toPersonId === p.id));
+  const relIds = new Set(rels.map((r) => r.id));
+  const texts = [p.birthPlace, p.deathPlace, ...rels.flatMap((r) => [r.startPlace, r.endPlace])];
+  for (const e of mock.events) if (e.personId === p.id || (e.relationshipId && relIds.has(e.relationshipId))) texts.push(e.place);
+  return texts.every((t) => !t || LOWER_SAXONY.has(t));
+})!;
+
+async function areaCleanup() {
+  const api = await apiAs("admin");
+  const res = await api.get("/api/history-events");
+  expect(res.status()).toBe(200);
+  const state = (await res.json()) as { custom: { id: string; title: string }[] };
+  for (const c of state.custom.filter((c) => c.title.startsWith(AREA_PREFIX))) {
+    expect([200, 404]).toContain((await api.delete(`/api/history-events/${c.id}`)).status());
+  }
+  await api.dispose();
+}
+
+
+const areaCard = (page: Page, title: string) => page.getByTestId("history-custom").filter({ hasText: title });
+
+async function fillBasics(page: Page, title: string) {
+  const form = addForm(page);
+  await form.getByLabel("Titel").fill(title);
+  await form.getByLabel("Jahr von").fill(String(AREA_YEAR));
+  await form.getByLabel("Art").selectOption("not");
+}
+
+/** Land wählen, warten, bis die Regionen geladen sind, ggf. Region wählen, hinzufügen. */
+async function addArea(page: Page, country: string, region?: string) {
+  const picker = addForm(page).getByTestId("history-areas");
+  await picker.getByTestId("history-areas-country").selectOption({ label: country });
+  const regionSelect = picker.getByTestId("history-areas-region");
+  await expect(regionSelect).toBeEnabled();
+  if (region) await regionSelect.selectOption({ label: region });
+  await picker.getByTestId("history-areas-add").click();
+}
+
+test.describe("Geltungsbereich", () => {
+  test.beforeAll(areaCleanup);
+  test.afterAll(areaCleanup);
+
+  test("Verwaltung: Gebiet wählen ohne Schlüssel — Land, Region, Schnellwahl, entfernen", async ({ page }) => {
+    expect(areaSubject, "Mock-Daten: Person der Familie A mit Orten nur in Niedersachsen, lebend 1916").toBeTruthy();
+    await page.goto("/admin/history");
+    await waitForHydration(page, '[data-testid="history-areas-some"]');
+    // Mitgelieferte nennen ihren Bereich.
+    await expect(page.getByTestId("history-builtin-mauerfall").getByTestId("history-builtin-areas")).toHaveText(
+      "Gilt für: Ostdeutschland (Gebiet der DDR), Deutschland",
+    );
+    await expect(page.getByTestId("history-builtin-spanische-grippe").getByTestId("history-builtin-areas")).toHaveText("Gilt für: überall");
+
+    await fillBasics(page, AREA_NEAR);
+    const picker = addForm(page).getByTestId("history-areas");
+    await expect(picker.getByTestId("history-areas-everywhere")).toBeChecked();
+    await picker.getByTestId("history-areas-some").check();
+    await expect(picker.getByTestId("history-areas-empty")).toBeVisible();
+    await expect(picker.getByRole("link", { name: "Wie funktioniert der Geltungsbereich?" })).toHaveAttribute("href", "/hilfe/einstellungen#geltungsbereich");
+
+    // Schnellwahl fügt eine historische Gruppe hinzu; entfernen nimmt sie ganz wieder heraus.
+    await picker.getByTestId("history-areas-group-ostdeutschland").click();
+    await expect(picker.getByTestId("history-areas-chip")).toHaveText(["Ostdeutschland (Gebiet der DDR)×"]);
+    await picker.getByRole("button", { name: "Ostdeutschland (Gebiet der DDR) entfernen" }).click();
+    await expect(picker.getByTestId("history-areas-chip")).toHaveCount(0);
+
+    await addArea(page, "Deutschland", "Niedersachsen");
+    await expect(picker.getByTestId("history-areas-chip")).toHaveText(["Niedersachsen (Deutschland)×"]);
+    await expectNoA11yViolations(page);
+    await addForm(page).getByRole("button", { name: "Anlegen" }).click();
+    await expect(areaCard(page, AREA_NEAR)).toBeVisible();
+    await expect(areaCard(page, AREA_NEAR).getByTestId("history-custom-areas")).toHaveText("Geltungsbereich: Niedersachsen (Deutschland)");
+    // Nach dem Anlegen ist das Formular wieder leer („Überall“).
+    await expect(addForm(page).getByTestId("history-areas-everywhere")).toBeChecked();
+
+    await fillBasics(page, AREA_FAR);
+    await addForm(page).getByTestId("history-areas-some").check();
+    await addArea(page, "Frankreich");
+    await expect(addForm(page).getByTestId("history-areas-chip")).toHaveText(["Frankreich×"]);
+    await addForm(page).getByRole("button", { name: "Anlegen" }).click();
+    await expect(areaCard(page, AREA_FAR).getByTestId("history-custom-areas")).toHaveText("Geltungsbereich: Frankreich");
+  });
+
+  test("Zeitreise: passendes vorn, Ereignisse anderer Gegenden eingeklappt", async ({ page }) => {
+    await page.goto(`/map?mode=alle&jahr=${AREA_YEAR}`);
+    await waitForHydration(page, '[data-testid="map-history-toggle"]');
+    const line = page.getByTestId("map-history");
+    const main = line.locator(":scope > p").getByTestId("map-history-item");
+    await expect(main.filter({ hasText: AREA_NEAR })).toHaveCount(1);
+    await expect(main.first()).toContainText(AREA_NEAR);
+    await expect(main.filter({ hasText: AREA_FAR })).toHaveCount(0);
+    const foreign = page.getByTestId("map-history-foreign");
+    await expect(foreign.locator("summary")).toHaveText("1 Ereignis anderer Gegenden");
+    await foreign.locator("summary").click();
+    await expect(foreign.getByTestId("map-history-item").filter({ hasText: AREA_FAR })).toBeVisible();
+    await expectNoA11yViolations(page);
+  });
+
+  test("Lebenslauf: Ereignis der Gegend vorn mit Region, anderes unter „Andere Gegenden“", async ({ page }) => {
+    await page.goto(`/people/${areaSubject.id}`);
+    const line = page.getByTestId("biography-history");
+    const top = line.locator(':scope > p [data-testid="biography-history-item"]');
+    await expect(top.filter({ hasText: AREA_NEAR }).getByTestId("biography-history-near")).toHaveText("· Niedersachsen");
+    await expect(top.filter({ hasText: AREA_FAR })).toHaveCount(0);
+    await page.getByTestId("biography-history-more").locator("summary").click();
+    await expect(page.getByTestId("biography-history-other").getByTestId("biography-history-item").filter({ hasText: AREA_FAR })).toBeVisible();
+  });
+
+  test("Ändern: zurück auf „Überall“", async ({ page }) => {
+    acceptDialogs(page);
+    await page.goto("/admin/history");
+    await waitForHydration(page, '[data-testid="history-areas-some"]');
+    await areaCard(page, AREA_FAR).getByRole("button", { name: `${AREA_FAR} ändern` }).click();
+    const form = page.getByRole("form", { name: `${AREA_FAR} ändern` });
+    await expect(form.getByTestId("history-areas-some")).toBeChecked();
+    await form.getByTestId("history-areas-everywhere").check();
+    await form.getByRole("button", { name: "Speichern" }).click();
+    await expect(areaCard(page, AREA_FAR).getByTestId("history-custom-areas")).toHaveText("Geltungsbereich: überall");
+  });
+
+  test.describe("Telefon (390 px), dunkel", () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, colorScheme: "dark" });
+
+    test("Auswahl ohne Seitwärts-Scrollen, Tippflächen mindestens 44 px, Barrierefreiheit", async ({ page }) => {
+      await page.goto("/admin/history");
+      await waitForHydration(page, '[data-testid="history-areas-some"]');
+      const picker = addForm(page).getByTestId("history-areas");
+      await picker.getByTestId("history-areas-some").check();
+      await picker.getByTestId("history-areas-group-habsburg").click();
+      await expectNoHorizontalOverflow(page);
+      const remove = picker.getByRole("button", { name: /entfernen$/ }).first();
+      const box = (await remove.boundingBox())!;
+      expect(box.height).toBeGreaterThanOrEqual(44);
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect((await picker.getByTestId("history-areas-add").boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      expect((await picker.getByTestId("history-areas-group-europa").boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      expect((await picker.getByTestId("history-areas-some").locator("xpath=..").boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      await expectNoA11yViolations(page);
+    });
   });
 });

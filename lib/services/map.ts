@@ -10,6 +10,7 @@ import {
   type MapPersonInput,
   type MapPlace,
 } from "../map/build";
+import { regionKeysOf } from "../places/region-codes";
 import { prisma } from "../prisma";
 import { LINE_KEYS, relationsFromReference, type LineKey } from "../reference";
 import type { Scope } from "../scope";
@@ -25,7 +26,9 @@ import { resolveReference, visibleIndex, type ReferenceChoice } from "./referenc
  * gesucht (visibleIndex, wie bei der Bezugsperson), Ereignisse und Heiraten
  * nur für diese Personen gelesen. Gesperrte Personen tauchen weder auf der
  * Karte noch in einer Zahl auf. Koordinaten kommen aus der Tabelle Place;
- * die Ortstexte selbst und die Zuordnungsliste sieht nur ein Admin.
+ * die Ortstexte selbst und die Zuordnungsliste sieht nur ein Admin. Je
+ * Ort kommt das Gebiet (Land bzw. Region) mit — die Zeitreise ordnet damit
+ * die Zeitgeschichte nach den Orten der sichtbaren Personen im Jahr.
  */
 
 export type MapMode = "ancestors" | "all";
@@ -132,7 +135,16 @@ export async function loadMapView(
     }),
     prisma.place.findMany({
       where: { unresolvable: false, latitude: { not: null }, longitude: { not: null } },
-      select: { key: true, latitude: true, longitude: true, label: true, precision: true, text: true },
+      select: {
+        key: true,
+        latitude: true,
+        longitude: true,
+        label: true,
+        precision: true,
+        text: true,
+        countryCode: true,
+        gazetteerId: true,
+      },
     }),
     prisma.event.findMany({
       where: baptismWhere,
@@ -162,11 +174,23 @@ export async function loadMapView(
     for (const personId of owners) facts.push({ personId, date, place: e.place, burial });
   }
 
+  // Gebiet je Ort für die Zeitgeschichte der Zeitreise (Region bzw. Land,
+  // wie lib/places/area.ts) — schlank aus dem Ortsverzeichnis, ein Schlüssel je Ort.
+  const regionOf = await regionKeysOf(coordRows.filter((c) => c.gazetteerId).map((c) => c.gazetteerId!));
+  const areaOf = (c: (typeof coordRows)[number]): string | undefined => {
+    const cc = c.countryCode?.trim().toUpperCase();
+    if (!cc || !/^[A-Z]{2}$/.test(cc)) return undefined;
+    const region = c.gazetteerId ? regionOf.get(c.gazetteerId) : undefined;
+    return region && region.startsWith(`${cc}.`) ? region : cc;
+  };
   const coords = new Map<string, MapPlace>(
-    coordRows.map((c) => [
-      c.key,
-      { label: c.label ?? c.text, lat: c.latitude!, lon: c.longitude!, precision: c.precision ?? "PLACE" },
-    ]),
+    coordRows.map((c) => {
+      const ar = areaOf(c);
+      return [
+        c.key,
+        { label: c.label ?? c.text, lat: c.latitude!, lon: c.longitude!, precision: c.precision ?? "PLACE", ...(ar ? { ar } : {}) },
+      ];
+    }),
   );
   const payload = buildMapData({
     persons,

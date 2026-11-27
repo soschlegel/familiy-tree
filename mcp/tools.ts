@@ -106,7 +106,9 @@ import {
   type HistoryAdminCustomDto,
 } from "../lib/services/history";
 import { HISTORY_KINDS, HISTORY_LIMITS } from "../lib/history/events";
+import { compactAreas, MAX_AREA_KEYS } from "../lib/history/areas";
 import { AI_REASON_LIMITS } from "../lib/history/origin";
+import { historyAreaLegend } from "../lib/services/history-areas";
 
 export type ToolContext = {
   /** Wer zugreift — nur für Meldungen (E-Mail bzw. Schlüssel-Präfix). */
@@ -2529,6 +2531,14 @@ const historyReasonInput = z
   );
 const historySourceUrlInput = z.string().max(AI_REASON_LIMITS.url).optional().describe("Optional https:// link to the source.");
 const historyEventIdInput = z.string().min(1).max(80).describe("Event ID from list_history_events: own entries 'c:…'.");
+const historyAreasInput = z
+  .array(z.string().min(1).max(60))
+  .max(MAX_AREA_KEYS)
+  .describe(
+    "Area of validity: country codes ('DE', 'AT'), first-level regions ('DE.13' = Sachsen) and/or named groups " +
+      "('group:ostdeutschland') — keys from list_history_areas. Empty = everywhere (no regional reference). Events whose " +
+      "area fits the places where a person lived at the time are shown first; others move to the back.",
+  );
 
 const historyEventOutput = z
   .object({ id: z.string(), title: z.string(), yearFrom: z.number(), origin: z.string(), unconfirmed: z.boolean() })
@@ -2543,6 +2553,7 @@ function historyEventOut(e: HistoryAdminCustomDto) {
     kind: e.kind,
     description: e.description,
     region: e.region,
+    areas: compactAreas(e.areas),
     origin: e.origin,
     unconfirmed: e.unconfirmed,
     aiReason: e.aiReason,
@@ -2558,7 +2569,9 @@ function registerHistoryReadTools(server: McpServer, ctx: ToolContext): void {
       description:
         "The app's 'Zeitgeschichte': general historical events shown as background in the tree timeline, the map time " +
         "travel and the biography — the bundled list (source 'builtin', fixed, may be hidden by an administrator) and own " +
-        "entries (source 'custom', id 'c:…', optional `region`). Own entries have `origin` MANUAL (by hand), AI (added by an " +
+        "entries (source 'custom', id 'c:…', optional `region` as free text). Every event has `areas`, its area of validity " +
+        "(country codes, first-level regions, named groups 'group:…' — see list_history_areas; empty = everywhere). " +
+        "Own entries have `origin` MANUAL (by hand), AI (added by an " +
         "AI assistant) or AI_EDITED (by hand, later changed by an AI); `unconfirmed: true` = from an AI and not yet confirmed " +
         "by an administrator (the app shows 'von KI, ungeprüft'). Filter by `year` (events touching that year) or " +
         "`from_year`/`to_year`, by `region` text (own entries only), `source`, `include_hidden` (hidden builtin entries " +
@@ -2600,6 +2613,30 @@ function registerHistoryReadTools(server: McpServer, ctx: ToolContext): void {
       })) as unknown as Data;
     }),
   );
+
+  server.registerTool(
+    "list_history_areas",
+    {
+      title: "Gebiete der Zeitgeschichte",
+      description:
+        "Keys for the area of validity (`areas`) of Zeitgeschichte events: the named groups for historical states " +
+        "expressed as today's countries/regions (e.g. 'group:ostdeutschland' = area of the GDR, 'group:habsburg') and, " +
+        "with `country` (ISO code like 'DE', 'PL'), that country's first-level regions with their keys ('DE.13' = " +
+        "Sachsen, 'PL.72' = Niederschlesien). Countries are plain ISO codes. Today's borders are a deliberate " +
+        "simplification. Use these keys in add_history_event / update_history_event.",
+      inputSchema: {
+        country: z.string().max(10).optional().describe("ISO country code; lists its first-level regions with keys."),
+      },
+      outputSchema: {
+        groups: z.array(z.object({ key: z.string(), label: z.string(), note: z.string(), areas: z.array(z.string()) })),
+        country: z
+          .object({ key: z.string(), name: z.string(), regions: z.array(z.object({ key: z.string(), name: z.string() })) })
+          .optional(),
+      },
+      annotations: { title: "Gebiete der Zeitgeschichte", ...READ_ONLY },
+    },
+    run(ctx, async (_scope, a) => (await historyAreaLegend(a.country)) as unknown as Data),
+  );
 }
 
 function registerHistoryWriteTools(server: McpServer, ctx: ToolContext): void {
@@ -2614,7 +2651,8 @@ function registerHistoryWriteTools(server: McpServer, ctx: ToolContext): void {
       description:
         "Add an event to the Zeitgeschichte, e.g. a regional event (flood, town fire, epidemic, emigration wave) for the " +
         "regions and times the ancestors lived in. Only well-established events with a verifiable year and a source; when " +
-        "in doubt, do not add. Set `region` for regional events. `reason` (required) names the source of the year. Call " +
+        "in doubt, do not add. Give every regional event its `areas` (keys from list_history_areas); `region` is an " +
+        "optional free-text addition finer than a region (valley, town). `reason` (required) names the source of the year. Call " +
         "list_history_events first: an entry with the same or a very similar title and overlapping years (bundled or own) " +
         "is refused with a hint to the existing one — change own entries with update_history_event instead. Stored with " +
         "origin AI. " +
@@ -2629,7 +2667,12 @@ function registerHistoryWriteTools(server: McpServer, ctx: ToolContext): void {
         year_to: historyYear.optional().describe("Last year of a period (inclusive); omit for a single year."),
         kind: historyKindInput,
         description: z.string().max(HISTORY_LIMITS.description).optional().describe("One German sentence."),
-        region: z.string().max(HISTORY_LIMITS.region).optional().describe("Region or place the event applies to, e.g. 'Beispieltal'."),
+        region: z
+          .string()
+          .max(HISTORY_LIMITS.region)
+          .optional()
+          .describe("Optional free text shown with the event, finer than `areas`, e.g. 'Beispieltal'."),
+        areas: historyAreasInput.optional(),
         reason: historyReasonInput,
         source_url: historySourceUrlInput,
       },
@@ -2644,6 +2687,7 @@ function registerHistoryWriteTools(server: McpServer, ctx: ToolContext): void {
         kind: a.kind,
         description: a.description ?? null,
         region: a.region ?? null,
+        areas: a.areas ?? [],
         reason: a.reason,
         sourceUrl: a.source_url,
       });
@@ -2657,8 +2701,9 @@ function registerHistoryWriteTools(server: McpServer, ctx: ToolContext): void {
       title: "Zeitgeschichte ändern",
       description:
         "Change an OWN Zeitgeschichte entry (id 'c:…'; bundled entries are fixed — hide them instead). Omitted fields stay, " +
-        "null clears year_to, description or region. `reason` (required) explains the change and names the source. Any " +
-        "change of title, years, kind, description or region makes the entry unconfirmed again; an entry added by hand " +
+        "null clears year_to, description or region; `areas` replaces the area of validity (null or [] = everywhere). " +
+        "`reason` (required) explains the change and names the source. Any " +
+        "change of title, years, kind, description, region or areas makes the entry unconfirmed again; an entry added by hand " +
         "becomes 'von KI geändert'. " +
         adminNote +
         HISTORY_NOTE +
@@ -2673,6 +2718,7 @@ function registerHistoryWriteTools(server: McpServer, ctx: ToolContext): void {
         kind: historyKindInput.optional(),
         description: z.string().max(HISTORY_LIMITS.description).nullable().optional(),
         region: z.string().max(HISTORY_LIMITS.region).nullable().optional(),
+        areas: historyAreasInput.nullable().optional(),
         reason: historyReasonInput,
         source_url: historySourceUrlInput,
       },
@@ -2683,7 +2729,15 @@ function registerHistoryWriteTools(server: McpServer, ctx: ToolContext): void {
       const r = await aiUpdateHistoryEvent(
         scope,
         a.event_id,
-        { title: a.title, yearFrom: a.year_from, yearTo: a.year_to, kind: a.kind, description: a.description, region: a.region },
+        {
+          title: a.title,
+          yearFrom: a.year_from,
+          yearTo: a.year_to,
+          kind: a.kind,
+          description: a.description,
+          region: a.region,
+          areas: a.areas === null ? [] : a.areas,
+        },
         { reason: a.reason, sourceUrl: a.source_url },
       );
       return { event: historyEventOut(r.event), changed: r.changed };

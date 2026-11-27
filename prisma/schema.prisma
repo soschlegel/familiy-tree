@@ -791,6 +791,9 @@ model AppSetting {
 // Ganze Jahre: yearFrom, bei Zeiträumen yearTo (einschließlich, ≥ yearFrom).
 // kind: krieg | politik | not | wanderung | sonstiges (lib/history/events.ts).
 // region: „gilt für Region/Ort“, freier Text — nur Zusatz in der Anzeige.
+// areas: Geltungsbereich (lib/history/areas.ts) — Schlüssel von Ländern
+// („DE“) bzw. Regionen erster Ebene („DE.13“) wie lib/places/area.ts; leer =
+// überall. Bestimmt die Reihenfolge an den Anzeigestellen (passende vorn).
 model HistoryEvent {
   id            String        @id @default(cuid())
   title         String
@@ -799,6 +802,7 @@ model HistoryEvent {
   kind          String
   description   String?
   region        String?
+  areas         String[]      @default([])
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   // Herkunft (lib/history/origin.ts): von Hand (Verwaltungsseite), von der

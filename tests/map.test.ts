@@ -23,6 +23,9 @@ import {
   sortLived,
 } from "@/lib/map/year";
 import { placeKey } from "@/lib/places/normalize";
+import { BUILTIN_HISTORY } from "@/lib/history/builtin";
+import { eventsInYear as historyInYear, mergeHistory, partitionByArea } from "@/lib/history/events";
+import { areaOfKey, bestMatch } from "@/lib/history/areas";
 import type { LineKey } from "@/lib/reference";
 
 const d = (s: string, precision = "YEAR", qualifier = "EXACT", to?: string): FuzzyDate =>
@@ -354,7 +357,10 @@ describe("Leistung", () => {
     const N = 12_000;
     const texts = ["Kiel", "Hamburg", "New York", ...Array.from({ length: 800 }, (_, i) => `Ort ${i}`)];
     const many: Record<string, MapPlace> = {};
-    texts.forEach((t, i) => (many[placeKey(t)] = { label: t, lat: 40 + (i % 30), lon: (i % 40) - 10, precision: "PLACE" }));
+    // Gebiet je Ort (Zeitgeschichte der Zeitreise): Region bzw. Land wie in lib/services/map.ts.
+    texts.forEach(
+      (t, i) => (many[placeKey(t)] = { label: t, lat: 40 + (i % 30), lon: (i % 40) - 10, precision: "PLACE", ar: i % 7 === 0 ? "DE" : `DE.${String((i % 16) + 1).padStart(2, "0")}` }),
+    );
     let seed = 7;
     const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
     const persons: MapPersonInput[] = [];
@@ -392,11 +398,26 @@ describe("Leistung", () => {
       listed += eventsInYear(r, y).births.length;
     }
     const tList = (performance.now() - t2) / years;
+    // Zeitgeschichte je Jahr: Gebiete der Lebenden sammeln und die Ereignisse danach ordnen (wie MapExplorer).
+    const historyEvents = mergeHistory(BUILTIN_HISTORY, [], []);
+    const t3 = performance.now();
+    for (let y = r.yearMin; y <= r.yearMax; y++) {
+      const ats = new Map<string, ReturnType<typeof areaOfKey>>();
+      for (const l of livedInYear(r, y)) {
+        const ar = l.at !== null && l.at >= 0 ? r.places[l.at].ar : undefined;
+        if (ar && !ats.has(ar)) ats.set(ar, areaOfKey(ar));
+      }
+      const list = [...ats.values()];
+      partitionByArea(historyInYear(historyEvents, y), (e) => bestMatch(e.areas, list).match);
+    }
+    const tHistory = (performance.now() - t3) / years;
     const size = JSON.stringify(r).length;
     const marSize = JSON.stringify(r.mar).length;
+    const areaSize = size - JSON.stringify({ ...r, places: r.places.map(({ ar: _ar, ...p }) => p) }).length;
     console.log(
-      `[karte] ${N} Personen: Aufbau ${tBuild.toFixed(0)} ms, je Jahr ${tYear.toFixed(2)} ms Karte + ${tList.toFixed(2)} ms Liste (${years} Jahre), Daten ${(size / 1e6).toFixed(2)} MB JSON (davon Hochzeiten ${(marSize / 1e3).toFixed(0)} KB)`,
+      `[karte] ${N} Personen: Aufbau ${tBuild.toFixed(0)} ms, je Jahr ${tYear.toFixed(2)} ms Karte + ${tList.toFixed(2)} ms Liste + ${tHistory.toFixed(2)} ms Zeitgeschichte (${years} Jahre), Daten ${(size / 1e6).toFixed(2)} MB JSON (davon Hochzeiten ${(marSize / 1e3).toFixed(0)} KB, Gebiete der ${r.places.length} Orte ${(areaSize / 1e3).toFixed(1)} KB)`,
     );
+    expect(tHistory).toBeLessThan(50);
     expect(total).toBeGreaterThan(0);
     expect(listed).toBeGreaterThan(0);
     expect(tBuild).toBeLessThan(2000);
