@@ -41,7 +41,7 @@ Familie bearbeiten und in einer anderen nur lesen.
 | Personen ohne Familienzuordnung sehen | | | ✓ |
 | KI-Zugang vergeben, fremde KI-Schlüssel widerrufen | | | ✓ |
 | Einstellungen der Installation pflegen | | | ✓ |
-| Zeitgeschichte pflegen (eigene Ereignisse, mitgelieferte ausblenden) | | | ✓ |
+| Zeitgeschichte pflegen (eigene Ereignisse, mitgelieferte ausblenden, Einträge der KI bestätigen) | | | ✓ |
 
 Der **KI-Zugang** liegt quer dazu: Der Administrator gibt ihn je Benutzer
 (kein Zugang, lesen, lesen und schreiben), auch sich selbst ausdrücklich. Mit
@@ -100,3 +100,12 @@ mitgelieferte ausblenden. Sehen dürfen die Ereignisse alle angemeldeten
 Benutzer gleich — sie enthalten keine Personendaten und dürfen keine
 Personen des Stammbaums nennen. Jede Änderung steht im Änderungsprotokoll
 (nur für Administratoren sichtbar).
+
+Über den **KI-Zugang** darf jeder Schlüssel mit Leserecht die Zeitgeschichte
+lesen (`list_history_events`). Pflegen (anlegen, ändern, löschen,
+mitgelieferte ausblenden) darf die KI nur mit einem Schlüssel der Stufe
+„lesen und schreiben“ **und** wenn der Benutzer dahinter Administrator ist;
+sonst lehnt der Server ab. Einträge der KI sind sofort für alle sichtbar,
+tragen aber den Vermerk „von KI, ungeprüft“, bis ein Administrator sie in
+der App bestätigt — bestätigen kann die KI selbst nicht. Einzelheiten:
+[MCP-Server](../komponenten/mcp.md).

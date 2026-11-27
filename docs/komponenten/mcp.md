@@ -220,6 +220,15 @@ sagt sinngemäß:
   widersprüchlicher Lage `DISPUTED`, nie raten; das fehlende Werkzeug nicht
   umgehen (keine Daten umkopieren oder Beziehungen löschen, um ein
   Zusammenführen nachzuahmen). Ablauf im Prompt `review_duplicates`.
+- **Zeitgeschichte (eigener Absatz):** allgemeine Geschichte als Hintergrund
+  in Zeitstrahl, Zeitreise und Lebenslauf, nie eine Aussage über eine
+  Person. Vorher `list_history_events`; nur gesicherte Ereignisse mit
+  nachprüfbarer Jahreszahl und Quelle in `reason` eintragen
+  (`add_history_event`, nur Administratoren mit Schreibstufe); im Zweifel
+  nicht eintragen; regionale Ereignisse mit `region`; nie Personennamen in
+  Titel, Beschreibung oder Region. Einträge sind sofort sichtbar, aber „von
+  KI, ungeprüft“, bis ein Administrator in der App bestätigt; die KI kann
+  nicht bestätigen, eine Änderung macht den Eintrag wieder unbestätigt.
 
 ## Lesewerkzeuge (immer vorhanden, Stufe `READ`)
 
@@ -244,6 +253,7 @@ sagt sinngemäß:
 | `list_duplicate_candidates` | Die Liste „Mögliche Dubletten“ der App zum Vorprüfen (`listDuplicateCandidates`) — dieselbe Reihenfolge (Klasse, dann Punkte), nur Paare, deren beide Personen sichtbar sind, ohne als „kein Duplikat“ markierte | `confidence` (`high`/`medium`/`low`), `review` (`unreviewed` = keine oder veraltete Einschätzung, `reviewed` = irgendeine, oder ein Urteil), `limit` (Standard 20, höchstens 50), `offset` | `total`, `offset`, `hasMore`, `counts` je Klasse, `candidates` je mit beiden Personen, Punkten, Klasse samt deutscher Bezeichnung, Gründen, Widersprüchen, `crossTree`, `canReview` (= beide bearbeitbar) und `review` (Urteil, Begründung, Vorschlag, Zeitpunkt, `stale`) — die Einschätzung nur bei `canReview` |
 | `preview_person_merge` | **Trockenlauf**, ändert nichts: genau die Vorschau, die die App vor dem Zusammenführen zeigt (`previewPersonMerge`); Rechte wie in der App (beide bearbeitbar) | `keep_id`, `merge_id` | `dryRun: true`, beide Seiten (Daten, Eltern, Partner, Kinderzahl, Familien, Importe, Zählungen), `fields` (je Feld beide Werte, `differs`, Vorauswahl und Grund), `sentences`, `alternates`, `newNames`, `dropped`, `blockers` (mit `suggestions`), `canMerge`, Hinweis „nichts geändert“ |
 | `get_source` | Eine Quelle mit Abschrift/Notizen und allem, wofür sie zitiert wird (`getSource`) | `source_id` | `source`, `canEdit`, `citations` (Angabe, Fundstelle, Ziel Person/Beziehung, Ereignis, Bilder), `hiddenCitationCount` (Belege an verborgenen Personen nur gezählt), `images` (Hauptscan markiert) |
+| `list_history_events` | Die Zeitgeschichte der App (`listHistoryEventsForAi`) — für jeden Lesezugang, enthält keine Personendaten | `year` (berührt dieses Jahr) **oder** `from_year`/`to_year` (berührt die Spanne; beides zugleich → Validierungsfehler), `region` (Teiltext, nur eigene Einträge haben eine Region), `source` (`all`/`custom`/`builtin`), `include_hidden` (ausgeblendete mitgelieferte mit `hidden: true`), `only_unconfirmed`, `limit` (Standard 100, höchstens 500), `offset` | `total`, `offset`, `hasMore`, `events` nach der Zeit: `id` (mitgeliefert: Kennung aus `builtin.ts`, eigen: `c:…`), `source`, Titel, `from`/`to`, Art samt deutscher Bezeichnung, Beschreibung, Region; bei eigenen `origin` (`MANUAL`/`AI`/`AI_EDITED`), `unconfirmed: true` bei unbestätigten KI-Einträgen, `confirmedAt`; `aiReason`/`aiSourceUrl` nur für Administratoren |
 
 ## Schreibwerkzeuge (nur bei wirksamer Stufe `WRITE`)
 
@@ -286,6 +296,22 @@ Rückfrage, geht es weiterhin.
 | `assign_place` | Ortstexten Koordinaten zuordnen (`assignPlacesByAi`) — **nur Administratoren**, wie `/admin/places`; der Freitext bleibt unverändert | entweder eine Zuordnung (`text` + genau eines von `gazetteer_id` \| `latitude`+`longitude`+`label` (eigener Ort, `precision` Standard Ort) \| `unresolvable`) oder `assignments` mit bis zu 50 solchen; je optional `uncertain`, `note` (Begründung, bis 1000 Zeichen); `change_set_id` | `assigned`, `failed`, `results` je mit `ok`, Status, Bezeichnung, Koordinaten, `replaced` (vorherige Herkunft) bzw. `error`. Herkunft `AI` („von KI“), gilt sofort für die Karte; überschreibt automatische und frühere KI-Zuordnungen, nie von Hand bestätigte (Eintrag mit Fehler, die übrigen laufen weiter); Text muss in den Daten vorkommen. Protokoll mit Kanal `MCP` und Schlüssel; Paket „Ort zugeordnet (KI): …“ bzw. „Orte zugeordnet (KI)“ ohne Kennung |
 | `review_duplicate` | Einschätzung **eines** Dublettenpaares speichern — sonst nichts (`reviewDuplicate`) | `person_a_id`, `person_b_id`, `verdict` (`MERGE` sicher dieselbe Person, `NOT_DUPLICATE` sicher verschiedene, `DISPUTED` alles andere — im Zweifel immer), `reason` (deutsch, 10 bis 2000 Zeichen, mit den konkreten Belegen und Widersprüchen), `suggested_keep_id` (nur bei `MERGE`, eine der beiden — nur ein Hinweis) | `personAId`, `personBId` (kanonisch), Urteil, Begründung, Vorschlag, `reviewedAt`, `replacedVerdict`, immer `merged: false`. Eine neue Einschätzung ersetzt die alte; ein von einem Menschen als „kein Duplikat“ markiertes Paar wird abgewiesen. Bearbeitungsrecht an beiden Personen nötig. Paket „Mögliche Dubletten vorgeprüft (KI)“ ohne Kennung |
 | `link_media` | Vorhandenes Bild an weitere Einträge hängen oder lösen (`linkMedia` / `unlinkMedia`) | `media_id`, `action` (verknüpfen, Standard, oder lösen), Ziele wie bei `add_media` | `mediaId`, `action`, `targets`, `changed`. Das Bild muss sichtbar, jedes Ziel bearbeitbar sein; die letzte Zuordnung lässt sich nicht lösen — die KI löscht nie ein Bild |
+| `add_history_event` | Ereignis der Zeitgeschichte ergänzen (`aiCreateHistoryEvent`) — **nur Administratoren** (Recht `history:manage`), sonst „Keine Berechtigung für: Zeitgeschichte pflegen (nur Administratoren, Recht history:manage)“ | `title`, `year_from`, `year_to` (optional), `kind` (`krieg`/`politik`/`not`/`wanderung`/`sonstiges`), `description`, `region`, **`reason`** (Pflicht: Begründung mit Quelle der Jahreszahl, 15 bis 1000 Zeichen), `source_url` (optional, nur `https://`) | `event` (Kennung `c:…`, Felder, `origin: "AI"`, `unconfirmed: true`). Grenzen wie auf `/admin/history` (`checkHistoryInput`). **Dublettenschutz:** gleicher bzw. sehr ähnlicher Titel, überlappende Jahre und verträgliche Region bei einem mitgelieferten (auch ausgeblendeten) oder eigenen Eintrag → `CONFLICT` mit Titel, Jahren und Kennung des vorhandenen. Paket „Zeitgeschichte ergänzt (KI): …“ ohne Kennung |
+| `update_history_event` | Eigenen Eintrag ändern (`aiUpdateHistoryEvent`) — nur Administratoren | `event_id` (`c:…`), `title`, `year_from`, `year_to`, `kind`, `description`, `region` (weggelassen = unverändert, `null` leert `year_to`/`description`/`region`), **`reason`** (Pflicht), `source_url` | `event`, `changed` (geänderte Felder; leer = nichts geändert, kein Protokoll). Inhaltliche Änderung → wieder unbestätigt; von Hand angelegte werden `AI_EDITED` („von KI geändert“); die Begründung ersetzt die alte. Mitgelieferte sind fest (Validierungsfehler mit Hinweis aufs Ausblenden); Dublettenschutz wie beim Anlegen, ohne den Eintrag selbst. Unbekannte Felder (etwa ein „bestätigt“) werden verworfen |
+| `delete_history_event` | Eigenen Eintrag löschen (`aiDeleteHistoryEvent`) — nur Administratoren | `event_id` (`c:…`), **`reason`** (15 bis 1000 Zeichen) | `deleted`, `eventId`, `title`. Die gelöschten Werte, die Herkunft und die Begründung stehen im Protokoll. Mitgelieferte lassen sich nicht löschen |
+| `set_builtin_history_event_hidden` | Mitgelieferten Eintrag für alle aus- bzw. wieder einblenden (`aiSetBuiltinHidden` → `setBuiltinHidden`) — nur Administratoren | `builtin_id`, `hidden` | `id`, `title`, `hidden`. Schon im gewünschten Zustand: nichts, kein Protokoll |
+
+**Zeitgeschichte — „von KI“ und Bestätigen:** Alle vier Schreibwerkzeuge
+laufen über `runWrite` (Stufe `WRITE`, Paket, Protokoll mit Kanal `MCP` und
+Schlüssel) und verlangen im Dienst zusätzlich Administratorrechte — wie
+`assign_place` sind sie für jeden Schreibschlüssel registriert und lehnen
+Nicht-Administratoren beim Aufruf ab. Einträge der KI sind sofort für alle
+sichtbar; bis ein Administrator sie auf `/admin/history` bestätigt
+(`confirmHistoryEvents`, Route `POST /api/history-events/confirm`), tragen
+sie an den Anzeigestellen den Vermerk „von KI, ungeprüft“. **Es gibt
+bewusst kein Werkzeug zum Bestätigen.** Regeln im Einzelnen:
+`lib/history/origin.ts` in [bibliotheken.md](bibliotheken.md) und
+`lib/services/history.ts` in [dienste.md](dienste.md).
 
 ### Bild-Wege
 
@@ -394,8 +420,11 @@ werden nicht aufgelöst.
 | `tests/media-links.db.test.ts` | `add_media` per base64 und per Adresse (mit ersetztem Netz), `link_media`, Rechte |
 | `tests/changelog.db.test.ts` | Bündeln je Schlüssel, `begin_change_set`, fremde Paketkennung abgelehnt |
 | `tests/places-ai.db.test.ts` | `suggest_place` (früherer Name, mehrdeutig, eigener Ort), `list_places` nur für Admins mit Kontext ohne Personennamen, `assign_place` mit Stapel, eigenem Ort, Ablehnung bei MANUAL bzw. unbekanntem Text, Protokoll mit Kanal und Schlüssel, Rechte für Nicht-Admins |
+| `tests/history-ai.db.test.ts` | Zeitgeschichte über MCP: Server-Hinweis; Leseschlüssel nur `list_history_events` mit Filtern; Schreibschlüssel eines Nicht-Administrators abgelehnt; Administrator legt nur mit Begründung an (Herkunft `AI`, unbestätigt, Protokoll mit Kanal, Schlüssel und Paket), Dublette (mitgeliefert, eigen, auch beim Ändern) abgelehnt, andere Region erlaubt; Ändern macht wieder unbestätigt bzw. „von KI geändert“; kein Werkzeug zum Bestätigen; Löschen mit Begründung, Ausblenden; Bestätigen über Dienst und Route |
+| `tests/history-origin.test.ts` | Reine Regeln aus `lib/history/origin.ts`: unbestätigt, Herkunft nach KI-Änderung, Bestätigen beim Speichern von Hand, Begründung/Adresse, Titelähnlichkeit, Jahre, Region, Hinweistext |
 | `tests/ai-access.db.test.ts`, `tests/ai-access.test.ts` | Rechte- und Schlüssellogik (`authorizeAiCall`, Stufen) |
-| `e2e/read/mcp-http.spec.ts` | Gegen den laufenden Server: Schlüssel-Matrix, `tools/list` nach Stufe, Cookie allein meldet nicht an |
+| `e2e/read/mcp-http.spec.ts` | Gegen den laufenden Server: Schlüssel-Matrix, `tools/list` nach Stufe (auch `list_history_events` bzw. `add_history_event`), Cookie allein meldet nicht an |
+| `e2e/write/history.spec.ts`, Block „Einträge der KI“ | Einträge über `add_history_event`; Vermerk „von KI, ungeprüft“ an Zeitstrahl, Zeitreise und Lebenslauf; Verwaltung mit Filter und Bestätigen; Vermerk danach weg |
 | `e2e/write/ai-access.spec.ts` | Oberfläche `/ai-access` und Verwaltung (Schlüssel anlegen, herabsetzen, widerrufen) |
 
 Die `.db`-Tests überspringen sich ohne Mock-Datenbank.

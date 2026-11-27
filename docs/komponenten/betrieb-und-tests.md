@@ -711,6 +711,10 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   Stichproben), Zusammenführen und Ausblenden, Auswahl je Jahr/Spanne mit
   Rändern, Rangfolge, Bahnen, Lebenszeit (ungenaue und fehlende Daten,
   Lebende, Tod ohne Datum), Eingabeprüfung, Cookie.
+- **`history-origin.test.ts`** — Zeitgeschichte „von KI“ (reine Logik,
+  `lib/history/origin.ts`): unbestätigt, Herkunft nach einer Änderung der
+  KI, Bestätigen beim Speichern von Hand, Vermerk in der Anzeigeliste,
+  Begründung und Adresse, Titelähnlichkeit, Jahre, Region, Hinweistext.
 - **`settings.test.ts`** — Verzeichnis der Einstellungen (eindeutige
   Kennungen, keine Namen, die nach Geheimnissen klingen), Prüfung von
   http(s)-Adressen, Rückfall auf die Umgebungsvariable.
@@ -849,6 +853,13 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   Änderungsübersicht; Routen `/api/history-events…` (Fehlercodes, 403 für
   Nicht-Admins und fremde Herkunft). Räumt beide Tabellen vorher und
   nachher leer.
+- **`history-ai.db.test.ts`** — Zeitgeschichte über MCP (HTTP-Endpunkt):
+  Server-Hinweis, Leseschlüssel nur `list_history_events` mit Filtern,
+  Nicht-Administrator abgelehnt, Anlegen mit Pflicht-Begründung (Herkunft,
+  Protokoll mit Kanal, Schlüssel und Paket), Dubletten, Ändern (wieder
+  unbestätigt, „von KI geändert“), kein Werkzeug zum Bestätigen, Löschen,
+  Ausblenden; Bestätigen über Dienst und Route `confirm`. Räumt beide
+  Tabellen, ihr Protokoll und die eigenen Pakete ab.
 - **`settings.db.test.ts`** — Einstellungen: Vorrang App vor Umgebung,
   Rückfall nach dem Entfernen, ungültige gespeicherte Werte, Prüfung, nur
   Administratoren, Protokoll vorher → nachher samt Anzeige in der
@@ -1100,6 +1111,16 @@ zum nächsten Setup).
   auf die Karte), 390 px, löschen; Betrachter/Bearbeiter ohne Menüpunkt,
   Seite und API. Löscht „E2E …“-Einträge und blendet Ausgeblendetes vor und
   nach der Datei wieder ein.
+  Am Ende der Block „Einträge der KI“: legt über
+  `/api/mcp` (Schreibschlüssel des Administrators) zwei Einträge an, prüft
+  die Verwaltung („von KI“, „ungeprüft“, Begründung, Quelle, Filter „Nur
+  unbestätigte“, axe hell/dunkel, 390 px), den Vermerk „von KI, ungeprüft“
+  an Zeitstrahl, Zeitreise und Lebenslauf (als Betrachter), Bestätigen
+  einzeln und „Alle sichtbaren bestätigen“ mit Rückfrage, danach kein
+  Vermerk mehr. Bewusst in derselben (seriellen) Datei, weil „löschen“
+  eine leere Liste erwartet. Eigene Titel „KI-Test …“ ohne „E2E“ (die
+  Karten oben werden per `hasText: "E2E "` gezählt, und Playwright ignoriert
+  dabei das Leerzeichen am Rand); räumt vor und nach dem Block auf.
 - **`reference.spec.ts`** — „Das bin ich“ setzen und aufheben, selbst und
   durch den Admin.
 - **`sources.spec.ts`** — Quelle anlegen, zitieren, Beleg ändern/entfernen,

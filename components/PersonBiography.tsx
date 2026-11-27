@@ -8,6 +8,7 @@ import type { Biography } from "@/lib/biography";
 import { formatHistoryYears, HISTORY_KIND_LABEL, type HistoryEvent } from "@/lib/history/events";
 import type { LifetimeHistory } from "@/lib/history/lifetime";
 import { HistoryToggle, useHistoryToggle } from "./HistoryToggle";
+import { HistoryAiNote } from "./HistoryAiNote";
 
 /**
  * Abschnitt „Lebenslauf“ der Personenseite: der aus den erfassten Daten
@@ -107,6 +108,7 @@ function EventItem({ event: e }: { event: HistoryEvent }) {
   return (
     <span title={detail} data-testid="biography-history-item">
       {e.title} <span className="whitespace-nowrap tabular-nums muted">({formatHistoryYears(e)})</span>
+      {e.aiUnconfirmed && <HistoryAiNote testId="biography-history-ai" className="ml-1" />}
     </span>
   );
 }

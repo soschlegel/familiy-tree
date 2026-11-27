@@ -12,6 +12,14 @@ Dabei handelt die KI **als du**: Sie sieht nur, was du siehst, und ändert nur, 
 
 > **Bedenke:** Alles, was der Assistent abruft, geht an den KI-Anbieter. Besonders bei lebenden Personen lohnt es sich, das zu bedenken.
 
+### Zeitgeschichte ergänzen lassen
+
+Die KI kann die [Zeitgeschichte](12-einstellungen.md#zeitgeschichte) lesen — jeder Schlüssel darf das. Ist der Benutzer hinter dem Schlüssel **Administrator** und hat der Schlüssel die Stufe „lesen und schreiben“, kann sie die Liste auch pflegen: Ereignisse ergänzen, zum Beispiel ein Hochwasser oder eine Seuche in der Gegend, aus der deine Vorfahren stammen, Einträge ändern oder löschen und mitgelieferte ausblenden. Bitte sie etwa: „Ergänze die Zeitgeschichte um Ereignisse aus dem Beispieltal zwischen 1800 und 1900“.
+
+- Die KI soll nur gesicherte Ereignisse mit einer nachprüfbaren Jahreszahl eintragen und muss jedes Mal angeben, **woher** die Jahreszahl stammt. Im Zweifel trägt sie nichts ein. Namen von Personen aus dem Stammbaum gehören nie hinein.
+- Gibt es ein Ereignis mit sehr ähnlichem Titel in denselben Jahren schon, lehnt die App einen neuen Eintrag ab.
+- Was die KI einträgt, sehen alle sofort — aber mit dem Vermerk **von KI, ungeprüft**, bis ein Administrator es bestätigt. Wie das geht, steht unter [Einträge der KI](12-einstellungen.md#eintraege-der-ki). Die KI selbst kann nichts bestätigen; ändert sie einen Eintrag, ist er wieder ungeprüft.
+
 ## Wer darf was
 
 - Den KI-Zugang gibt der **Administrator** je Benutzer frei (unter „Benutzer“): **kein Zugang** (Standard), **lesen** oder **lesen und schreiben**. Auch Administratoren müssen ihn sich ausdrücklich selbst geben.

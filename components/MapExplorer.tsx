@@ -26,6 +26,8 @@ import { loadCountries, type Country } from "@/lib/map/countries";
 import { HelpLink } from "./HelpLink";
 import { LineCode } from "./ReferenceLines";
 import { HistoryToggle, useHistoryToggle } from "./HistoryToggle";
+import { HistoryAiNote } from "./HistoryAiNote";
+import { AI_UNCONFIRMED_LABEL } from "@/lib/history/origin";
 import {
   eventsInYear as historyInYear,
   formatHistoryYears,
@@ -918,7 +920,7 @@ function HistoryMarks({ events, yearMin, yearMax }: { events: HistoryEvent[]; ye
               height={LANE}
               className="fill-amber-600/70 dark:fill-amber-400/70"
             >
-              <title>{`${e.title} (${formatHistoryYears(e)})`}</title>
+              <title>{`${e.title} (${formatHistoryYears(e)})${e.aiUnconfirmed ? ` – ${AI_UNCONFIRMED_LABEL}` : ""}`}</title>
             </rect>
           );
         })}
@@ -940,6 +942,7 @@ function HistoryYearLine({ year, events }: { year: number; events: HistoryEvent[
         events.map((e, i) => (
           <span key={e.id} data-testid="map-history-item" title={[HISTORY_KIND_LABEL[e.kind], e.region ? `gilt für ${e.region}` : null, e.description].filter(Boolean).join(" · ")}>
             {e.title} <span className="whitespace-nowrap tabular-nums muted">({formatHistoryYears(e)})</span>
+            {e.aiUnconfirmed && <HistoryAiNote testId="map-history-ai" className="ml-1" />}
             {i < events.length - 1 && <span aria-hidden className="muted"> ·</span>}
           </span>
         ))

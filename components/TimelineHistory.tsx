@@ -10,6 +10,8 @@ import {
   lastYear,
   type HistoryEvent,
 } from "@/lib/history/events";
+import { AI_UNCONFIRMED_LABEL } from "@/lib/history/origin";
+import { HistoryAiNote } from "./HistoryAiNote";
 
 /** Mindesthöhe einer Tippfläche (px). */
 const TAP = 44;
@@ -109,7 +111,8 @@ export function TimelineHistory({ events, axis }: { events: readonly HistoryEven
   const label = (g: Group) => {
     const from = Math.min(...g.events.map((e) => e.from));
     const to = Math.max(...g.events.map(lastYear));
-    return `Zeitgeschichte ${formatHistoryYears({ from, to: to === from ? null : to })}: ${g.events.map((e) => e.title).join(", ")}`;
+    const titles = g.events.map((e) => (e.aiUnconfirmed ? `${e.title} (${AI_UNCONFIRMED_LABEL})` : e.title));
+    return `Zeitgeschichte ${formatHistoryYears({ from, to: to === from ? null : to })}: ${titles.join(", ")}`;
   };
 
   return (
@@ -185,11 +188,17 @@ function HistoryTip({ group, height }: { group: Group; height: number }) {
       style={style}
     >
       <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">Zeitgeschichte</p>
-      <ul className="max-h-64 space-y-1.5 overflow-y-auto">
+      {/* Bei kleinem Zoom fließen viele Ereignisse zusammen — die Liste rollt dann und muss per Tastatur erreichbar sein. */}
+      <ul
+        className="max-h-64 space-y-1.5 overflow-y-auto rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:focus-visible:ring-amber-300"
+        tabIndex={0}
+        aria-label="Ereignisse"
+      >
         {events.map((e) => (
           <li key={e.id}>
             <p className="font-medium text-stone-900 dark:text-stone-100">
               {e.title} <span className="font-normal tabular-nums muted">{formatHistoryYears(e)}</span>
+              {e.aiUnconfirmed && <HistoryAiNote testId="tree-history-ai" className="ml-1" />}
             </p>
             <p className="muted">
               {HISTORY_KIND_LABEL[e.kind]}

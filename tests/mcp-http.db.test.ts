@@ -56,6 +56,7 @@ const READ_TOOLS = [
   "list_duplicate_candidates",
   "list_events",
   "list_families",
+  "list_history_events",
   "list_places",
   "preview_person_merge",
   "search_persons",
@@ -80,6 +81,10 @@ const WRITE_TOOLS = [
   "update_relationship",
   "link_media",
   "review_duplicate",
+  "add_history_event",
+  "update_history_event",
+  "delete_history_event",
+  "set_builtin_history_event_hidden",
 ];
 
 type Handler = (req: Request) => Response | Promise<Response>;

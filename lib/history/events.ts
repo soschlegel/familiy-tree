@@ -13,8 +13,9 @@
  *   (einschließlich). Ein Ereignis „berührt“ ein Jahr, wenn das Jahr in
  *   [from, to ?? from] liegt.
  * - Das Modul wird auch im Browser benutzt (Zeitstrahl, Karte) — deshalb
- *   ohne Abhängigkeiten außer Typen.
+ *   ohne Abhängigkeiten außer Typen und lib/history/origin.ts.
  */
+import { isUnconfirmedAi } from "./origin";
 
 /** Art eines Ereignisses — die Kennung steht so in der Datenbank. */
 export const HISTORY_KINDS = ["krieg", "politik", "not", "wanderung", "sonstiges"] as const;
@@ -53,6 +54,10 @@ export type CustomHistoryEvent = {
   kind: string;
   description: string | null;
   region: string | null;
+  /** Herkunft (lib/history/origin.ts); fehlt = von Hand. */
+  origin?: string;
+  /** Bestätigung durch einen Administrator; leer bei KI-Herkunft = ungeprüft. */
+  confirmedAt?: Date | string | null;
 };
 
 /** Ein Ereignis zur Anzeige — mitgeliefert oder eigen, einheitlich. */
@@ -68,6 +73,11 @@ export type HistoryEvent = {
   /** Nur eigene Einträge: „gilt für Region/Ort“ (freier Text, nur Zusatz). */
   region: string | null;
   rank: HistoryRank;
+  /**
+   * Eigener Eintrag der KI, noch nicht von einem Administrator bestätigt —
+   * die Anzeigestellen tragen dann den Vermerk „von KI, ungeprüft“.
+   */
+  aiUnconfirmed?: true;
 };
 
 /** Cookie für den Schalter „Zeitgeschichte“ (je Browser): "0" = aus, sonst an. */
@@ -133,6 +143,7 @@ export function mergeHistory(
       description: c.description?.trim() || null,
       region: c.region?.trim() || null,
       rank: CUSTOM_RANK,
+      ...(c.origin && isUnconfirmedAi({ origin: c.origin, confirmedAt: c.confirmedAt ?? null }) ? { aiUnconfirmed: true as const } : {}),
     });
   }
   return out.sort(byTime);

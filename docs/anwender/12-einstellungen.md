@@ -47,8 +47,9 @@ Die App zeigt neben der Familiengeschichte, was in der Zeit allgemein geschah �
 
 - **Mitgeliefert:** eine kurze Liste allgemein bekannter Ereignisse für den deutschsprachigen Raum und Europa, vom Dreißigjährigen Krieg bis zur Wiedervereinigung — nur mit gesicherten Jahreszahlen.
 - **Eigene Einträge:** Ereignisse, die ein Administrator ergänzt, zum Beispiel ein Hochwasser oder ein Stadtbrand in der Gegend, aus der die Familie stammt.
+- **Von der KI ergänzt:** Ein Administrator kann auch den [KI-Assistenten](10-ki-zugang.md#zeitgeschichte-ergaenzen-lassen) bitten, Ereignisse aus den Gegenden und Zeiten der Vorfahren zu ergänzen (siehe [Einträge der KI](#eintraege-der-ki)).
 
-Alle Benutzer sehen dieselben Ereignisse.
+Alle Benutzer sehen dieselben Ereignisse. Hat die KI einen Eintrag ergänzt und noch kein Administrator ihn geprüft, steht dahinter überall der Vermerk **von KI, ungeprüft**. Nach dem Bestätigen verschwindet er.
 
 ### Zeitgeschichte verwalten
 
@@ -62,3 +63,20 @@ Unter **Verwaltung → Zeitgeschichte** pflegt ein **Administrator** die Liste. 
 > **Keine Namen aus dem Stammbaum:** Trage hier nur allgemeine Geschichte ein, die jeder sehen darf — nicht „Onkel Karl wandert aus“. Solche Angaben gehören als Lebensereignis zur Person.
 
 Jede Änderung steht in der [Änderungsgeschichte](09-aenderungen.md) unter **Verwaltung → Änderungen**.
+
+### Einträge der KI
+
+Einträge, die der KI-Assistent ergänzt hat, sind sofort für alle sichtbar — im Zeitstrahl, in der Zeitreise und im Lebenslauf aber mit dem Vermerk **von KI, ungeprüft**, bis du sie geprüft hast. Unter **Eigene Ereignisse** erkennst du sie so:
+
+- Die Plakette **von KI** (bzw. **von KI geändert**, wenn die KI einen von Hand angelegten Eintrag geändert hat) und, solange niemand sie geprüft hat, **ungeprüft**.
+- Darunter die **Begründung der KI** — woher die Jahreszahl stammt — und, falls angegeben, die **Quelle** als Link.
+- Neben der Überschrift steht, wie viele Einträge noch ungeprüft sind.
+
+So prüfst du sie:
+
+1. Setze das Häkchen **Nur unbestätigte** — dann siehst du nur die Einträge, die noch offen sind.
+2. Lies Titel, Jahre und Begründung; öffne bei Bedarf die Quelle.
+3. Passt alles, klicke beim Eintrag **Bestätigen**. Passt etwas nicht, korrigiere es mit **Ändern** — **Speichern** bestätigt ihn dann gleich mit. Ist der Eintrag falsch, **Löschen**.
+4. Mit **Alle sichtbaren bestätigen** bestätigst du nach einer Rückfrage alle gerade angezeigten unbestätigten Einträge auf einmal — am besten erst, nachdem du sie durchgesehen hast.
+
+Bestätigte Einträge zeigen „Bestätigt am …“ und erscheinen überall ohne Vermerk. Ändert die KI einen Eintrag später, ist er wieder ungeprüft. Die KI kann selbst nichts bestätigen.

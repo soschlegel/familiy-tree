@@ -139,7 +139,7 @@ beide). Ereignisse, Belege, Namen und Rohdaten folgen ihrem Träger.
 | `export-selection.ts` | Familienauswahl für den GEDCOM-Export |
 | `release-notes.ts` | Neuigkeiten: zuletzt gesehenes Release je Benutzer merken |
 | `settings.ts` | Einstellungen der Installation: wirksamen Wert lesen (App vor Umgebung), pflegen (nur Admin) |
-| `history.ts` | Zeitgeschichte: mitgelieferte Liste plus eigene Ereignisse lesen (alle), Zeile für den Lebenslauf, pflegen und mitgelieferte ausblenden (nur Admin) |
+| `history.ts` | Zeitgeschichte: mitgelieferte Liste plus eigene Ereignisse lesen (alle), Zeile für den Lebenslauf, pflegen, mitgelieferte ausblenden und KI-Einträge bestätigen (nur Admin); Lesen und Pflegen für die KI (MCP) mit Herkunft „von KI“ |
 
 ---
 
@@ -2419,6 +2419,19 @@ stehen in `lib/history/events.ts` und `lib/history/lifetime.ts`
 - `createHistoryEvent`, `updateHistoryEvent`, `deleteHistoryEvent` — eigene
   Ereignisse; `setBuiltinHidden(scope, id, hidden)` — mitgelieferten Eintrag
   aus- bzw. einblenden.
+- `confirmHistoryEvents(scope, ids)` — KI-Einträge bestätigen (einzeln oder
+  „alle sichtbaren“); zählt nur unbestätigte KI-Einträge, von Hand angelegte
+  und schon bestätigte bleiben unverändert; eine unbekannte Kennung →
+  `NOT_FOUND`, nichts bestätigt.
+- Für die KI (MCP, [mcp.md](mcp.md)): `listHistoryEventsForAi(scope,
+  filter)` — Liste mit Filtern (Jahr bzw. Spanne, Region, Herkunft
+  mitgeliefert/eigen, ausgeblendete, nur unbestätigte; Seiten) für jeden
+  Lesezugang, Begründung der KI nur für Administratoren;
+  `aiCreateHistoryEvent`, `aiUpdateHistoryEvent`, `aiDeleteHistoryEvent`,
+  `aiSetBuiltinHidden` — wie die Verwaltung, aber mit Herkunft „von KI“,
+  Pflicht-Begründung, Dublettenschutz und eigenem Paket-Titel
+  („Zeitgeschichte ergänzt (KI): …“ usw.). `customHistoryId` nimmt die
+  Kennung mit oder ohne Vorsatz `c:`.
 
 **Regeln und Entscheidungen:**
 - Ereignisse sind allgemeines Wissen bzw. vom Administrator eingegeben,
@@ -2435,30 +2448,62 @@ stehen in `lib/history/events.ts` und `lib/history/lifetime.ts`
   ausgeblendeten (bzw. Einblenden eines sichtbaren) bleibt ohne Wirkung.
 - „Gilt für Region/Ort“ ist nur ein Zusatz in der Anzeige; einen Abgleich
   mit Wohnorten gibt es bewusst nicht.
+- **Von KI und bestätigt** (Regeln in `lib/history/origin.ts`): Einträge der
+  KI (`origin` `AI`) sind sofort in allen Anzeigen, tragen aber bis zur
+  Bestätigung den Vermerk „von KI, ungeprüft“ (`aiUnconfirmed` in der
+  Anzeigeliste). Ändert die KI ein Inhaltsfeld (Titel, Jahre, Art,
+  Beschreibung, Region), ist der Eintrag wieder unbestätigt; ein von Hand
+  angelegter wird `AI_EDITED`. Speichert ein Administrator einen
+  unbestätigten KI-Eintrag von Hand, gilt er als bestätigt — auch ohne
+  Inhaltsänderung. Die Herkunft bleibt dabei erhalten („von KI“ bzw. „von KI
+  geändert“, nur in der Verwaltung sichtbar).
+- **Pflicht-Begründung** der KI: 15 bis 1000 Zeichen, optional eine Adresse
+  `https://…` (`checkAiReason`); beim Löschen eine Begründung, die nur ins
+  Protokoll geht.
+- **Dublettenschutz** (nur für die KI): gleicher bzw. sehr ähnlicher Titel
+  (vereinheitlicht, enthalten, Tippfehler, gleiche Wörter ohne Füllwörter
+  und Endungen), überlappende Jahre und verträgliche Region (eine fehlt oder
+  eine enthält die andere) bei einem mitgelieferten — auch ausgeblendeten —
+  oder eigenen Eintrag → `CONFLICT` mit Titel, Jahren und Kennung des
+  vorhandenen. Beim Ändern zählt der Eintrag selbst nicht. Die Verwaltung
+  von Hand prüft das bewusst nicht.
+- Keine Personennamen: Werkzeugbeschreibung und Server-Hinweis sagen es; eine
+  Erkennung gibt es bewusst nicht (wäre unzuverlässig).
 
 **Rechte/Datenschutz:** Lesen (`listHistoryEvents`, `getLifetimeHistory`)
 ohne Rechteprüfung — keine Personendaten außer der übergebenen, schon
-geprüften Personenansicht. Pflegen nur Administratoren (`FORBIDDEN`); die
-Routen prüfen zusätzlich `history:manage`.
+geprüften Personenansicht. Pflegen und Bestätigen nur Administratoren
+(`FORBIDDEN`; für die KI mit dem Zusatz „nur Administratoren, Recht
+history:manage“); die Routen prüfen zusätzlich `history:manage`. Die
+KI-Funktionen laufen nur mit Schreibstufe (MCP `runWrite`).
 
 **Protokoll:** Audit-Art `HistoryEvent`: eigene Ereignisse mit ihrer
 Kennung — `CREATE` (alle Felder), `UPDATE` (`title`, `changes` vorher →
 nachher), `DELETE` (bisherige Felder); mitgelieferte mit ihrer Kennung aus
-`builtin.ts` — `UPDATE` mit `builtin: true` und `changes.hidden`. In der
+`builtin.ts` — `UPDATE` mit `builtin: true` und `changes.hidden`. Über MCP
+zusätzlich Kanal und Schlüssel; beim Anlegen `origin`, `aiReason`,
+`aiSourceUrl`, beim Ändern durch die KI `changes.origin` und
+`changes.confirmed` (bestätigt → nein) samt neuer Begründung, beim Löschen
+`origin` und `reason`; Bestätigen als `UPDATE` mit `confirmed: true`. In der
 Änderungsübersicht (`changes.ts`) als „Zeitgeschichte „…“ angelegt /
-geändert / gelöscht / ausgeblendet / wieder eingeblendet“ mit deutschen
-Feldnamen (Art als „Seuche/Not“ usw.); ohne Personen- und Familienbezug,
-daher nur für Administratoren sichtbar.
+geändert / gelöscht / ausgeblendet / wieder eingeblendet / bestätigt“ mit
+deutschen Feldnamen (Art als „Seuche/Not“, Herkunft als „von KI“ usw.); ohne
+Personen- und Familienbezug, daher nur für Administratoren sichtbar.
 
 **Benutzt von:** `app/admin/history/page.tsx`,
 `app/api/history-events/route.ts`, `app/api/history-events/[id]/route.ts`,
-`app/api/history-events/builtin/[id]/route.ts`; `listHistoryEvents` in
+`app/api/history-events/builtin/[id]/route.ts`,
+`app/api/history-events/confirm/route.ts`; `listHistoryEvents` in
 `app/tree/page.tsx` (ganzer Baum) und `app/map/page.tsx`;
-`getLifetimeHistory` in `app/people/[id]/page.tsx`.
+`getLifetimeHistory` in `app/people/[id]/page.tsx`; die `ai…`-Funktionen und
+`listHistoryEventsForAi` in `mcp/tools.ts`.
 
 **Tests:** `tests/history.db.test.ts` (Dienst, Rechte, Protokoll, Routen),
-`tests/history.test.ts` (reine Logik, mitgelieferte Liste);
-`e2e/write/history.spec.ts`, `e2e/read/history.spec.ts`.
+`tests/history-ai.db.test.ts` (MCP-Werkzeuge, Herkunft, Bestätigen, Route
+`confirm`), `tests/history.test.ts` (reine Logik, mitgelieferte Liste),
+`tests/history-origin.test.ts` (Herkunft, Begründung, Dubletten);
+`e2e/write/history.spec.ts` (mit Block „Einträge der KI“),
+`e2e/read/history.spec.ts`.
 
 ---
 

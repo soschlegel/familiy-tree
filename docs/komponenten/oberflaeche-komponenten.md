@@ -20,7 +20,7 @@ Abschnitt 1). Seiten und API-Routen selbst stehen in
   `OriginChips`, `MarriageNode`, `MarriageEdge`, `ParentEdge`, `ReferenceLines`,
   `ReferenceChip`, `ReferencePanel`, `KinshipPersonField`, `KinshipDiagram`,
   `kinship-url`, `MapExplorer`, `MapPersonChooser`, `LifePathMap`, `Avatar`, `gender-style`,
-  `TimelineHistory`, `HistoryToggle`
+  `TimelineHistory`, `HistoryToggle`, `HistoryAiNote`
 - [Gestaltungssystem: app/globals.css](#gestaltungssystem-appglobalscss)
 - [Personen, Ereignisse, Quellen und Medien](#personen-ereignisse-quellen-und-medien)
   — `PersonForm`, `DateInput`, `EventSection`, `CitationSection`,
@@ -150,13 +150,22 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 **Verhalten:**
 
 - Bänder und Punkte sind Schmuck (`aria-hidden`); bedienbar ist je Gruppe zeitlich überschneidender Ereignisse eine Schaltfläche über die ganze Achsenbreite, mindestens 44 px hoch, mit `aria-label` „Zeitgeschichte 1914–1920: Erster Weltkrieg, …“. Liegen Schaltflächen bei kleinem Zoom übereinander, werden ihre Gruppen zusammengefasst.
-- Überfahren und Fokus zeigen daneben eine Anzeige (`role="tooltip"`): Titel, Jahre, Art, „gilt für …“ und Beschreibung je Ereignis; Antippen bzw. Klicken hält sie fest, Escape oder ein Klick daneben schließt. In der unteren Hälfte klappt sie nach oben auf; Breite auf den Bildschirm begrenzt.
+- Überfahren und Fokus zeigen daneben eine Anzeige (`role="tooltip"`): Titel, Jahre, Art, „gilt für …“ und Beschreibung je Ereignis; Antippen bzw. Klicken hält sie fest, Escape oder ein Klick daneben schließt. In der unteren Hälfte klappt sie nach oben auf; Breite auf den Bildschirm begrenzt. Die Liste rollt ab einer Höchsthöhe (bei kleinem Zoom fließen viele Ereignisse zusammen) und ist deshalb selbst per Tab erreichbar (`tabIndex`, Name „Ereignisse“, sichtbarer Fokusrahmen).
 - Leistung: liest nur Verschiebung, Zoom und Höhe aus dem React-Flow-Speicher (wie `TimelineAxis`); Weltkoordinaten einmal je Ereignisliste und Achse; der Baum selbst rendert dadurch nicht neu. Unsichtbare Gruppen werden nicht gezeichnet.
 - Hell/dunkel: Bernsteintöne mit halber Deckkraft, hervorgehoben bei geöffneter Anzeige.
+- Unbestätigte Einträge der KI: in der Anzeige der Vermerk „von KI, ungeprüft“ hinter den Jahren (`HistoryAiNote`), im `aria-label` als „Titel (von KI, ungeprüft)“. Die Marken selbst bleiben gleich.
 
 **Server oder Client:** Client.
 
-**Tests:** `e2e/read/history.spec.ts` (Marken, Anzeige bei Überfahren und Antippen, Escape, Schalter samt Cookie, Legende, 390 px mit Tippflächen, axe).
+**Tests:** `e2e/read/history.spec.ts` (Marken, Anzeige bei Überfahren und Antippen, Escape, Schalter samt Cookie, Legende, 390 px mit Tippflächen, axe), `e2e/write/history.spec.ts` (Block „Einträge der KI“: Vermerk vor und nach dem Bestätigen).
+
+### components/HistoryAiNote.tsx
+
+**Zweck:** Vermerk „von KI, ungeprüft“ (`AI_UNCONFIRMED_LABEL`) an einem Ereignis der Zeitgeschichte, das die KI eingetragen und noch kein Administrator bestätigt hat — dezent (kleine, gestrichelt umrandete Schrift in Steingrau), aber als Text und nicht nur über die Farbe; hell und dunkel.
+
+**Wo eingesetzt:** `TimelineHistory` (Test-Kennung `tree-history-ai`), `MapExplorer` (`map-history-ai`), `PersonBiography` (`biography-history-ai`) — jeweils nur bei `aiUnconfirmed`.
+
+**Server oder Client:** beides (reine Darstellung).
 
 ### components/HistoryToggle.tsx
 
@@ -447,7 +456,7 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 **Verhalten:**
 
-- *Zeitgeschichte:* Zeile „Zeitgeschichte <Jahr>: …“ unter der Zählzeile mit den Ereignissen, die das (nachlaufende) Jahr berühren (`eventsInYear` aus `lib/history/events.ts`), Titel mit Jahren, Art/Region/Beschreibung als Tooltip, sonst „kein Ereignis aus der Liste“, Kontexthilfe `zeitgeschichteKarte`; unter dem Balkenband feine Marken je Ereignis (Bahnen wie im Baum, nur Schmuck). Kästchen „Zeitgeschichte“ (`HistoryToggle`) in der ersten Zeile der Zeitreise; aus = weder Zeile noch Marken.
+- *Zeitgeschichte:* Zeile „Zeitgeschichte <Jahr>: …“ unter der Zählzeile mit den Ereignissen, die das (nachlaufende) Jahr berühren (`eventsInYear` aus `lib/history/events.ts`), Titel mit Jahren, Art/Region/Beschreibung als Tooltip, bei unbestätigten KI-Einträgen der Vermerk „von KI, ungeprüft“ (`HistoryAiNote`, auch im Tooltip der Marke), sonst „kein Ereignis aus der Liste“, Kontexthilfe `zeitgeschichteKarte`; unter dem Balkenband feine Marken je Ereignis (Bahnen wie im Baum, nur Schmuck). Kästchen „Zeitgeschichte“ (`HistoryToggle`) in der ersten Zeile der Zeitreise; aus = weder Zeile noch Marken.
 
 - *Zeitstrahl (Jahr):* über dem Regler ein Balkenband „Lebende je Jahr“ (`aliveByYear`, nur Schmuck, das aktuelle Jahr markiert); Schiebefeld über die ganze Spanne `yearMin`…`yearMax` (44 px hoch; Pfeile ±1, Bild-auf/-ab ±10, Pos1/Ende; `aria-valuetext` mit Jahr und Zahl der Lebenden); Knöpfe −10/−1/+1/+10 (mindestens 44 × 44 px, am Rand gesperrt); Feld „Gehe zu“ (Eingabetaste oder Verlassen übernimmt, `clampYear` begrenzt auf die Spanne, Unsinn stellt das alte Jahr wieder her). Jede Wahl von Hand hält das Abspielen an. Das Jahr wird ohne Neuladen in `?jahr=` geschrieben (nicht während des Abspielens).
 - *Abspielen:* „Abspielen“ → „Pause“ → „Weiter“ (ein Jahr je Takt, Tempo langsam 400 ms/normal 160 ms/schnell 60 ms, hält am Ende; startet am Ende wieder vorn). Bei `prefers-reduced-motion: reduce` gibt es weder Knopf noch Tempo, nur einen Hinweis — die Schritt-Knöpfe bleiben.
@@ -1048,7 +1057,8 @@ Region und Beschreibung als Tooltip; der Rest in „… weitere Ereignisse“
 (`details`); darunter „Allgemeine Zeitgeschichte <von>–<bis bzw. heute>,
 keine Angabe über die Person.“ mit Kontexthilfe
 `zeitgeschichteLebenslauf`. Kein Satz behauptet, die Person sei betroffen
-gewesen. Das Kästchen „Zeitgeschichte“ (`HistoryToggle`) steht in der
+gewesen. Unbestätigte Einträge der KI tragen hinter den Jahren den Vermerk
+„von KI, ungeprüft“ (`HistoryAiNote`). Das Kästchen „Zeitgeschichte“ (`HistoryToggle`) steht in der
 Hinweiszeile, nur wenn es eine solche Zeile gibt.
 
 **Server oder Client:** Client (wegen „Text kopieren“).
@@ -1914,6 +1924,8 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 - **Exporte / Props:** `HistoryAdmin({ state })` mit `HistoryAdminState` aus `historyAdminState`.
 - **Verhalten:**
   - Abschnitt „Eigene Ereignisse“: je Ereignis eine Karte (`history-custom`) mit Jahren, Titel, Art, Beschreibung und „Gilt für: …“; „Ändern“ öffnet dasselbe Formular an Ort und Stelle (Speichern/Abbrechen), „Löschen“ fragt nach. Ohne Einträge ein Hinweis mit erfundenen Beispielen.
+  - Einträge der KI (`lib/history/origin.ts`): Plakette „von KI“ bzw. „von KI geändert“, bei unbestätigten zusätzlich „ungeprüft“ (gestrichelt); darunter „Begründung der KI: …“ und „Quelle: …“ (Adresse nur `http(s)`, neues Fenster ohne Verweis zurück); bestätigte mit „Bestätigt am … von …“. Unbestätigte haben den Knopf „Bestätigen“ (`POST /api/history-events/confirm`). Beim Ändern eines unbestätigten steht über dem Formular, dass Speichern ihn bestätigt.
+  - Neben der Überschrift „davon N von KI, ungeprüft“; das Kästchen „Nur unbestätigte“ (erscheint, sobald es unbestätigte gibt) filtert die Liste im Browser, „Alle sichtbaren bestätigen (N)“ bestätigt nach Rückfrage alle angezeigten unbestätigten auf einmal. Bleibt nach dem Filtern nichts, steht „Keine unbestätigten Einträge der KI.“
   - Abschnitt „Ereignis hinzufügen“: Felder „Titel“, „Jahr von“, „Jahr bis (optional)“, „Art“ (Auswahl), „Beschreibung (optional, ein Satz)“, „Gilt für Region/Ort (optional)“; darüber der Hinweis „keine Namen aus dem Stammbaum“. Nach dem Anlegen ist das Formular wieder leer.
   - Abschnitt „Mitgelieferte Ereignisse“: Liste mit Jahren, Titel, Art und Beschreibung, Zahl der ausgeblendeten; je Eintrag „Ausblenden“ bzw. „Einblenden“ (zugänglicher Name mit Titel), ausgeblendete blass mit Plakette „ausgeblendet“.
   - Geprüft wird nur auf dem Server; Meldungen je Feld erscheinen am Feld (`aria-invalid`, `field-error`), andere oben im `aria-live`-Bereich. Nach Erfolg Meldung und `router.refresh()`.

@@ -84,11 +84,15 @@ test.describe("MCP-Endpunkt /api/mcp", () => {
     const read = await toolNames(request, "viewer-read");
     expect(read).toContain("search_persons");
     expect(read).not.toContain("create_person");
+    // Zeitgeschichte: lesen mit jedem Schlüssel, pflegen nur mit Schreibstufe.
+    expect(read).toContain("list_history_events");
+    expect(read).not.toContain("add_history_event");
     // Schlüssel WRITE, Benutzer nur READ: wirksam ist READ.
     expect(await toolNames(request, "viewer-write")).toEqual(read);
     const write = await toolNames(request, "admin-write");
     expect(write).toContain("create_person");
     expect(write).toContain("search_persons");
+    expect(write).toContain("add_history_event");
 
     const res = await mcp(request, rpc("tools/call", { name: "list_families", arguments: {} }), bearer("viewer-read"));
     expect(res.status()).toBe(200);
