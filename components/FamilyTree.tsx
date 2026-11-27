@@ -66,6 +66,10 @@ import {
   type TreeView,
 } from "@/lib/focus-tree";
 import { edgeLine, LINES_COOKIE, type ReferenceView } from "@/lib/reference";
+import type { HistoryEvent } from "@/lib/history/events";
+import { HistoryToggle, useHistoryToggle } from "./HistoryToggle";
+import { TimelineHistory } from "./TimelineHistory";
+import { HelpLink } from "./HelpLink";
 
 // Außerhalb der Komponente: React Flow warnt (und rendert neu), wenn sich die
 // Objekte bei jedem Render ändern.
@@ -187,6 +191,10 @@ export function FamilyTree(props: {
   canOrigin?: boolean;
   /** Herkunft der gezeigten Personen — nur bei eingeschaltetem Schalter (`?herkunft=1`) geladen. */
   origin?: TreeOrigin | null;
+  /** Zeitgeschichte für den Zeitstrahl (nur ganzer Baum; lib/services/history.ts). */
+  history?: HistoryEvent[] | null;
+  /** Schalter „Zeitgeschichte“ beim Laden (Cookie, Standard an). */
+  initialHistory?: boolean;
 }) {
   return (
     <ReactFlowProvider>
@@ -204,6 +212,8 @@ function TreeCanvas({
   initialLines = false,
   canOrigin = false,
   origin = null,
+  history = null,
+  initialHistory = true,
 }: {
   data: TreeData | FocusTreeData;
   view: TreeView;
@@ -213,6 +223,8 @@ function TreeCanvas({
   initialLines?: boolean;
   canOrigin?: boolean;
   origin?: TreeOrigin | null;
+  history?: HistoryEvent[] | null;
+  initialHistory?: boolean;
 }) {
   const focusData = view === "focus" && "members" in data ? data : null;
   const router = useRouter();
@@ -225,6 +237,8 @@ function TreeCanvas({
   const [familyMenuOpen, setFamilyMenuOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
   const [showLines, setShowLines] = useState(initialLines);
+  // Zeitgeschichte an der Jahresachse (nur Zeitstrahl), im Cookie gemerkt.
+  const [historyOn, setHistoryOn] = useHistoryToggle(initialHistory);
   const referenceCtx = useMemo<TreeReference>(
     () => ({ view: reference, showLines: showLines && reference !== null }),
     [reference, showLines],
@@ -1310,6 +1324,10 @@ function TreeCanvas({
           </label>
         )}
 
+        {activeView === "timeline" && history && (
+          <HistoryToggle on={historyOn} onChange={setHistoryOn} testId="tree-history-toggle" className={`${toolbarBox} px-3 py-1.5`} />
+        )}
+
         {/* Fokus-Ansicht auf dem Telefon: Ansicht zuerst, „Ehen zeigen“ und die
             Tiefe teilen sich die nächste Zeile — sonst vier Zeilen bei 360 px. */}
         <TreeViewSwitch active={activeView} onSwitch={switchView} className={focusData ? "max-sm:order-1" : ""} />
@@ -1435,6 +1453,9 @@ function TreeCanvas({
         </ReactFlow>
 
         {display.timeline && <TimelineAxis ticks={display.timeline.axis.ticks} />}
+        {display.timeline && history && historyOn && history.length > 0 && (
+          <TimelineHistory events={history} axis={display.timeline.axis} />
+        )}
 
         <button
           type="button"
@@ -1496,6 +1517,7 @@ function TreeCanvas({
           open={legendOpen}
           onToggle={() => setLegendOpen((o) => !o)}
           timeline={activeView === "timeline"}
+          history={activeView === "timeline" && Boolean(history?.length) && historyOn}
           focus={Boolean(focusData)}
           lines={showLines ? reference : null}
           origin={origin}
@@ -1565,6 +1587,7 @@ function Legend({
   open,
   onToggle,
   timeline,
+  history,
   focus,
   lines,
   origin,
@@ -1574,6 +1597,8 @@ function Legend({
   open: boolean;
   onToggle: () => void;
   timeline: boolean;
+  /** Zeitgeschichte an der Jahresachse eingeschaltet (nur Zeitstrahl). */
+  history: boolean;
   focus: boolean;
   /** Bezugsperson, deren Ahnenlinien gerade eingefärbt sind. */
   lines: ReferenceView | null;
@@ -1649,6 +1674,16 @@ function Legend({
             </span>
             männlich / weiblich
           </li>
+          {history && (
+            <li className="flex items-center gap-2" data-testid="legend-history">
+              <span aria-hidden className="inline-flex w-7 justify-center gap-1">
+                <span className="inline-block h-3 w-1 rounded-full bg-amber-600/55 dark:bg-amber-400/55" />
+                <span className="inline-block h-[7px] w-[7px] self-center rounded-full bg-amber-600/55 dark:bg-amber-400/55" />
+              </span>
+              <span>Zeitgeschichte an der Jahresachse</span>
+              <HelpLink to="zeitgeschichteBaum" compact label="Wie funktioniert die Zeitgeschichte im Zeitstrahl?" />
+            </li>
+          )}
           {focus ? (
             <>
               <li className="flex items-center gap-2">

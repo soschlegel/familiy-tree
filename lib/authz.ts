@@ -17,7 +17,8 @@ export type Action =
   | "data:import"
   | "family:manage"
   | "place:manage"
-  | "setting:manage";
+  | "setting:manage"
+  | "history:manage";
 
 const ADMIN_ONLY: Action[] = [
   "user:read",
@@ -31,6 +32,9 @@ const ADMIN_ONLY: Action[] = [
   "place:manage",
   // Einstellungen der Installation (/admin/settings) gelten für alle.
   "setting:manage",
+  // Zeitgeschichte (/admin/history): eigene Ereignisse und ausgeblendete
+  // mitgelieferte gelten für alle Benutzer.
+  "history:manage",
 ];
 
 const PERMISSIONS: Record<Role, Action[]> = {

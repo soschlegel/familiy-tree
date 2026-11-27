@@ -4,6 +4,8 @@ import { cookies } from "next/headers";
 import { requireScope } from "@/lib/session";
 import { REFERENCE_COOKIE } from "@/lib/reference";
 import { loadMapView, type MapMode } from "@/lib/services/map";
+import { listHistoryEvents } from "@/lib/services/history";
+import { HISTORY_COOKIE, historyEnabled } from "@/lib/history/events";
 import { MapExplorer } from "@/components/MapExplorer";
 import { MapPersonChooser } from "@/components/MapPersonChooser";
 import { HelpLink } from "@/components/HelpLink";
@@ -136,7 +138,14 @@ export default async function MapPage({
           .
         </p>
       ) : (
-        <MapExplorer payload={p} initialYear={initialYear} grandparents={view.grandparents} showLines={linesOn} />
+        <MapExplorer
+          payload={p}
+          initialYear={initialYear}
+          grandparents={view.grandparents}
+          showLines={linesOn}
+          history={await listHistoryEvents()}
+          initialHistory={historyEnabled(jar.get(HISTORY_COOKIE)?.value)}
+        />
       )}
 
       {scope.isAdmin && p.unmappedTexts > 0 && (

@@ -19,7 +19,8 @@ Abschnitt 1). Seiten und API-Routen selbst stehen in
 - [Stammbaum und Karte](#stammbaum-und-karte) — `FamilyTree`, `AncestorRings`, `TreeViewSwitch`, `tree-url`, `useTreeFullscreen`, `PersonNode`,
   `OriginChips`, `MarriageNode`, `MarriageEdge`, `ParentEdge`, `ReferenceLines`,
   `ReferenceChip`, `ReferencePanel`, `KinshipPersonField`, `KinshipDiagram`,
-  `kinship-url`, `MapExplorer`, `MapPersonChooser`, `LifePathMap`, `Avatar`, `gender-style`
+  `kinship-url`, `MapExplorer`, `MapPersonChooser`, `LifePathMap`, `Avatar`, `gender-style`,
+  `TimelineHistory`, `HistoryToggle`
 - [Gestaltungssystem: app/globals.css](#gestaltungssystem-appglobalscss)
 - [Personen, Ereignisse, Quellen und Medien](#personen-ereignisse-quellen-und-medien)
   — `PersonForm`, `DateInput`, `EventSection`, `CitationSection`,
@@ -36,7 +37,7 @@ Abschnitt 1). Seiten und API-Routen selbst stehen in
   `MergeDialog`, `FollowUpDuplicates`, `ChangeSetList`, `ChangeEntryList`
 - [Verwaltung und KI-Zugang](#verwaltung-und-ki-zugang) — `UserAdmin`,
   `FamilyAdmin`, `PlaceAdmin` (exportiert `PlaceAutoAssign` und `PlaceTable`),
-  `SettingsAdmin`, `AiAccessManager`, `AiConnectGuide`, `ApiTokenList`
+  `SettingsAdmin`, `HistoryAdmin`, `AiAccessManager`, `AiConnectGuide`, `ApiTokenList`
 
 ## Stammbaum und Karte
 
@@ -54,13 +55,13 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 - `herkunft=1` — Schalter „Herkunft“ (`ORIGIN_PARAM` in `lib/origin.ts`). Nur für Bearbeiter und Administratoren (`canSeeOrigin`); bei anderen wirkt die Adresse nicht. Nur dann lädt der Server die Zuordnung (`loadTreeOrigin`, in der Fokus-Ansicht nur für den Ausschnitt). `treeUrl` trägt den Parameter bei allen Baum-Links mit, solange der Schalter an ist; kein Cookie.
 - `vollbild=1` — Vollbild der Baumfläche (`FULLSCREEN_PARAM` in `components/useTreeFullscreen.ts`). Wertet nur der Browser aus (`useSearchParams`), der Server ignoriert ihn. `treeUrl` trägt ihn wie `herkunft=1` bei allen Baum-Links mit, solange das Vollbild an ist.
 - `denied` — nur für den Hinweis „fehlende Berechtigung“ der Seite.
-- Cookies: `tree-focus` (zuletzt fokussierte Person bzw. Mitte der Ringe, `FOCUS_COOKIE`), `tree-lines` (Schalter „Linien“, `LINES_COOKIE`), `tree-bezug` (vorübergehende Bezugsperson, `REFERENCE_COOKIE`). Gesetzt werden sie im Browser von `FamilyTree`, `AncestorRings` bzw. `ReferenceChip`, gelesen vom Server.
+- Cookies: `tree-focus` (zuletzt fokussierte Person bzw. Mitte der Ringe, `FOCUS_COOKIE`), `tree-lines` (Schalter „Linien“, `LINES_COOKIE`), `tree-bezug` (vorübergehende Bezugsperson, `REFERENCE_COOKIE`), `zeitgeschichte` (Schalter „Zeitgeschichte“, `HISTORY_COOKIE`; `0` = aus, gilt auch für Karte und Lebenslauf). Gesetzt werden sie im Browser von `FamilyTree`, `AncestorRings`, `ReferenceChip` bzw. `useHistoryToggle`, gelesen vom Server.
 
 **Datenfluss**
 
 - Der Server lädt einmal den Graphen der sichtbaren Personen (`loadGraph` aus `lib/services`) und bestimmt die Bezugsperson (`resolveReference`, Vorrang Adresse vor Cookie vor eigener Person).
 - **Fokus-Ansicht:** `loadFocusTree` liefert nur den Ausschnitt um die Fokusperson (Personen, Beziehungen und je Person Generation, Rolle sowie Anzahl verborgener Eltern/Kinder jenseits des Ausschnitts). Ohne `focus` gilt: angefragte Person → `bezug` → gemerkte Person aus dem Cookie → Bezugsperson; ein nicht vorhandener oder gesperrter `focus` ergibt den Hinweis „Person nicht gefunden“ statt eines Baums.
-- **Generationen/Zeitstrahl:** `loadTree` liefert den ganzen (maskierten) Bestand; gesperrte Personen sind Platzhalter mit `restricted`. Zwischen Generationen und Zeitstrahl wechselt der Browser ohne neues Laden (nur die Adresse wird per `replaceState` nachgeführt); der Wechsel zwischen Fokus und ganzem Baum ist eine Navigation, weil sich die Daten ändern.
+- **Generationen/Zeitstrahl:** `loadTree` liefert den ganzen (maskierten) Bestand; gesperrte Personen sind Platzhalter mit `restricted`. Dazu die Zeitgeschichte (`listHistoryEvents`, wenige Dutzend Einträge) für die Marken am Zeitstrahl. Zwischen Generationen und Zeitstrahl wechselt der Browser ohne neues Laden (nur die Adresse wird per `replaceState` nachgeführt); der Wechsel zwischen Fokus und ganzem Baum ist eine Navigation, weil sich die Daten ändern.
 - Zur Bezugsperson berechnet der Server `referenceView` (Verwandtschaftsbegriffe je sichtbarer Person, vier Großeltern, Ahnenlinien je Person) — in der Fokus-Ansicht beschränkt auf die Personen des Ausschnitts.
 - **Ringe:** kein `loadGraph`, kein `referenceView`, keine Familienliste und keine Zählzeile über dem Baum. `loadAncestorRings` (`lib/services/ancestor-rings.ts`) lädt nur die Vorfahren der Mitte, Generation für Generation. Mitte wie in der Fokus-Ansicht: angefragte Person → `bezug` → gemerkte Person → Bezugsperson → `defaultRingsRootId` (jüngste sichtbare Person mit leiblichen Eltern); eine angefragte, aber fehlende oder gesperrte Person ergibt „Person nicht gefunden“ (mit Link „Ringe öffnen“). Die Bezugsperson wird dafür ohne Graph geprüft (`resolveReference` mit Datenbankabfrage je Kandidat).
 
@@ -110,7 +111,7 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 **Wo eingesetzt:** `app/tree/page.tsx` — je einmal für die Fokus-Ansicht und für den ganzen Baum (mit unterschiedlichem `key`, damit beim Wechsel neu aufgebaut wird).
 
-**Props/Daten:** Baumdaten (ganzer Baum oder Fokus-Ausschnitt mit Mitgliedsangaben), die aktive Ansicht, die Liste der sichtbaren Familien für den Filter, optional eine zu zentrierende Person, die Bezugsperson samt Verwandtschaft (oder keine), den Anfangszustand des Schalters „Linien“ aus dem Cookie, `canOrigin` (Schalter „Herkunft“ zeigen) und `origin` (Herkunft der gezeigten Personen, nur bei eingeschaltetem Schalter).
+**Props/Daten:** Baumdaten (ganzer Baum oder Fokus-Ausschnitt mit Mitgliedsangaben), die aktive Ansicht, die Liste der sichtbaren Familien für den Filter, optional eine zu zentrierende Person, die Bezugsperson samt Verwandtschaft (oder keine), den Anfangszustand des Schalters „Linien“ aus dem Cookie, `canOrigin` (Schalter „Herkunft“ zeigen), `origin` (Herkunft der gezeigten Personen, nur bei eingeschaltetem Schalter), `history` (Zeitgeschichte, nur im ganzen Baum) und `initialHistory` (Schalter „Zeitgeschichte“ aus dem Cookie, Standard an).
 
 **Verhalten:**
 
@@ -124,7 +125,7 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 - *„Herkunft“* (nur mit `canOrigin`): Kontrollkästchen, das zur Adresse mit bzw. ohne `herkunft=1` navigiert — der Haken folgt der Adresse, wechselt also erst, wenn der Server die Zuordnung geladen hat. An klappt auf breiten Bildschirmen die Legende auf; hervorgehobener Import nur im Speicher der Seite.
 - *Legende* (unten links, aufklappbar): Arten der Elternschaft, Partnerschaftsarten, „nicht freigegeben“, Geschlechtsfarben, Klickverhalten je Ansicht; bei aktiver Herkunft zuerst die Herkunfts-Legende, bei aktiven Linien die Großeltern-Legende. Auf dem Telefon bleibt bei Linien oder Herkunft nur deren Legende; sind beide an, entfällt die allgemeine Liste auch auf breiten Bildschirmen. Anfangs offen nur auf breiten Bildschirmen und nicht in der Fokus-Ansicht (außer Linien sind beim Laden an).
 - *Anfangsausschnitt im ganzen Baum:* passt der Baum lesbar hinein, wird eingepasst; sonst beginnt die Ansicht lesbar bei der obersten Generation mit einer sichtbaren Person. Verschieben ist auf den Baum plus Rand begrenzt.
-- *Zeitstrahl:* Jahresachse als feste Leiste links, die beim Verschieben stehen bleibt und Zoom/Verschiebung direkt aus dem React-Flow-Speicher liest.
+- *Zeitstrahl:* Jahresachse als feste Leiste links, die beim Verschieben stehen bleibt und Zoom/Verschiebung direkt aus dem React-Flow-Speicher liest. Darüber die Zeitgeschichte (`TimelineHistory`), ein- und ausschaltbar mit dem Kästchen „Zeitgeschichte“ (`HistoryToggle`, nur in dieser Ansicht in der Werkzeugleiste); bei eingeschalteter Zeitgeschichte nennt die Legende die Marken („Zeitgeschichte an der Jahresachse“, Kontexthilfe `zeitgeschichteBaum`).
 - *Leistung:* Knotenobjekte werden zwischengespeichert, solange sich ihr Zustand nicht ändert; Kanten hängen nur davon ab, *ob* gesucht wird. Im ganzen Baum werden nur sichtbare Elemente gezeichnet, in der Fokus-Ansicht alle (damit Tab alle Karten erreicht).
 - *Tastatur/Fokus:* Karten sind Links; beim Tab-Sprung auf eine Karte setzt die Komponente das Browser-Scrollen der Fläche zurück und zentriert stattdessen die Karte. React-Flow-eigene Knoten-/Kantenfokussierung ist aus.
 - *Vollbild* (Knopf „Vollbild“ rechts oben in der Baumfläche, alle drei Ansichten; Zustand über `useTreeFullscreen`): Die Hülle um Werkzeugleiste und Fläche (`data-testid="tree-shell"`, `data-fullscreen`) wird zur festen Überlagerung über der ganzen Seite (`fixed inset-0`, `100dvh`, Innenabstand `env(safe-area-inset-*)`, Papierfarbe, auch dunkel), die Werkzeugleiste ist ausgeblendet, die Fläche verliert Rand und Mindesthöhe. Alles in der Fläche bleibt: Zoom-Knöpfe, Fokus-Verlauf, Legende (samt Linien- und Herkunfts-Legende, falls eingeschaltet — so bleiben die Farben erklärbar, ohne die Leiste einzublenden), Jahresachse, MiniMap. Beim Umschalten bleibt die Bildmitte stehen (Verschiebung um die halbe Größenänderung, gemessene Größe per `ResizeObserver`). Der Knopf ist ein Umschalter mit `aria-pressed`, beschriftet „Vollbild“ bzw. „Vollbild beenden“, auf dem Telefon ≥ 44 px hoch, ab `md` klein und unaufdringlich; der Fokus-Verlauf lässt rechts Platz dafür, die MiniMap rückt darunter (`!top-12`). Weil es derselbe Knopf an derselben Stelle ist, bleibt der Tastaturfokus beim Umschalten erhalten.
@@ -137,6 +138,33 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 **Ruft auf:** `GET /api/persons?q=…&limit=8` (Suche in der Fokus-Ansicht); Porträts indirekt über die Karten (`/api/media/<id>?variant=thumb`). Navigation über den Next-Router.
 
 **Tests:** `e2e/read/tree-focus.spec.ts` (Startperson, Fokus-Klick, Verlauf, Tiefe, Zurück/Vor, Suche, „Ganzer Baum“, gesperrte Personen), `e2e/read/tree-whole.spec.ts` (Ansichtswechsel, Hochzeitsknoten im Zeitstrahl, Suche, Familienfilter, „Ehen zeigen“, Legende), `e2e/read/reference.spec.ts` (Schalter „Linien“, farbige Kanten, Linienlegende), `e2e/read/origin.spec.ts` und `e2e/write/origin.spec.ts` (Schalter „Herkunft“, Rechte, Legende, Hervorheben, mit „Linien“ zugleich, Telefonbreite), `e2e/read/permissions.spec.ts` (keine fremden Namen, Suche), `e2e/read/mobile.spec.ts` und `e2e/read/quality.spec.ts` (Tippziele, Bildschirmhöhe, axe; Vollbild bei 360 px: ein/aus, Escape, Zurück, Karte antippen, `inert`, axe), `e2e/read/tree-whole.spec.ts` auch Vollbild per Adresse im dunklen Schema (MiniMap unter dem Knopf, Beenden ohne Verlaufsschritt), `e2e/read/navigation.spec.ts` (Fußzeile auf der Baumseite). Layout-Logik: `tests/layout.test.ts`, `tests/focus.test.ts`, `tests/focus.db.test.ts`.
+
+### components/TimelineHistory.tsx
+
+**Zweck:** Zeitgeschichte an der Jahresachse des Zeitstrahls: Zeiträume als schmales Band, Einzeljahre als Punkt, links in der Achsenspalte (die Personenkarten bleiben frei). Sich überschneidende Ereignisse stehen in eigenen Bahnen nebeneinander (`historyLanes`).
+
+**Wo eingesetzt:** `FamilyTree`, nur im Zeitstrahl und bei eingeschaltetem Schalter.
+
+**Props/Daten:** `events` (Zeitgeschichte), `axis` (`minYear`, `maxYear`, `toY` aus `layoutTimeline` — die Jahresachse ist gestaucht, deshalb rechnet die Komponente mit derselben Umrechnung wie die Karten). Ereignisse außerhalb der Achse fallen weg, angeschnittene werden auf sie begrenzt.
+
+**Verhalten:**
+
+- Bänder und Punkte sind Schmuck (`aria-hidden`); bedienbar ist je Gruppe zeitlich überschneidender Ereignisse eine Schaltfläche über die ganze Achsenbreite, mindestens 44 px hoch, mit `aria-label` „Zeitgeschichte 1914–1920: Erster Weltkrieg, …“. Liegen Schaltflächen bei kleinem Zoom übereinander, werden ihre Gruppen zusammengefasst.
+- Überfahren und Fokus zeigen daneben eine Anzeige (`role="tooltip"`): Titel, Jahre, Art, „gilt für …“ und Beschreibung je Ereignis; Antippen bzw. Klicken hält sie fest, Escape oder ein Klick daneben schließt. In der unteren Hälfte klappt sie nach oben auf; Breite auf den Bildschirm begrenzt.
+- Leistung: liest nur Verschiebung, Zoom und Höhe aus dem React-Flow-Speicher (wie `TimelineAxis`); Weltkoordinaten einmal je Ereignisliste und Achse; der Baum selbst rendert dadurch nicht neu. Unsichtbare Gruppen werden nicht gezeichnet.
+- Hell/dunkel: Bernsteintöne mit halber Deckkraft, hervorgehoben bei geöffneter Anzeige.
+
+**Server oder Client:** Client.
+
+**Tests:** `e2e/read/history.spec.ts` (Marken, Anzeige bei Überfahren und Antippen, Escape, Schalter samt Cookie, Legende, 390 px mit Tippflächen, axe).
+
+### components/HistoryToggle.tsx
+
+**Zweck:** Schalter „Zeitgeschichte“ für alle drei Anzeigestellen: `useHistoryToggle(initial)` (Zustand plus Cookie `zeitgeschichte` über `historyCookie`) und `HistoryToggle` (Kontrollkästchen mit Beschriftung, auf dem Telefon mindestens 44 px hoch).
+
+**Wo eingesetzt:** `FamilyTree` (Zeitstrahl), `MapExplorer`, `PersonBiography`.
+
+**Server oder Client:** Client.
 
 ### components/AncestorRings.tsx
 
@@ -383,9 +411,11 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 **Wo eingesetzt:** `app/map/page.tsx` (nicht, wenn „Vorfahren“ ohne Ausgangsperson gewählt ist).
 
-**Props/Daten:** Kartendaten aller Jahre (Orte mit Koordinaten und Genauigkeit, Personen mit Lebensspanne, Ortsverlauf, Linienbits und Geburtsjahr-Angaben fürs Alter, Hochzeiten, Jahresbereich, Zahl ohne Lebensdaten), Startjahr, Großeltern der Ausgangsperson und ob Linien gezeigt werden.
+**Props/Daten:** Kartendaten aller Jahre (Orte mit Koordinaten und Genauigkeit, Personen mit Lebensspanne, Ortsverlauf, Linienbits und Geburtsjahr-Angaben fürs Alter, Hochzeiten, Jahresbereich, Zahl ohne Lebensdaten), Startjahr, Großeltern der Ausgangsperson und ob Linien gezeigt werden; `history` (Zeitgeschichte) und `initialHistory` (Schalter aus dem Cookie, Standard an).
 
 **Verhalten:**
+
+- *Zeitgeschichte:* Zeile „Zeitgeschichte <Jahr>: …“ unter der Zählzeile mit den Ereignissen, die das (nachlaufende) Jahr berühren (`eventsInYear` aus `lib/history/events.ts`), Titel mit Jahren, Art/Region/Beschreibung als Tooltip, sonst „kein Ereignis aus der Liste“, Kontexthilfe `zeitgeschichteKarte`; unter dem Balkenband feine Marken je Ereignis (Bahnen wie im Baum, nur Schmuck). Kästchen „Zeitgeschichte“ (`HistoryToggle`) in der ersten Zeile der Zeitreise; aus = weder Zeile noch Marken.
 
 - *Zeitstrahl (Jahr):* über dem Regler ein Balkenband „Lebende je Jahr“ (`aliveByYear`, nur Schmuck, das aktuelle Jahr markiert); Schiebefeld über die ganze Spanne `yearMin`…`yearMax` (44 px hoch; Pfeile ±1, Bild-auf/-ab ±10, Pos1/Ende; `aria-valuetext` mit Jahr und Zahl der Lebenden); Knöpfe −10/−1/+1/+10 (mindestens 44 × 44 px, am Rand gesperrt); Feld „Gehe zu“ (Eingabetaste oder Verlassen übernimmt, `clampYear` begrenzt auf die Spanne, Unsinn stellt das alte Jahr wieder her). Jede Wahl von Hand hält das Abspielen an. Das Jahr wird ohne Neuladen in `?jahr=` geschrieben (nicht während des Abspielens).
 - *Abspielen:* „Abspielen“ → „Pause“ → „Weiter“ (ein Jahr je Takt, Tempo langsam 400 ms/normal 160 ms/schnell 60 ms, hält am Ende; startet am Ende wieder vorn). Bei `prefers-reduced-motion: reduce` gibt es weder Knopf noch Tempo, nur einen Hinweis — die Schritt-Knöpfe bleiben.
@@ -404,7 +434,7 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 **Ruft auf:** `fetch("/geo/countries.json")` über `loadCountries` aus `lib/map/countries.ts` (statische Datei, keine API-Route; gemeinsamer Zwischenspeicher mit `LifePathMap`). Die Kartendaten liefert die Seite serverseitig (`loadMapView`); keine API-Route aus der Komponente.
 
-**Tests:** `e2e/read/map.spec.ts` (Kreise, Grenzen, Legende, Regler per Tastatur ohne Neuladen, Bild-ab, Schritt-Knöpfe, Jahreseingabe mit Begrenzung, Jahr in der Adresse, „Wer lebte“ mit Zahl gleich Zählzeile, Sortieren nach Alter, Kreis filtert die Liste, „In diesem Jahr“ aufklappen, Abspielen/Pause/Weiter, „Bewegung reduzieren“, Kreis-Auswahl, Ortsliste und Fokus, Ausschnitte/Zoom, axe, Telefon: Tippflächen ≥ 44 px, kein Querscrollen). Rechenlogik: `tests/map.test.ts` (`snapshot`, Zeitreise-Helfer, Projektion, `zoomAt`, `fitViewBox`, Laufzeit), `tests/map.db.test.ts`. Pfeiltasten auf der Karte, Tempo und „ohne bekannten Ort“-Auswahl sind nicht gezielt getestet.
+**Tests:** `e2e/read/map.spec.ts` (Kreise, Grenzen, Legende, Regler per Tastatur ohne Neuladen, Bild-ab, Schritt-Knöpfe, Jahreseingabe mit Begrenzung, Jahr in der Adresse, „Wer lebte“ mit Zahl gleich Zählzeile, Sortieren nach Alter, Kreis filtert die Liste, „In diesem Jahr“ aufklappen, Abspielen/Pause/Weiter, „Bewegung reduzieren“, Kreis-Auswahl, Ortsliste und Fokus, Ausschnitte/Zoom, axe, Telefon: Tippflächen ≥ 44 px, kein Querscrollen). Rechenlogik: `tests/map.test.ts` (`snapshot`, Zeitreise-Helfer, Projektion, `zoomAt`, `fitViewBox`, Laufzeit), `tests/map.db.test.ts`. Pfeiltasten auf der Karte, Tempo und „ohne bekannten Ort“-Auswahl sind nicht gezielt getestet. Zeitgeschichte: `e2e/read/history.spec.ts`, `e2e/write/history.spec.ts`.
 
 ### components/MapPersonChooser.tsx
 
@@ -966,7 +996,8 @@ Person sehen darf; ohne Satz über den Namen hinaus entfällt er.
 
 **Props/Daten:** `biography` (`Biography`: Absätze aus Textstücken, Namen
 anderer Personen mit `personId`; reiner Text) — fertig vom Server, nur
-Sichtbares.
+Sichtbares. `history` (`LifetimeHistory` aus `getLifetimeHistory` oder
+`null`) und `initialHistory` (Schalter aus dem Cookie, Standard an).
 
 **Verhalten:** Absätze in Serifenschrift, Namen als Links auf die
 Personenseiten. Knopf „Text kopieren“ legt den reinen Text (ohne Links,
@@ -977,13 +1008,26 @@ aus den erfassten Daten erstellt.“ mit Kontexthilfe „Wie entsteht der
 Text?“ (`HelpLink` `lebenslauf`). Hell/dunkel über die üblichen Klassen;
 bei 390 px bricht der Knopf unter die Überschrift.
 
+*Zeitgeschichte:* Zwischen Text und Hinweis, abgesetzt (Randlinie,
+`aside` „Zeitgeschichte“, außerhalb von `#biography-text`, also nie Teil
+des Texts oder von „Text kopieren“), die Zeile „In diese Lebenszeit
+fielen: …“ — die wichtigsten Ereignisse (höchstens vier) mit Jahren, Art,
+Region und Beschreibung als Tooltip; der Rest in „… weitere Ereignisse“
+(`details`); darunter „Allgemeine Zeitgeschichte <von>–<bis bzw. heute>,
+keine Angabe über die Person.“ mit Kontexthilfe
+`zeitgeschichteLebenslauf`. Kein Satz behauptet, die Person sei betroffen
+gewesen. Das Kästchen „Zeitgeschichte“ (`HistoryToggle`) steht in der
+Hinweiszeile, nur wenn es eine solche Zeile gibt.
+
 **Server oder Client:** Client (wegen „Text kopieren“).
 
 **Ruft auf:** —
 
 **Tests:** `e2e/read/biography.spec.ts` (Abschnitt, Links, Kopieren,
-eingeschränkter Benutzer, 390 px, axe). Text und Rechte:
-`tests/biography.test.ts`, `tests/biography.db.test.ts`.
+eingeschränkter Benutzer, 390 px, axe), `e2e/read/history.spec.ts`
+(Zeitgeschichte: Inhalt, nicht im Text und nicht kopiert, Schalter, 390 px,
+dunkel). Text und Rechte: `tests/biography.test.ts`,
+`tests/biography.db.test.ts`; Lebenszeit: `tests/history.test.ts`.
 
 ### components/DonutChart.tsx
 
@@ -1482,7 +1526,7 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 ### components/HelpLink.tsx
 
 - **Zweck:** Kontexthilfe — kleiner Link zur passenden Seite der Anwender-Hilfe (`/hilfe/…`), und `FooterHelpLink`, der Link „Hilfe“ in der Fußzeile.
-- **Wo eingesetzt:** `HelpLink` auf `/map` (in „Wie wird gezählt?“, beim Lebensweg in „Wie entsteht der Weg?“ und am Admin-Hinweis „Orte zuordnen“), `/admin/data` (Orte zuordnen), `/research/duplicates`, `/ai-access`, `/admin/settings`, in `ReferencePanel` und `LineLegend`; `FooterHelpLink` in `app/layout.tsx` (nur angemeldet).
+- **Wo eingesetzt:** `HelpLink` auf `/map` (in „Wie wird gezählt?“, beim Lebensweg in „Wie entsteht der Weg?“ und am Admin-Hinweis „Orte zuordnen“), `/admin/data` (Orte zuordnen), `/research/duplicates`, `/ai-access`, `/admin/settings`, `/admin/history`, in `ReferencePanel` und `LineLegend`, Zeitgeschichte in der Legende des Zeitstrahls, in der Zeile der Zeitreise (`MapExplorer`) und im Lebenslauf (`PersonBiography`); `FooterHelpLink` in `app/layout.tsx` (nur angemeldet).
 - **Props:** `to` (Schlüssel aus `HELP_LINKS` in `lib/help/links.ts` — nie eine freie Adresse, damit der Test alle Ziele kennt), `label` (Standard „Wie funktioniert das?“), `compact` (nur „?“ im Kreis; Text dann als `sr-only` und Tooltip; auf dem Telefon 44 px Tippziel), `className`.
 - **Verhalten:** `next/link`, `data-testid="help-link"`. Neue Stellen: Ziel in `HELP_LINKS` ergänzen (Anker aus der Überschrift, siehe `slugify`).
 - **Server oder Client:** neutral (kein `"use client"`), auch in Client-Komponenten nutzbar.
@@ -1830,6 +1874,21 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 - **Server oder Client:** Client.
 - **Ruft auf:** `POST /api/settings`, `PATCH /api/settings/[key]`, `DELETE /api/settings/[key]` (über `apiFetch`/`jsonBody`).
 - **Tests:** `e2e/write/settings.spec.ts` (Menü, Ausgangszustand, axe hell/dunkel, anlegen mit Prüfung am Feld, ändern, entfernen, 390 px, Nicht-Admins).
+
+### components/HistoryAdmin.tsx
+
+- **Zweck:** Zeitgeschichte pflegen: eigene Ereignisse anlegen, ändern, löschen; mitgelieferte Einträge aus- und wieder einblenden.
+- **Wo eingesetzt:** `app/admin/history/page.tsx` (Recht `history:manage`).
+- **Exporte / Props:** `HistoryAdmin({ state })` mit `HistoryAdminState` aus `historyAdminState`.
+- **Verhalten:**
+  - Abschnitt „Eigene Ereignisse“: je Ereignis eine Karte (`history-custom`) mit Jahren, Titel, Art, Beschreibung und „Gilt für: …“; „Ändern“ öffnet dasselbe Formular an Ort und Stelle (Speichern/Abbrechen), „Löschen“ fragt nach. Ohne Einträge ein Hinweis mit erfundenen Beispielen.
+  - Abschnitt „Ereignis hinzufügen“: Felder „Titel“, „Jahr von“, „Jahr bis (optional)“, „Art“ (Auswahl), „Beschreibung (optional, ein Satz)“, „Gilt für Region/Ort (optional)“; darüber der Hinweis „keine Namen aus dem Stammbaum“. Nach dem Anlegen ist das Formular wieder leer.
+  - Abschnitt „Mitgelieferte Ereignisse“: Liste mit Jahren, Titel, Art und Beschreibung, Zahl der ausgeblendeten; je Eintrag „Ausblenden“ bzw. „Einblenden“ (zugänglicher Name mit Titel), ausgeblendete blass mit Plakette „ausgeblendet“.
+  - Geprüft wird nur auf dem Server; Meldungen je Feld erscheinen am Feld (`aria-invalid`, `field-error`), andere oben im `aria-live`-Bereich. Nach Erfolg Meldung und `router.refresh()`.
+  - Knöpfe und Felder über `btn-*`/`field` — auf dem Telefon 44 px hoch.
+- **Server oder Client:** Client.
+- **Ruft auf:** `POST /api/history-events`, `PATCH`/`DELETE /api/history-events/[id]`, `PATCH /api/history-events/builtin/[id]` (über `apiFetch`/`jsonBody`).
+- **Tests:** `e2e/write/history.spec.ts` (Menü, Ausgangszustand, axe hell/dunkel, anlegen mit Prüfung am Feld, Wirkung auf die Karte, ändern, aus-/einblenden, Änderungsübersicht, 390 px, löschen, Nicht-Admins); `e2e/read/quality.spec.ts`.
 
 ### components/PlaceAdmin.tsx
 

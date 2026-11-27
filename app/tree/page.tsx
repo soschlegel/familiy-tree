@@ -8,6 +8,7 @@ import { editableFamilyIds } from "@/lib/scope";
 import {
   canSeeOrigin,
   listFamilies,
+  listHistoryEvents,
   loadFocusTree,
   loadGraph,
   loadTree,
@@ -20,6 +21,7 @@ import {
 import { LINES_COOKIE, REFERENCE_COOKIE, type ReferenceView } from "@/lib/reference";
 import { FOCUS_COOKIE, FOCUS_DEPTH, parseDepth, type TreeView } from "@/lib/focus-tree";
 import { ORIGIN_PARAM } from "@/lib/origin";
+import { HISTORY_COOKIE, historyEnabled } from "@/lib/history/events";
 import {
   parseRingsColoring,
   parseRingsDirection,
@@ -212,8 +214,12 @@ async function TreeContent({
     if (visible > 0) {
       reference = graph ? referenceView(graph, choice) : null;
       const origin = originOn && graph ? await loadTreeOrigin(scope, graph) : null;
+      // Zeitgeschichte für den Zeitstrahl (Wechsel Generationen ↔ Zeitstrahl ohne Neuladen).
+      const history = await listHistoryEvents();
       content = (
         <FamilyTree
+          history={history}
+          initialHistory={historyEnabled(jar.get(HISTORY_COOKIE)?.value)}
           key="full"
           view={view}
           data={data}

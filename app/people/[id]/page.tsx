@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PlaceText } from "@/components/PlaceText";
 import { placeLinksFor } from "@/lib/services/place-pages";
 import { notFound, permanentRedirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { cache } from "react";
 
 import { prisma } from "@/lib/prisma";
@@ -54,6 +55,8 @@ import { lifePathEntry } from "@/lib/services/life-path";
 import { PersonRoots } from "@/components/PersonRoots";
 import { PersonBiography } from "@/components/PersonBiography";
 import { getPersonBiography } from "@/lib/services/biography";
+import { getLifetimeHistory } from "@/lib/services/history";
+import { HISTORY_COOKIE, historyEnabled } from "@/lib/history/events";
 import {
   RelationshipEditor,
   type RelationRow,
@@ -345,11 +348,13 @@ export default async function PersonPage({
   // Punkte hat (eigene Stationen, sonst Vater- bzw. Mutterlinie).
   // Lebenslauf: Text aus den schon geladenen Daten (nur Sichtbares), dazu
   // eine Abfrage der Eltern-Kind-Kanten (lib/services/biography.ts).
-  const [origin, roots, lifePath, biography] = await Promise.all([
+  // Zeitgeschichte zur Lebenszeit (lib/history/lifetime.ts) — nur Zusatz unter dem Lebenslauf.
+  const [origin, roots, lifePath, biography, lifetimeHistory] = await Promise.all([
     canEdit ? getPersonOrigin(scope, id) : null,
     getPersonRoots(scope, id),
     lifePathEntry(scope, id),
     getPersonBiography(detail),
+    getLifetimeHistory(detail),
   ]);
 
   // Lebensereignisse: die der Person und die ihrer Beziehungen in einer
@@ -631,7 +636,13 @@ export default async function PersonPage({
         </dl>
       </header>
 
-      {biography && <PersonBiography biography={biography} />}
+      {biography && (
+        <PersonBiography
+          biography={biography}
+          history={lifetimeHistory}
+          initialHistory={historyEnabled((await cookies()).get(HISTORY_COOKIE)?.value)}
+        />
+      )}
 
       <ReferencePanel scope={scope} personId={person.id} personName={name(person)} bezug={bezug} />
 

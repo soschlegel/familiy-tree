@@ -44,3 +44,4 @@ export * from "./attached-media";
 export * from "./release-notes";
 export * from "./origin";
 export * from "./settings";
+export * from "./history";

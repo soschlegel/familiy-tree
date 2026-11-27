@@ -3,7 +3,7 @@ import { openAdminMenu } from "../support/nav";
 
 const ALL = ["Baum", "Karte", "Personen", "Recherche", "Statistik", "Quellen", "Daten"];
 /** Stehen im Untermenü „Verwaltung“ (components/NavBar.tsx). */
-const ADMIN_ONLY = ["Familien", "Benutzer", "Änderungen", "Einstellungen"];
+const ADMIN_ONLY = ["Familien", "Benutzer", "Änderungen", "Einstellungen", "Zeitgeschichte"];
 
 const nav = (page: import("@playwright/test").Page) =>
   page.getByRole("navigation", { name: "Hauptnavigation" });
@@ -126,10 +126,14 @@ test.describe("als Admin", () => {
       await expect(page).toHaveURL(/\/sources$/);
       await expect(page.locator("#mobile-menu")).toBeHidden();
 
-      // Klick daneben schließt.
+      // Klick daneben schließt. Das Menü des Administrators reicht bei 844 px
+      // fast bis zum unteren Rand — für den Klick unterhalb mehr Höhe geben.
+      await page.setViewportSize({ width: 390, height: 1000 });
       await toggle.click();
       await expect(menu).toBeVisible();
-      await page.mouse.click(200, 820);
+      const box = (await menu.boundingBox())!;
+      expect(box.y + box.height, "Platz unter dem Menü").toBeLessThan(990);
+      await page.mouse.click(200, 990);
       await expect(menu).toBeHidden();
     });
   });

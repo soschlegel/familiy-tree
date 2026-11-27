@@ -39,7 +39,7 @@ test.describe("Lebenslauf als Bearbeiter", () => {
     await expect(text).toContainText(`${fullName(founder)}, genannt „Hein“, wurde`);
     await expect(text).toContainText("Als Todesursache ist „Lungenentzündung“ vermerkt.");
     await expect(page.getByTestId("biography-note")).toContainText("Automatisch aus den erfassten Daten erstellt.");
-    await expect(section.getByTestId("help-link")).toHaveAttribute("href", "/hilfe/personen#lebenslauf");
+    await expect(page.getByTestId("biography-note").getByTestId("help-link")).toHaveAttribute("href", "/hilfe/personen#lebenslauf");
 
     // Lage: nach dem Kopf (Name), vor den Lebensereignissen und der Familie.
     const top = async (loc: import("@playwright/test").Locator) => (await loc.boundingBox())!.y;

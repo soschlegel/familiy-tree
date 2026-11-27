@@ -5,15 +5,34 @@ import { useState } from "react";
 
 import { HelpLink } from "@/components/HelpLink";
 import type { Biography } from "@/lib/biography";
+import { formatHistoryYears, HISTORY_KIND_LABEL, type HistoryEvent } from "@/lib/history/events";
+import type { LifetimeHistory } from "@/lib/history/lifetime";
+import { HistoryToggle, useHistoryToggle } from "./HistoryToggle";
 
 /**
  * Abschnitt „Lebenslauf“ der Personenseite: der aus den erfassten Daten
  * gebaute Text (lib/biography.ts), Namen anderer Personen als Link, dazu
  * „Text kopieren“ (reiner Text ohne Links). Der Text kommt fertig vom
  * Server und nennt nur Personen, die der Benutzer sehen darf.
+ *
+ * Darunter, abgesetzt und NICHT Teil des Texts (auch nicht von „Text
+ * kopieren“): die Zeile „In diese Lebenszeit fielen: …“ mit Ereignissen der
+ * Zeitgeschichte (lib/history/lifetime.ts) — Hintergrund, ausdrücklich
+ * keine Aussage, die Person sei betroffen gewesen. Schalter
+ * „Zeitgeschichte“ wie im Zeitstrahl und auf der Karte (Cookie).
  */
-export function PersonBiography({ biography }: { biography: Biography }) {
+export function PersonBiography({
+  biography,
+  history = null,
+  initialHistory = true,
+}: {
+  biography: Biography;
+  /** Ereignisse der Lebenszeit; null ohne brauchbare Lebenszeit oder ohne Ereignisse darin. */
+  history?: LifetimeHistory | null;
+  initialHistory?: boolean;
+}) {
   const [copied, setCopied] = useState<"ok" | "fail" | null>(null);
+  const [historyOn, setHistoryOn] = useHistoryToggle(initialHistory);
 
   async function copy() {
     try {
@@ -63,9 +82,11 @@ export function PersonBiography({ biography }: { biography: Biography }) {
           </p>
         ))}
       </div>
-      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs muted" data-testid="biography-note">
+      {history && historyOn && <LifetimeHistoryLine history={history} />}
+      <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs muted" data-testid="biography-note">
         <span>Automatisch aus den erfassten Daten erstellt.</span>
         <HelpLink to="lebenslauf" label="Wie entsteht der Text?" className="text-xs" />
+        {history && <HistoryToggle on={historyOn} onChange={setHistoryOn} testId="biography-history-toggle" />}
         {copied === "ok" && (
           <span role="status" className="font-medium text-accent-700 dark:text-accent-300">
             Text kopiert.
@@ -78,5 +99,51 @@ export function PersonBiography({ biography }: { biography: Biography }) {
         )}
       </p>
     </section>
+  );
+}
+
+function EventItem({ event: e }: { event: HistoryEvent }) {
+  const detail = [HISTORY_KIND_LABEL[e.kind], e.region ? `gilt für ${e.region}` : null, e.description].filter(Boolean).join(" · ");
+  return (
+    <span title={detail} data-testid="biography-history-item">
+      {e.title} <span className="whitespace-nowrap tabular-nums muted">({formatHistoryYears(e)})</span>
+    </span>
+  );
+}
+
+const joined = (events: HistoryEvent[]) =>
+  events.map((e, i) => (
+    <span key={e.id}>
+      <EventItem event={e} />
+      {i < events.length - 1 && <span aria-hidden> · </span>}
+    </span>
+  ));
+
+/** Abgesetzte Zeile unter dem Text: Ereignisse zwischen Geburts- und Sterbejahr (bei Lebenden bis heute). */
+function LifetimeHistoryLine({ history }: { history: LifetimeHistory }) {
+  return (
+    <aside
+      aria-label="Zeitgeschichte"
+      className="space-y-1 border-l-2 border-amber-300 pl-3 text-sm dark:border-amber-700"
+      data-testid="biography-history"
+    >
+      <p>
+        <span className="font-medium text-amber-800 dark:text-amber-300">In diese Lebenszeit fielen:</span> {joined(history.top)}
+      </p>
+      {history.rest.length > 0 && (
+        <details data-testid="biography-history-more">
+          <summary className="cursor-pointer text-accent-700 max-md:py-2.5 dark:text-accent-300">
+            {history.rest.length === 1 ? "1 weiteres Ereignis" : `${history.rest.length} weitere Ereignisse`}
+          </summary>
+          <p className="mt-1">{joined(history.rest)}</p>
+        </details>
+      )}
+      <p className="flex flex-wrap items-center gap-x-2 text-xs muted">
+        <span>
+          Allgemeine Zeitgeschichte {history.from}–{history.living ? "heute" : history.to}, keine Angabe über die Person.
+        </span>
+        <HelpLink to="zeitgeschichteLebenslauf" compact label="Was zeigt die Zeitgeschichte im Lebenslauf?" />
+      </p>
+    </aside>
   );
 }

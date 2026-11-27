@@ -700,6 +700,11 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   (Weiterleitungen, Größe, Typ, Zeit) und Nebenläufigkeitsgrenze.
 - **`scope.test.ts`** — Sicht- und Bearbeitungsrechte je Person/Beziehung,
   Familienfilter.
+- **`history.test.ts`** — Zeitgeschichte, reine Logik: mitgelieferte Liste
+  (eindeutige Kennungen, von ≤ bis, plausible Spanne, keine leeren Texte,
+  Stichproben), Zusammenführen und Ausblenden, Auswahl je Jahr/Spanne mit
+  Rändern, Rangfolge, Bahnen, Lebenszeit (ungenaue und fehlende Daten,
+  Lebende, Tod ohne Datum), Eingabeprüfung, Cookie.
 - **`settings.test.ts`** — Verzeichnis der Einstellungen (eindeutige
   Kennungen, keine Namen, die nach Geheimnissen klingen), Prüfung von
   http(s)-Adressen, Rückfall auf die Umgebungsvariable.
@@ -828,6 +833,12 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
   Stufe Region, Eingabeprüfung, Person ohne Eltern (nur lesend).
 - **`services.db.test.ts`** — die zentralen Dienste (Lesen mit Rechten,
   Anlegen/Ändern/Löschen eigener Personen).
+- **`history.db.test.ts`** — Zeitgeschichte: anlegen, ändern, löschen,
+  mitgelieferte aus- und einblenden mit Wirkung auf die Anzeigeliste,
+  Prüfung, nur Administratoren (lesen alle), Protokoll samt Anzeige in der
+  Änderungsübersicht; Routen `/api/history-events…` (Fehlercodes, 403 für
+  Nicht-Admins und fremde Herkunft). Räumt beide Tabellen vorher und
+  nachher leer.
 - **`settings.db.test.ts`** — Einstellungen: Vorrang App vor Umgebung,
   Rückfall nach dem Entfernen, ungültige gespeicherte Werte, Prüfung, nur
   Administratoren, Protokoll vorher → nachher samt Anzeige in der
@@ -921,6 +932,14 @@ Benutzer bekommt keinen gespeicherten Zustand.
 - **`export.spec.ts`** — Export-Downloads über die Daten-Seite je Rolle.
 - **`gedcom-export-dialog.spec.ts`** — GEDCOM-Export-Dialog mit
   Familienauswahl, Tastatur, Telefon und Rechten.
+- **`history.spec.ts`** — Zeitgeschichte an den drei Anzeigestellen:
+  Marken am Zeitstrahl (Anzeige bei Überfahren und Antippen, Escape,
+  Legende, nur im Zeitstrahl), Zeile der Zeitreise (Jahr mit Zeitraum am
+  Rand, Jahr ohne Ereignis, Marken), Zeile im Lebenslauf (Inhalt aus der
+  mitgelieferten Liste nachgerechnet, nicht im Text, nicht kopiert);
+  Schalter samt Cookie über alle drei Stellen; 390 px mit Tippflächen,
+  axe hell und dunkel. Erwartet die mitgelieferte Liste ohne eigene oder
+  ausgeblendete Einträge.
 - **`map.spec.ts`** — Karte „Wurzeln nach Jahr“ je Rolle und auf dem Telefon,
   Zeitreise (Regler per Tastatur und Eingabe, Jahr in der Adresse, Liste,
   Abspielen/Pause/Weiter, „Bewegung reduzieren“, Tippflächen).
@@ -1057,6 +1076,13 @@ zum nächsten Setup).
   „KI-Zugang“ sichtbar, ändern (auch in der Änderungsübersicht), 390 px,
   entfernen stellt den Rückfall her; Betrachter/Bearbeiter ohne Menüpunkt,
   Seite und API. Entfernt den Eintrag vor und nach der Datei.
+- **`history.spec.ts`** — Zeitgeschichte verwalten: Menüpunkt,
+  Ausgangszustand, axe hell/dunkel, eigenes Ereignis anlegen (Prüfung am
+  Feld) und in der Zeitreise sehen, ändern (auch in der
+  Änderungsübersicht), mitgelieferten Eintrag aus- und einblenden (Wirkung
+  auf die Karte), 390 px, löschen; Betrachter/Bearbeiter ohne Menüpunkt,
+  Seite und API. Löscht „E2E …“-Einträge und blendet Ausgeblendetes vor und
+  nach der Datei wieder ein.
 - **`reference.spec.ts`** — „Das bin ich“ setzen und aufheben, selbst und
   durch den Admin.
 - **`sources.spec.ts`** — Quelle anlegen, zitieren, Beleg ändern/entfernen,
