@@ -55,6 +55,7 @@ setup("Routen vorwärmen", async ({ browser }) => {
     `/sources/${L.sources.churchBookA}/edit`,
     "/sources/new",
     "/research",
+    "/statistics",
     "/admin/data",
     "/admin/users",
     "/admin/families",

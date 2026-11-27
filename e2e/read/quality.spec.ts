@@ -31,6 +31,7 @@ const PAGES = [
   `/sources/${L.sources.crossFamily}/edit`,
   "/sources/new",
   "/research",
+  "/statistics",
   "/admin/data",
   "/ai-access",
   "/admin/users",

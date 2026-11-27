@@ -22,14 +22,24 @@
  *   ist „nicht freigegeben“, über ihn hinaus wird nicht weitergerechnet.
  */
 
+import {
+  CHART_MAX_AREA_SLICES,
+  CHART_MIN_SLICE,
+  groupAreaSlices,
+  roundPercentages,
+  SLICE_COLORS,
+  SLICE_LABELS,
+  type AreaSliceKind,
+} from "./chart-slices";
+
 export const ROOTS_MIN_GENERATION = 2;
 export const ROOTS_MAX_GENERATION = 8;
 export const ROOTS_DEFAULT_GENERATION = 4;
 
-/** Kleinere Ortsstücke als dieser Anteil wandern nach „Sonstige“. */
-export const ROOTS_MIN_SLICE = 0.02;
+/** Kleinere Ortsstücke als dieser Anteil wandern nach „Sonstige“ (lib/chart-slices.ts). */
+export const ROOTS_MIN_SLICE = CHART_MIN_SLICE;
 /** Höchstens so viele farbige Ortsstücke; der Rest wird „Sonstige“. */
-export const ROOTS_MAX_PLACE_SLICES = 8;
+export const ROOTS_MAX_PLACE_SLICES = CHART_MAX_AREA_SLICES;
 
 export function clampRootsGeneration(value: unknown): number {
   const n = typeof value === "number" ? value : Number(value);
@@ -127,7 +137,7 @@ export function ancestorShares(graph: RootsGraph): RootsShares {
 // Zusammenfassen zu Stücken
 // ---------------------------------------------------------------------------
 
-export type RootsSliceKind = "area" | "other" | "unassigned" | "unknown" | "restricted";
+export type RootsSliceKind = AreaSliceKind;
 
 /** Wohin der Anteil eines sichtbaren Vorfahren gehört. */
 export type RootsCategory =
@@ -149,54 +159,27 @@ export type RootsSlice = {
   members?: string[];
 };
 
-export const ROOTS_LABELS = {
-  other: "Sonstige",
-  unassigned: "Ort nicht zugeordnet",
-  unknown: "Unbekannt",
-  restricted: "Nicht freigegeben",
-} as const;
+export const ROOTS_LABELS = SLICE_LABELS;
 
 /** Farben: acht gut unterscheidbare für Gebiete, Grautöne für die übrigen. */
-export const ROOTS_COLORS = {
-  area: Array.from({ length: ROOTS_MAX_PLACE_SLICES }, (_, i) => `var(--chart-${i + 1})`),
-  other: "var(--chart-other)",
-  unassigned: "var(--chart-unassigned)",
-  unknown: "var(--chart-unknown)",
-  restricted: "var(--chart-restricted)",
-} as const;
+export const ROOTS_COLORS = SLICE_COLORS;
 
-/**
- * Ganze Prozent nach dem Verfahren der größten Reste: jede Zahl ist ab- oder
- * aufgerundet, die Summe ist genau 100 (bei Summe 0: alles 0).
- */
-export function roundPercentages(values: readonly number[]): number[] {
-  const total = values.reduce((a, b) => a + Math.max(0, b), 0);
-  if (total <= 0) return values.map(() => 0);
-  const raw = values.map((v) => (Math.max(0, v) / total) * 100);
-  const out = raw.map(Math.floor);
-  let rest = 100 - out.reduce((a, b) => a + b, 0);
-  const order = raw
-    .map((r, i) => ({ i, frac: r - Math.floor(r) }))
-    .sort((a, b) => b.frac - a.frac || a.i - b.i);
-  for (const { i } of order) {
-    if (rest <= 0) break;
-    out[i] += 1;
-    rest -= 1;
-  }
-  return out;
-}
+/** Ganze Prozent, Summe genau 100 (lib/chart-slices.ts). */
+export { roundPercentages };
 
 /**
  * Stücke des Rings: Gebiete absteigend nach Anteil (gleich: nach Name),
  * dann „Sonstige“, „Ort nicht zugeordnet“, „Unbekannt“, „Nicht freigegeben“.
  * Gebiete unter ROOTS_MIN_SLICE bzw. jenseits von ROOTS_MAX_PLACE_SLICES
- * werden „Sonstige“ — aber nie ein einzelnes Gebiet allein.
+ * werden „Sonstige“ — aber nie ein einzelnes Gebiet allein. Das Zusammenfassen
+ * selbst teilt sich der Abschnitt mit der Seite „Statistik“
+ * (groupAreaSlices in lib/chart-slices.ts); das Ganze ist hier 1.
  */
 export function rootsSlices(
   contributions: readonly RootsContribution[],
   categoryOf: (personId: string) => RootsCategory,
 ): RootsSlice[] {
-  const areas = new Map<string, { label: string; share: number }>();
+  const areas = new Map<string, { label: string; value: number }>();
   const gray = { unassigned: 0, unknown: 0, restricted: 0 };
   for (const c of contributions) {
     if (c.share <= 0) continue;
@@ -210,48 +193,9 @@ export function rootsSlices(
       continue;
     }
     const a = areas.get(cat.key);
-    if (a) a.share += c.share;
-    else areas.set(cat.key, { label: cat.label, share: c.share });
+    if (a) a.value += c.share;
+    else areas.set(cat.key, { label: cat.label, value: c.share });
   }
-
-  const sorted = [...areas.entries()]
-    .map(([key, a]) => ({ key, ...a }))
-    .sort((a, b) => b.share - a.share || a.label.localeCompare(b.label, "de"));
-  let keep = sorted.filter((a, i) => a.share >= ROOTS_MIN_SLICE - 1e-12 && i < ROOTS_MAX_PLACE_SLICES);
-  // Absteigend sortiert: die behaltenen sind ein Anfangsstück.
-  let rest = sorted.slice(keep.length);
-  // Ein „Sonstige“ aus nur einem Gebiet verrät nichts Neues — dann lieber beim Namen.
-  if (rest.length === 1 && keep.length < ROOTS_MAX_PLACE_SLICES) {
-    keep = [...keep, rest[0]];
-    rest = [];
-  } else if (rest.length === 1) {
-    // Kein Platz mehr für eine weitere Farbe: das kleinste behaltene Gebiet kommt mit dazu.
-    rest = [keep[keep.length - 1], rest[0]];
-    keep = keep.slice(0, -1);
-  }
-
-  const slices: Omit<RootsSlice, "percent">[] = keep.map((a, i) => ({
-    key: `area:${a.key}`,
-    kind: "area",
-    label: a.label,
-    share: a.share,
-    color: ROOTS_COLORS.area[i % ROOTS_COLORS.area.length],
-  }));
-  if (rest.length) {
-    slices.push({
-      key: "other",
-      kind: "other",
-      label: ROOTS_LABELS.other,
-      share: rest.reduce((s, a) => s + a.share, 0),
-      color: ROOTS_COLORS.other,
-      members: rest.map((a) => a.label),
-    });
-  }
-  for (const kind of ["unassigned", "unknown", "restricted"] as const) {
-    if (gray[kind] > 1e-12) {
-      slices.push({ key: kind, kind, label: ROOTS_LABELS[kind], share: gray[kind], color: ROOTS_COLORS[kind] });
-    }
-  }
-  const percents = roundPercentages(slices.map((s) => s.share));
-  return slices.map((s, i) => ({ ...s, percent: percents[i] }));
+  // Ohne den Zählwert — die Antwort bleibt wie zuvor (nur Anteile).
+  return groupAreaSlices(areas, gray, { total: 1 }).map(({ value: _value, ...slice }) => slice);
 }

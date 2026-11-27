@@ -89,6 +89,7 @@ describe("Anwender-Hilfe: Inhalte in docs/anwender/", () => {
       "ki-zugang",
       "datenschutz",
       "einstellungen",
+      "statistik",
     ]);
     for (const t of topics) {
       expect(t.title, t.file).not.toBe("Hilfe");
