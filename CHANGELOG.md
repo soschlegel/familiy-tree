@@ -17,6 +17,17 @@ Regeln für neue Einträge (AGENTS.md, Abschnitt 3 „Ausrollen“):
 - Geprüft von tests/release-notes.test.ts (lib/release-notes.ts).
 -->
 
+## 2026-11-27.2 — Stammbaum als Ringe
+
+- Neue Ansicht „Ringe“ im Stammbaum: In der Mitte steht eine Person, im
+  ersten Ring ihre Eltern je auf einer Hälfte, in jedem weiteren Ring die
+  Eltern davon — so siehst du alle Vorfahren auf einen Blick.
+- Tippe eine Fläche an, um Name, Lebensdaten und Verwandtschaft zu sehen.
+  „Zur Person“ öffnet die Personenseite, „In die Mitte“ stellt diese Person
+  ins Zentrum.
+- Du wählst 3 bis 7 Generationen und färbst die Ringe „nach Linie“ (je
+  Großelternteil eine Farbe) oder „nach Wurzeln“ (Land des Geburtsorts).
+
 ## 2026-11-27.1 — Wurzeln und Statistik
 
 - Neuer Abschnitt „Wurzeln“ auf der Personenseite: Ein Ring zeigt, aus
