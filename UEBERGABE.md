@@ -13,9 +13,10 @@ aktuell halten — Erledigtes streichen, keine Paketgeschichte sammeln.
   Portainer aktualisiert den Stack von dort. **Ein Merge ist ein
   Produktiv-Deployment auf echte Daten.**
 - `optimierung` = Arbeitsbranch, zum Zeitpunkt der Übergabe gleich `main`.
-- Letztes Release: **2026-11-27.5** (Startseite: Geburtstage Lebender
-  zuerst; Zeitgeschichte mit Geltungsbereich und regionaler Reihenfolge).
-  Davor am selben Tag .4 (Zeitgeschichte über MCP lesen und pflegen,
+- Letztes Release: **2026-11-27.6** (GEDCOM-Export „Ab einer Person“ mit
+  wählbaren Verwandten). Davor am selben Tag .5 (Startseite: Geburtstage
+  Lebender zuerst; Zeitgeschichte mit Geltungsbereich und regionaler
+  Reihenfolge), .4 (Zeitgeschichte über MCP lesen und pflegen,
   Vermerk „von KI, ungeprüft“ bis zur Bestätigung) und **.3** (Startseite „Heute in der Familie“,
   `/kinship` „Wie sind wir verwandt?“, Lebenslauf-Text, Karte: Lebensweg
   und Zeitreise, Ringe: Nachfahren und Druckseite, Seiten „Rekorde“ und
@@ -30,10 +31,10 @@ aktuell halten — Erledigtes streichen, keine Paketgeschichte sammeln.
   Migration: `20261127000300_zeitgeschichte_gebiete` (Liste aller
   Migrationen:
   [datenmodell.md](docs/komponenten/datenmodell.md#migrationen-prismamigrations)).
-- Prüfstand dieses Releases: Migrationen ↔ Schema ohne Abweichung, eine
-  neue, rein ergänzende Migration, Typecheck, Lint, Vitest 1407/1407;
+- Prüfstand dieses Releases: Migrationen ↔ Schema ohne Abweichung, keine
+  neue Migration, Typecheck, Lint, Vitest 1427/1427;
   `npm run test:e2e` (Produktions-Build, strenger Hydration-Wächter,
-  CSP-Wächter): 478
+  CSP-Wächter): 483
   bestanden, 1 übersprungen.
 - Git-Verlauf am 23.11. umgeschrieben (alle Zweige neu hochgeladen). Ältere
   Klone und Worktrees passen nicht mehr dazu — neu klonen statt
@@ -166,6 +167,11 @@ Anleitungen: [docs/entwicklung/tests.md](docs/entwicklung/tests.md),
   mitgelieferten Liste nicht gegen eine Quelle geprüft; kein Abgleich mit
   Wohnorten. Forschungs-Fortschritt: nähere Generationen stehen vor
   fehlenden Eltern entfernterer — bei Bedarf Reihenfolge ändern.
+- **GEDCOM-Export ab einer Person:** Geschwister kommen nur über einen
+  exportierten Elternteil mit (Geschwister der obersten Vorfahren fehlen,
+  wenn deren Eltern unbekannt sind). Einspielen des Teil-Exports in
+  MyHeritage, Gramps & Co. nicht ausprobiert. Der Hilfe-Link im Dialog
+  wechselt die Seite, die Auswahl geht dabei verloren.
 - **Zeitgeschichte regional:** Gebiete nach heutigen Grenzen (bewusste
   Vereinfachung); Geltungsbereiche der mitgelieferten Liste und die
   benannten Gruppen (Preußen, Habsburgermonarchie …) sind eine Einschätzung

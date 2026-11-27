@@ -17,6 +17,17 @@ Regeln für neue Einträge (AGENTS.md, Abschnitt 3 „Ausrollen“):
 - Geprüft von tests/release-notes.test.ts (lib/release-notes.ts).
 -->
 
+## 2026-11-27.6 — GEDCOM-Export ab einer Person
+
+- Beim GEDCOM-Export kannst du jetzt „Ab einer Person“ wählen: Die Datei
+  enthält dann diese Person und ihre Vorfahren.
+- Mit Kästchen nimmst du weitere Verwandte mit: Partner, Geschwister (also
+  auch Onkel und Tanten), deren Partner und Kinder, die Nachkommen der
+  Person sowie Adoptiv-, Stief- und Pflegeeltern.
+- Vor dem Herunterladen siehst du, wie viele Personen die Datei enthält.
+  Den Export erreichst du unter „Daten“ oder über „Vorfahren als GEDCOM
+  exportieren …“ auf der Personenseite.
+
 ## 2026-11-27.5 — Geburtstage zuerst, Zeitgeschichte passend zur Gegend
 
 - Startseite: Ganz oben stehen jetzt die Geburtstage der Lebenden — heute
