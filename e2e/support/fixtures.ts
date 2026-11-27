@@ -129,6 +129,12 @@ export async function devLogin(page: Page, email: string) {
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
 }
 
+/** Nach der Anmeldung: Startseite „Heute in der Familie“ unter `/` (app/page.tsx). */
+export async function waitForStartPage(page: Page) {
+  await page.waitForURL((url) => url.pathname === "/");
+  await expect(page.getByRole("heading", { level: 1, name: /in der Familie$/ })).toBeVisible();
+}
+
 export async function newRoleContext(browser: Browser, role: Role) {
   return browser.newContext({ storageState: authFile(role) });
 }

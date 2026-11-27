@@ -1,4 +1,4 @@
-import { test, expect, devLogin, waitForTree } from "../support/fixtures";
+import { test, expect, devLogin, waitForStartPage } from "../support/fixtures";
 import { USERS } from "../support/mock";
 
 /**
@@ -15,10 +15,9 @@ const ROLE_LABEL = {
 } as const;
 
 for (const role of ["admin", "editor", "viewer", "nofamily"] as const) {
-  test(`Anmeldung als ${role} führt zum Stammbaum`, async ({ page }) => {
+  test(`Anmeldung als ${role} führt zur Startseite`, async ({ page }) => {
     await devLogin(page, USERS[role]);
-    await page.waitForURL(/\/tree/);
-    await expect(page.getByRole("heading", { name: "Stammbaum", level: 1 })).toBeVisible();
+    await waitForStartPage(page);
     const nav = page.getByRole("navigation", { name: "Hauptnavigation" });
     await expect(nav.getByText(ROLE_LABEL[role])).toBeVisible();
   });
@@ -41,7 +40,7 @@ test("gesperrter Benutzer wird mit Meldung abgelehnt", async ({ page }) => {
 });
 
 test("ohne Anmeldung leiten Seiten auf /login, die API antwortet 401", async ({ page, request }) => {
-  for (const url of ["/tree", "/people", "/people/mock-p-001", "/sources", "/research", "/statistics", "/admin/users"]) {
+  for (const url of ["/", "/tree", "/people", "/people/mock-p-001", "/sources", "/research", "/statistics", "/admin/users"]) {
     await page.goto(url);
     await expect(page, url).toHaveURL(/\/login$/);
   }
@@ -54,20 +53,17 @@ test("ohne Anmeldung leiten Seiten auf /login, die API antwortet 401", async ({ 
 
 test("Abmelden beendet die Sitzung", async ({ page }) => {
   await devLogin(page, USERS.viewer);
-  await page.waitForURL(/\/tree/);
-  // Erst abmelden, wenn der Baum seine Daten geladen hat — sonst antworten
-  // dessen noch laufende Anfragen nach dem Abmelden mit 401 (gegen den
-  // schnellen Produktions-Build gesehen).
-  await waitForTree(page);
+  // Die Startseite lädt alles auf dem Server — keine nachlaufenden Anfragen.
+  await waitForStartPage(page);
   await page.getByRole("button", { name: "Abmelden" }).click();
   await expect(page).toHaveURL(/\/login/);
   await page.goto("/people");
   await expect(page).toHaveURL(/\/login/);
 });
 
-test("angemeldet führt /login direkt zum Stammbaum", async ({ page }) => {
+test("angemeldet führt /login direkt zur Startseite", async ({ page }) => {
   await devLogin(page, USERS.editor);
-  await page.waitForURL(/\/tree/);
+  await waitForStartPage(page);
   await page.goto("/login");
-  await expect(page).toHaveURL(/\/tree/);
+  await waitForStartPage(page);
 });

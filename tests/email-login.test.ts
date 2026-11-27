@@ -222,7 +222,7 @@ describe("Link, Bestätigungsseite und Route", () => {
     expect(plausibleLinkParams(`${token}<`, "ada@example.test")).toBe(false);
     expect(plausibleLinkParams([token], "ada@example.test")).toBe(false);
     expect(callbackActionPath(token, "ada@example.test")).toBe(
-      `/api/auth/callback/nodemailer?token=${token}&email=ada%40example.test&callbackUrl=%2Ftree`,
+      `/api/auth/callback/nodemailer?token=${token}&email=ada%40example.test&callbackUrl=%2F`,
     );
   });
 

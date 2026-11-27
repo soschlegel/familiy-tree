@@ -84,9 +84,9 @@ Alle Seiten außer `/login`, `/login/email` und der Weiterleitung `/` sind
 
 | Adresse | Zweck | Rechte |
 |---|---|---|
-| `/` | Weiterleitung nach `/tree` | — |
-| `/login` | Anmeldung (GitHub, Google, E-Mail-Link, Dev-Login) | öffentlich; angemeldet → `/tree` |
-| `/login/email` | Bestätigung eines E-Mail-Links („Jetzt anmelden“) | öffentlich; angemeldet → `/tree` |
+| `/` | Startseite „Heute in der Familie“: Jahrestage, Geburtstage, Einstieg | angemeldet |
+| `/login` | Anmeldung (GitHub, Google, E-Mail-Link, Dev-Login) | öffentlich; angemeldet → `/` |
+| `/login/email` | Bestätigung eines E-Mail-Links („Jetzt anmelden“) | öffentlich; angemeldet → `/` |
 | `/tree` | Stammbaum: Fokus-Ansicht, Generationen, Zeitstrahl | angemeldet |
 | `/map` | Karte „Wurzeln nach Jahr“ | angemeldet |
 | `/people` | Personenliste mit Suche und Filtern | angemeldet |
@@ -228,12 +228,36 @@ Dienst über den `Scope`.
 
 ### `/` — `app/page.tsx`
 
-Leitet immer nach `/tree` weiter (wer nicht angemeldet ist, landet von
-dort auf `/login`).
+Startseite **„Heute in der Familie“** — Ziel nach der Anmeldung und des
+Logos in der Kopfzeile (`components/NavBar.tsx`). Früher leitete `/` nur
+nach `/tree` weiter; der Baum ist jetzt einen Klick entfernt (Menüpunkt
+„Baum“, Kachel „Stammbaum“). Einen eigenen Menüpunkt „Start“ gibt es
+bewusst nicht (die Kopfzeile ist voll; das Logo genügt).
+
+- **Rechte:** angemeldet (`requireScope`, sonst `/login`). Inhalt nur über
+  sichtbare Personen (`getToday`, `lib/services/today.ts`); ohne Familie
+  (kein Admin, keine Familie im Scope) statt der Listen der Hinweis „Noch
+  keine Familie freigegeben“ — ohne Zahlen.
+- **Parameter:** `datum=JJJJ-MM-TT` wählt einen anderen Tag (`parseIsoDay`;
+  ungültig → heute). Ohne Parameter gilt der heutige Tag nach
+  Europe/Berlin (`calendarDayIn`).
+- **Anzeige:** Kopf mit Datum (`formatLongDay`), Überschrift („Heute in der
+  Familie“ bzw. „Der 14. März in der Familie“) und Kontexthilfe
+  (`HelpLink` → `/hilfe/startseite#wie-wird-gezaehlt`). Karte **Heute** mit
+  „‹ Vortag“, „Heute“ (nur an anderen Tagen), „Folgetag ›“ (der heutige Tag
+  immer als `/`) und der Liste der Jahrestage (`AnniversaryList` aus
+  `components/TodayList.tsx`, höchstens zehn, der Rest hinter „Weitere …
+  anzeigen“); leer: freundlicher Hinweis und der nächste Jahrestag mit
+  „Diesen Tag ansehen“. Karte **Demnächst** (30 Tage) mit „Geburtstage“ und
+  „Runde Jahrestage“. Daneben (Telefon: darunter) **Einstieg** mit vier
+  Kacheln: Stammbaum, Karte, Personen, Statistik.
+- **Daten:** `getToday` (`lib/services/today.ts`), Regeln in `lib/today.ts`.
+- **Tests:** `e2e/read/today.spec.ts`; `tests/today.test.ts`,
+  `tests/today.db.test.ts`.
 
 ### `/login` — `app/login/page.tsx`
 
-- Öffentlich. Wer schon angemeldet ist, wird nach `/tree` geleitet.
+- Öffentlich. Wer schon angemeldet ist, wird nach `/` (Startseite) geleitet.
 - Zeigt je nach Konfiguration „Mit GitHub anmelden“ (`AUTH_GITHUB_ID`),
   „Mit Google anmelden“ (`AUTH_GOOGLE_ID`) und den Dev-Login mit
   Feld „Dev-Login: E-Mail-Adresse“ ohne Passwort (`ENABLE_DEV_LOGIN=true`,
@@ -247,7 +271,7 @@ dort auf `/login`).
   neutrale Bestätigung „Wenn diese Adresse freigeschaltet ist, kommt gleich
   eine E-Mail …“ (`role="status"`). Den Link fordert sie über `signIn(…,
   { redirect: false })` direkt bei Auth.js an, nicht über die HTTP-Route.
-- Anmeldung über Server-Aktionen; Ziel nach Erfolg `/tree`. Lehnt Auth.js
+- Anmeldung über Server-Aktionen; Ziel nach Erfolg `/` (Startseite). Lehnt Auth.js
   ab (E-Mail nicht eingeladen oder gesperrt), geht es zurück nach
   `/login?error=<Typ>` mit dem Hinweis, die Adresse sei nicht
   freigeschaltet. Bei `error=Verification` (E-Mail-Link abgelaufen,
@@ -257,13 +281,13 @@ dort auf `/login`).
 
 ### `/login/email` — `app/login/email/page.tsx`
 
-- Öffentlich; angemeldet → `/tree`. Ziel des Links aus der Anmelde-Mail
+- Öffentlich; angemeldet → `/`. Ziel des Links aus der Anmelde-Mail
   (`?token=…&email=…`, aufgebaut von `confirmationUrl`).
 - Löst beim Aufruf **nichts** ein (Mail-Vorschauen und Virenscanner rufen
   Links vorab ab). Zeigt die Adresse und ein Formular mit „Jetzt anmelden“,
-  das per POST an `/api/auth/callback/nodemailer?token=…&email=…&callbackUrl=/tree`
+  das per POST an `/api/auth/callback/nodemailer?token=…&email=…&callbackUrl=/`
   schickt (`callbackActionPath`); Auth.js prüft und löscht das Token, setzt
-  die Sitzung und leitet nach `/tree` — oder bei ungültigem Link nach
+  die Sitzung und leitet nach `/` (Startseite) — oder bei ungültigem Link nach
   `/login?error=Verification`.
 - Unplausible Angaben (`plausibleLinkParams`) oder E-Mail-Anmeldung aus:
   Hinweis als `alert` und Link „Neuen Link anfordern“ (bzw. „Zur Anmeldung“).
@@ -1025,6 +1049,7 @@ Dienste (`tests/*.db.test.ts`) und das Zusammenspiel im Browser
 | Karte, Orte | `e2e/read/map.spec.ts`; `e2e/write/places.spec.ts` |
 | Personen | `e2e/read/people-list.spec.ts`, `person-families.spec.ts`, `dates.spec.ts`; `e2e/write/person-lifecycle.spec.ts`, `genealogy.spec.ts`, `dates.spec.ts` |
 | Statistik | `e2e/read/statistics.spec.ts`; Unit: `tests/statistics.test.ts`, `tests/statistics.db.test.ts` |
+| Startseite | `e2e/read/today.spec.ts`; Unit: `tests/today.test.ts`, `tests/today.db.test.ts` |
 | Recherche, Dubletten, Zusammenführen | `e2e/read/research.spec.ts`, `quality.spec.ts`, `duplicate-banner.spec.ts`; `e2e/write/merge.spec.ts`, `duplicate-banner.spec.ts`, `connect.spec.ts` |
 | Quellen, Bilder | `e2e/write/sources.spec.ts`, `import-sources.spec.ts`, `media.spec.ts`, `attached-media.spec.ts` |
 | Export, Import | `e2e/read/export.spec.ts`, `gedcom-export-dialog.spec.ts`; `e2e/write/import.spec.ts`, `gedcom-import.spec.ts` |

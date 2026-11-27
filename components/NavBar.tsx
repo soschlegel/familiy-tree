@@ -65,7 +65,7 @@ export function NavBar({
         aria-label="Hauptnavigation"
         className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-2.5 max-md:py-[5px]"
       >
-        <Link href="/tree" className="mr-4 flex items-center gap-2 max-lg:-my-2 max-lg:py-2" aria-label="Stammbaum — Startseite">
+        <Link href="/" className="mr-4 flex items-center gap-2 max-lg:-my-2 max-lg:py-2" aria-label="Stammbaum — Startseite">
           <BrandMark />
           <span className="font-serif text-lg font-semibold tracking-tight">Stammbaum</span>
         </Link>

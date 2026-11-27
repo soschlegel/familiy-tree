@@ -24,7 +24,7 @@ Abschnitt 1). Seiten und API-Routen selbst stehen in
 - [Personen, Ereignisse, Quellen und Medien](#personen-ereignisse-quellen-und-medien)
   — `PersonForm`, `DateInput`, `EventSection`, `CitationSection`,
   `CitationLink`, `NameVariants`, `PersonFamilies`, `RelationshipEditor`,
-  `PersonChanges`, `PersonRoots`, `DonutChart` (mit `DonutLegend`), `StatisticsCharts`, `PersonOrigin`, `PersonPicker`, `AttachedMedia`, `MediaGallery`,
+  `PersonChanges`, `PersonRoots`, `DonutChart` (mit `DonutLegend`), `StatisticsCharts`, `TodayList`, `PersonOrigin`, `PersonPicker`, `AttachedMedia`, `MediaGallery`,
   `DeletePersonButton`, `SelfPersonButton`, `SourceForm`, `DeleteSourceButton`
 - [Rahmen und Helfer](#rahmen-und-helfer) — `NavBar`, `PageLoading`,
   `AutoSubmit`, `api-client`, `useDismiss`, `ai-access-labels`,
@@ -943,6 +943,35 @@ Server-Komponente.
 
 **Tests:** `e2e/read/statistics.spec.ts` (Desktop, 390 px hell/dunkel, axe).
 
+### components/TodayList.tsx
+
+**Zweck:** Bausteine der Startseite „Heute in der Familie“ (`app/page.tsx`):
+Jahrestage als Sätze in Anwendersprache, die Personen darin als Links auf
+ihre Personenseite.
+
+**Wo eingesetzt:** `app/page.tsx`.
+
+**Props/Daten:** `AnniversaryList` (`items` = `Anniversary`-Einträge aus
+`lib/today.ts`, `isRealToday` für „heute“/„morgen“, `testId`, `label` als
+Listenname für Screenreader), `AnniversarySentence` (ein Satz, auch für den
+Hinweis „Der nächste: …“ auf einem leeren Tag).
+
+**Verhalten:** Je Eintrag ein genealogisches Zeichen (* Geburt, ⚭ Hochzeit
+bzw. Partnerschaft, † Tod, ~ Ereignis; `aria-hidden`, Art als Tooltip), der
+Satz aus `anniversarySentence` und bei runden Einträgen ein Hinweis aus
+`roundLabel` („Goldene Hochzeit“, „runder Geburtstag“, „100. Jahrestag“);
+runde Einträge haben ein messingfarbenes Zeichen. Höchstens
+`SECTION_LIMIT` (10) Einträge sichtbar, der Rest in einem `<details>` mit
+„Weitere … anzeigen“ / „Weniger anzeigen“ — ohne eigenes Skript (CSP).
+Namenslinks sind Inline-Links; unter `md` vergrößert ein senkrechter
+Innenabstand die Tippfläche auf 44 px, ohne die Zeilenhöhe zu ändern.
+Lange Namen brechen um (`overflow-wrap: anywhere`), bei 390 px nichts über
+dem Rand. Helles und dunkles Schema über Tailwind-Klassen.
+
+**Server oder Client:** Server-Komponente (keine Hooks).
+
+**Tests:** `e2e/read/today.spec.ts` (Desktop, Rechte, 390 px hell/dunkel, axe).
+
 ### components/PersonOrigin.tsx
 
 **Zweck:** Block „Herkunft“ auf der Personenseite: aus welchen Importen die
@@ -1205,13 +1234,13 @@ Erfolg Weiterleitung auf `/sources?deleted=<Titel>`. Fehler als
 
 ### components/NavBar.tsx
 
-- **Zweck:** Kopfzeile mit Hauptnavigation, Untermenü „Verwaltung“, Benutzername und Abmelde-Knopf; dazu der Inhaltsrahmen und das Logo.
+- **Zweck:** Kopfzeile mit Hauptnavigation, Untermenü „Verwaltung“, Benutzername und Abmelde-Knopf; dazu der Inhaltsrahmen und das Logo. Das Logo („Stammbaum — Startseite“) führt auf `/`, die Startseite „Heute in der Familie“; einen eigenen Menüpunkt dafür gibt es nicht (die Hauptzeile ist voll).
 - **Wo eingesetzt:** `app/layout.tsx` (`NavBar`, `MainContainer`, Typ `NavItem`); `BrandMark` zusätzlich in `app/login/page.tsx` und `app/tree/page.tsx`.
 - **Exporte / Props:**
   - `NavBar`: `items` (Liste von `NavItem` = Ziel, Beschriftung, optional `group: "admin"`), `userLabel` (Anzeigename), `signOut` (fertiges Element, kommt vom Layout).
   - `BrandMark`: stilisiertes Stammbaum-Zeichen als SVG, Größe über `className`, für Screenreader ausgeblendet.
   - `MainContainer`: `<main id="inhalt">` (Ziel des Sprunglinks im Layout); unter `/tree` volle Breite, sonst Lesebreite.
-- **Welche Punkte erscheinen** (entscheidet `app/layout.tsx`, nicht die Komponente): Baum, Karte, Personen, Recherche, Quellen, Daten in der Hauptzeile; im Untermenü „Verwaltung“ KI-Zugang (nur bei KI-Recht oder noch nicht widerrufenen Schlüsseln), Familien, Benutzer, Änderungen, Einstellungen (je nach Rechten). Ohne Anmeldung ist die Liste leer.
+- **Welche Punkte erscheinen** (entscheidet `app/layout.tsx`, nicht die Komponente): Baum, Karte, Personen, Recherche, Statistik, Quellen, Daten in der Hauptzeile; im Untermenü „Verwaltung“ KI-Zugang (nur bei KI-Recht oder noch nicht widerrufenen Schlüsseln), Familien, Benutzer, Änderungen, Einstellungen (je nach Rechten). Ohne Anmeldung ist die Liste leer.
 - **Verhalten:**
   - Aktiver Bereich: exakter Pfad oder Unterpfad, Link bekommt `aria-current="page"`. Der Knopf „Verwaltung“ trägt `data-active`, solange man in einem seiner Bereiche ist.
   - Ab Breite `lg`: Hauptpunkte als eine Zeile; „Verwaltung“ als Knopf mit `aria-expanded`/`aria-controls`, der eine Liste aufklappt. Der Benutzername wird gekürzt (vollständig im Tooltip).

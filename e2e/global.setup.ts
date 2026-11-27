@@ -2,9 +2,9 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
-import { test as setup, expect } from "@playwright/test";
+import { test as setup } from "@playwright/test";
 
-import { AUTH_DIR, authFile } from "./support/fixtures";
+import { AUTH_DIR, authFile, waitForStartPage } from "./support/fixtures";
 import { L, USERS, type Role } from "./support/mock";
 
 /**
@@ -33,8 +33,8 @@ for (const role of ROLES) {
     await page.goto("/login");
     await page.getByLabel("Dev-Login: E-Mail-Adresse").fill(USERS[role]);
     await page.getByRole("button", { name: "Anmelden", exact: true }).click();
-    await page.waitForURL(/\/tree/);
-    await expect(page.getByRole("heading", { name: "Stammbaum", level: 1 })).toBeVisible();
+    // Nach der Anmeldung: Startseite „Heute in der Familie“.
+    await waitForStartPage(page);
     await page.context().storageState({ path: authFile(role) });
   });
 }
@@ -44,6 +44,7 @@ setup("Routen vorwärmen", async ({ browser }) => {
   const context = await browser.newContext({ storageState: authFile("admin") });
   const page = await context.newPage();
   const pages = [
+    "/",
     "/tree",
     "/tree?view=generations",
     "/people",

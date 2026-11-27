@@ -12,6 +12,7 @@ import { L } from "../support/mock";
 const [dupKeep, dupOther] = L.duplicates[0];
 
 const PAGES: { name: string; url: string; heading: string | RegExp }[] = [
+  { name: "Startseite", url: "/", heading: /in der Familie$/ },
   { name: "Baum (Fokus)", url: "/tree", heading: "Stammbaum" },
   { name: "Baum (Generationen)", url: "/tree?view=generations", heading: "Stammbaum" },
   { name: "Karte", url: "/map", heading: "Wurzeln nach Jahr" },

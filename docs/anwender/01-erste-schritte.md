@@ -8,7 +8,7 @@ Der Stammbaum ist privat. Hinein kommt nur, wen ein Administrator **eingeladen**
 
 1. Öffne die Seite des Stammbaums. Du landest auf „Anmelden“.
 2. Wähle „Mit Google anmelden“ oder „Mit GitHub anmelden“ (je nachdem, was eure Installation anbietet) und melde dich mit dem Konto an, dessen E-Mail-Adresse eingeladen wurde.
-3. Danach siehst du den Stammbaum.
+3. Danach siehst du die Startseite **Heute in der Familie** mit Geburtstagen und Jahrestagen, siehe [Startseite](14-startseite.md).
 
 Steht dort „Anmeldung fehlgeschlagen. Diese E-Mail-Adresse ist nicht freigeschaltet“, ist deine Adresse (noch) nicht eingeladen — oder du hast ein anderes Konto erwischt. Sag dem Administrator, mit welcher Adresse du dich anmeldest.
 
@@ -19,7 +19,7 @@ Bietet eure Installation das an, steht auf der Anmeldeseite unten ein Feld „E-
 1. Gib die Adresse ein, die eingeladen wurde, zum Beispiel `oma.erna@example.org`, und tippe auf „Link zusenden“.
 2. Es erscheint „Wenn diese Adresse freigeschaltet ist, kommt gleich eine E-Mail …“. Diese Meldung kommt immer — auch bei einer vertippten Adresse. Kommt nach ein paar Minuten keine Mail, schau im Spam-Ordner nach und prüfe die Schreibweise.
 3. Öffne die Mail „Dein Anmeldelink für den Stammbaum“ und tippe auf „Zur Anmeldung“.
-4. Es öffnet sich die Seite „Mit E-Mail-Link anmelden“. Tippe auf „Jetzt anmelden“ — danach siehst du den Stammbaum.
+4. Es öffnet sich die Seite „Mit E-Mail-Link anmelden“. Tippe auf „Jetzt anmelden“ — danach siehst du die Startseite **Heute in der Familie**.
 
 Gut zu wissen:
 
@@ -31,6 +31,8 @@ Gut zu wissen:
 Abmelden kannst du oben rechts mit „Abmelden“ (auf dem Telefon im „Menü“).
 
 ## Was du oben im Menü findest
+
+Ganz links steht **Stammbaum** mit dem kleinen Baum-Zeichen — ein Tipp darauf bringt dich immer zurück zur Startseite **Heute in der Familie** ([Startseite](14-startseite.md)).
 
 - **Baum** — der Stammbaum, siehe [Stammbaum](04-stammbaum.md).
 - **Karte** — wo die Vorfahren in einem Jahr lebten, siehe [Karte](05-karte.md).
