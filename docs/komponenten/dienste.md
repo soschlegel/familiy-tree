@@ -1397,12 +1397,16 @@ einmal auf dem Server gerechnet (`buildMapData` in `lib/map/build.ts`).
 Scheidung (Ort an der Beziehung, für beide Partner der Auswahl) und aus
 Ereignissen mit Ort (keine Zweitangaben); Beerdigung und Einäscherung sind
 gekennzeichnet. Koordinaten kommen aus der Tabelle `Place` (nur zugeordnete,
-nicht „nicht zuordenbar“).
+nicht „nicht zuordenbar“). Für die Zeitreise zusätzlich eine Abfrage der
+Taufen (Taufe, Kindstaufe, Erwachsenentaufe; mit Datum, auch ohne Ort, keine
+Zweitangaben; je Person die früheste) und die Hochzeiten aus dem schon
+geladenen Graphen (`pickMarriages`).
 
 **Rechte/Datenschutz:** Grundlage sind nur sichtbare Personen; Vorfahren und
 Linien auf dem Graphen der sichtbaren Personen (`visibleIndex`). Gesperrte
 Personen tauchen weder auf der Karte noch in einer Zahl auf; Großeltern nur,
-wenn sichtbar. Die Ortstexte und die Zuordnungsliste selbst sieht nur ein
+wenn sichtbar. Taufen nur von Personen der Auswahl; eine Hochzeit nur, wenn
+beide Partner sichtbar sind (wie beim Lebensweg). Die Ortstexte und die Zuordnungsliste selbst sieht nur ein
 Administrator (`places.ts`).
 
 **Protokoll:** —

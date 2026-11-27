@@ -1,6 +1,15 @@
-import { fuzzyField } from "../dates";
+import type { EventType } from "@prisma/client";
+
+import { fuzzyField, type FuzzyDate } from "../dates";
 import { ancestorDistances } from "../kinship";
-import { buildMapData, type MapFactInput, type MapPayload, type MapPersonInput, type MapPlace } from "../map/build";
+import {
+  buildMapData,
+  pickMarriages,
+  type MapFactInput,
+  type MapPayload,
+  type MapPersonInput,
+  type MapPlace,
+} from "../map/build";
 import { prisma } from "../prisma";
 import { LINE_KEYS, relationsFromReference, type LineKey } from "../reference";
 import type { Scope } from "../scope";
@@ -20,6 +29,8 @@ import { resolveReference, visibleIndex, type ReferenceChoice } from "./referenc
  */
 
 export type MapMode = "ancestors" | "all";
+
+const BAPTISM_TYPES: EventType[] = ["BAPTISM", "CHRISTENING", "ADULT_CHRISTENING"];
 
 export type MapView = {
   mode: MapMode;
@@ -97,7 +108,14 @@ export async function loadMapView(
           place: { not: null },
           OR: [{ personId: { in: ids } }, { relationshipId: { in: relIds } }],
         };
-  const [events, coordRows] = await Promise.all([
+  // Taufen (auch ohne Ort): ersetzen für Beginn und Alter die fehlende Geburt.
+  const baptismWhere = {
+    isAlternative: false,
+    date: { not: null },
+    type: { in: BAPTISM_TYPES },
+    ...(mode === "all" ? { personId: { not: null } } : { personId: { in: ids } }),
+  };
+  const [events, coordRows, baptisms] = await Promise.all([
     prisma.event.findMany({
       where: eventWhere,
       select: {
@@ -116,7 +134,27 @@ export async function loadMapView(
       where: { unresolvable: false, latitude: { not: null }, longitude: { not: null } },
       select: { key: true, latitude: true, longitude: true, label: true, precision: true, text: true },
     }),
+    prisma.event.findMany({
+      where: baptismWhere,
+      select: { personId: true, date: true, datePrecision: true, dateQualifier: true, dateTo: true, dateToPrecision: true },
+    }),
   ]);
+  const baptismOf = new Map<string, FuzzyDate>();
+  for (const e of baptisms) {
+    if (!e.personId || !selected.has(e.personId)) continue;
+    const date = fuzzyField(e, "date");
+    const known = baptismOf.get(e.personId);
+    if (date && (!known || date.date < known.date)) baptismOf.set(e.personId, date);
+  }
+  for (const p of persons) p.baptism = baptismOf.get(p.id) ?? null;
+
+  // Hochzeiten (Ehe bzw. geschiedene Ehe mit Datum) — nur mit sichtbarem
+  // Partner, wie beim Lebensweg; der Partner zählt mit, wenn er in der Auswahl steht.
+  const marriages = pickMarriages(
+    graph.relationships.map((r) => ({ type: r.type, subtype: r.subtype, from: r.from, to: r.to, date: fuzzyField(r, "startDate") })),
+    visible,
+    (id) => selected.has(id),
+  );
   for (const e of events) {
     const owners = e.personId ? (selected.has(e.personId) ? [e.personId] : []) : (partnersOf.get(e.relationshipId ?? "") ?? []);
     const date = fuzzyField(e, "date");
@@ -135,6 +173,7 @@ export async function loadMapView(
     facts,
     coords: (key) => coords.get(key) ?? null,
     currentYear: opts.currentYear ?? new Date().getUTCFullYear(),
+    marriages,
   });
 
   const refPerson = refId ? graph.persons.get(refId)! : null;

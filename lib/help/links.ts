@@ -7,7 +7,8 @@
 export const HELP_LINKS = {
   startseite: "/hilfe/startseite#wie-wird-gezaehlt",
   karte: "/hilfe/karte#wie-wird-gezaehlt",
-  wurzeln: "/hilfe/karte#wurzeln-auf-der-personenseite",
+  zeitreise: "/hilfe/karte#zeitreise-wer-lebte-in-diesem-jahr",
+  wurzeln:"/hilfe/karte#wurzeln-auf-der-personenseite",
   lebensweg: "/hilfe/karte#lebensweg",
   orteZuordnen: "/hilfe/orte-zuordnen",
   linien: "/hilfe/stammbaum#linienfarben",

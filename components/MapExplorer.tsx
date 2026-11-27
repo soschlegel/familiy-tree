@@ -1,13 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import { LINE_CODE, LINE_KEYS, LINE_LABEL, type LineKey } from "@/lib/reference";
-import { linesFromBits, type MapPayload } from "@/lib/map/build";
+import { linesFromBits, type MapPayload, type MapPerson } from "@/lib/map/build";
 import { fitViewBox, project, VIEWS, zoomAt, type ViewBox, type ViewName } from "@/lib/map/projection";
-import { snapshot, type PlaceGroup } from "@/lib/map/year";
+import {
+  aliveByYear,
+  clampYear,
+  eventsInYear,
+  formatAge,
+  groupLivedByPlace,
+  livedInYear,
+  parseYearInput,
+  placeLabelOf,
+  snapshot,
+  sortLived,
+  type LivedEntry,
+  type LivedSort,
+  type PlaceGroup,
+  type YearEvents,
+} from "@/lib/map/year";
 import { loadCountries, type Country } from "@/lib/map/countries";
+import { HelpLink } from "./HelpLink";
 import { LineCode } from "./ReferenceLines";
 
 /**
@@ -20,8 +36,31 @@ import { LineCode } from "./ReferenceLines";
  * Bedienung: Ziehen (auch mit einem Finger) verschiebt, Mausrad bzw. zwei
  * Finger zoomen, dazu Knöpfe und Tastatur (Pfeile, +/−) auf der Karte. Für
  * Screenreader und Tastatur steht dieselbe Information in der Ortsliste
- * darunter; der Jahresregler ist ein normales Schiebefeld.
+ * darunter.
+ *
+ * Zeitreise: Zeitstrahl-Regler über die ganze Spanne (normales Schiebefeld,
+ * dazu Bild-auf/-ab ±10), Schritt-Knöpfe ±1/±10, Jahreseingabe, „Abspielen“
+ * (Pause/Weiter; bei „Bewegung reduzieren“ nur Schritte). Daneben die Liste
+ * „Wer lebte …?“ (Alter, Ort, nach Ort gruppiert oder sortiert; ein gewählter
+ * Ort filtert sie) und die Zeile „In diesem Jahr“ (Geburten, Hochzeiten,
+ * Todesfälle) — alles aus denselben, einmal geladenen Daten.
  */
+
+/** Bewegung reduzieren (Betriebssystem bzw. Browser). */
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const m = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const on = () => setReduced(m.matches);
+    on();
+    m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, []);
+  return reduced;
+}
+
+/** So viele Zeilen zeigt „Wer lebte …?“ zunächst. */
+const LIST_LIMIT = 100;
 
 const lineColor = (k: LineKey | "none") => (k === "none" ? "var(--map-neutral)" : `var(--line-${k.toLowerCase()})`);
 const CATEGORIES: (LineKey | "none")[] = [...LINE_KEYS, "none"];
@@ -49,9 +88,29 @@ export function MapExplorer({
   showLines: boolean;
 }) {
   const { yearMin, yearMax } = payload;
-  const [year, setYear] = useState(() => Math.min(yearMax, Math.max(yearMin, initialYear)));
+  const [year, setYearState] = useState(() => clampYear(initialYear, yearMin, yearMax));
   const [playing, setPlaying] = useState(false);
+  // Angehalten mitten im Abspielen: der Knopf heißt dann „Weiter“.
+  const [paused, setPaused] = useState(false);
   const [speed, setSpeed] = useState(1);
+  const reducedMotion = usePrefersReducedMotion();
+  const [yearDraft, setYearDraft] = useState(String(year));
+  const [sort, setSort] = useState<LivedSort>("place");
+  const [showAllLived, setShowAllLived] = useState(false);
+  /** Jahr von Hand wählen: hält das Abspielen an. */
+  const setYear = useCallback(
+    (next: number | ((y: number) => number)) => {
+      setPlaying(false);
+      setPaused(false);
+      setYearState((y) => clampYear(typeof next === "function" ? next(y) : next, yearMin, yearMax));
+    },
+    [yearMin, yearMax],
+  );
+  useEffect(() => setYearDraft(String(year)), [year]);
+  // Bei „Bewegung reduzieren“ nicht automatisch weiterlaufen.
+  useEffect(() => {
+    if (reducedMotion) setPlaying(false);
+  }, [reducedMotion]);
   const [selection, setSelection] = useState<Selection>(null);
   const [countries, setCountries] = useState<Country[] | null>(null);
   const [size, setSize] = useState({ w: 960, h: 600 });
@@ -113,9 +172,10 @@ export function MapExplorer({
   useEffect(() => {
     if (!playing) return;
     const t = setInterval(() => {
-      setYear((y) => {
+      setYearState((y) => {
         if (y >= yearMax) {
           setPlaying(false);
+          setPaused(false);
           return y;
         }
         return y + 1;
@@ -135,6 +195,40 @@ export function MapExplorer({
 
   const snap = useMemo(() => snapshot(payload, year), [payload, year]);
   const placed = snap.alive - snap.noPlace - snap.unmapped;
+
+  // Zeitstrahl über dem Regler: Lebende je Jahr (einmal je Datensatz).
+  const timeline = useMemo(() => aliveByYear(payload, yearMin, yearMax), [payload, yearMin, yearMax]);
+  // Liste und „In diesem Jahr“ dürfen beim Abspielen kurz nachlaufen.
+  const listYear = useDeferredValue(year);
+  const lived = useMemo(() => livedInYear(payload, listYear), [payload, listYear]);
+  const yearEvents = useMemo(() => eventsInYear(payload, listYear), [payload, listYear]);
+
+  const togglePlay = () => {
+    if (reducedMotion) return;
+    if (playing) {
+      setPlaying(false);
+      setPaused(true);
+      return;
+    }
+    if (year >= yearMax) setYearState(yearMin);
+    setPaused(false);
+    setPlaying(true);
+  };
+  const commitYearDraft = () => {
+    const y = parseYearInput(yearDraft);
+    if (y === null) setYearDraft(String(year));
+    else {
+      const next = clampYear(y, yearMin, yearMax);
+      setYear(next);
+      setYearDraft(String(next));
+    }
+  };
+  const onSliderKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "PageUp" || e.key === "PageDown") {
+      e.preventDefault();
+      setYear((y) => y + (e.key === "PageUp" ? 10 : -10));
+    }
+  };
 
   const unitsPerPx = box.w / size.w;
 
@@ -236,27 +330,37 @@ export function MapExplorer({
   // --- Auswahl -------------------------------------------------------------------
   const select = (s: Selection) => {
     setSelection(s);
+    setShowAllLived(false);
     // Fokus auf die Personenliste (Tastatur, Screenreader).
     requestAnimationFrame(() => panelHeadingRef.current?.focus());
   };
-  const selectedGroup: PlaceGroup | null =
-    selection?.kind === "place" ? (snap.groups.find((g) => g.place === selection.place) ?? null) : null;
 
-  const panelPersons = useMemo(() => {
-    if (!selection) return [];
-    let idx: number[] = [];
-    if (selection.kind === "place") idx = selectedGroup?.persons ?? [];
-    else {
-      payload.persons.forEach((p, i) => {
-        if (year < p.y0 || year > p.y1) return;
-        const st = p.st;
-        let at: number | null = null;
-        for (let j = 0; j < st.length && st[j] <= year; j += 2) at = st[j + 1];
-        if (selection.kind === "noPlace" ? at === null : at === -1) idx.push(i);
-      });
+  // „Wer lebte …?“: alle Lebenden des Jahres, ein gewählter Ort filtert.
+  const panelRows = useMemo(() => {
+    if (!selection) return lived;
+    return lived.filter((r) =>
+      selection.kind === "place" ? r.at === selection.place : selection.kind === "noPlace" ? r.at === null : r.at === -1,
+    );
+  }, [selection, lived]);
+  const effectiveSort: LivedSort = selection && sort === "place" ? "name" : sort;
+  const panelGroups = useMemo(
+    () =>
+      effectiveSort === "place"
+        ? groupLivedByPlace(payload, panelRows)
+        : [{ key: "all", label: "", place: null, rows: sortLived(payload, panelRows, effectiveSort) }],
+    [effectiveSort, payload, panelRows],
+  );
+  // Höchstens LIST_LIMIT Zeilen, bis „Alle zeigen“ gewählt ist.
+  const shownGroups = useMemo(() => {
+    let left = showAllLived ? Infinity : LIST_LIMIT;
+    const out: ((typeof panelGroups)[number] & { total: number })[] = [];
+    for (const g of panelGroups) {
+      if (left <= 0) break;
+      out.push({ ...g, total: g.rows.length, rows: g.rows.slice(0, left) });
+      left -= g.rows.length;
     }
-    return idx.map((i) => payload.persons[i]).sort((a, b) => a.n.localeCompare(b.n, "de"));
-  }, [selection, selectedGroup, payload, year]);
+    return out;
+  }, [panelGroups, showAllLived]);
 
   const panelTitle =
     selection?.kind === "place"
@@ -283,74 +387,135 @@ export function MapExplorer({
   return (
     <div className="space-y-3" data-testid="map-explorer">
       {/* Jahr */}
-      <div className="card flex flex-wrap items-center gap-x-4 gap-y-2 p-3">
-        <div className="flex items-baseline gap-2">
-          <span className="text-sm muted">Jahr</span>
-          <output
-            htmlFor={`${ids}-year`}
-            className="min-w-[4ch] font-serif text-2xl font-semibold tabular-nums"
-            data-testid="map-year"
+      <div className="card space-y-2 p-3" role="group" aria-label="Zeitreise: Jahr wählen" data-testid="map-timeline">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="flex items-baseline gap-2">
+            <span className="text-sm muted">Jahr</span>
+            <output
+              htmlFor={`${ids}-year`}
+              className="min-w-[4ch] font-serif text-2xl font-semibold tabular-nums"
+              data-testid="map-year"
+            >
+              {year}
+            </output>
+          </div>
+          {reducedMotion ? (
+            <p className="max-w-xs text-xs muted" data-testid="map-play-reduced">
+              Abspielen ist aus, weil dein Gerät „Bewegung reduzieren“ eingestellt hat — die Schritt-Knöpfe gehen weiter.
+            </p>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="btn-secondary min-w-11"
+                onClick={togglePlay}
+                aria-pressed={playing}
+                disabled={empty}
+                data-testid="map-play"
+              >
+                <span aria-hidden>{playing ? "❚❚" : "▶"}</span>
+                {playing ? "Pause" : paused ? "Weiter" : "Abspielen"}
+              </button>
+              <label className="flex items-center gap-2 text-sm">
+                <span className="muted">Tempo</span>
+                <select className="field py-1" value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
+                  {SPEEDS.map((s, i) => (
+                    <option key={s.label} value={i}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          )}
+          <form
+            className="flex items-center gap-2 text-sm sm:ml-auto"
+            // Außerhalb der Spanne nicht blockieren, sondern begrenzen (commitYearDraft).
+            noValidate
+            onSubmit={(e) => {
+              e.preventDefault();
+              commitYearDraft();
+            }}
           >
-            {year}
-          </output>
+            <label htmlFor={`${ids}-year-input`} className="muted">
+              Gehe zu
+            </label>
+            <input
+              id={`${ids}-year-input`}
+              type="number"
+              inputMode="numeric"
+              min={yearMin}
+              max={yearMax}
+              step={1}
+              value={yearDraft}
+              onChange={(e) => setYearDraft(e.target.value)}
+              onBlur={commitYearDraft}
+              className="field w-24 tabular-nums"
+              aria-describedby={`${ids}-year-range`}
+              disabled={empty}
+              data-testid="map-year-input"
+            />
+            <span id={`${ids}-year-range`} className="sr-only">
+              Jahr zwischen {yearMin} und {yearMax}, mit Eingabetaste übernehmen
+            </span>
+          </form>
         </div>
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={() => {
-            if (!playing && year >= yearMax) setYear(yearMin);
-            setPlaying((p) => !p);
-          }}
-          aria-pressed={playing}
-          disabled={empty}
-          data-testid="map-play"
-        >
-          <span aria-hidden>{playing ? "❚❚" : "▶"}</span>
-          {playing ? "Anhalten" : "Abspielen"}
-        </button>
-        <label className="flex min-w-0 flex-1 basis-56 items-center gap-2">
-          <span className="sr-only">Jahr wählen</span>
-          <span aria-hidden className="text-xs tabular-nums muted">
+
+        {/* Zeitstrahl: Lebende je Jahr, darunter der Regler über die ganze Spanne */}
+        <div className="flex items-center gap-2">
+          <span aria-hidden className="hidden text-xs tabular-nums muted sm:inline">
             {yearMin}
           </span>
-          <input
-            id={`${ids}-year`}
-            type="range"
-            min={yearMin}
-            max={yearMax}
-            step={1}
-            value={year}
-            onChange={(e) => {
-              setPlaying(false);
-              setYear(Number(e.target.value));
-            }}
-            aria-valuetext={`${year}`}
-            className="h-11 min-w-0 flex-1 accent-accent-700 text-base dark:accent-accent-300"
-            data-testid="map-year-slider"
-            disabled={empty}
-          />
-          <span aria-hidden className="text-xs tabular-nums muted">
+          <div className="min-w-0 flex-1">
+            <Timeline counts={timeline} index={year - yearMin} />
+            <input
+              id={`${ids}-year`}
+              type="range"
+              min={yearMin}
+              max={yearMax}
+              step={1}
+              value={year}
+              onChange={(e) => setYear(Number(e.target.value))}
+              onKeyDown={onSliderKey}
+              aria-label="Jahr"
+              aria-valuetext={`${year}: ${snap.alive} ${snap.alive === 1 ? "Person lebte" : "Personen lebten"}`}
+              aria-keyshortcuts="PageUp PageDown Home End"
+              className="block h-11 w-full min-w-0 cursor-pointer accent-accent-700 text-base dark:accent-accent-300"
+              data-testid="map-year-slider"
+              disabled={empty}
+            />
+            <div aria-hidden className="flex justify-between text-xs tabular-nums muted sm:hidden">
+              <span>{yearMin}</span>
+              <span>{yearMax}</span>
+            </div>
+          </div>
+          <span aria-hidden className="hidden text-xs tabular-nums muted sm:inline">
             {yearMax}
           </span>
-        </label>
-        <div className="flex items-center gap-1">
-          <button type="button" className="btn-secondary px-2.5" onClick={() => setYear((y) => Math.max(yearMin, y - 1))} aria-label="Ein Jahr zurück" disabled={empty}>
-            ‹
-          </button>
-          <button type="button" className="btn-secondary px-2.5" onClick={() => setYear((y) => Math.min(yearMax, y + 1))} aria-label="Ein Jahr weiter" disabled={empty}>
-            ›
-          </button>
         </div>
-        <label className="flex items-center gap-2 text-sm">
-          <span className="muted">Tempo</span>
-          <select className="field py-1" value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
-            {SPEEDS.map((s, i) => (
-              <option key={s.label} value={i}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </label>
+
+        <div className="flex flex-wrap items-center justify-center gap-1" role="group" aria-label="Jahr schrittweise">
+          {(
+            [
+              [-10, "−10", " Jahre zurück"],
+              [-1, "−1", " Jahr zurück"],
+              [1, "+1", " Jahr weiter"],
+              [10, "+10", " Jahre weiter"],
+            ] as const
+          ).map(([d, text, rest]) => (
+            <button
+              key={d}
+              type="button"
+              className="btn-secondary min-h-11 min-w-11 tabular-nums"
+              onClick={() => setYear((y) => y + d)}
+              disabled={empty || (d < 0 ? year <= yearMin : year >= yearMax)}
+              data-testid={`map-step-${d > 0 ? "plus" : "minus"}${Math.abs(d)}`}
+            >
+              {text}
+              <span className="sr-only">{rest}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Zahlen für das Jahr */}
@@ -376,6 +541,8 @@ export function MapExplorer({
         )}
         {payload.undated > 0 && <span className="muted"> · {payload.undated} ohne Lebensdaten (nicht auf der Karte)</span>}
       </p>
+
+      <YearEventsLine year={listYear} events={yearEvents} persons={payload.persons} />
 
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
         {/* Karte */}
@@ -506,38 +673,85 @@ export function MapExplorer({
         {/* Personen am gewählten Ort */}
         <aside className="card min-w-0 space-y-2 p-3" aria-labelledby={`${ids}-panel`} data-testid="map-panel">
           <h2 id={`${ids}-panel`} ref={panelHeadingRef} tabIndex={-1} className="font-serif text-lg font-semibold focus:outline-none">
-            {panelTitle ?? "Personen"}
+            {panelTitle ?? `Wer lebte ${listYear}?`}
           </h2>
-          {!selection && <p className="text-sm muted">Kreis auf der Karte oder Ort in der Liste wählen.</p>}
-          {selection && (
-            <>
-              <p className="text-sm muted">
-                {panelPersons.length} {panelPersons.length === 1 ? "Person" : "Personen"} im Jahr {year}
-                {selection.kind === "place" && payload.places[selection.place]?.precision !== "PLACE" && (
-                  <> · nur {payload.places[selection.place].precision === "REGION" ? "die Region" : "das Land"} bekannt</>
-                )}
-              </p>
-              <ul className="max-h-[50vh] space-y-1 overflow-auto text-sm" data-testid="map-panel-list">
-                {panelPersons.map((p) => (
-                  <li key={p.id} className="flex items-start justify-between gap-2">
-                    <span className="min-w-0">
-                      <Link href={`/people/${p.id}`} className="font-medium text-accent-700 hover:underline dark:text-accent-300">
-                        {p.n}
-                      </Link>
-                      {p.life && <span className="muted"> · {p.life}</span>}
-                    </span>
-                    {showLines && p.ln ? (
-                      <span className="flex shrink-0 gap-0.5" aria-label={linesFromBits(p.ln).map((k) => LINE_LABEL[k]).join(", ")}>
-                        {linesFromBits(p.ln).map((k) => (
-                          <LineCode key={k} line={k} />
-                        ))}
+          <p className="text-sm" data-testid="map-panel-count">
+            <span className="font-medium">{panelRows.length}</span>{" "}
+            {selection
+              ? `${panelRows.length === 1 ? "Person" : "Personen"} im Jahr ${listYear}`
+              : `${panelRows.length === 1 ? "Person lebte" : "Personen lebten"} ${listYear}`}
+            {selection?.kind === "place" && payload.places[selection.place]?.precision !== "PLACE" && (
+              <span className="muted"> · nur {payload.places[selection.place].precision === "REGION" ? "die Region" : "das Land"} bekannt</span>
+            )}
+          </p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+            <label className="flex items-center gap-1.5">
+              <span className="muted">Ordnen</span>
+              <select
+                className="field py-1"
+                value={effectiveSort}
+                onChange={(e) => setSort(e.target.value as LivedSort)}
+                data-testid="map-lived-sort"
+              >
+                {!selection && <option value="place">nach Ort</option>}
+                <option value="name">nach Name</option>
+                <option value="age">nach Alter</option>
+              </select>
+            </label>
+            {selection ? (
+              <button type="button" className="btn-link" onClick={() => setSelection(null)} data-testid="map-panel-all">
+                Alle Orte zeigen
+              </button>
+            ) : (
+              <span className="text-xs muted">Kreis antippen filtert nach Ort.</span>
+            )}
+          </div>
+          {panelRows.length === 0 ? (
+            <p className="text-sm muted">Niemand aus dieser Auswahl lebte {listYear}.</p>
+          ) : (
+            <ul className="max-h-[50vh] space-y-1 overflow-auto text-sm" data-testid="map-panel-list">
+              {shownGroups.map((g) => (
+                <li key={g.key}>
+                  {g.label && (
+                    <p className="sticky top-0 mt-1 flex items-baseline justify-between gap-2 bg-surface py-0.5 text-xs font-semibold" data-testid="map-lived-group">
+                      {g.place !== null && g.place >= 0 ? (
+                        <button type="button" className="btn-link min-w-0 text-left" onClick={() => select({ kind: "place", place: g.place! })}>
+                          {g.label}
+                        </button>
+                      ) : (
+                        <span className="min-w-0 muted">{g.label}</span>
+                      )}
+                      <span className="shrink-0 tabular-nums muted">
+                        {g.total}
+                        <span className="sr-only"> {g.total === 1 ? "Person" : "Personen"}</span>
                       </span>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            </>
+                    </p>
+                  )}
+                  <ul className="space-y-1">
+                    {g.rows.map((r) => (
+                      <LivedRow
+                        key={r.i}
+                        row={r}
+                        person={payload.persons[r.i]}
+                        place={effectiveSort === "place" || selection ? null : placeLabelOf(payload, r.at)}
+                        showLines={showLines}
+                      />
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ul>
           )}
+          {!showAllLived && panelRows.length > LIST_LIMIT && (
+            <button type="button" className="btn-link" onClick={() => setShowAllLived(true)} data-testid="map-lived-more">
+              Alle {panelRows.length} zeigen
+            </button>
+          )}
+          <p className="text-xs muted">
+            Alter = Jahr minus Geburtsjahr (ersatzweise Taufe), „etwa“ bei ungenauen Daten. Wer im Jahr lebte und wo, zählt
+            wie die Karte.{" "}
+            <HelpLink to="zeitreise" compact label="Wie funktioniert die Zeitreise?" className="ml-1 align-middle" />
+          </p>
         </aside>
       </div>
 
@@ -627,6 +841,132 @@ export function MapExplorer({
         )}
       </section>
     </div>
+  );
+}
+
+/**
+ * Zeitstrahl über dem Regler: je Jahr ein Balken mit der Zahl der Lebenden,
+ * das gewählte Jahr hervorgehoben (zusätzlich zur Farbe volle Höhe der Marke).
+ * Nur Schmuck — dieselbe Zahl sagt der Regler (aria-valuetext).
+ */
+function Timeline({ counts, index }: { counts: number[]; index: number }) {
+  const max = Math.max(1, ...counts);
+  const H = 24;
+  const d = counts
+    .map((c, i) => (c > 0 ? `M${i} ${H}V${(H - (c / max) * H).toFixed(2)}H${i + 1}V${H}Z` : ""))
+    .join("");
+  return (
+    // Der Daumen des Reglers läuft um seine halbe Breite eingerückt — daher der Rand.
+    <div aria-hidden className="px-2" data-testid="map-timeline-bars">
+      <svg viewBox={`0 0 ${Math.max(1, counts.length)} ${H}`} preserveAspectRatio="none" className="block h-6 w-full">
+        <path d={d} className="fill-accent-600/30 dark:fill-accent-300/35" />
+        {index >= 0 && index < counts.length && (
+          <rect x={index} y={0} width={1} height={H} className="fill-accent-700 dark:fill-accent-300" />
+        )}
+      </svg>
+    </div>
+  );
+}
+
+/** Eine Zeile der Liste „Wer lebte …?“: Name (Link), Alter, Ort, Linien. */
+function LivedRow({
+  row,
+  person: p,
+  place,
+  showLines,
+}: {
+  row: LivedEntry;
+  person: MapPerson;
+  place: string | null;
+  showLines: boolean;
+}) {
+  return (
+    <li className="flex items-start justify-between gap-2" data-testid="map-lived-row">
+      <span className="min-w-0">
+        <Link href={`/people/${p.id}`} className="font-medium text-accent-700 hover:underline dark:text-accent-300">
+          {p.n}
+        </Link>
+        <span className="block text-xs muted">
+          <span data-testid="map-lived-age">{formatAge(row.age)}</span>
+          {place ? <> · {place}</> : p.life ? <> · {p.life}</> : null}
+        </span>
+      </span>
+      {showLines && p.ln ? (
+        <span className="flex shrink-0 gap-0.5" aria-label={linesFromBits(p.ln).map((k) => LINE_LABEL[k]).join(", ")}>
+          {linesFromBits(p.ln).map((k) => (
+            <LineCode key={k} line={k} />
+          ))}
+        </span>
+      ) : null}
+    </li>
+  );
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** Zeile „In diesem Jahr“: Geburten, Hochzeiten, Todesfälle — Zahl, Namen aufklappbar. */
+function YearEventsLine({ year, events, persons }: { year: number; events: YearEvents; persons: MapPerson[] }) {
+  const byName = (a: number, b: number) => persons[a].n.localeCompare(persons[b].n, "de");
+  const births = [...events.births].sort(byName);
+  const deaths = [...events.deaths].sort(byName);
+  const marriages = [...events.marriages].sort((a, b) => byName(a[0], b[0]));
+  const total = births.length + deaths.length + marriages.length;
+  const link = (i: number) => (
+    <Link href={`/people/${persons[i].id}`} className="text-accent-700 hover:underline dark:text-accent-300">
+      {persons[i].n}
+    </Link>
+  );
+  const column = (title: string, items: React.ReactNode[], testId: string) => (
+    <div data-testid={testId}>
+      <p className="font-medium">{title}</p>
+      {items.length === 0 ? (
+        <p className="muted">keine</p>
+      ) : (
+        <ul className="space-y-0.5">
+          {items.map((it, k) => (
+            <li key={k}>{it}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+  return (
+    <details className="card p-3 text-sm" data-testid="map-year-events">
+      <summary className="cursor-pointer">
+        <span className="font-medium">In diesem Jahr ({year}):</span>{" "}
+        <span data-testid="map-year-events-summary">
+          {plural(births.length, "Geburt", "Geburten")} · {plural(marriages.length, "Hochzeit", "Hochzeiten")} ·{" "}
+          {plural(deaths.length, "Todesfall", "Todesfälle")}
+        </span>
+        {total > 0 && <span className="muted"> — Namen zeigen</span>}
+      </summary>
+      <div className="mt-2 grid gap-3 sm:grid-cols-3">
+        {column(
+          "Geburten",
+          births.map((i) => (
+            <>
+              {link(i)}
+              {persons[i].bt ? <span className="muted"> (Taufe)</span> : persons[i].ba ? <span className="muted"> (ungenau)</span> : null}
+            </>
+          )),
+          "map-year-births",
+        )}
+        {column(
+          "Hochzeiten",
+          marriages.map(([a, b]) => (
+            <>
+              {link(a)}
+              {b >= 0 ? <> und {link(b)}</> : null}
+            </>
+          )),
+          "map-year-marriages",
+        )}
+        {column("Todesfälle", deaths.map((i) => link(i)), "map-year-deaths")}
+      </div>
+      <p className="mt-2 text-xs muted">
+        Geburt ersatzweise Taufe, Tod ersatzweise Beerdigung; Hochzeiten nur, wenn du beide Partner sehen darfst.
+      </p>
+    </details>
   );
 }
 

@@ -7,9 +7,21 @@ import { describe, expect, it } from "vitest";
 
 import { toFuzzyDate, type FuzzyDate } from "@/lib/dates";
 import { PRESUMED_LIFESPAN } from "@/lib/consistency";
-import { buildMapData, factYear, LINE_BIT, type MapFactInput, type MapPersonInput, type MapPlace } from "@/lib/map/build";
+import { buildMapData, factYear, LINE_BIT, pickMarriages, type MapFactInput, type MapPersonInput, type MapPlace } from "@/lib/map/build";
 import { fitViewBox, project, VIEWS, zoomAt } from "@/lib/map/projection";
-import { placeInYear, snapshot } from "@/lib/map/year";
+import {
+  ageInYear,
+  aliveByYear,
+  clampYear,
+  eventsInYear,
+  formatAge,
+  groupLivedByPlace,
+  livedInYear,
+  parseYearInput,
+  placeInYear,
+  snapshot,
+  sortLived,
+} from "@/lib/map/year";
 import { placeKey } from "@/lib/places/normalize";
 import type { LineKey } from "@/lib/reference";
 
@@ -177,6 +189,150 @@ describe("snapshot (ein Jahr)", () => {
   });
 });
 
+describe("Zeitreise: Regler, Alter, wer lebte, In diesem Jahr", () => {
+  it("Spanne des Reglers: frühestes bis spätestes Jahr, Eingaben werden begrenzt", () => {
+    const r = build([
+      person({ id: "a", birth: d("1820"), death: d("1880") }),
+      person({ id: "b", birth: d("1990") }),
+    ]);
+    expect([r.yearMin, r.yearMax]).toEqual([1820, 2025]);
+    expect(clampYear(1700, r.yearMin, r.yearMax)).toBe(1820);
+    expect(clampYear(3000, r.yearMin, r.yearMax)).toBe(2025);
+    expect(clampYear(1850.6, r.yearMin, r.yearMax)).toBe(1851);
+    expect(clampYear(Number.NaN, r.yearMin, r.yearMax)).toBe(1820);
+    expect(parseYearInput(" 1850 ")).toBe(1850);
+    expect(parseYearInput("18a0")).toBeNull();
+    expect(parseYearInput("")).toBeNull();
+    expect(aliveByYear(r, 1879, 1881)).toEqual([1, 1, 0]);
+    expect(aliveByYear(r, 1990, 1991)).toEqual([1, 1]);
+  });
+
+  it("Alter: Jahr minus Geburtsjahr, „etwa“ bei ungenauer Geburt oder nur Taufe, sonst unbekannt", () => {
+    const r = build(
+      [
+        person({ id: "genau", birth: d("1816-03-12", "DAY") }),
+        person({ id: "um", birth: d("1816", "YEAR", "ABOUT") }),
+        person({ id: "zwischen", birth: d("1814", "YEAR", "BETWEEN", "1818") }),
+        person({ id: "taufe", baptism: d("1816-04-01", "DAY") }),
+        person({ id: "ohne" }),
+      ],
+      [{ personId: "ohne", date: d("1840"), place: "Kiel" }],
+    );
+    const age = (id: string, y: number) => formatAge(ageInYear(r.persons.find((p) => p.id === id)!, y));
+    expect(age("genau", 1850)).toBe("34 Jahre");
+    expect(age("genau", 1817)).toBe("1 Jahr");
+    expect(age("genau", 1816)).toBe("unter 1 Jahr");
+    expect(age("um", 1850)).toBe("etwa 34 Jahre");
+    expect(age("zwischen", 1850)).toBe("etwa 34 Jahre");
+    expect(age("taufe", 1850)).toBe("etwa 34 Jahre");
+    expect(age("ohne", 1850)).toBe("Alter unbekannt");
+    // Die Taufe ohne Ort setzt auch den Beginn (Taufe statt Geburt).
+    expect(r.persons.find((p) => p.id === "taufe")).toMatchObject({ y0: 1816, bt: 1, ba: 1 });
+    expect(r.persons.find((p) => p.id === "ohne")).toMatchObject({ y0: 1840, nb: 1 });
+    // Genaue Geburt: keine Zusatzfelder (Datenmenge).
+    const genau = r.persons.find((p) => p.id === "genau")!;
+    expect([genau.b, genau.ba, genau.bt, genau.nb]).toEqual([undefined, undefined, undefined, undefined]);
+  });
+
+  it("wer lebte: dieselben Personen wie die Karte, ohne Sterbedatum höchstens die angenommene Lebensspanne", () => {
+    const r = build(
+      [
+        person({ id: "a", birth: d("1800"), death: d("1860"), birthPlace: "Kiel" }),
+        person({ id: "b", birth: d("1830"), birthPlace: "Hamburg" }),
+        person({ id: "c", birth: d("1855") }),
+        person({ id: "d" }),
+      ],
+      [],
+    );
+    const ids = (y: number) => livedInYear(r, y).map((e) => r.persons[e.i].id);
+    expect(ids(1850)).toEqual(["a", "b"]);
+    expect(ids(1860)).toEqual(["a", "b", "c"]);
+    expect(ids(1861)).toEqual(["b", "c"]);
+    expect(ids(1830 + PRESUMED_LIFESPAN)).toContain("b");
+    expect(ids(1830 + PRESUMED_LIFESPAN + 1)).not.toContain("b");
+    for (let y = 1800; y <= 2000; y += 7) expect(livedInYear(r, y).length).toBe(snapshot(r, y).alive);
+    // Person ohne Datum zählt nie.
+    expect(r.persons.some((p) => p.id === "d")).toBe(false);
+  });
+
+  it("nach Ort gruppiert (Orte der Karte nach Zahl, dann ohne Koordinaten, dann ohne Ort), nach Name und Alter sortiert", () => {
+    const r = build(
+      [
+        person({ id: "Zora", name: "Zora", birth: d("1800"), birthPlace: "Kiel" }),
+        person({ id: "Anna", name: "Anna", birth: d("1820"), birthPlace: "Kiel" }),
+        person({ id: "Bert", name: "Bert", birth: d("1810"), birthPlace: "Hamburg" }),
+        person({ id: "Carl", name: "Carl", birth: d("1815"), birthPlace: "Nirgendwo" }),
+        person({ id: "Dora", name: "Dora", birth: d("1805") }),
+        person({ id: "Emil", name: "Emil" }),
+      ],
+      [{ personId: "Emil", date: d("1830"), place: null }],
+    );
+    const rows = livedInYear(r, 1850);
+    const groups = groupLivedByPlace(r, rows);
+    expect(groups.map((g) => [g.label, g.rows.map((x) => r.persons[x.i].n)])).toEqual([
+      ["Kiel", ["Anna", "Zora"]],
+      ["Hamburg", ["Bert"]],
+      ["Ort nicht auf der Karte", ["Carl"]],
+      ["ohne bekannten Ort", ["Dora", "Emil"]],
+    ]);
+    expect(sortLived(r, rows, "name").map((x) => r.persons[x.i].n)).toEqual(["Anna", "Bert", "Carl", "Dora", "Emil", "Zora"]);
+    // Älteste zuerst, ohne Alter am Ende.
+    expect(sortLived(r, rows, "age").map((x) => r.persons[x.i].n)).toEqual(["Zora", "Dora", "Bert", "Carl", "Anna", "Emil"]);
+  });
+
+  it("In diesem Jahr: Geburten (ersatzweise Taufe), Hochzeiten, Todesfälle (ohne geschätztes Ende)", () => {
+    const r = buildMapData({
+      persons: [
+        person({ id: "a", birth: d("1850"), death: d("1900") }),
+        person({ id: "b", baptism: d("1850") }),
+        person({ id: "c", birth: d("1825") }),
+        person({ id: "e", birth: d("1830") }),
+        person({ id: "f", birth: d("1700") }),
+      ],
+      facts: [{ personId: "e", date: d("1900"), place: "Kiel", burial: true }],
+      coords,
+      currentYear: 2025,
+      marriages: [
+        { a: "c", b: "e", date: d("1850", "YEAR", "ABOUT") },
+        { a: "a", b: null, date: d("1875") },
+        { a: "unbekannt", b: null, date: d("1850") },
+      ],
+    });
+    const name = (i: number) => r.persons[i].id;
+    const y1850 = eventsInYear(r, 1850);
+    expect(y1850.births.map(name).sort()).toEqual(["a", "b"]);
+    expect(y1850.marriages.map(([x, y]) => [name(x), y >= 0 ? name(y) : null])).toEqual([["c", "e"]]);
+    expect(y1850.deaths).toEqual([]);
+    expect(eventsInYear(r, 1875).marriages.map(([x, y]) => [name(x), y])).toEqual([["a", -1]]);
+    // Tod und Beerdigung zählen, das geschätzte Ende (1700 + Lebensspanne) nicht.
+    expect(eventsInYear(r, 1900).deaths.map(name).sort()).toEqual(["a", "e"]);
+    expect(eventsInYear(r, 1700 + PRESUMED_LIFESPAN).deaths).toEqual([]);
+  });
+
+  it("Hochzeiten: nur Ehen mit Datum, beide Partner sichtbar, mindestens einer in der Auswahl", () => {
+    const rel = (from: string, to: string, subtype: string, date: FuzzyDate | null = d("1850"), type = "PARTNER_OF") => ({ type, subtype, from, to, date });
+    const visible = (id: string) => id !== "gesperrt";
+    const selected = (id: string) => ["a", "b", "c"].includes(id);
+    const picked = pickMarriages(
+      [
+        rel("a", "b", "MARRIED"),
+        rel("a", "gesperrt", "MARRIED"),
+        rel("c", "x", "DIVORCED"),
+        rel("a", "b", "UNMARRIED"),
+        rel("a", "b", "MARRIED", null),
+        rel("x", "y", "MARRIED"),
+        rel("a", "b", "BIOLOGICAL", d("1850"), "PARENT_OF"),
+      ],
+      visible,
+      selected,
+    );
+    expect(picked.map((m) => [m.a, m.b])).toEqual([
+      ["a", "b"],
+      ["c", null],
+    ]);
+  });
+});
+
 describe("Projektion", () => {
   it("Mercator, Europa-Ausschnitt enthält Kiel, Zoom hält den Punkt fest", () => {
     const [x, y] = project(10.1, 54.3);
@@ -218,20 +374,33 @@ describe("Leistung", () => {
       );
       for (let k = 0; k < 2; k++) facts.push({ personId: `p${i}`, date: d(String(by + 15 + k * 10)), place: texts[Math.floor(rnd() * texts.length)] });
     }
+    // Jede zweite Person heiratet (Zeile „In diesem Jahr“).
+    const marriages = Array.from({ length: N / 2 }, (_, k) => ({ a: `p${2 * k}`, b: `p${2 * k + 1}`, date: d(String(1720 + (k % 280))) }));
     const t0 = performance.now();
-    const r = buildMapData({ persons, facts, coords: (k) => many[k] ?? null, currentYear: 2025 });
+    const r = buildMapData({ persons, facts, coords: (k) => many[k] ?? null, currentYear: 2025, marriages });
     const tBuild = performance.now() - t0;
     const t1 = performance.now();
     let total = 0;
     for (let y = r.yearMin; y <= r.yearMax; y++) total += snapshot(r, y).alive;
     const years = r.yearMax - r.yearMin + 1;
     const tYear = (performance.now() - t1) / years;
+    // Zeitreise je Jahr: Liste (gruppiert) und „In diesem Jahr“.
+    const t2 = performance.now();
+    let listed = 0;
+    for (let y = r.yearMin; y <= r.yearMax; y++) {
+      listed += groupLivedByPlace(r, livedInYear(r, y)).length;
+      listed += eventsInYear(r, y).births.length;
+    }
+    const tList = (performance.now() - t2) / years;
     const size = JSON.stringify(r).length;
+    const marSize = JSON.stringify(r.mar).length;
     console.log(
-      `[karte] ${N} Personen: Aufbau ${tBuild.toFixed(0)} ms, je Jahr ${tYear.toFixed(2)} ms (${years} Jahre), Daten ${(size / 1e6).toFixed(2)} MB JSON`,
+      `[karte] ${N} Personen: Aufbau ${tBuild.toFixed(0)} ms, je Jahr ${tYear.toFixed(2)} ms Karte + ${tList.toFixed(2)} ms Liste (${years} Jahre), Daten ${(size / 1e6).toFixed(2)} MB JSON (davon Hochzeiten ${(marSize / 1e3).toFixed(0)} KB)`,
     );
     expect(total).toBeGreaterThan(0);
+    expect(listed).toBeGreaterThan(0);
     expect(tBuild).toBeLessThan(2000);
     expect(tYear).toBeLessThan(50);
+    expect(tList).toBeLessThan(100);
   });
 });

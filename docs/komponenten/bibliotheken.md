@@ -1982,8 +1982,12 @@ und Koordinaten — einmal je Ausgangsperson auf dem Server gerechnet.
 **Wichtige Funktionen/Typen:** `buildMapData`, `factYear` (geschätztes
 Lebensende mit `PRESUMED_LIFESPAN` aus `lib/consistency.ts`), `LINE_BIT`, `linesFromBits`, `MapPlace`, `MapPerson` (kurze
 Schlüssel: Name, Lebensdaten, Beginn, Ende, geschätzt, Linien-Bits,
-Stationen als Jahr/Ortsindex-Paare), `MapPayload`, `MapPersonInput`,
-`MapFactInput`, `CoordsLookup`.
+Stationen als Jahr/Ortsindex-Paare; für die Zeitreise nur bei Bedarf
+`b` Geburtsjahr fürs Alter, wenn ≠ Beginn, `ba` ungenau, `bt` aus der Taufe,
+`nb` ohne Geburts- und Taufjahr), `MapPayload` (dazu `mar`: Hochzeiten als
+flache Liste Jahr/Index/Partnerindex oder −1, nach Jahr sortiert),
+`MapPersonInput` (mit `baptism`, früheste Taufe), `MapFactInput`,
+`MapMarriageInput`, `pickMarriages`, `CoordsLookup`.
 
 **Regeln (Lebend-Regel der Karte):**
 - **Jahr einer Angabe:** Jahr des Ankers; „zwischen 1850 und 1854“ zählt
@@ -2002,6 +2006,16 @@ Stationen als Jahr/Ortsindex-Paare), `MapPayload`, `MapPersonInput`,
   filtert der Dienst.
 - **Startjahr:** Jahr mit den meisten Personen an einem Ort der Karte
   (Differenzfeld über alle Stationen).
+- **Taufe:** die früheste Taufe (auch ohne Ort) zählt wie ein datiertes
+  Ereignis für den Beginn und ersetzt fürs Alter die fehlende Geburt.
+- **Alter (Zeitreise):** Geburtsjahr, sonst Taufjahr; ungenau bei
+  Qualifier ≠ EXACT der Geburt oder wenn nur die Taufe bekannt ist.
+- **Hochzeiten** (`pickMarriages`): PARTNER_OF mit Untertyp MARRIED oder
+  DIVORCED und Beginndatum, beide Partner sichtbar, mindestens einer in der
+  Auswahl; Jahr wie `factYear`. Partner außerhalb der Auswahl → −1.
+- **Datenmenge:** Zusatzfelder nur, wo nötig — bei genauer Geburt nichts;
+  bei 12 000 erzeugten Personen mit 6 000 Ehen gut 1,5 MB JSON, davon rund
+  90 KB Hochzeiten (`tests/map.test.ts`, „Leistung“).
 
 **Benutzt von:** `lib/services/map.ts`, `lib/map/year.ts`,
 `components/MapExplorer.tsx`.
@@ -2017,6 +2031,18 @@ Ort, `undefined` lebt nicht), `snapshot` (Gruppen je Ort mit Personen,
 Anteilen je Linie für das Tortendiagramm — eine Person in zwei Linien zählt
 je halb — und Personen je Linie; Zähler lebend, ohne Ort, Ort nicht auf der
 Karte), `PlaceGroup`, `YearSnapshot`.
+
+Zeitreise (alles aus denselben, einmal geladenen Daten): `clampYear`
+(Spanne des Reglers, gerundet), `parseYearInput`, `aliveByYear`
+(Lebende je Jahr für den Zeitstrahl, ein Differenzfeld), `birthYearOf`,
+`ageInYear`/`formatAge` (Jahr − Geburtsjahr; „34 Jahre“, „etwa 34 Jahre“,
+„1 Jahr“, „unter 1 Jahr“, „Alter unbekannt“), `livedInYear` (genau die
+Lebenden von `snapshot`, mit Ort und Alter), `placeLabelOf`, `sortLived`
+(Name; Alter absteigend, ohne Alter am Ende), `groupLivedByPlace` (Orte der
+Karte nach Zahl, dann „Ort nicht auf der Karte“, dann „ohne bekannten Ort“),
+`eventsInYear` (Geburten = Geburts- bzw. Taufjahr, Todesfälle = Ende ohne
+`est`, Hochzeiten aus `mar`). Gemessen bei 12 000 Personen: unter 1 ms je
+Jahr für Liste und Ereignisse.
 
 **Benutzt von:** `components/MapExplorer.tsx`.
 

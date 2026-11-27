@@ -378,19 +378,22 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 ### components/MapExplorer.tsx
 
-**Zweck:** Interaktive Karte „Wurzeln nach Jahr“: eigene SVG-Karte ohne fremde Kachelserver, Kreise je Ort für das gewählte Jahr, Jahresregler mit Abspielen, Personenliste je Ort, Legende und eine Ortstabelle als zugängliche Alternative.
+**Zweck:** Interaktive Karte „Wurzeln nach Jahr“ mit Zeitreise: eigene SVG-Karte ohne fremde Kachelserver, Kreise je Ort für das gewählte Jahr, Zeitstrahl-Regler mit Abspielen, Liste „Wer lebte …?“ mit Alter und Ort, Zeile „In diesem Jahr“, Legende und eine Ortstabelle als zugängliche Alternative.
 
 **Wo eingesetzt:** `app/map/page.tsx` (nicht, wenn „Vorfahren“ ohne Ausgangsperson gewählt ist).
 
-**Props/Daten:** Kartendaten aller Jahre (Orte mit Koordinaten und Genauigkeit, Personen mit Lebensspanne, Ortsverlauf und Linienbits, Jahresbereich, Zahl ohne Lebensdaten), Startjahr, Großeltern der Ausgangsperson und ob Linien gezeigt werden.
+**Props/Daten:** Kartendaten aller Jahre (Orte mit Koordinaten und Genauigkeit, Personen mit Lebensspanne, Ortsverlauf, Linienbits und Geburtsjahr-Angaben fürs Alter, Hochzeiten, Jahresbereich, Zahl ohne Lebensdaten), Startjahr, Großeltern der Ausgangsperson und ob Linien gezeigt werden.
 
 **Verhalten:**
 
-- *Jahr:* Schiebefeld, Knöpfe ‹ ›, „Abspielen/Anhalten“ (ein Jahr je Takt, Tempo langsam/normal/schnell, hält am Ende; startet am Ende wieder vorn). Das Jahr wird ohne Neuladen in `?jahr=` geschrieben (nicht während des Abspielens). Die Jahresdaten rechnet der Browser (`snapshot` aus `lib/map/year.ts`).
+- *Zeitstrahl (Jahr):* über dem Regler ein Balkenband „Lebende je Jahr“ (`aliveByYear`, nur Schmuck, das aktuelle Jahr markiert); Schiebefeld über die ganze Spanne `yearMin`…`yearMax` (44 px hoch; Pfeile ±1, Bild-auf/-ab ±10, Pos1/Ende; `aria-valuetext` mit Jahr und Zahl der Lebenden); Knöpfe −10/−1/+1/+10 (mindestens 44 × 44 px, am Rand gesperrt); Feld „Gehe zu“ (Eingabetaste oder Verlassen übernimmt, `clampYear` begrenzt auf die Spanne, Unsinn stellt das alte Jahr wieder her). Jede Wahl von Hand hält das Abspielen an. Das Jahr wird ohne Neuladen in `?jahr=` geschrieben (nicht während des Abspielens).
+- *Abspielen:* „Abspielen“ → „Pause“ → „Weiter“ (ein Jahr je Takt, Tempo langsam 400 ms/normal 160 ms/schnell 60 ms, hält am Ende; startet am Ende wieder vorn). Bei `prefers-reduced-motion: reduce` gibt es weder Knopf noch Tempo, nur einen Hinweis — die Schritt-Knöpfe bleiben.
 - *Zählzeile:* Lebende, davon auf der Karte, „ohne bekannten Ort“ und „Ort nicht auf der Karte“ als anklickbare Auswahl; `aria-live` nur, wenn nicht abgespielt wird.
+- *In diesem Jahr:* aufklappbare Zeile (`details`) mit Zahl der Geburten (ersatzweise Taufe), Hochzeiten und Todesfälle (ersatzweise Beerdigung) des Jahres, aufgeklappt drei Namenslisten mit Links (`eventsInYear`).
+- *Wer lebte …? (Seitenleiste):* ohne Auswahl alle Lebenden des Jahres (`livedInYear` — dieselben wie die Zählzeile) mit Zahl, Name (Link), Alter (`formatAge`) und Ort bzw. Lebensdaten; „Ordnen“ nach Ort (Standard, Gruppen mit Ortsknopf und Zahl, `groupLivedByPlace`), Name oder Alter (`sortLived`). Zunächst 100 Zeilen, „Alle … zeigen“. Liste und „In diesem Jahr“ rechnen mit `useDeferredValue` und dürfen beim Abspielen kurz nachlaufen. Kontexthilfe „?“ (`HelpLink` „zeitreise“).
 - *Karte:* Ländergrenzen aus `public/geo/countries.json` (einmal geladen, im Modul zwischengespeichert), Projektion und Ausschnitte aus `lib/map/projection.ts`. Kreisfläche wächst mit der Zahl (begrenzt), große Kreise mit Zahl; mit Linien als Tortenstücke mit Farbe **und** Muster je Linie. Kreise erst nach dem Einhängen gezeichnet (Gleitkomma-Unterschiede Server/Browser).
 - *Bedienung:* Ziehen (Maus/ein Finger), zwei Finger und Mausrad zoomen, Knöpfe +/− (44 px), Ausschnitte „Orte“ (alle Orte der Auswahl, Standard), „Europa“, „Welt“; auf der fokussierten Karte Pfeiltasten und +/−. Ein Klick nach echtem Ziehen wählt keinen Kreis. Größenänderungen behalten den gewählten Ausschnitt.
-- *Auswahl:* Kreis oder Ortszeile füllt die Seitenleiste mit den Personen (Links zur Personenseite, ggf. Kurzzeichen, Hinweis bei nur Region/Land bekannt) und setzt den Fokus auf deren Überschrift.
+- *Auswahl:* Kreis, Ortszeile oder Ortsüberschrift der Liste filtert die Seitenleiste auf die Personen dort (Überschrift = Ort, Links zur Personenseite, Alter, ggf. Kurzzeichen, Hinweis bei nur Region/Land bekannt; „nach Ort“ wird dann „nach Name“) und setzt den Fokus auf deren Überschrift; „Alle Orte zeigen“ hebt den Filter auf.
 - *Ortstabelle:* „Orte im Jahr …“, zunächst 30 Zeilen, „Alle … Orte zeigen“.
 - *Barrierefreiheit:* SVG mit `role="img"` und ausführlichem `aria-label`, Tooltips je Kreis und Land, Tabelle als gleichwertige Alternative.
 - *Telefonbreite:* Seitenleiste unter der Karte (zweispaltig erst ab `lg`), Kartenhöhe nach Bildschirmhöhe, Auswahlfeld in Viewportbreite begrenzt.
@@ -400,7 +403,7 @@ Die Baumseite `app/tree/page.tsx` (Server-Komponente) entscheidet anhand der Adr
 
 **Ruft auf:** `fetch("/geo/countries.json")` über `loadCountries` aus `lib/map/countries.ts` (statische Datei, keine API-Route; gemeinsamer Zwischenspeicher mit `LifePathMap`). Die Kartendaten liefert die Seite serverseitig (`loadMapView`); keine API-Route aus der Komponente.
 
-**Tests:** `e2e/read/map.spec.ts` (Kreise, Grenzen, Legende, Regler per Tastatur ohne Neuladen, Abspielen, Kreis-Auswahl, Ortsliste und Fokus, Ausschnitte/Zoom, axe, Telefon antippen ohne Querscrollen). Rechenlogik: `tests/map.test.ts` (`snapshot`, Projektion, `zoomAt`, `fitViewBox`), `tests/map.db.test.ts`. Pfeiltasten auf der Karte, Tempo und „ohne bekannten Ort“-Auswahl sind nicht gezielt getestet.
+**Tests:** `e2e/read/map.spec.ts` (Kreise, Grenzen, Legende, Regler per Tastatur ohne Neuladen, Bild-ab, Schritt-Knöpfe, Jahreseingabe mit Begrenzung, Jahr in der Adresse, „Wer lebte“ mit Zahl gleich Zählzeile, Sortieren nach Alter, Kreis filtert die Liste, „In diesem Jahr“ aufklappen, Abspielen/Pause/Weiter, „Bewegung reduzieren“, Kreis-Auswahl, Ortsliste und Fokus, Ausschnitte/Zoom, axe, Telefon: Tippflächen ≥ 44 px, kein Querscrollen). Rechenlogik: `tests/map.test.ts` (`snapshot`, Zeitreise-Helfer, Projektion, `zoomAt`, `fitViewBox`, Laufzeit), `tests/map.db.test.ts`. Pfeiltasten auf der Karte, Tempo und „ohne bekannten Ort“-Auswahl sind nicht gezielt getestet.
 
 ### components/MapPersonChooser.tsx
 

@@ -52,6 +52,95 @@ test.describe("Karte als Bearbeiter", () => {
     await expect(page.getByTestId("map-play")).toHaveAttribute("aria-pressed", "false");
   });
 
+  test("Zeitreise: Regler per Tastatur und Eingabe, Jahr in der Adresse, Liste „Wer lebte“, In diesem Jahr", async ({ page }) => {
+    await page.goto("/map?mode=alle&jahr=1900");
+    await expect(page.getByTestId("map-year")).toHaveText("1900");
+    const panel = page.getByTestId("map-panel");
+    await expect(panel.getByRole("heading")).toHaveText("Wer lebte 1900?");
+    const count1900 = await page.getByTestId("map-panel-count").textContent();
+    // Liste und Zahl über der Karte stimmen überein.
+    const alive = Number((await page.getByTestId("map-counts").textContent())!.match(/^\s*(\d+)/)![1]);
+    expect(count1900).toContain(`${alive} ${alive === 1 ? "Person lebte" : "Personen lebten"} 1900`);
+    await expect(page.getByTestId("map-lived-row")).toHaveCount(Math.min(alive, 100));
+    await expect(page.getByTestId("map-lived-age").first()).toHaveText(/Jahre?$|unbekannt$/);
+
+    // Bild-ab: zehn Jahre zurück; Ende: letztes Jahr.
+    const slider = page.getByTestId("map-year-slider");
+    await slider.focus();
+    await page.keyboard.press("PageDown");
+    await expect(page.getByTestId("map-year")).toHaveText("1890");
+    await expect(page).toHaveURL(/jahr=1890/);
+    await expect(panel.getByRole("heading")).toHaveText("Wer lebte 1890?");
+    expect(await page.getByTestId("map-panel-count").textContent()).not.toBe(count1900);
+
+    // Schritt-Knöpfe.
+    await page.getByTestId("map-step-plus10").click();
+    await page.getByTestId("map-step-plus1").click();
+    await expect(page.getByTestId("map-year")).toHaveText("1901");
+    await page.getByTestId("map-step-minus1").click();
+    await expect(page.getByTestId("map-year")).toHaveText("1900");
+
+    // Direkte Eingabe; außerhalb der Spanne wird begrenzt.
+    const input = page.getByTestId("map-year-input");
+    await input.fill("1875");
+    await input.press("Enter");
+    await expect(page.getByTestId("map-year")).toHaveText("1875");
+    await expect(page).toHaveURL(/jahr=1875/);
+    await input.fill("99999");
+    await input.press("Enter");
+    const max = await slider.getAttribute("max");
+    await expect(page.getByTestId("map-year")).toHaveText(max!);
+
+    // Geteilte Adresse öffnet dasselbe Jahr.
+    await page.goto("/map?mode=alle&jahr=1875");
+    await expect(page.getByTestId("map-year")).toHaveText("1875");
+
+    // In diesem Jahr: Zahl, aufklappbare Namen mit Links.
+    const events = page.getByTestId("map-year-events");
+    await expect(page.getByTestId("map-year-events-summary")).toHaveText(/\d+ Geburte?n? · \d+ Hochzeite?n? · \d+ Todesf(a|ä)ll(e)?/);
+    await events.locator("summary").click();
+    await expect(page.getByTestId("map-year-births")).toBeVisible();
+
+    // Sortieren nach Alter: ältester zuerst.
+    await page.getByTestId("map-lived-sort").selectOption("age");
+    const ages = await page.getByTestId("map-lived-age").allTextContents();
+    const nums = ages.map((a) => Number(a.match(/(\d+)/)?.[1] ?? -1)).filter((n) => n >= 0);
+    expect(nums.length).toBeGreaterThan(1);
+    expect(nums).toEqual([...nums].sort((a, b) => b - a));
+
+    // Kreis wählen filtert die Liste, „Alle Orte zeigen“ hebt es auf.
+    const circle = page.getByTestId("map-circle").first();
+    const n = Number(await circle.getAttribute("data-count"));
+    await circle.click();
+    await expect(page.getByTestId("map-lived-row")).toHaveCount(Math.min(n, 100));
+    await page.getByTestId("map-panel-all").click();
+    await expect(panel.getByRole("heading")).toHaveText("Wer lebte 1875?");
+  });
+
+  test("Abspielen: Pause und Weiter; bei „Bewegung reduzieren“ nur Schritte", async ({ page, browser }) => {
+    await page.goto("/map?mode=alle&jahr=1900");
+    const play = page.getByTestId("map-play");
+    await expect(play).toHaveText(/Abspielen/);
+    await play.click();
+    await expect(play).toHaveAttribute("aria-pressed", "true");
+    await expect(play).toHaveText(/Pause/);
+    await expect(page.getByTestId("map-year")).not.toHaveText("1900");
+    await play.click();
+    await expect(play).toHaveAttribute("aria-pressed", "false");
+    await expect(play).toHaveText(/Weiter/);
+    const paused = await page.getByTestId("map-year").textContent();
+    await expect(page).toHaveURL(new RegExp(`jahr=${paused}`));
+
+    const ctx = await browser.newContext({ storageState: authFile("editor"), reducedMotion: "reduce" });
+    const calm = await ctx.newPage();
+    await calm.goto("/map?mode=alle&jahr=1900");
+    await expect(calm.getByTestId("map-play-reduced")).toBeVisible();
+    await expect(calm.getByTestId("map-play")).toHaveCount(0);
+    await calm.getByTestId("map-step-plus10").click();
+    await expect(calm.getByTestId("map-year")).toHaveText("1910");
+    await ctx.close();
+  });
+
   test("Kreis anklicken zeigt die Personen mit Link, Ortsliste als Alternative", async ({ page }) => {
     await page.goto("/map");
     const circle = page.getByTestId("map-circle").last();
@@ -164,6 +253,21 @@ test.describe("Karte auf dem Telefon", () => {
     await expectNoHorizontalOverflow(page);
     await page.getByTestId("map-circle").last().tap();
     await expect(page.getByTestId("map-panel-list").getByRole("link").first()).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test("Zeitreise: Regler und Knöpfe groß genug, Liste ohne waagerechtes Scrollen", async ({ page }) => {
+    await page.goto("/map?mode=alle&jahr=1900");
+    await expect(page.getByTestId("map-lived-row").first()).toBeVisible();
+    for (const id of ["map-year-slider", "map-step-minus10", "map-step-minus1", "map-step-plus1", "map-step-plus10", "map-play", "map-year-input"]) {
+      const box = await page.getByTestId(id).boundingBox();
+      expect(box, id).not.toBeNull();
+      expect(box!.height, id).toBeGreaterThanOrEqual(44);
+      if (id.startsWith("map-step")) expect(box!.width, id).toBeGreaterThanOrEqual(44);
+    }
+    await page.getByTestId("map-step-plus10").tap();
+    await expect(page.getByTestId("map-year")).toHaveText("1910");
+    await page.getByTestId("map-year-events").locator("summary").tap();
     await expectNoHorizontalOverflow(page);
   });
 });

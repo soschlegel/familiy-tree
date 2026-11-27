@@ -12,6 +12,7 @@ import { mockDbSkipReason } from "./db-ready";
 import type { Scope } from "@/lib/scope";
 import { scopeForEmail } from "@/lib/services";
 import { loadMapView } from "@/lib/services/map";
+import { eventsInYear, livedInYear, snapshot } from "@/lib/map/year";
 import { assignPlace, autoAssignPlaces, listPlaces, searchPlaceDirectory } from "@/lib/services/places";
 import { placeKey } from "@/lib/places/normalize";
 import { mockData } from "./helpers";
@@ -53,6 +54,40 @@ describe.skipIf(Boolean(skipReason))("Karte (Mock-Datenbank)", () => {
     expect(view.payload.persons).toEqual([]);
     expect(view.payload.undated).toBe(0);
     expect(view.payload.places).toEqual([]);
+    expect(view.payload.mar).toEqual([]);
+  });
+
+  it("Zeitreise (Betrachter, Familie A): Hochzeiten nur mit beiden Partnern sichtbar, Liste und Zahl ohne gesperrte", async () => {
+    const viewer = await scope("viewer@example.test");
+    const view = await loadMapView(viewer, { mode: "all", currentYear: 2025 });
+    const { persons, mar } = view.payload;
+    const inA = (id: string) => byId.get(id)?.familyKeys.includes("A") ?? false;
+    const shown = new Set(persons.map((p) => p.id));
+    // Erwartet: Ehen mit Datum, beide Partner sichtbar, mindestens einer mit Lebensdaten.
+    const expected = data.relationships.filter(
+      (r) =>
+        r.type === "PARTNER_OF" &&
+        (r.subtype === "MARRIED" || r.subtype === "DIVORCED") &&
+        r.startDate &&
+        inA(r.fromPersonId) &&
+        inA(r.toPersonId) &&
+        (shown.has(r.fromPersonId) || shown.has(r.toPersonId)),
+    );
+    expect(expected.length).toBeGreaterThan(0);
+    expect(mar.length / 3).toBe(expected.length);
+    for (let k = 0; k < mar.length; k += 3) {
+      const a = persons[mar[k + 1]];
+      expect(a && inA(a.id)).toBe(true);
+      if (mar[k + 2] >= 0) expect(inA(persons[mar[k + 2]].id)).toBe(true);
+    }
+    // „Wer lebte“ zählt genau wie die Karte, nur sichtbare Personen.
+    for (let y = view.payload.yearMin; y <= view.payload.yearMax; y += 11) {
+      const rows = livedInYear(view.payload, y);
+      expect(rows.length).toBe(snapshot(view.payload, y).alive);
+      for (const r of rows) expect(inA(persons[r.i].id)).toBe(true);
+      const ev = eventsInYear(view.payload, y);
+      for (const i of [...ev.births, ...ev.deaths]) expect(inA(persons[i].id)).toBe(true);
+    }
   });
 
   it("Bearbeiter: Vorfahren seiner eigenen Person, gesperrte Großeltern fehlen", async () => {
