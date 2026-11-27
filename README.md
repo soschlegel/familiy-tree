@@ -14,9 +14,10 @@ Diese Datei ist Einstieg und Wegweiser. Alles Weitere steht unter
   Zugang nur auf Einladung (ein Google-/GitHub-Konto allein genügt nicht);
   gesperrte Personen erscheinen als Platzhalter
   ([Berechtigungen](docs/fachlich/berechtigungen.md))
-- **Stammbaum in drei Ansichten** — Fokus-Ansicht (eine Person im
+- **Stammbaum in vier Ansichten** — Fokus-Ansicht (eine Person im
   Mittelpunkt, Wandern per Klick) als Einstieg, dazu der ganze Baum nach
-  Generationen oder als Zeitstrahl; Adoptiv-, Stief- und Pflegeverhältnisse,
+  Generationen oder als Zeitstrahl und die Vorfahren als Ringe (Ahnenfächer
+  im Vollkreis); Adoptiv-, Stief- und Pflegeverhältnisse,
   Beziehungen mit Zeitraum ([Fokus-Ansicht](docs/fachlich/fokus-ansicht.md))
 - **Bezugsperson** — „Das bin ich“ oder vorübergehend eine andere Person;
   Verwandtschaftsgrad an jeder Karte, die vier Großeltern-Linien farbig

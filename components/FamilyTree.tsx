@@ -25,7 +25,9 @@ import ReactFlow, {
 } from "reactflow";
 
 import { useDismiss } from "./useDismiss";
-import { FULLSCREEN_PARAM, useTreeFullscreen } from "./useTreeFullscreen";
+import { useTreeFullscreen } from "./useTreeFullscreen";
+import { treeUrl } from "./tree-url";
+import { FULLSCREEN_BUTTON_CLASS, FullscreenIcon, TreeViewSwitch } from "./TreeViewSwitch";
 import {
   FocusIcon,
   LockIcon,
@@ -44,7 +46,7 @@ import {
 import { MarriageEdge } from "./MarriageEdge";
 import { LineLegend, ReferenceContext, type TreeReference } from "./ReferenceLines";
 import { OriginLegend, TreeOriginContext, type TreeOriginState } from "./OriginChips";
-import { ORIGIN_PARAM, type TreeOrigin } from "@/lib/origin";
+import type { TreeOrigin } from "@/lib/origin";
 import { ParentEdge, PARENT_EDGE_STYLE, type ParentSubtype } from "./ParentEdge";
 import {
   displayName,
@@ -92,36 +94,8 @@ const handleFor = (base: string, side?: "left" | "right" | "center") =>
 
 const unitWidth = (n: { partner: unknown }) => (n.partner ? NODE_WIDTH * 2 + CONNECTOR : NODE_WIDTH);
 
-/** URL der Baumseite; Standardwerte bleiben weg, damit Links kurz bleiben. */
-export function treeUrl({
-  view = "focus",
-  focus,
-  up = FOCUS_DEPTH.up,
-  down = FOCUS_DEPTH.down,
-  herkunft = false,
-  vollbild = false,
-}: {
-  view?: TreeView;
-  focus?: string | null;
-  up?: number;
-  down?: number;
-  /** Schalter „Herkunft“ (`?herkunft=1`); aus bleibt weg. */
-  herkunft?: boolean;
-  /** Vollbild (`?vollbild=1`, components/useTreeFullscreen.ts); aus bleibt weg. */
-  vollbild?: boolean;
-}): string {
-  const s = new URLSearchParams();
-  if (view !== "focus") s.set("view", view);
-  if (focus) s.set("focus", focus);
-  if (view === "focus") {
-    if (up !== FOCUS_DEPTH.up) s.set("up", String(up));
-    if (down !== FOCUS_DEPTH.down) s.set("down", String(down));
-  }
-  if (herkunft) s.set(ORIGIN_PARAM, "1");
-  if (vollbild) s.set(FULLSCREEN_PARAM, "1");
-  const query = s.toString();
-  return query ? `/tree?${query}` : "/tree";
-}
+/** URL der Baumseite (components/tree-url.ts). */
+export { treeUrl };
 
 function useMediaQuery(query: string) {
   const [matches, setMatches] = useState(false);
@@ -992,6 +966,12 @@ function TreeCanvas({
 
   /** Ansicht wechseln. Zwischen Fokus und Gesamtbaum wechseln die Daten. */
   function switchView(next: TreeView) {
+    // Ringe: eigene Daten und eigene Komponente (AncestorRings) — mit der
+    // Person im Fokus bzw. der zuletzt gewählten als Ausgangsperson.
+    if (next === "rings") {
+      navigate(tUrl({ view: "rings", focus: focusData?.focusId ?? focused }));
+      return;
+    }
     if (focusData) {
       if (next === "focus") return;
       navigate(tUrl({ view: next, focus: focusData.focusId }));
@@ -1283,7 +1263,11 @@ function TreeCanvas({
             onChange={(e) => setShowMarriages(e.target.checked)}
             className="accent-rose-500"
           />
-          Ehen zeigen
+          {/* Telefon: nur „Ehen“ sichtbar, damit die Ansicht (vier Knöpfe) und
+              dieser Schalter in eine Zeile passen; der Name bleibt vollständig. */}
+          <span>
+            Ehen<span className="max-sm:sr-only"> zeigen</span>
+          </span>
         </label>
 
         {reference && (
@@ -1328,31 +1312,7 @@ function TreeCanvas({
 
         {/* Fokus-Ansicht auf dem Telefon: Ansicht zuerst, „Ehen zeigen“ und die
             Tiefe teilen sich die nächste Zeile — sonst vier Zeilen bei 360 px. */}
-        <div className={`${toolbarBox} flex overflow-hidden ${focusData ? "max-sm:order-1" : ""}`} role="group" aria-label="Ansicht">
-          {(
-            [
-              ["focus", "Fokus", "Eine Person im Mittelpunkt mit Vorfahren und Nachkommen"],
-              ["generations", "Generationen", "Ganzer Baum nach Generationen"],
-              ["timeline", "Zeitstrahl", "Ganzer Baum auf einer Jahresachse"],
-            ] as const
-          ).map(([value, label, title]) => (
-            <button
-              type="button"
-              key={value}
-              title={title}
-              aria-pressed={activeView === value}
-              data-testid={`tree-view-${value}`}
-              onClick={() => switchView(value)}
-              className={`px-2.5 py-1.5 max-md:min-h-11 sm:px-3 transition ${
-                activeView === value
-                  ? "bg-accent-700 text-white dark:bg-accent-300 dark:text-stone-950"
-                  : "hover:bg-stone-100 dark:hover:bg-stone-800"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <TreeViewSwitch active={activeView} onSwitch={switchView} className={focusData ? "max-sm:order-1" : ""} />
 
         {focusData ? (
           <>
@@ -1482,7 +1442,7 @@ function TreeCanvas({
           aria-pressed={fullscreen.on}
           onClick={fullscreen.toggle}
           title={fullscreen.on ? "Zurück zur normalen Ansicht (Escape)" : "Baum bildschirmfüllend zeigen"}
-          className="absolute right-3 top-3 z-20 inline-flex min-h-11 items-center gap-1.5 rounded-full bg-white/95 px-3 text-sm font-medium text-stone-700 shadow-sm ring-1 ring-stone-300 backdrop-blur transition hover:ring-accent-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 md:min-h-0 md:px-2.5 md:py-1 md:text-xs md:font-normal dark:bg-stone-900/95 dark:text-stone-200 dark:ring-stone-700 dark:hover:ring-accent-500"
+          className={FULLSCREEN_BUTTON_CLASS}
         >
           <FullscreenIcon exit={fullscreen.on} />
           {fullscreen.on ? "Vollbild beenden" : "Vollbild"}
@@ -1578,16 +1538,6 @@ function TimelineAxis({ ticks }: { ticks: { year: number; y: number }[] }) {
         );
       })}
     </div>
-  );
-}
-
-/** Pfeile nach außen (Vollbild) bzw. nach innen (Vollbild beenden). */
-function FullscreenIcon({ exit }: { exit: boolean }) {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden className="h-4 w-4 shrink-0 md:h-3.5 md:w-3.5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      {/* Diagonale Pfeile — die vier Ecken „Alles einpassen“ der Zoom-Knöpfe sind schon vergeben. */}
-      {exit ? <path d="M14 2 9.5 6.5M9.5 3v3.5H13M2 14l4.5-4.5M6.5 13V9.5H3" /> : <path d="M9.5 6.5 14 2M10.5 2H14v3.5M6.5 9.5 2 14M5.5 14H2v-3.5" />}
-    </svg>
   );
 }
 

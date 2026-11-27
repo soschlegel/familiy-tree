@@ -1,28 +1,48 @@
 # Stammbaum
 
-Die drei Ansichten Fokus, Generationen und Zeitstrahl, die Bezugsperson („Das bin ich“), der Verwandtschaftsgrad an jeder Karte, die farbigen Großeltern-Linien, die Herkunft aus Importen und das Vollbild fürs Handy.
+Die vier Ansichten Fokus, Generationen, Zeitstrahl und Ringe, die Bezugsperson („Das bin ich“), der Verwandtschaftsgrad an jeder Karte, die farbigen Großeltern-Linien, die Herkunft aus Importen und das Vollbild fürs Handy.
 
-## Die drei Ansichten
+## Die Ansichten
 
 Oben im Baum wählst du die Ansicht:
 
 - **Fokus** (Start): eine Person in der Mitte, darüber ihre Vorfahren, darunter ihre Nachkommen, dazu Partner und Geschwister. Mit „Vorfahren“ und „Nachkommen“ stellst du ein, wie viele Generationen (1 bis 4) zu sehen sind. Ein Klick auf eine Karte stellt diese Person in die Mitte — so wanderst du durch die Familie. Die Personenseite öffnet das kleine Symbol in der Kartenecke.
 - **Generationen**: der ganze Baum, Generation für Generation. Hier öffnet ein Klick auf die Karte die Personenseite, das Ecksymbol stellt die Person in die Fokus-Ansicht.
 - **Zeitstrahl**: der ganze Baum an einer Jahresachse — wer früher geboren ist, steht weiter oben; Hochzeiten stehen als eigene Ereignisse an ihrem Jahr.
+- **Ringe**: die Vorfahren einer Person als Kreis, von innen nach außen — mehr dazu unter [Ringe](04-stammbaum.md#ringe).
 
 Karten am Rand zeigen, dass es weitergeht: „▲ Vorfahren“ oder „▼ +3 Kinder“. Ein Klick darauf holt sie in den Ausschnitt.
 
-Weitere Werkzeuge: **Suche** (stellt den Treffer in die Mitte), **Ehen zeigen** (aus = nur die reine Abstammung), der **Familienfilter** im ganzen Baum und unten links die **Legende** mit allen Linienarten (leiblich, Adoption, Stief- und Pflegekind, Ehe, geschieden, Ehestand unbekannt, nicht freigegeben). Ziehen verschiebt, Mausrad bzw. zwei Finger zoomen.
+Weitere Werkzeuge: **Suche** (stellt den Treffer in die Mitte), **Ehen zeigen** (aus = nur die reine Abstammung; auf dem Handy steht dort kurz **Ehen**), der **Familienfilter** im ganzen Baum und unten links die **Legende** mit allen Linienarten (leiblich, Adoption, Stief- und Pflegekind, Ehe, geschieden, Ehestand unbekannt, nicht freigegeben). Ziehen verschiebt, Mausrad bzw. zwei Finger zoomen.
 
 Von jeder Personenseite führt **Im Stammbaum zeigen** zurück in die Fokus-Ansicht.
 
+## Ringe
+
+Die Ansicht **Ringe** zeigt die Vorfahren einer Person als Kreis. In der Mitte steht die Person selbst. Im ersten Ring drumherum stehen Vater und Mutter, jeder auf einer Hälfte des Kreises. Im nächsten Ring folgen die vier Großeltern mit je einem Viertel, dann die acht Urgroßeltern — und so weiter: Jeder Bogen teilt sich für die beiden Eltern dieser Person in zwei gleiche Hälften.
+
+- **Wer steht wo?** Die Seite des Vaters liegt oben, die der Mutter unten. In jedem Bogen steht im Uhrzeigersinn zuerst der Vater, dann die Mutter. Ist ein Elternteil nicht erfasst, bleibt sein Platz als blasse, gestrichelte Lücke frei — die anderen rücken nicht nach.
+- **Beschriftung:** In den inneren Ringen stehen Name und Lebensjahre im Bogen; wird es eng, wird der Name gekürzt (etwa „Wilhelm S.“). In den äußeren Ringen ist dafür kein Platz mehr, dort siehst du nur die Fläche.
+- **Antippen bzw. Überfahren** zeigt Name, Lebensdaten und die Verwandtschaft zur Person in der Mitte, etwa „Urgroßmutter väterlicherseits von Paula“. Am Computer stehen die Angaben links neben dem Kreis, auf dem Handy unten als Karte (mit × schließen).
+- Eine angetippte Fläche bietet zwei Wege: **Zur Person** öffnet die Personenseite, **In die Mitte** macht diese Person zur Mitte der Ringe — so wanderst du weiter in die Vergangenheit. Die Zurück-Taste führt wieder zurück.
+- Mit der **Suche** stellst du eine beliebige Person in die Mitte. Wer in der Fokus-Ansicht in der Mitte stand, steht auch in den Ringen in der Mitte — und umgekehrt.
+- **Generationen** legt fest, wie viele Ringe du siehst (3 bis 7, anfangs 5). Unter dem Kreis steht, wie viele Vorfahren bekannt sind, etwa „23 von 62 Vorfahren bis zur 5. Generation bekannt“.
+- Gezählt werden nur **leibliche Eltern**. Taucht derselbe Vorfahr über mehrere Linien auf (wenn z.B. Cousin und Cousine geheiratet haben), steht er auf jedem seiner Plätze.
+
+Mit **nach Linie** und **nach Wurzeln** wählst du die Farben:
+
+- **nach Linie** (Start): Jede der vier Großeltern-Linien hat ihren Farbton — Blau, Grün, Rot und Gelb wie bei den [Linienfarben](04-stammbaum.md#linienfarben) —, nach außen immer heller. Vater und Mutter tragen die Mischfarbe ihrer Seite. Die Legende nennt die vier Großeltern mit Namen.
+- **nach Wurzeln**: Die Farbe zeigt das Land, in dem der Vorfahr geboren ist (fehlt der Geburtsort, der Ort der Taufe) — wie im Abschnitt „Wurzeln“ auf der Personenseite. Die Legende nennt die Länder und wie viele Plätze sie belegen. Grau heißt: kein Ort erfasst oder der Ort ist noch keinem Land zugeordnet.
+
+Personen aus Familien, für die du keine Freigabe hast, erscheinen als schraffierte graue Fläche **„Nicht freigegeben“** — ohne Namen und Daten. Was dahinter liegt, bleibt leer.
+
 ## Vollbild
 
-Gerade auf dem Handy bleibt unter Kopfzeile und Werkzeugen wenig Platz für den Baum. Der Knopf **Vollbild** oben rechts im Baum zeigt ihn bildschirmfüllend — in allen drei Ansichten.
+Gerade auf dem Handy bleibt unter Kopfzeile und Werkzeugen wenig Platz für den Baum. Der Knopf **Vollbild** oben rechts im Baum zeigt ihn bildschirmfüllend — in allen Ansichten, auch bei den Ringen.
 
 - Im Vollbild kannst du wie gewohnt verschieben und zoomen. Ein Tipp auf eine Karte stellt die Person in die Mitte bzw. öffnet ihre Seite — genau wie sonst.
 - Die **Legende** unten links bleibt da. Hast du vorher **Linien** oder **Herkunft** eingeschaltet, stehen deren Erklärungen ebenfalls darin.
-- Suche, Ansicht, „Ehen zeigen“, „Linien“ und „Herkunft“ sind im Vollbild ausgeblendet. Stell sie vorher ein, oder beende kurz das Vollbild.
+- Suche, Ansicht, „Ehen zeigen“, „Linien“ und „Herkunft“ (bei den Ringen: „Generationen“ und die Farben) sind im Vollbild ausgeblendet. Stell sie vorher ein, oder beende kurz das Vollbild.
 - **Beenden:** mit dem Knopf **Vollbild beenden** oben rechts, mit der Zurück-Taste bzw. Zurück-Wischgeste des Handys oder am Computer mit der Taste Esc. Du bleibst dabei auf der Baumseite. Hast du im Vollbild andere Personen in die Mitte gestellt, führt die Zurück-Taste erst Schritt für Schritt zu ihnen zurück, bevor das Vollbild endet.
 
 Auf manchen Handys verschwinden im Vollbild zusätzlich die Adress- und die Statusleiste des Browsers; auf dem iPhone bleiben sie stehen.

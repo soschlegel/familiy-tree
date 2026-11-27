@@ -270,7 +270,7 @@ dort auf `/login`).
 
 ### `/tree` — `app/tree/page.tsx`
 
-Der Stammbaum in drei Ansichten. Bedienung: [fokus-ansicht.md](../fachlich/fokus-ansicht.md) und
+Der Stammbaum in vier Ansichten (Fokus, Generationen, Zeitstrahl, Ringe). Bedienung: [fokus-ansicht.md](../fachlich/fokus-ansicht.md) und
 [bezugsperson.md](../fachlich/bezugsperson.md).
 
 - **Aufbau:** Die äußere Seite prüft nur, ob `focus` die alte Kennung
@@ -282,8 +282,8 @@ Der Stammbaum in drei Ansichten. Bedienung: [fokus-ansicht.md](../fachlich/fokus
 - **Rechte:** angemeldet. Ohne freigegebene Familie (und nicht Admin)
   wird nichts geladen; Hinweis „Noch keine Familie freigegeben“.
 - **Suchparameter:**
-  - `view` — `generations` oder `timeline` für den ganzen Baum; sonst
-    Fokus-Ansicht.
+  - `view` — `generations` oder `timeline` für den ganzen Baum, `rings`
+    für die Ringe (`AncestorRings`); sonst Fokus-Ansicht.
   - `focus` — Person im Mittelpunkt (nur Zeichen `[A-Za-z0-9_-]`, höchstens
     64). Im ganzen Baum zentriert die Ansicht darauf.
   - `up`, `down` — Tiefe der Fokus-Ansicht (`parseDepth`, Grenzen und
@@ -295,6 +295,9 @@ Der Stammbaum in drei Ansichten. Bedienung: [fokus-ansicht.md](../fachlich/fokus
   - `vollbild=1` — Baumfläche bildschirmfüllend (für alle Rollen). Nur im
     Browser ausgewertet (`useTreeFullscreen`); der Server lädt dafür nichts
     anders.
+  - `generationen` (3–7, Standard 5) und `farbe=wurzeln` — nur Ringe
+    (`parseRingsGeneration`, `parseRingsColoring` in `lib/ancestor-rings.ts`).
+    Die Färbung schaltet der Browser um; der Server liefert beides.
   - `denied` — Hinweis nach einer Umleitung wegen fehlender Rechte.
 - **Cookies:** `tree-focus` (zuletzt fokussierte Person), `tree-bezug`
   (Bezugsperson), `tree-lines` (Großeltern-Linien an/aus).
@@ -304,7 +307,12 @@ Der Stammbaum in drei Ansichten. Bedienung: [fokus-ansicht.md](../fachlich/fokus
   Mittelpunkt aus `focus`, sonst `bezug`, sonst Cookie, sonst
   Bezugsperson; eine angefragte, aber unbekannte oder gesperrte Person
   ergibt den Hinweis „Person nicht gefunden“ (gemerkte Personen dürfen
-  fehlen, dann Ersatzperson). Ganzer Baum: `loadTree`. Verwandtschaftsgrade
+  fehlen, dann Ersatzperson). Ringe: weder `loadGraph` noch `listFamilies`
+  noch `referenceView` — `loadAncestorRings` lädt nur die Vorfahren der
+  Mitte generationsweise; Mitte in derselben Reihenfolge wie die
+  Fokus-Ansicht, zuletzt `defaultRingsRootId`; eine angefragte, aber
+  fehlende oder gesperrte Person ergibt „Person nicht gefunden“ (Link
+  „Ringe öffnen“). Ganzer Baum: `loadTree`. Verwandtschaftsgrade
   und Linien über `referenceView` — in der Fokus-Ansicht nur für die
   Personen im Ausschnitt. Nur mit `herkunft=1` (und Recht):
   `loadTreeOrigin`, ebenfalls auf den Ausschnitt begrenzt; sonst wird keine
@@ -313,7 +321,8 @@ Der Stammbaum in drei Ansichten. Bedienung: [fokus-ansicht.md](../fachlich/fokus
   freigegeben) · k Beziehungen“), `ReferenceChip` („Sicht von: …“),
   „Person anlegen“ (nur mit Bearbeitungsrecht), `FamilyTree` mit Ansicht,
   Daten, Familienauswahl, Bezugsperson und Linienstatus. Leerer Bestand →
-  Hinweiskarte.
+  Hinweiskarte. Ringe: ohne Zählzeile, statt `FamilyTree` `AncestorRings`
+  mit Daten und Färbung.
 - Die Seite füllt genau die Bildschirmhöhe zwischen Kopf- und Fußzeile.
 
 ### `/map` — `app/map/page.tsx`

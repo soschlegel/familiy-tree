@@ -126,6 +126,30 @@
   }
 }
 
+/* Ansicht „Ringe“ (components/AncestorRings.tsx): Flächen sind Mischungen
+   aus Linien- bzw. Diagrammfarbe und Kartenfläche, höchstens etwa zur
+   Hälfte (lineTint in lib/ancestor-rings.ts). --rings-strength dämpft das im
+   dunklen Schema noch etwas, damit helle Schrift überall gut lesbar bleibt.
+   --rings-ink ist die Schrift auf den Flächen, --rings-restricted und
+   --rings-hatch die Schraffur „nicht freigegeben“, --rings-gap leere Plätze. */
+:root {
+  --rings-strength: 1;
+  --rings-ink: #1c1917;
+  --rings-restricted: #e7e5e4;
+  --rings-hatch: #a8a29e;
+  --rings-gap: #a8a29e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --rings-strength: 0.82;
+    --rings-ink: #f5f5f4;
+    --rings-restricted: #44403c;
+    --rings-hatch: #78716c;
+    --rings-gap: #78716c;
+  }
+}
+
 /* Auch <html> in Papierfarbe: Was der Browser beim Überziehen des
    Bildlaufs oder beim Ein- und Ausblenden der Adressleiste außerhalb von
    <body> zeigt, ist dann kein schwarzer oder weißer Streifen. */

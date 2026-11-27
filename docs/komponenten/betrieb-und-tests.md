@@ -587,6 +587,11 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
 
 - **`ai-access.test.ts`** — Schlüsselformat und Hash, wirksame KI-Stufe,
   Eingabeschemas und die festen Mock-Schlüssel.
+- **`ancestor-rings.test.ts`** — Ansicht „Ringe“: Platzvergabe (volle
+  Belegung, Lücken, Seitenregel bei unbekanntem/gleichem Geschlecht,
+  Ahnenschwund, Zyklus, nicht sichtbarer Vorfahr), Geometrie, Text nie
+  kopfüber, Beschriftungsplan und Kürzen, Verwandtschaftsstufe,
+  Zusammenfassung, Adressparameter.
 - **`build-info.test.ts`** — Build-Angabe der Fußzeile, Rückfall „Build
   lokal“, ohne Anmeldung kein Commit.
 - **`changelog.test.ts`** — Feldänderungen und Paket-Titel des Changelogs.
@@ -697,6 +702,9 @@ Start: `npm test` (oder `npm run test:watch`). Zwei Arten:
 
 - **`ai-access.db.test.ts`** — KI-Rechte, Schlüssel, Prüfung pro Aufruf und
   Audit über den KI-Kanal.
+- **`ancestor-rings.db.test.ts`** — „Ringe“: Plätze und Begriffe, gesperrte
+  Großeltern nur als „nicht freigegeben“ ohne Kennungen oder Namen dahinter,
+  Tiefe 3…7, unsichtbare Mitte, Startperson (nur lesend).
 - **`changelog.db.test.ts`** — Pakete, Momentaufnahmen, Verlauf je Person mit
   Rechten und Maskierung, Admin-Übersicht, Bündeln über den KI-Zugang.
 - **`changelog-subject.db.test.ts`** — Verlauf zu gelöschten und
@@ -864,6 +872,11 @@ Benutzer bekommt keinen gespeicherten Zustand.
 - **`reference.spec.ts`** — Bezugsperson und Ahnenlinien, keine
   Durchsickerung, Telefon.
 - **`research.spec.ts`** — Recherche-Seite als Admin und Betrachter.
+- **`rings.spec.ts`** — Ansicht „Ringe“ der Baumseite: wählbar, Flächen mit
+  Namen und Verwandtschaftsstufe, „Nicht freigegeben“ ohne Angaben und ohne
+  alles dahinter, Auswahl mit „Zur Person“ und „In die Mitte“, Tiefe,
+  Färbung, Tastatur, Quelltext ohne fremde Namen/Kennungen, „Person nicht
+  gefunden“, 390 px mit Tippflächen und Vollbild, axe.
 - **`roots.spec.ts`** — Abschnitt „Wurzeln“ der Personenseite: Legende und
   Prozente, „Nicht freigegeben“, Umschalten Land/Region und Generation,
   kein Abschnitt ohne Eltern, Schnittstelle (400/404, keine Kennungen),

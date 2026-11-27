@@ -22,7 +22,7 @@ Test-Briefkasten).
 | Daten und Regeln | `dates`, `date-fields`, `events`, `event-labels`, `validation`, `consistency`, `partner-labels`, `source-labels`, `source-classify` |
 | Graph und Verwandtschaft | `graph`, `kinship`, `reference`, `roots` |
 | Auswertungen | `statistics`, `chart-slices` |
-| Baumdarstellung | `tree-layout`, `layout-generations`, `focus-tree` |
+| Baumdarstellung | `tree-layout`, `layout-generations`, `focus-tree`, `ancestor-rings` |
 | Dubletten und Zusammenführen | `name-keys`, `duplicates`, `merge-rules`, `import-linking` |
 | Import/Export | `exchange`, `export-selection`, `import-fingerprint`, `gedcom/*`, `gedcom-import/*` |
 | Medien | `storage`, `media-processing`, `media-scope`, `safe-fetch` |
@@ -1105,7 +1105,8 @@ Generationen Vorfahren, darunter N Generationen Nachkommen. Arbeitet auf
 bereits maskierten Baumdaten.
 
 **Wichtige Funktionen/Typen:** `TreeView` (`focus`, `generations`,
-`timeline`), `FOCUS_COOKIE` (`tree-focus`), `FOCUS_DEPTH` (1–4, Standard 2
+`timeline`, `rings` — letztere ohne Fokus-Ausschnitt, siehe
+`lib/ancestor-rings.ts`), `FOCUS_COOKIE` (`tree-focus`, auch Mitte der Ringe), `FOCUS_DEPTH` (1–4, Standard 2
 je Richtung), `parseDepth`, `FocusRole`, `FocusMember` (Rolle, relative
 Generation, verdeckte Eltern/Kinder), `focusSubgraph`, `defaultFocusId`,
 `FOCUS_ROW_GAP`, `layoutFocus`.
@@ -1124,6 +1125,69 @@ Partner ohne gemeinsames Kind im Ausschnitt weg.
 `lib/services/tree.ts`.
 
 **Tests:** `tests/focus.test.ts`, `tests/focus.db.test.ts`.
+
+### lib/ancestor-rings.ts
+**Zweck:** Ansicht „Ringe“ — die Vorfahren einer Person als Vollkreis
+(Ahnenfächer): Platzvergabe, Geometrie, Beschriftungsplan,
+Verwandtschaftsstufe, Farbstufen. Rein, ohne Datenbank und ohne
+Rechteprüfung, auch im Browser nutzbar; Laden und Sichtbarkeit in
+`lib/services/ancestor-rings.ts`, Darstellung in
+`components/AncestorRings.tsx`.
+
+**Wichtige Funktionen/Typen:** Grenzen `RINGS_MIN_GENERATION` (3),
+`RINGS_MAX_GENERATION` (7), `RINGS_DEFAULT_GENERATION` (5); Adressparameter
+`RINGS_GENERATION_PARAM` (`generationen`), `RINGS_COLORING_PARAM` (`farbe`),
+`parseRingsGeneration`, `parseRingsColoring`, `RingsColoring` (`linie`,
+`wurzeln`); `ringSlotCount`; Platzvergabe `orderParents`, `assignRingSlots`
+(→ `RingSlot`), `childSlot`, `slotSide`, `slotLine`, `ringRelationTerm`;
+Geometrie `RINGS_VIEWBOX`, `ringGeometry`, `slotAngles`, `polar`,
+`sectorPath`, `isLowerHalf`, `labelArcPath`, `radialRotation`; Beschriftung
+`ringLabelPlan`, `truncate`, `fitName`, `fitYears`, `ringsSummary`; Farben
+`lineTint`, `lineColorVar`.
+
+**Regeln (Entscheidungen des Eigentümers):**
+- **Plätze:** Generation g (Eltern = 1) hat 2^g Plätze. Die Eltern von
+  (g, i) stehen auf (g+1, 2i) und (g+1, 2i+1) — der Bogen eines Kindes wird
+  in zwei gleiche Hälften geteilt. Kein Platz verschiebt sich je; ein
+  fehlender Elternteil lässt seinen Platz und alles dahinter leer.
+- **Seitenregel:** im Uhrzeigersinn zuerst der Vater, dann die Mutter. Der
+  Kreis beginnt links (9 Uhr), die Vaterseite liegt damit oben, die
+  Mutterseite unten. Rang männlich vor unbekannt/anders vor weiblich,
+  sonst stabile Reihenfolge der Eingabe; ein einzelner Elternteil kommt auf
+  den Mutterplatz, wenn er weiblich ist, sonst auf den Vaterplatz. Doppelte
+  zählen einmal; mehr als zwei Eltern: nur die ersten zwei nach dieser
+  Regel.
+- **Ahnenschwund:** derselbe Vorfahr steht auf jedem seiner Plätze (Suche je
+  Weg). **Zyklen:** ein Elternteil, der schon auf dem eigenen Weg zur Mitte
+  liegt, gilt als fehlend — nach der Seitenregel, damit sich nichts
+  verschiebt. **Nicht sichtbar:** Platz `restricted` ohne Kennung; seine
+  Eltern werden nicht gefragt.
+- **Verwandtschaftsstufe:** `bloodRelationTerm` aus `lib/kinship.ts` mit
+  `up` = Generation („Urgroßmutter“, ab 7: „Vorfahr in der 7. Generation“);
+  die Seite gibt der Aufrufer nur, wenn sie belegt ist.
+- **Geometrie:** viewBox 1000 × 1000, Mitte und Ringe bis knapp an den
+  Rand. Relative Ringbreiten: innen gleich, Generation 3–4 etwas breiter
+  (dort wird der Bogen eng), ab Generation 6 schmaler, aber noch zu treffen.
+  Winkel in SVG-Koordinaten (im Uhrzeigersinn), Platz (g, i) beginnt bei
+  180° + i · 360°/2^g.
+- **Text nie kopfüber:** im Bogen läuft der Textpfad oben im Uhrzeigersinn,
+  in der unteren Hälfte umgekehrt; entlang des Radius wird links um 180°
+  gedreht.
+- **Beschriftungsplan:** je Ring aus Breite und Bogenlänge und der
+  gezeichneten Größe (Bildpunkte je viewBox-Einheit; Schrift 13 bzw. 12 px):
+  Bogen, Radius oder nichts — was mehr Zeichen fasst; mindestens 4 Zeichen,
+  höchstens 2 Zeilen (Name, Lebensjahre). Namen: voll, sonst „Vorname N.“,
+  sonst Vorname, sonst gekürzt mit „…“.
+- **Farbstufen:** `lineTint` nach außen abnehmend (50 % … 18 % Linienfarbe,
+  Rest Kartenfläche).
+
+**Benutzt von:** `lib/services/ancestor-rings.ts`,
+`components/AncestorRings.tsx`, `components/tree-url.ts`, `app/tree/page.tsx`.
+
+**Tests:** `tests/ancestor-rings.test.ts` (volle Belegung, Lücken,
+Seitenregel, Ahnenschwund, Zyklus, nicht sichtbarer Vorfahr, Geometrie,
+Textausrichtung, Beschriftung, Verwandtschaftsstufe, Adresse),
+`tests/ancestor-rings.db.test.ts`.
 
 ---
 
@@ -1975,7 +2039,7 @@ Entwicklung bei jedem Aufruf. Ins Standalone-Image kommen die Dateien über
 
 ### lib/help/links.ts
 **Zweck:** Ziele der Kontexthilfe (`HELP_LINKS`: Karte, Wurzeln, Orte zuordnen,
-Linien, Bezugsperson, Dubletten, Dubletten-Klassen, KI-Vorprüfung der
+Linien, Ringe, Bezugsperson, Dubletten, Dubletten-Klassen, KI-Vorprüfung der
 Dubletten, KI-Zugang, Einstellungen, Statistik) an einer
 Stelle, damit der Test prüfen kann, dass Thema und Anker existieren.
 

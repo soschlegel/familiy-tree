@@ -3,8 +3,10 @@
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef } from "react";
 
+import { FULLSCREEN_PARAM } from "./tree-url";
+
 /** Adressparameter des Vollbilds im Stammbaum (`/tree?vollbild=1`). */
-export const FULLSCREEN_PARAM = "vollbild";
+export { FULLSCREEN_PARAM };
 
 /** Aktuelle Adresse mit bzw. ohne `vollbild=1` (Pfad + Suche + Anker). */
 function addressWith(on: boolean): string {
